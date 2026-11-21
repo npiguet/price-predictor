@@ -1,5 +1,0 @@
-name: commercial district
-types: land mountain forest
-triggered: when CARDNAME enters, surveil 1.
-replacement: CARDNAME enters tapped.
-activated[1]: {T}: add {R} or {G}.

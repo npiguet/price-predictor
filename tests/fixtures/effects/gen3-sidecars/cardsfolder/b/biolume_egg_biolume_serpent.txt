@@ -1,0 +1,15 @@
+layout: transform
+name: biolume egg
+mana cost: {2}{U}
+types: creature serpent egg
+power toughness: 0/4
+static: defender
+triggered: when CARDNAME enters, scry 2.
+triggered: when you sacrifice CARDNAME, return it to the battlefield transformed under its owner's control at the beginning of the next end step.
+
+ALTERNATE
+
+name: biolume serpent
+types: creature serpent
+power toughness: 4/4
+activated[1]: sacrifice two islands: CARDNAME can't be blocked this turn.

@@ -1,0 +1,4 @@
+name: bird token
+types: creature bird
+power toughness: 1/1
+static: flying

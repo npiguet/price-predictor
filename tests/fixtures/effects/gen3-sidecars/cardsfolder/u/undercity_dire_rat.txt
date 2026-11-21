@@ -1,5 +1,0 @@
-name: undercity dire rat
-mana cost: {1}{B}
-types: creature rat
-power toughness: 2/2
-triggered: rat tail — when this creature dies, create a treasure token.

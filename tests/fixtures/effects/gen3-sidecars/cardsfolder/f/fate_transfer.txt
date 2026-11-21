@@ -1,0 +1,4 @@
+name: fate transfer
+mana cost: {1}{U/B}
+types: instant
+spell[1]: move all counters from target creature onto another target creature.

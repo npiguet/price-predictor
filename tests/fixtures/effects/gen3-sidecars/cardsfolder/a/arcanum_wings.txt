@@ -1,0 +1,6 @@
+name: arcanum wings
+mana cost: {1}{U}
+types: enchantment aura
+activated[1]: aura swap {2}{U}
+static: enchant creature
+static: enchanted creature has flying.

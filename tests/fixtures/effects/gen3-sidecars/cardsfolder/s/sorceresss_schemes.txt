@@ -1,5 +1,0 @@
-name: sorceress's schemes
-mana cost: {3}{R}
-types: sorcery
-alternate cost: flashback {4}{R}
-spell[1]: return target instant or sorcery card from your graveyard or exiled card with flashback you own to your hand. add {R}.

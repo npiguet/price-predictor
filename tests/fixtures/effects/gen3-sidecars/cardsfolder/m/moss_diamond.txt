@@ -1,5 +1,0 @@
-name: moss diamond
-mana cost: {2}
-types: artifact
-activated[1]: {T}: add {G}.
-replacement: CARDNAME enters tapped.

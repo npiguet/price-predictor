@@ -1,0 +1,4 @@
+name: felonious rage
+mana cost: {R}
+types: instant
+spell[1]: target creature you control gets +2/+0 and gains haste until end of turn. when that creature dies this turn, create a 2/2 white and blue detective creature token.

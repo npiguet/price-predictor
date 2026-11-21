@@ -1,0 +1,6 @@
+name: dual-sun adepts
+mana cost: {2}{W}
+types: creature human soldier
+power toughness: 2/2
+static: double strike
+activated[1]: {5}: creatures you control get +1/+1 until end of turn.

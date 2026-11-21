@@ -1,4 +1,0 @@
-name: crippling fear
-mana cost: {2}{B}{B}
-types: sorcery
-spell[1]: choose a creature type. creatures that aren't of the chosen type get -3/-3 until end of turn.

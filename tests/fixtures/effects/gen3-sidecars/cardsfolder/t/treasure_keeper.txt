@@ -1,0 +1,5 @@
+name: treasure keeper
+mana cost: {4}
+types: artifact creature construct
+power toughness: 3/3
+triggered: when CARDNAME dies, reveal cards from the top of your library until you reveal a nonland card with mana value 3 or less. you may cast that card without paying its mana cost. put all revealed cards not cast this way on the bottom of your library in a random order.

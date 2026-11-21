@@ -1,6 +1,0 @@
-name: red elemental blast
-mana cost: {R}
-types: instant
-spell[1]: choose one
-option[2]: counter target blue spell.
-option[3]: destroy target blue permanent.

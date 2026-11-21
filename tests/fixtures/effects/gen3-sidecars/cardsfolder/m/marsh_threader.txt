@@ -1,0 +1,5 @@
+name: marsh threader
+mana cost: {1}{W}
+types: creature kor scout
+power toughness: 2/1
+static: swampwalk

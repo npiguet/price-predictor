@@ -1,0 +1,7 @@
+name: thought harvester
+mana cost: {3}{U}
+types: creature eldrazi drone
+power toughness: 2/4
+static: devoid
+static: flying
+triggered: whenever you cast a colorless spell, target opponent exiles the top card of their library.

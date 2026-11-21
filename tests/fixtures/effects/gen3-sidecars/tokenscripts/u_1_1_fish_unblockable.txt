@@ -1,0 +1,4 @@
+name: fish token
+types: creature fish
+power toughness: 1/1
+static: this creature can't be blocked.

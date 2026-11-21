@@ -1,0 +1,6 @@
+name: savanti romero, time's exile
+mana cost: {3}{B}{B}
+types: legendary creature demon wizard
+power toughness: 4/4
+static: trample
+triggered: at the beginning of combat on your turn, put a +1/+1 counter on CARDNAME. then you draw X cards and lose X life, where X is the number of counters on CARDNAME.

@@ -1,7 +1,0 @@
-name: captain lannery storm
-mana cost: {2}{R}
-types: legendary creature human pirate
-power toughness: 2/2
-static: haste
-triggered: whenever CARDNAME attacks, create a treasure token.
-triggered: whenever you sacrifice a treasure, CARDNAME gets +1/+0 until end of turn.

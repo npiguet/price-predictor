@@ -1,0 +1,7 @@
+name: purity
+mana cost: {3}{W}{W}{W}
+types: creature elemental incarnation
+power toughness: 6/6
+static: flying
+triggered: when CARDNAME is put into a graveyard from anywhere, shuffle it into its owner's library.
+replacement: if noncombat damage would be dealt to you, prevent that damage. you gain life equal to the damage prevented this way.

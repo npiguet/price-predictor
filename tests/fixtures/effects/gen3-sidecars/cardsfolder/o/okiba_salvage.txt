@@ -1,0 +1,4 @@
+name: okiba salvage
+mana cost: {4}{B}
+types: sorcery
+spell[1]: return target creature or vehicle card from your graveyard to the battlefield. then put two +1/+1 counters on that permanent if you control an artifact and an enchantment.

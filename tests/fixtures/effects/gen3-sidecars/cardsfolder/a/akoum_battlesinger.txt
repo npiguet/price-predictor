@@ -1,0 +1,6 @@
+name: akoum battlesinger
+mana cost: {1}{R}
+types: creature human berserker ally
+power toughness: 1/1
+static: haste
+triggered: whenever CARDNAME or another ally you control enters, you may have ally creatures you control get +1/+0 until end of turn.

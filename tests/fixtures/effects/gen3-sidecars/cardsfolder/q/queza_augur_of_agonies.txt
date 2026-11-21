@@ -1,0 +1,5 @@
+name: queza, augur of agonies
+mana cost: {1}{W}{U}{B}
+types: legendary creature octopus advisor
+power toughness: 3/4
+triggered: whenever you draw a card, target opponent loses 1 life and you gain 1 life.

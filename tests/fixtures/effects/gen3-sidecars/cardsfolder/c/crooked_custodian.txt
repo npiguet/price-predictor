@@ -1,5 +1,0 @@
-name: crooked custodian
-mana cost: {1}{B}
-types: creature ogre rogue
-power toughness: 3/2
-replacement: CARDNAME enters tapped.

@@ -1,0 +1,5 @@
+name: abstruse interference
+mana cost: {2}{U}
+types: instant
+static: devoid
+spell[1]: counter target spell unless its controller pays {1}. you create a 1/1 colorless eldrazi scion creature token. it has "sacrifice this creature: add {C}."

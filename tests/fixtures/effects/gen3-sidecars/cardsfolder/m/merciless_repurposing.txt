@@ -1,0 +1,4 @@
+name: merciless repurposing
+mana cost: {4}{B}{B}
+types: instant
+spell[1]: exile target creature. incubate 3.

@@ -1,4 +1,0 @@
-name: wrath of god
-mana cost: {2}{W}{W}
-types: sorcery
-spell[1]: destroy all creatures. they can't be regenerated.

@@ -1,0 +1,6 @@
+name: mudbrawler cohort
+mana cost: {1}{R}
+types: creature goblin warrior
+power toughness: 1/1
+static: haste
+static: CARDNAME gets +1/+1 as long as you control another red creature.

@@ -1,0 +1,6 @@
+name: ravenous leucrocota
+mana cost: {3}{G}
+types: creature beast
+power toughness: 2/4
+static: vigilance
+activated[1]: {6}{G}: monstrosity 3

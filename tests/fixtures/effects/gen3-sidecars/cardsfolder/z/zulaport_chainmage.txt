@@ -1,0 +1,5 @@
+name: zulaport chainmage
+mana cost: {3}{B}
+types: creature human shaman ally
+power toughness: 4/2
+activated[1]: cohort — {T}, tap an untapped ally you control: target opponent loses 2 life.

@@ -1,0 +1,4 @@
+name: spire of industry
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}, pay 1 life: add one mana of any color. activate only if you control an artifact.

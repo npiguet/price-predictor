@@ -1,0 +1,4 @@
+name: disdainful stroke
+mana cost: {1}{U}
+types: instant
+spell[1]: counter target spell with mana value 4 or greater.

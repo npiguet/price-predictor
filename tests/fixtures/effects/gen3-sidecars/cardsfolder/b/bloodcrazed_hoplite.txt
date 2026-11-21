@@ -1,0 +1,6 @@
+name: bloodcrazed hoplite
+mana cost: {1}{B}
+types: creature human soldier
+power toughness: 2/1
+triggered: heroic — whenever you cast a spell that targets CARDNAME, put a +1/+1 counter on CARDNAME.
+triggered: whenever a +1/+1 counter is put on CARDNAME, remove a +1/+1 counter from target creature an opponent controls.

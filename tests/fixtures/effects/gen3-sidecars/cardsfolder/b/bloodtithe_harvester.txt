@@ -1,0 +1,6 @@
+name: bloodtithe harvester
+mana cost: {B}{R}
+types: creature vampire
+power toughness: 3/2
+activated[1]: {T}, sacrifice CARDNAME: target creature gets -X/-X until end of turn, where X is twice the number of blood tokens you control. activate only as a sorcery.
+triggered: when CARDNAME enters, create a blood token.

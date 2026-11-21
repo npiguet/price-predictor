@@ -1,0 +1,6 @@
+name: blood cultist
+mana cost: {1}{B}{R}
+types: creature human wizard
+power toughness: 1/1
+activated[1]: {T}: CARDNAME deals 1 damage to target creature.
+triggered: whenever a creature dealt damage by CARDNAME this turn dies, put a +1/+1 counter on CARDNAME.

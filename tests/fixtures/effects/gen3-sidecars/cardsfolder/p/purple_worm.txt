@@ -1,0 +1,6 @@
+name: purple worm
+mana cost: {5}{G}{G}
+types: creature worm
+power toughness: 8/7
+static: ward {2}
+static: CARDNAME costs {2} less to cast if a creature died this turn.

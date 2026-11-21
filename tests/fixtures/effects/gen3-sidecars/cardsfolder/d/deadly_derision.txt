@@ -1,0 +1,4 @@
+name: deadly derision
+mana cost: {2}{B}{B}
+types: instant
+spell[1]: destroy target creature or planeswalker. create a treasure token.

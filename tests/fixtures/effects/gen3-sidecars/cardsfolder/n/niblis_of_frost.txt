@@ -1,0 +1,7 @@
+name: niblis of frost
+mana cost: {2}{U}{U}
+types: creature spirit
+power toughness: 3/3
+static: flying
+triggered: prowess
+triggered: whenever you cast an instant or sorcery spell, tap target creature an opponent controls. that creature doesn't untap during its controller's next untap step.

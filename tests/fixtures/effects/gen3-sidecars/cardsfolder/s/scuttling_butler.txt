@@ -1,5 +1,0 @@
-name: scuttling butler
-mana cost: {3}
-types: artifact creature construct
-power toughness: 4/1
-triggered: at the beginning of combat on your turn, if you control two or more multicolored permanents, CARDNAME gains double strike until end of turn.

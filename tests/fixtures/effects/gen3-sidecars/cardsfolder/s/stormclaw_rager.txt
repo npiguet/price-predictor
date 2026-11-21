@@ -1,0 +1,5 @@
+name: stormclaw rager
+mana cost: {1}{B}{R}
+types: creature ogre warrior
+power toughness: 2/2
+activated[1]: {1}, sacrifice another creature or artifact: put a +1/+1 counter on CARDNAME and draw a card. activate only as a sorcery.

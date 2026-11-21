@@ -1,6 +1,0 @@
-name: deathless behemoth
-mana cost: {6}
-types: creature eldrazi
-power toughness: 6/6
-static: vigilance
-activated[1]: sacrifice two eldrazi scions: return CARDNAME from your graveyard to your hand. activate only as a sorcery.

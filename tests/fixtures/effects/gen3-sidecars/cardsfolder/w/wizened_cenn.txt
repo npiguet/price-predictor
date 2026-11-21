@@ -1,0 +1,5 @@
+name: wizened cenn
+mana cost: {W}{W}
+types: creature kithkin cleric
+power toughness: 2/2
+static: other kithkin creatures you control get +1/+1.

@@ -1,0 +1,6 @@
+name: slippery scoundrel
+mana cost: {2}{U}
+types: creature human pirate
+power toughness: 2/2
+triggered: ascend
+static: as long as you have the city's blessing, CARDNAME has hexproof and can't be blocked.

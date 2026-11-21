@@ -1,0 +1,4 @@
+name: wolf strike
+mana cost: {2}{G}
+types: instant
+spell[1]: target creature you control gets +2/+0 until end of turn if it's night. then it deals damage equal to its power to target creature you don't control.

@@ -1,0 +1,5 @@
+name: grappling kraken
+mana cost: {4}{U}{U}
+types: creature kraken
+power toughness: 5/6
+triggered: landfall — whenever a land you control enters, tap target creature an opponent controls and put a stun counter on it.

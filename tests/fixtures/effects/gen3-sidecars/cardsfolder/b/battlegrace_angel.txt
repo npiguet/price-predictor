@@ -1,0 +1,7 @@
+name: battlegrace angel
+mana cost: {3}{W}{W}
+types: creature angel
+power toughness: 4/4
+triggered: exalted
+static: flying
+triggered: whenever a creature you control attacks alone, it gains lifelink until end of turn.

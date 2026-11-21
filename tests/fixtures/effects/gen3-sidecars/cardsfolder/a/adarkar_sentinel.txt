@@ -1,5 +1,0 @@
-name: adarkar sentinel
-mana cost: {5}
-types: artifact creature soldier
-power toughness: 3/3
-activated[1]: {1}: CARDNAME gets +0/+1 until end of turn.

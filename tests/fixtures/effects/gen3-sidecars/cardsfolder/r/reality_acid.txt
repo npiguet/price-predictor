@@ -1,6 +1,0 @@
-name: reality acid
-mana cost: {2}{U}
-types: enchantment aura
-static: enchant permanent
-triggered: vanishing 3
-triggered: when CARDNAME leaves the battlefield, enchanted permanent's controller sacrifices it.

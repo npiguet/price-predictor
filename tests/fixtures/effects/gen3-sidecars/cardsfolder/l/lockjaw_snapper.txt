@@ -1,0 +1,6 @@
+name: lockjaw snapper
+mana cost: {4}
+types: artifact creature scarecrow
+power toughness: 2/2
+static: wither
+triggered: when CARDNAME dies, put a -1/-1 counter on each creature with a -1/-1 counter on it.

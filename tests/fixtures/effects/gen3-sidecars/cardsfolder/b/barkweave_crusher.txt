@@ -1,0 +1,5 @@
+name: barkweave crusher
+mana cost: {3}{G}
+types: creature elemental warrior
+power toughness: 2/5
+static: enlist

@@ -1,0 +1,5 @@
+name: cosi's ravager
+mana cost: {3}{R}
+types: creature elemental
+power toughness: 2/2
+triggered: landfall — whenever a land you control enters, you may have CARDNAME deal 1 damage to target player or planeswalker.

@@ -1,0 +1,5 @@
+name: outland boar
+mana cost: {2}{R}{G}
+types: creature boar
+power toughness: 4/4
+static: CARDNAME can't be blocked by creatures with power 2 or less.

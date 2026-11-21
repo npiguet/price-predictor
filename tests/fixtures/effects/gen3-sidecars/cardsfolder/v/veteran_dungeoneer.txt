@@ -1,0 +1,5 @@
+name: veteran dungeoneer
+mana cost: {3}{W}
+types: creature human warrior
+power toughness: 3/4
+triggered: when CARDNAME enters, venture into the dungeon.

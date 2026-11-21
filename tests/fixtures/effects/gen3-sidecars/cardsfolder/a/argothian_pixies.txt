@@ -1,6 +1,0 @@
-name: argothian pixies
-mana cost: {1}{G}
-types: creature faerie
-power toughness: 2/1
-static: CARDNAME can't be blocked by artifact creatures.
-replacement: prevent all damage that would be dealt to CARDNAME by artifact creatures.

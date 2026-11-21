@@ -1,0 +1,6 @@
+name: repository skaab
+mana cost: {3}{U}
+types: creature zombie
+power toughness: 3/3
+triggered: exploit
+triggered: when CARDNAME exploits a creature, return target instant or sorcery card from your graveyard to your hand.

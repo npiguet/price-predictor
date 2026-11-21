@@ -1,0 +1,5 @@
+name: gurmag angler
+mana cost: {6}{B}
+types: creature zombie fish
+power toughness: 5/5
+cost reduction: delve

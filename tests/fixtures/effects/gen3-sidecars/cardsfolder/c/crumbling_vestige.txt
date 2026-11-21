@@ -1,0 +1,5 @@
+name: crumbling vestige
+types: land
+activated[1]: {T}: add {C}.
+triggered: when CARDNAME enters, add one mana of any color.
+replacement: CARDNAME enters tapped.

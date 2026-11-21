@@ -1,5 +1,0 @@
-name: polliwallop
-mana cost: {3}{G}
-types: instant
-cost reduction: affinity for frogs
-spell[1]: target creature you control deals damage equal to twice its power to target creature you don't control.

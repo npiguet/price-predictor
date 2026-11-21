@@ -1,0 +1,6 @@
+name: lyev skyknight
+mana cost: {1}{W}{U}
+types: creature human knight
+power toughness: 3/1
+static: flying
+triggered: when CARDNAME enters, detain target nonland permanent an opponent controls.

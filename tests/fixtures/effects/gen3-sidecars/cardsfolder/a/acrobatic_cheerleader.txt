@@ -1,5 +1,0 @@
-name: acrobatic cheerleader
-mana cost: {1}{W}
-types: creature human survivor
-power toughness: 2/2
-triggered: survival — at the beginning of your second main phase, if CARDNAME is tapped, put a flying counter on it. this ability triggers only once.

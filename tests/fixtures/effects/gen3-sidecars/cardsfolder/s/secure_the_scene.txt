@@ -1,0 +1,4 @@
+name: secure the scene
+mana cost: {4}{W}
+types: sorcery
+spell[1]: exile target nonland permanent. its controller creates a 1/1 white soldier creature token.

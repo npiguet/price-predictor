@@ -1,4 +1,0 @@
-name: harmonize
-mana cost: {2}{G}{G}
-types: sorcery
-spell[1]: draw three cards.

@@ -1,5 +1,0 @@
-name: dungeon descent
-types: land
-activated[1]: {T}: add {C}.
-activated[2]: {4}, {T}, tap an untapped legendary creature you control: venture into the dungeon. activate only as a sorcery.
-replacement: CARDNAME enters tapped.

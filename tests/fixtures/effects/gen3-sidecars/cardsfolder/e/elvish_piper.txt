@@ -1,5 +1,0 @@
-name: elvish piper
-mana cost: {3}{G}
-types: creature elf shaman
-power toughness: 1/1
-activated[1]: {G}, {T}: you may put a creature card from your hand onto the battlefield.

@@ -1,0 +1,5 @@
+name: braids, arisen nightmare
+mana cost: {1}{B}{B}
+types: legendary creature nightmare
+power toughness: 3/3
+triggered: at the beginning of your end step, you may sacrifice an artifact, creature, enchantment, land, or planeswalker. if you do, each opponent may sacrifice a permanent that shares a card type with it. for each opponent who doesn't, that player loses 2 life and you draw a card.

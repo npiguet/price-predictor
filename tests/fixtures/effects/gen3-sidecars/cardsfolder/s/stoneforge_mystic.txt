@@ -1,0 +1,6 @@
+name: stoneforge mystic
+mana cost: {1}{W}
+types: creature kor artificer
+power toughness: 1/2
+activated[1]: {1}{W}, {T}: you may put an equipment card from your hand onto the battlefield.
+triggered: when CARDNAME enters, you may search your library for an equipment card, reveal it, put it into your hand, then shuffle.

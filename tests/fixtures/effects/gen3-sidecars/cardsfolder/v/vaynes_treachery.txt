@@ -1,5 +1,0 @@
-name: vayne's treachery
-mana cost: {1}{B}
-types: instant
-additional cost: kicker—sacrifice an artifact or creature
-spell[1]: target creature gets -2/-2 until end of turn. if this spell was kicked, that creature gets -6/-6 until end of turn instead.

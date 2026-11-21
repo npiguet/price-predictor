@@ -1,4 +1,0 @@
-name: totally lost
-mana cost: {4}{U}
-types: instant
-spell[1]: put target nonland permanent on top of its owner's library.

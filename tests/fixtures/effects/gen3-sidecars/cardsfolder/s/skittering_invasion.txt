@@ -1,4 +1,0 @@
-name: skittering invasion
-mana cost: {7}
-types: kindred sorcery eldrazi
-spell[1]: create five 0/1 colorless eldrazi spawn creature tokens. they have "sacrifice this creature: add {C}."

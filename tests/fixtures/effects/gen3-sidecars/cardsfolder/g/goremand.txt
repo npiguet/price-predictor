@@ -1,0 +1,8 @@
+name: goremand
+mana cost: {4}{B}{B}
+types: creature demon
+power toughness: 5/5
+additional cost: sacrifice a creature.
+static: flying
+static: trample
+triggered: when CARDNAME enters, each opponent sacrifices a creature.

@@ -1,6 +1,0 @@
-name: legion warboss
-mana cost: {2}{R}
-types: creature goblin soldier
-power toughness: 2/2
-triggered: mentor
-triggered: at the beginning of combat on your turn, create a 1/1 red goblin creature token. that token gains haste until end of turn and attacks this combat if able.

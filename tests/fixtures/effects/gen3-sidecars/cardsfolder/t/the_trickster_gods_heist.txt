@@ -1,7 +1,0 @@
-name: the trickster-god's heist
-mana cost: {2}{U}{B}
-types: enchantment saga
-chapter: I — you may exchange control of two target creatures.
-chapter: II — you may exchange control of two target nonbasic, noncreature permanents that share a card type.
-chapter: III — target player loses 3 life and you gain 3 life.
-replacement: CARDNAME enters with a lore counter on it.

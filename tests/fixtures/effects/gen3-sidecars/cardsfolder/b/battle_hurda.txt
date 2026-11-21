@@ -1,0 +1,5 @@
+name: battle hurda
+mana cost: {4}{W}
+types: creature giant
+power toughness: 3/3
+static: first strike

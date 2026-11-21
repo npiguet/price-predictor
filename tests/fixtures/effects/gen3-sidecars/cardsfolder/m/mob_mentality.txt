@@ -1,0 +1,6 @@
+name: mob mentality
+mana cost: {R}
+types: enchantment aura
+static: enchant creature
+triggered: whenever all non-wall creatures you control attack, enchanted creature gets +X/+0 until end of turn, where X is the number of attacking creatures.
+static: enchanted creature has trample.

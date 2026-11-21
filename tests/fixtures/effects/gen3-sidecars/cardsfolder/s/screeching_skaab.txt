@@ -1,5 +1,0 @@
-name: screeching skaab
-mana cost: {1}{U}
-types: creature zombie
-power toughness: 2/1
-triggered: when CARDNAME enters, mill two cards.

@@ -1,6 +1,0 @@
-name: boneyard lurker
-mana cost: {2}{B}{G}
-types: creature nightmare beast
-power toughness: 4/4
-alternate cost: mutate {2}{B/G}{B/G}
-triggered: whenever this creature mutates, return target permanent card from your graveyard to your hand.

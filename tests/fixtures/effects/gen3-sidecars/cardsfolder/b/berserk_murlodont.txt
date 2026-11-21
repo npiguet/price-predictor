@@ -1,0 +1,5 @@
+name: berserk murlodont
+mana cost: {4}{G}
+types: creature beast
+power toughness: 3/3
+triggered: whenever a beast becomes blocked, it gets +1/+1 until end of turn for each creature blocking it.

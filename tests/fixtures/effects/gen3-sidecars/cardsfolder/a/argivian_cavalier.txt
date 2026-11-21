@@ -1,0 +1,6 @@
+name: argivian cavalier
+mana cost: {2}{W}
+types: creature orc knight
+power toughness: 2/2
+static: enlist
+triggered: when CARDNAME enters, create a 1/1 white soldier creature token.

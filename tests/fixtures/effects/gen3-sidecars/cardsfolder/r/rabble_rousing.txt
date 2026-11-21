@@ -1,0 +1,5 @@
+name: rabble rousing
+mana cost: {4}{W}
+types: enchantment
+triggered: hideaway 5
+triggered: whenever you attack with one or more creatures, create that many 1/1 green and white citizen creature tokens. then if you control ten or more creatures, you may play the exiled card without paying its mana cost.

@@ -1,0 +1,5 @@
+name: king macar, the gold-cursed
+mana cost: {2}{B}{B}
+types: legendary creature human noble
+power toughness: 2/3
+triggered: inspired — whenever CARDNAME becomes untapped, you may exile target creature. if you do, create a gold token.

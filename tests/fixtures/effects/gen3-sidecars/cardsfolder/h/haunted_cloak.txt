@@ -1,5 +1,0 @@
-name: haunted cloak
-mana cost: {3}
-types: artifact equipment
-activated[1]: equip {1}
-static: equipped creature has vigilance, trample, and haste.

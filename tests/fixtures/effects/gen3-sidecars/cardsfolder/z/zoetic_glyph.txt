@@ -1,0 +1,6 @@
+name: zoetic glyph
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant artifact
+triggered: when CARDNAME is put into a graveyard from the battlefield, discover 3.
+static: enchanted artifact is a golem creature with base power and toughness 5/4 in addition to its other types.

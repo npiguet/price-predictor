@@ -1,0 +1,6 @@
+name: reconstructed thopter
+mana cost: {3}
+types: artifact creature thopter
+power toughness: 2/1
+alternate cost: unearth {2}
+static: flying

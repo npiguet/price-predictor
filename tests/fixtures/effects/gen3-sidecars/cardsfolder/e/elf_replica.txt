@@ -1,5 +1,0 @@
-name: elf replica
-mana cost: {3}
-types: artifact creature elf
-power toughness: 2/2
-activated[1]: {1}{G}, sacrifice CARDNAME: destroy target enchantment.

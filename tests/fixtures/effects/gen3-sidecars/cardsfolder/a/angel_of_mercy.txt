@@ -1,6 +1,0 @@
-name: angel of mercy
-mana cost: {4}{W}
-types: creature angel
-power toughness: 3/3
-static: flying
-triggered: when CARDNAME enters, you gain 3 life.

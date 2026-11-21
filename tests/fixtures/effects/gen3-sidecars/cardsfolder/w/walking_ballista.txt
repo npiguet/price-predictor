@@ -1,0 +1,7 @@
+name: walking ballista
+mana cost: {X}{X}
+types: artifact creature construct
+power toughness: 0/0
+replacement: CARDNAME enters with X +1/+1 counters on it.
+activated[1]: {4}: put a +1/+1 counter on CARDNAME.
+activated[2]: remove a +1/+1 counter from CARDNAME: it deals 1 damage to any target.

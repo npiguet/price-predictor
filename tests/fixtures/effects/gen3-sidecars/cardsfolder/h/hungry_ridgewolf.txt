@@ -1,0 +1,5 @@
+name: hungry ridgewolf
+mana cost: {1}{R}
+types: creature wolf
+power toughness: 2/2
+static: as long as you control another wolf or werewolf, CARDNAME gets +1/+0 and has trample.

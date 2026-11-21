@@ -1,0 +1,7 @@
+name: soaring hope
+mana cost: {4}{W}
+types: enchantment aura
+static: enchant creature
+activated[1]: {W}: put CARDNAME on top of its owner's library.
+triggered: when CARDNAME enters, you gain 3 life.
+static: enchanted creature has flying.

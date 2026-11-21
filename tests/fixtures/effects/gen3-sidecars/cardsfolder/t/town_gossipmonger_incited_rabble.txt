@@ -1,0 +1,14 @@
+layout: transform
+name: town gossipmonger
+mana cost: {W}
+types: creature human
+power toughness: 1/1
+activated[1]: {T}, tap an untapped creature you control: transform CARDNAME.
+
+ALTERNATE
+
+name: incited rabble
+types: creature human
+power toughness: 2/3
+activated[1]: {2}: CARDNAME gets +1/+0 until end of turn.
+static: CARDNAME attacks each combat if able.

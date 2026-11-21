@@ -1,0 +1,15 @@
+layout: transform
+name: gutter skulker
+mana cost: {3}{U}
+types: creature spirit
+power toughness: 3/3
+alternate cost: disturb {3}{U}
+static: CARDNAME can't be blocked as long as it's attacking alone.
+
+ALTERNATE
+
+name: gutter shortcut
+types: enchantment aura
+static: enchant creature
+static: enchanted creature can't be blocked as long as it's attacking alone.
+replacement: if CARDNAME would be put into a graveyard from anywhere, exile it instead.

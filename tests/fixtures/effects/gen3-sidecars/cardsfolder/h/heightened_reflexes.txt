@@ -1,4 +1,0 @@
-name: heightened reflexes
-mana cost: {R}
-types: instant
-spell[1]: target creature gets +1/+0 until end of turn. put a first strike counter on it.

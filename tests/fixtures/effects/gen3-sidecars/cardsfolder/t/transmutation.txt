@@ -1,0 +1,4 @@
+name: transmutation
+mana cost: {1}{B}
+types: instant
+spell[1]: switch target creature's power and toughness until end of turn.

@@ -1,4 +1,0 @@
-name: seal of cleansing
-mana cost: {1}{W}
-types: enchantment
-activated[1]: sacrifice CARDNAME: destroy target artifact or enchantment.

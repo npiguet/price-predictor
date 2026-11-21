@@ -1,0 +1,5 @@
+name: enchanted being
+mana cost: {1}{W}{W}
+types: creature human
+power toughness: 2/2
+replacement: prevent all combat damage that would be dealt to CARDNAME by enchanted creatures.

@@ -1,0 +1,6 @@
+name: crusher zendikon
+mana cost: {2}{R}
+types: enchantment aura
+static: enchant land
+triggered: when enchanted land dies, return that card to its owner's hand.
+static: enchanted land is a 4/2 red beast creature with trample. it's still a land.

@@ -1,0 +1,5 @@
+name: self-assembler
+mana cost: {5}
+types: artifact creature assembly-worker
+power toughness: 4/4
+triggered: when CARDNAME enters, you may search your library for an assembly-worker creature card, reveal it, put it into your hand, then shuffle.

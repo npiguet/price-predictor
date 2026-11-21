@@ -1,0 +1,5 @@
+name: riftsweeper
+mana cost: {1}{G}
+types: creature elf shaman
+power toughness: 2/2
+triggered: when CARDNAME enters, choose target face-up exiled card. its owner shuffles it into their library.

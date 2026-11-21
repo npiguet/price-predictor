@@ -1,0 +1,5 @@
+name: goblin picker
+mana cost: {1}{R}
+types: creature goblin
+power toughness: 2/2
+activated[1]: {R}, {T}, discard a card: draw a card.

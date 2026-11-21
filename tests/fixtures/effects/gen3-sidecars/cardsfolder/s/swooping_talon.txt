@@ -1,0 +1,7 @@
+name: swooping talon
+mana cost: {4}{W}{W}
+types: creature bird soldier
+power toughness: 2/6
+static: flying
+triggered: provoke
+activated[1]: {1}: CARDNAME loses flying until end of turn.

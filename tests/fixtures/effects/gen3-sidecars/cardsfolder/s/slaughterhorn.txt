@@ -1,5 +1,0 @@
-name: slaughterhorn
-mana cost: {2}{G}
-types: creature beast
-power toughness: 3/2
-activated[1]: bloodrush — {G}, discard CARDNAME: target attacking creature gets +3/+2 until end of turn.

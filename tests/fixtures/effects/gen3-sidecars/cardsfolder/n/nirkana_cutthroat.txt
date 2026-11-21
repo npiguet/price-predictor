@@ -1,7 +1,0 @@
-name: nirkana cutthroat
-mana cost: {2}{B}
-types: creature vampire warrior
-power toughness: 3/2
-activated[1]: level up {2}{B}
-static: level 1-2 4/3 deathtouch
-static: level 3+ 5/4 first strike, deathtouch

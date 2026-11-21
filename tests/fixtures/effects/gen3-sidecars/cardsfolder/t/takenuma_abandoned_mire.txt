@@ -1,0 +1,4 @@
+name: takenuma, abandoned mire
+types: legendary land
+activated[1]: {T}: add {B}.
+activated[2]: channel — {3}{B}, discard CARDNAME: mill three cards, then return a creature or planeswalker card from your graveyard to your hand. this ability costs {1} less to activate for each legendary creature you control.

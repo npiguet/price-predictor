@@ -1,6 +1,0 @@
-name: volcano imp
-mana cost: {3}{B}
-types: creature imp
-power toughness: 2/2
-static: flying
-activated[1]: {1}{R}: CARDNAME gains first strike until end of turn.

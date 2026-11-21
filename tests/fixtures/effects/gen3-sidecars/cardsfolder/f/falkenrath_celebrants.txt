@@ -1,0 +1,6 @@
+name: falkenrath celebrants
+mana cost: {4}{R}
+types: creature vampire
+power toughness: 4/4
+static: menace
+triggered: when CARDNAME enters, create two blood tokens.

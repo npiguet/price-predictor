@@ -1,0 +1,5 @@
+name: dockside chef
+mana cost: {B}
+types: enchantment creature human citizen
+power toughness: 1/2
+activated[1]: {1}{B}, sacrifice an artifact or creature: draw a card.

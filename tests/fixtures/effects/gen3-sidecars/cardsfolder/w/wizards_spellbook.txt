@@ -1,0 +1,7 @@
+name: wizard's spellbook
+mana cost: {5}{U}{U}
+types: artifact book
+activated[1]: {T}: exile target instant or sorcery card from a graveyard. roll a d20. activate only as a sorcery.
+option[2]: 1—9 | copy that card. you may cast the copy.
+option[3]: 10—19 | copy that card. you may cast the copy by paying {1} rather than paying its mana cost.
+option[4]: 20 | copy each card exiled with CARDNAME. you may cast any number of the copies without paying their mana costs.

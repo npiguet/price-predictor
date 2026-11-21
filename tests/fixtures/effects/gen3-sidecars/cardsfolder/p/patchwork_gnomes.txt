@@ -1,5 +1,0 @@
-name: patchwork gnomes
-mana cost: {3}
-types: artifact creature gnome
-power toughness: 2/1
-activated[1]: discard a card: regenerate CARDNAME.

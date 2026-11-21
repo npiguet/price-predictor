@@ -1,0 +1,6 @@
+name: scion summoner
+mana cost: {2}{G}
+types: creature eldrazi drone
+power toughness: 2/2
+static: devoid
+triggered: when CARDNAME enters, create a 1/1 colorless eldrazi scion creature token. it has "sacrifice this creature: add {C}."

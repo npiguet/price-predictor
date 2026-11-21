@@ -1,6 +1,0 @@
-name: goblin assault team
-mana cost: {3}{R}
-types: creature goblin warrior
-power toughness: 4/1
-static: haste
-triggered: when CARDNAME dies, put a +1/+1 counter on target creature you control.

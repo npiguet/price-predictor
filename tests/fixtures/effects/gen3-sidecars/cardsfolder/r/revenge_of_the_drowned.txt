@@ -1,0 +1,4 @@
+name: revenge of the drowned
+mana cost: {3}{U}
+types: instant
+spell[1]: target creature's owner puts it on the top or bottom of their library. you create a 2/2 black zombie creature token with decayed.

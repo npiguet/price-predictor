@@ -1,0 +1,5 @@
+name: audacious infiltrator
+mana cost: {1}{W}
+types: creature dwarf rogue
+power toughness: 3/1
+static: CARDNAME can't be blocked by artifact creatures.

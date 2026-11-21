@@ -1,0 +1,5 @@
+name: falconer adept
+mana cost: {3}{W}
+types: creature human soldier
+power toughness: 2/3
+triggered: whenever CARDNAME attacks, create a 1/1 white bird creature token with flying that's tapped and attacking.

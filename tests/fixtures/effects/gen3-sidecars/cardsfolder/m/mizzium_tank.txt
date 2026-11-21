@@ -1,7 +1,0 @@
-name: mizzium tank
-mana cost: {1}{R}{R}
-types: artifact vehicle
-power toughness: 3/2
-activated[1]: crew 1
-static: trample
-triggered: whenever you cast a noncreature spell, CARDNAME becomes an artifact creature and gets +1/+1 until end of turn.

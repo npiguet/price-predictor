@@ -1,0 +1,6 @@
+name: juniper order rootweaver
+mana cost: {1}{W}
+types: creature human druid
+power toughness: 2/2
+additional cost: kicker {G}
+triggered: when CARDNAME enters, if it was kicked, put a +1/+1 counter on target creature you control.

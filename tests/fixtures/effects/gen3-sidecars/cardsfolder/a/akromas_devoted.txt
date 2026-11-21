@@ -1,0 +1,5 @@
+name: akroma's devoted
+mana cost: {3}{W}
+types: creature human cleric
+power toughness: 2/4
+static: cleric creatures have vigilance.

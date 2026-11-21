@@ -1,0 +1,6 @@
+name: wings of the guard
+mana cost: {1}{W}
+types: creature bird
+power toughness: 1/1
+static: flying
+triggered: melee

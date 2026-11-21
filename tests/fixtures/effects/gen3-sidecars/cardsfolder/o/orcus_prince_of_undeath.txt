@@ -1,9 +1,0 @@
-name: orcus, prince of undeath
-mana cost: {X}{2}{B}{R}
-types: legendary creature demon
-power toughness: 5/3
-static: flying
-static: trample
-triggered: when CARDNAME enters, choose one
-option[1]: each other creature gets -X/-X until end of turn. you lose X life.
-option[2]: return up to X target creature cards with total mana value X or less from your graveyard to the battlefield. they gain haste until end of turn.

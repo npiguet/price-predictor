@@ -1,5 +1,0 @@
-name: hypnotic grifter
-mana cost: {U}
-types: creature human rogue
-power toughness: 1/2
-activated[1]: {3}: CARDNAME connives.

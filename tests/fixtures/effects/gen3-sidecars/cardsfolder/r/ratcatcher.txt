@@ -1,0 +1,6 @@
+name: ratcatcher
+mana cost: {4}{B}{B}
+types: creature ogre rogue
+power toughness: 4/4
+static: fear
+triggered: at the beginning of your upkeep, you may search your library for a rat card, reveal it, put it into your hand, then shuffle.

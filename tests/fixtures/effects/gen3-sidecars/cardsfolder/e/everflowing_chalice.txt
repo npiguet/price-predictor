@@ -1,0 +1,6 @@
+name: everflowing chalice
+mana cost: {0}
+types: artifact
+additional cost: multikicker {2}
+replacement: CARDNAME enters with a charge counter on it for each time it was kicked.
+activated[1]: {T}: add {C} for each charge counter on CARDNAME.

@@ -1,0 +1,6 @@
+name: sengir connoisseur
+mana cost: {3}{B}{B}
+types: creature vampire
+power toughness: 3/3
+static: flying
+triggered: whenever one or more other creatures die, put a +1/+1 counter on CARDNAME. this ability triggers only once each turn.

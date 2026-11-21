@@ -1,0 +1,5 @@
+name: deathgreeter
+mana cost: {B}
+types: creature human shaman
+power toughness: 1/1
+triggered: whenever another creature dies, you may gain 1 life.

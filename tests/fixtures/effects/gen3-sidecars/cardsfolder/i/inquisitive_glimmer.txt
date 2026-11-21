@@ -1,6 +1,0 @@
-name: inquisitive glimmer
-mana cost: {W}{U}
-types: enchantment creature fox glimmer
-power toughness: 2/3
-static: enchantment spells you cast cost {1} less to cast.
-static: unlock costs you pay cost {1} less.

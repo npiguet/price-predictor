@@ -1,7 +1,0 @@
-name: thunderclap wyvern
-mana cost: {2}{W}{U}
-types: creature drake
-power toughness: 2/3
-static: flash
-static: flying
-static: other creatures you control with flying get +1/+1.

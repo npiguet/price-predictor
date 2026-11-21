@@ -1,0 +1,6 @@
+name: ascendant packleader
+mana cost: {G}
+types: creature wolf
+power toughness: 2/1
+replacement: CARDNAME enters with a +1/+1 counter on it if you control a permanent with mana value 4 or greater.
+triggered: whenever you cast a spell with mana value 4 or greater, put a +1/+1 counter on CARDNAME.

@@ -1,0 +1,6 @@
+name: mystic of the hidden way
+mana cost: {4}{U}
+types: creature human monk
+power toughness: 3/2
+alternate cost: morph {2}{U}
+static: CARDNAME can't be blocked.

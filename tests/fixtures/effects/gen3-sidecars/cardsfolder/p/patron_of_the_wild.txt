@@ -1,0 +1,6 @@
+name: patron of the wild
+mana cost: {G}
+types: creature elf
+power toughness: 1/1
+alternate cost: morph {2}{G}
+triggered: when CARDNAME is turned face up, target creature gets +3/+3 until end of turn.

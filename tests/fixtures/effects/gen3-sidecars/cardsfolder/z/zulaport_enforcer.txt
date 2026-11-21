@@ -1,7 +1,0 @@
-name: zulaport enforcer
-mana cost: {B}
-types: creature human warrior
-power toughness: 1/1
-activated[1]: level up {4}
-static: level 1-2 3/3
-static: level 3+ 5/5 CARDNAME can't be blocked except by black creatures.

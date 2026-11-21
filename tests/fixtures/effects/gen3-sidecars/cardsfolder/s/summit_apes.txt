@@ -1,0 +1,5 @@
+name: summit apes
+mana cost: {3}{G}
+types: creature ape
+power toughness: 5/2
+static: as long as you control a mountain, CARDNAME has menace.

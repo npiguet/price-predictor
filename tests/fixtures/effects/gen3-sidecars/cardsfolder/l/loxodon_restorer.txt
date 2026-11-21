@@ -1,6 +1,0 @@
-name: loxodon restorer
-mana cost: {4}{W}{W}
-types: creature elephant cleric
-power toughness: 3/4
-cost reduction: convoke
-triggered: when CARDNAME enters, you gain 4 life.

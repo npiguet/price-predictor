@@ -1,0 +1,5 @@
+name: infantry veteran
+mana cost: {W}
+types: creature human soldier
+power toughness: 1/1
+activated[1]: {T}: target attacking creature gets +1/+1 until end of turn.

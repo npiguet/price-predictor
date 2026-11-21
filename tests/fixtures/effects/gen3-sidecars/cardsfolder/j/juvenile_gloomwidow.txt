@@ -1,0 +1,6 @@
+name: juvenile gloomwidow
+mana cost: {G}{G}
+types: creature spider
+power toughness: 1/3
+static: reach
+static: wither

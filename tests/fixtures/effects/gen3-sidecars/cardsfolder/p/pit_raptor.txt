@@ -1,7 +1,0 @@
-name: pit raptor
-mana cost: {2}{B}{B}
-types: creature bird mercenary
-power toughness: 4/3
-static: first strike
-static: flying
-triggered: at the beginning of your upkeep, sacrifice CARDNAME unless you pay {2}{B}{B}.

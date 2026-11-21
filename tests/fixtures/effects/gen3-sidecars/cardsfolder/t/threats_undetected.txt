@@ -1,0 +1,4 @@
+name: threats undetected
+mana cost: {2}{G}
+types: sorcery
+spell[1]: search your library for up to four creature cards with different powers and reveal them. an opponent chooses two of those cards. shuffle the chosen cards into your library and put the rest into your hand.

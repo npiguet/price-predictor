@@ -1,6 +1,0 @@
-name: snarling gorehound
-mana cost: {B}
-types: creature dog
-power toughness: 1/1
-static: menace
-triggered: whenever another creature you control with power 2 or less enters, surveil 1.

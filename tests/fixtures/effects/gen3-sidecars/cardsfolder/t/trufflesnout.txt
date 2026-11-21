@@ -1,0 +1,7 @@
+name: trufflesnout
+mana cost: {2}{G}
+types: creature boar
+power toughness: 2/2
+triggered: when CARDNAME enters, choose one
+option[1]: put a +1/+1 counter on CARDNAME.
+option[2]: you gain 4 life.

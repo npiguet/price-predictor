@@ -1,0 +1,4 @@
+name: eyeblight's ending
+mana cost: {2}{B}
+types: kindred instant elf
+spell[1]: destroy target non-elf creature.

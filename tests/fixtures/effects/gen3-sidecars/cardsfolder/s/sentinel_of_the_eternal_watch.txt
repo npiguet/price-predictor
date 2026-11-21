@@ -1,6 +1,0 @@
-name: sentinel of the eternal watch
-mana cost: {5}{W}
-types: creature giant soldier
-power toughness: 4/6
-static: vigilance
-triggered: at the beginning of combat on each opponent's turn, tap target creature that player controls.

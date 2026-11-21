@@ -1,0 +1,5 @@
+name: honored heirloom
+mana cost: {3}
+types: artifact
+activated[1]: {T}: add one mana of any color.
+activated[2]: {2}, {T}: exile target card from a graveyard.

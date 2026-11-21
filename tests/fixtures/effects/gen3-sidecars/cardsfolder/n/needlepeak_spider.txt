@@ -1,5 +1,0 @@
-name: needlepeak spider
-mana cost: {3}{R}
-types: creature spider
-power toughness: 4/2
-static: reach

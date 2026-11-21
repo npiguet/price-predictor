@@ -1,5 +1,0 @@
-name: akroan jailer
-mana cost: {W}
-types: creature human soldier
-power toughness: 1/1
-activated[1]: {2}{W}, {T}: tap target creature.

@@ -1,0 +1,5 @@
+name: pitchburn devils
+mana cost: {4}{R}
+types: creature devil
+power toughness: 3/3
+triggered: when CARDNAME dies, it deals 3 damage to any target.

@@ -1,4 +1,0 @@
-name: wayfarer's bauble
-mana cost: {1}
-types: artifact
-activated[1]: {2}, {T}, sacrifice CARDNAME: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.

@@ -1,4 +1,0 @@
-name: honden of seeing winds
-mana cost: {4}{U}
-types: legendary enchantment shrine
-triggered: at the beginning of your upkeep, draw a card for each shrine you control.

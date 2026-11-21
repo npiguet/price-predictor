@@ -1,6 +1,0 @@
-name: long lake nuisance
-mana cost: {3}{U}
-types: creature bird
-power toughness: 3/1
-static: flying
-triggered: when this creature enters, recruit.

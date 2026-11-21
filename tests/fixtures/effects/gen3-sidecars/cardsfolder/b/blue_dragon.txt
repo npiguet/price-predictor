@@ -1,0 +1,6 @@
+name: blue dragon
+mana cost: {5}{U}{U}
+types: creature dragon
+power toughness: 5/5
+static: flying
+triggered: lightning breath — when CARDNAME enters, until your next turn, target creature an opponent controls gets -3/-0, up to one other target creature gets -2/-0, and up to one other target creature gets -1/-0.

@@ -1,5 +1,0 @@
-name: fathom fleet boarder
-mana cost: {2}{B}
-types: creature orc pirate
-power toughness: 3/3
-triggered: when CARDNAME enters, you lose 2 life unless you control another pirate.

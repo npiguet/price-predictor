@@ -1,0 +1,5 @@
+name: glowering rogon
+mana cost: {5}{G}
+types: creature beast
+power toughness: 4/4
+static: amplify 1

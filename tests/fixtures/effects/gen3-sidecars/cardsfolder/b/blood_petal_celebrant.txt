@@ -1,0 +1,6 @@
+name: blood petal celebrant
+mana cost: {1}{R}
+types: creature vampire
+power toughness: 2/1
+triggered: when CARDNAME dies, create a blood token.
+static: CARDNAME has first strike as long as it's attacking.

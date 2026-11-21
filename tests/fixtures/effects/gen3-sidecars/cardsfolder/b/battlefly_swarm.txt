@@ -1,0 +1,6 @@
+name: battlefly swarm
+mana cost: {B}
+types: creature phyrexian insect
+power toughness: 1/1
+static: flying
+activated[1]: {B}: CARDNAME gains deathtouch until end of turn.

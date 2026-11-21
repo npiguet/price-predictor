@@ -1,0 +1,5 @@
+name: wildslayer elves
+mana cost: {3}{G}
+types: creature elf warrior
+power toughness: 3/3
+static: wither

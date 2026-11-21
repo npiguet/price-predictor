@@ -1,0 +1,4 @@
+name: run out of town
+mana cost: {3}{U}
+types: instant
+spell[1]: the owner of target nonland permanent puts it on the top or bottom of their library.

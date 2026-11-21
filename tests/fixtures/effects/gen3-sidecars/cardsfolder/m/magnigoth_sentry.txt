@@ -1,0 +1,5 @@
+name: magnigoth sentry
+mana cost: {3}{G}
+types: creature treefolk
+power toughness: 4/4
+static: reach

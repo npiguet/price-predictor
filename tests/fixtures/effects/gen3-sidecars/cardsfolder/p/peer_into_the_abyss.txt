@@ -1,0 +1,4 @@
+name: peer into the abyss
+mana cost: {4}{B}{B}{B}
+types: sorcery
+spell[1]: target player draws cards equal to half the number of cards in their library and loses half their life. round up each time.

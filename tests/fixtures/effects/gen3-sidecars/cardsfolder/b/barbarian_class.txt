@@ -1,0 +1,6 @@
+name: barbarian class
+mana cost: {R}
+types: enchantment class
+level[1]: if you would roll one or more dice, instead roll that many dice plus one and ignore the lowest roll.
+level[2]: {1}{R}: whenever you roll one or more dice, target creature you control gets +2/+0 and gains menace until end of turn.
+level[3]: {2}{R}: creatures you control have haste.

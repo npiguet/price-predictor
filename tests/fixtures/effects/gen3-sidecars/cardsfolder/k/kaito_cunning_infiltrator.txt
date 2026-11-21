@@ -1,0 +1,9 @@
+name: kaito, cunning infiltrator
+mana cost: {1}{U}{U}
+types: legendary planeswalker kaito
+loyalty: 3
+planeswalker[1]: [+1]: up to one target creature you control can't be blocked this turn. draw a card, then discard a card.
+planeswalker[2]: [-2]: create a 2/1 blue ninja creature token.
+planeswalker[3]: [-9]: you get an emblem with "whenever a player casts a spell, you create a 2/1 blue ninja creature token."
+triggered: whenever a creature you control deals combat damage to a player, put a loyalty counter on CARDNAME.
+replacement: CARDNAME enters with three loyalty counters on it.

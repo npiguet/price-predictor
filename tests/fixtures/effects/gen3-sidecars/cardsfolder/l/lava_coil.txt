@@ -1,4 +1,0 @@
-name: lava coil
-mana cost: {1}{R}
-types: sorcery
-spell[1]: CARDNAME deals 4 damage to target creature. if that creature would die this turn, exile it instead.

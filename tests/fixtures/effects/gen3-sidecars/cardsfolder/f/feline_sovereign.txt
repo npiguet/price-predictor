@@ -1,0 +1,6 @@
+name: feline sovereign
+mana cost: {2}{G}
+types: creature cat
+power toughness: 2/3
+triggered: whenever one or more cats you control deal combat damage to a player, destroy up to one target artifact or enchantment that player controls.
+static: other cats you control get +1/+1 and have protection from dogs.

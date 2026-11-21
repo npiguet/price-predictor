@@ -1,0 +1,4 @@
+name: high market
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}, sacrifice a creature: you gain 1 life.

@@ -1,0 +1,5 @@
+name: valor singer
+mana cost: {2}{R}
+types: creature tiefling bard
+power toughness: 2/3
+triggered: at the beginning of combat on your turn, target creature you control gets +1/+0 until end of turn.

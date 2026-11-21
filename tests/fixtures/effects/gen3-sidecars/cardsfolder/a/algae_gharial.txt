@@ -1,0 +1,6 @@
+name: algae gharial
+mana cost: {3}{G}
+types: creature crocodile
+power toughness: 1/1
+static: shroud
+triggered: whenever another creature dies, you may put a +1/+1 counter on CARDNAME.

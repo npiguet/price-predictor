@@ -1,0 +1,5 @@
+name: twinblade assassins
+mana cost: {3}{B}{G}
+types: creature elf assassin
+power toughness: 5/4
+triggered: at the beginning of your end step, if a creature died this turn, draw a card.

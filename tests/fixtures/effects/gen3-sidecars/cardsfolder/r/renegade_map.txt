@@ -1,0 +1,5 @@
+name: renegade map
+mana cost: {1}
+types: artifact
+activated[1]: {T}, sacrifice CARDNAME: search your library for a basic land card, reveal it, put it into your hand, then shuffle.
+replacement: CARDNAME enters tapped.

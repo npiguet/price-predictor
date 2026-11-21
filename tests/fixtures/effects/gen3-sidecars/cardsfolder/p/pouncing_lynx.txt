@@ -1,5 +1,0 @@
-name: pouncing lynx
-mana cost: {1}{W}
-types: creature cat
-power toughness: 2/1
-static: during your turn, CARDNAME has first strike.

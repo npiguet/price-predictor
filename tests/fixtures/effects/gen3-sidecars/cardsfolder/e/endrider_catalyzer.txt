@@ -1,6 +1,0 @@
-name: endrider catalyzer
-mana cost: {1}{R}
-types: creature human warrior
-power toughness: 3/1
-static: start your engines
-static: max speed — {T}: add {R}{R}.

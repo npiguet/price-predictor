@@ -1,4 +1,0 @@
-name: strength in numbers
-mana cost: {1}{G}
-types: instant
-spell[1]: until end of turn, target creature gains trample and gets +X/+X, where X is the number of attacking creatures.

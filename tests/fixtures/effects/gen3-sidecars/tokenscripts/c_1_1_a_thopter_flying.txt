@@ -1,4 +1,0 @@
-name: thopter token
-types: artifact creature thopter
-power toughness: 1/1
-static: flying

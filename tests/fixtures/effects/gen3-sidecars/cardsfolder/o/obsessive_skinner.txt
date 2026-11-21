@@ -1,0 +1,6 @@
+name: obsessive skinner
+mana cost: {1}{G}
+types: creature human rogue
+power toughness: 1/1
+triggered: when CARDNAME enters, put a +1/+1 counter on target creature.
+triggered: delirium — at the beginning of each opponent's upkeep, if there are four or more card types among cards in your graveyard, put a +1/+1 counter on target creature.

@@ -1,5 +1,0 @@
-name: infernal pet
-mana cost: {2}{B}
-types: creature imp
-power toughness: 2/2
-triggered: whenever you cast your second spell each turn, put a +1/+1 counter on CARDNAME and it gains flying until end of turn.

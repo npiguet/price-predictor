@@ -1,5 +1,0 @@
-name: cephalid inkshrouder
-mana cost: {2}{U}
-types: creature octopus
-power toughness: 2/1
-activated[1]: discard a card: CARDNAME gains shroud until end of turn and can't be blocked this turn.

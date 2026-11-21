@@ -1,0 +1,6 @@
+name: harmonious grovestrider
+mana cost: {3}{G}{G}
+types: creature beast
+power toughness: */*
+static: ward {2}
+static: CARDNAME's power and toughness are each equal to the number of lands you control.

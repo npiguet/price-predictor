@@ -1,0 +1,6 @@
+name: twisted abomination
+mana cost: {5}{B}
+types: creature zombie mutant
+power toughness: 5/3
+activated[1]: swampcycling {2}
+activated[2]: {B}: regenerate CARDNAME.

@@ -1,0 +1,5 @@
+name: wirewood hivemaster
+mana cost: {1}{G}
+types: creature elf
+power toughness: 1/1
+triggered: whenever another nontoken elf enters, you may create a 1/1 green insect creature token.

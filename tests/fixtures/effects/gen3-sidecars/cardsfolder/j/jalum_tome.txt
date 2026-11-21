@@ -1,4 +1,0 @@
-name: jalum tome
-mana cost: {3}
-types: artifact book
-activated[1]: {2}, {T}: draw a card, then discard a card.

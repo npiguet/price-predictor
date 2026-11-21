@@ -1,0 +1,4 @@
+name: tremor
+mana cost: {R}
+types: sorcery
+spell[1]: CARDNAME deals 1 damage to each creature without flying.

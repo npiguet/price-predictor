@@ -1,5 +1,0 @@
-name: halo scarab
-mana cost: {2}
-types: artifact creature insect
-power toughness: 2/1
-activated[1]: {2}, exile CARDNAME from your graveyard: create a treasure token.

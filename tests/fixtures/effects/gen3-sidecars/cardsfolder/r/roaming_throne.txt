@@ -1,0 +1,8 @@
+name: roaming throne
+mana cost: {4}
+types: artifact creature golem
+power toughness: 4/4
+replacement: as CARDNAME enters, choose a creature type.
+static: ward {2}
+static: CARDNAME is the chosen type in addition to its other types.
+static: if a triggered ability of another creature you control of the chosen type triggers, it triggers an additional time.

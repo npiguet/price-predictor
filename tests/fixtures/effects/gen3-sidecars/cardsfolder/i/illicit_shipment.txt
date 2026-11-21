@@ -1,0 +1,5 @@
+name: illicit shipment
+mana cost: {3}{B}{B}
+types: sorcery
+additional cost: casualty 3
+spell[1]: search your library for a card, put that card into your hand, then shuffle.

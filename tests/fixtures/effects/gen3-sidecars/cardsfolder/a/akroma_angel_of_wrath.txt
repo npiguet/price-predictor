@@ -1,0 +1,11 @@
+name: akroma, angel of wrath
+mana cost: {5}{W}{W}{W}
+types: legendary creature angel
+power toughness: 6/6
+static: first strike
+static: flying
+static: haste
+static: protection from black
+static: protection from red
+static: trample
+static: vigilance

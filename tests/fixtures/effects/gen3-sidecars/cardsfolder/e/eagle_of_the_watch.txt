@@ -1,0 +1,6 @@
+name: eagle of the watch
+mana cost: {2}{W}
+types: creature bird
+power toughness: 2/1
+static: flying
+static: vigilance

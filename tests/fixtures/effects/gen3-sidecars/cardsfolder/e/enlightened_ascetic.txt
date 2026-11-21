@@ -1,5 +1,0 @@
-name: enlightened ascetic
-mana cost: {1}{W}
-types: creature cat monk
-power toughness: 1/1
-triggered: when CARDNAME enters, you may destroy target enchantment.

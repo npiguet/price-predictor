@@ -1,0 +1,5 @@
+name: slavering nulls
+mana cost: {1}{R}
+types: creature goblin zombie
+power toughness: 2/1
+triggered: whenever CARDNAME deals combat damage to a player, if you control a swamp, you may have that player discard a card.

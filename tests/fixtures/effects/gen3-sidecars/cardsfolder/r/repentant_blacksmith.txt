@@ -1,5 +1,0 @@
-name: repentant blacksmith
-mana cost: {1}{W}
-types: creature human
-power toughness: 1/2
-static: protection from red

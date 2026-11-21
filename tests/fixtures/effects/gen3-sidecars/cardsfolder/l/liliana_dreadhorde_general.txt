@@ -1,9 +1,0 @@
-name: liliana, dreadhorde general
-mana cost: {4}{B}{B}
-types: legendary planeswalker liliana
-loyalty: 6
-planeswalker[1]: [+1]: create a 2/2 black zombie creature token.
-planeswalker[2]: [-4]: each player sacrifices two creatures.
-planeswalker[3]: [-9]: each opponent chooses a permanent they control of each permanent type and sacrifices the rest.
-triggered: whenever a creature you control dies, draw a card.
-replacement: CARDNAME enters with six loyalty counters on it.

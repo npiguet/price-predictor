@@ -1,0 +1,5 @@
+name: hada freeblade
+mana cost: {W}
+types: creature human soldier ally
+power toughness: 0/1
+triggered: whenever CARDNAME or another ally you control enters, you may put a +1/+1 counter on CARDNAME.

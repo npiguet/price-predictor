@@ -1,0 +1,6 @@
+name: writhing necromass
+mana cost: {6}{B}
+types: creature zombie giant
+power toughness: 5/5
+static: deathtouch
+static: this spell costs {1} less to cast for each creature card in your graveyard.

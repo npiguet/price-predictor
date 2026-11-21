@@ -1,0 +1,5 @@
+name: llanowar envoy
+mana cost: {2}{G}
+types: creature elf scout
+power toughness: 3/2
+activated[1]: {1}{G}: add one mana of any color.

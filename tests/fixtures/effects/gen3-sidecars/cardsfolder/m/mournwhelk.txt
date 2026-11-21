@@ -1,0 +1,6 @@
+name: mournwhelk
+mana cost: {6}{B}
+types: creature elemental
+power toughness: 3/3
+alternate cost: evoke {3}{B}
+triggered: when CARDNAME enters, target player discards two cards.

@@ -1,0 +1,5 @@
+name: overwhelming remorse
+mana cost: {4}{B}
+types: instant
+spell[1]: exile target creature or planeswalker.
+static: this spell costs {1} less to cast for each creature card in your graveyard.

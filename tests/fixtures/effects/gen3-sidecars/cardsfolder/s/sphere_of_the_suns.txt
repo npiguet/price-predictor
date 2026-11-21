@@ -1,0 +1,5 @@
+name: sphere of the suns
+mana cost: {2}
+types: artifact
+activated[1]: {T}, remove a charge counter from CARDNAME: add one mana of any color.
+replacement: CARDNAME enters tapped and with three charge counters on it.

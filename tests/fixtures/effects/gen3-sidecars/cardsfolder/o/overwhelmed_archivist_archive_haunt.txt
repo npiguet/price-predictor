@@ -1,0 +1,16 @@
+layout: transform
+name: overwhelmed archivist
+mana cost: {2}{U}
+types: creature human wizard
+power toughness: 3/2
+alternate cost: disturb {3}{U}
+triggered: when CARDNAME enters, draw a card, then discard a card.
+
+ALTERNATE
+
+name: archive haunt
+types: creature spirit wizard
+power toughness: 2/1
+static: flying
+triggered: whenever CARDNAME attacks, draw a card, then discard a card.
+replacement: if CARDNAME would be put into a graveyard from anywhere, exile it instead.

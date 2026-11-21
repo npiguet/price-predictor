@@ -1,0 +1,5 @@
+name: harpoon sniper
+mana cost: {2}{W}
+types: creature merfolk archer
+power toughness: 2/2
+activated[1]: {W}, {T}: CARDNAME deals X damage to target attacking or blocking creature, where X is the number of merfolk you control.

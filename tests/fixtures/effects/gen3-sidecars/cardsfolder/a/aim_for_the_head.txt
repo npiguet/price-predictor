@@ -1,0 +1,6 @@
+name: aim for the head
+mana cost: {2}{B}
+types: sorcery
+spell[1]: choose one
+option[2]: exile target zombie.
+option[3]: target opponent exiles two cards from their hand.

@@ -1,0 +1,13 @@
+layout: transform
+name: inverted iceberg
+mana cost: {1}{U}
+types: artifact
+activated[1]: craft with artifact {4}{U}{U}
+triggered: when CARDNAME enters, mill a card, then draw a card.
+
+ALTERNATE
+
+name: iceberg titan
+types: artifact creature golem
+power toughness: 6/6
+triggered: whenever CARDNAME attacks, you may tap or untap target artifact or creature.

@@ -1,6 +1,0 @@
-name: nightscape familiar
-mana cost: {1}{B}
-types: creature zombie
-power toughness: 1/1
-activated[1]: {1}{B}: regenerate CARDNAME.
-static: blue spells and red spells you cast cost {1} less to cast.

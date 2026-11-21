@@ -1,8 +1,0 @@
-name: ice magic
-mana cost: {1}{U}
-types: instant
-additional cost: tiered
-spell[1]: choose one
-option[2]: {0} — blizzard — return target creature to its owner's hand.
-option[3]: {2} — blizzara — target creature's owner puts it on the top or bottom of their library.
-option[4]: {5}{U} — blizzaga — target creature's owner shuffles it into their library.

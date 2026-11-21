@@ -1,6 +1,0 @@
-name: ghostly sentinel
-mana cost: {4}{W}
-types: creature kor spirit
-power toughness: 3/3
-static: flying
-static: vigilance

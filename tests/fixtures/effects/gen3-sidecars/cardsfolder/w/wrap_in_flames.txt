@@ -1,4 +1,0 @@
-name: wrap in flames
-mana cost: {3}{R}
-types: sorcery
-spell[1]: CARDNAME deals 1 damage to each of up to three target creatures. those creatures can't block this turn.

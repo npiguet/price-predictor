@@ -1,0 +1,5 @@
+name: fiery temper
+mana cost: {1}{R}{R}
+types: instant
+alternate cost: madness {R}
+spell[1]: CARDNAME deals 3 damage to any target.

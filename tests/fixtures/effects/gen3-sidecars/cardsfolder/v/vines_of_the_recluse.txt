@@ -1,0 +1,4 @@
+name: vines of the recluse
+mana cost: {G}
+types: instant
+spell[1]: target creature gets +1/+2 and gains reach until end of turn. untap it.

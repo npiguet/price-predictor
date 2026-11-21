@@ -1,0 +1,8 @@
+name: lord skitter's butcher
+mana cost: {2}{B}
+types: creature rat peasant
+power toughness: 2/3
+triggered: when CARDNAME enters, choose one
+option[1]: create a 1/1 black rat creature token with "this creature can't block."
+option[2]: you may sacrifice another creature. if you do, scry 2, then draw a card.
+option[3]: creatures you control gain menace until end of turn.

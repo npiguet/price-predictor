@@ -1,0 +1,5 @@
+name: faithful mending
+mana cost: {W}{U}
+types: instant
+alternate cost: flashback {1}{W}{U}
+spell[1]: you gain 2 life, draw two cards, then discard two cards. draws two cards, then discards two cards.

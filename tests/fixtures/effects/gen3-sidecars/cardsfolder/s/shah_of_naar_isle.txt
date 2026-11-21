@@ -1,0 +1,7 @@
+name: shah of naar isle
+mana cost: {3}{R}
+types: creature efreet
+power toughness: 6/6
+triggered: echo {0}
+static: trample
+triggered: when CARDNAME's echo cost is paid, each opponent may draw up to three cards.

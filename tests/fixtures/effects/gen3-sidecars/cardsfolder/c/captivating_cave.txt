@@ -1,0 +1,5 @@
+name: captivating cave
+types: land cave
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}: add one mana of any color.
+activated[3]: {4}, {T}, sacrifice CARDNAME: put two +1/+1 counters on target creature. activate only as a sorcery.

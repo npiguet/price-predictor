@@ -1,5 +1,0 @@
-name: patron of the arts
-mana cost: {2}{R}
-types: creature dragon noble
-power toughness: 3/1
-triggered: when CARDNAME enters or dies, create a treasure token.

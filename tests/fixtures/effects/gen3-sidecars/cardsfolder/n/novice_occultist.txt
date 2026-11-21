@@ -1,5 +1,0 @@
-name: novice occultist
-mana cost: {1}{B}
-types: creature human wizard
-power toughness: 1/2
-triggered: when CARDNAME dies, you draw a card and you lose 1 life.

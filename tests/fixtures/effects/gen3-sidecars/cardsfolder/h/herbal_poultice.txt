@@ -1,0 +1,4 @@
+name: herbal poultice
+mana cost: {0}
+types: artifact
+activated[1]: {3}, sacrifice CARDNAME: regenerate target creature.

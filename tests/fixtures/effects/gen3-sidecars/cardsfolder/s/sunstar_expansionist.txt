@@ -1,0 +1,6 @@
+name: sunstar expansionist
+mana cost: {1}{W}
+types: creature human knight
+power toughness: 2/3
+triggered: when this creature enters, if an opponent controls more lands than you, create a lander token.
+triggered: landfall — whenever a land you control enters, this creature gets +1/+0 until end of turn.

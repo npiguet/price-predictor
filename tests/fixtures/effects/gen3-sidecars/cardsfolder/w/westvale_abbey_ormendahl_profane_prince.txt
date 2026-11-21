@@ -1,0 +1,16 @@
+layout: transform
+name: westvale abbey
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {5}, {T}, pay 1 life: create a 1/1 white and black human cleric creature token.
+activated[3]: {5}, {T}, sacrifice five creatures: transform CARDNAME, then untap it.
+
+ALTERNATE
+
+name: ormendahl, profane prince
+types: legendary creature demon
+power toughness: 9/7
+static: flying
+static: haste
+static: indestructible
+static: lifelink

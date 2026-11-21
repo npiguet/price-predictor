@@ -1,0 +1,5 @@
+name: thraben inspector
+mana cost: {W}
+types: creature human soldier
+power toughness: 1/2
+triggered: when CARDNAME enters, investigate.

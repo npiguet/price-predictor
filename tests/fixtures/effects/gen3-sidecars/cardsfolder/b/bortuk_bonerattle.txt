@@ -1,0 +1,5 @@
+name: bortuk bonerattle
+mana cost: {4}{B}{G}
+types: legendary creature troll shaman
+power toughness: 4/4
+triggered: domain — when CARDNAME enters, if you cast it, choose target creature card in your graveyard. return that card to the battlefield if its mana value is less than or equal to the number of basic land types among lands you control. otherwise, put it into your hand.

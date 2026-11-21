@@ -1,0 +1,8 @@
+name: sentinel of lost lore
+mana cost: {1}{G}{G}
+types: creature elf knight
+power toughness: 3/4
+triggered: when CARDNAME enters, choose one or more
+option[1]: return target card you own in exile that has an adventure to your hand.
+option[2]: put target card you don't own in exile that has an adventure on the bottom of its owner's library.
+option[3]: exile target player's graveyard.

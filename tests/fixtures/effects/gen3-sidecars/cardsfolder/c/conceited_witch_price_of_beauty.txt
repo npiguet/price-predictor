@@ -1,0 +1,14 @@
+layout: adventure
+name: conceited witch
+mana cost: {2}{B}
+types: creature human warlock
+power toughness: 2/3
+static: menace
+
+ALTERNATE
+
+name: price of beauty
+mana cost: {B}
+types: sorcery adventure
+spell[1]: create a wicked role token attached to target creature you control.
+replacement: adventure

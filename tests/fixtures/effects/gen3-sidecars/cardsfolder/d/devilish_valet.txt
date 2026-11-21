@@ -1,0 +1,7 @@
+name: devilish valet
+mana cost: {2}{R}
+types: creature devil warrior
+power toughness: 1/3
+static: haste
+static: trample
+triggered: alliance — whenever another creature you control enters, double CARDNAME's power until end of turn.

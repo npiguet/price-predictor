@@ -1,0 +1,4 @@
+name: hunter's edge
+mana cost: {3}{G}
+types: sorcery
+spell[1]: put a +1/+1 counter on target creature you control. then that creature deals damage equal to its power to target creature you don't control.

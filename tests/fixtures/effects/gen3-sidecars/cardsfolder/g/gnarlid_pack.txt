@@ -1,0 +1,6 @@
+name: gnarlid pack
+mana cost: {1}{G}
+types: creature beast
+power toughness: 2/2
+additional cost: multikicker {1}{G}
+replacement: CARDNAME enters with a +1/+1 counter on it for each time it was kicked.

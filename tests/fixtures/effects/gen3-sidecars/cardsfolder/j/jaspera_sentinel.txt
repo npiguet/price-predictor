@@ -1,6 +1,0 @@
-name: jaspera sentinel
-mana cost: {G}
-types: creature elf rogue
-power toughness: 1/2
-static: reach
-activated[1]: {T}, tap an untapped creature you control: add one mana of any color.

@@ -1,0 +1,6 @@
+name: shoreline ranger
+mana cost: {5}{U}
+types: creature bird soldier ranger
+power toughness: 3/4
+static: flying
+activated[1]: islandcycling {2}

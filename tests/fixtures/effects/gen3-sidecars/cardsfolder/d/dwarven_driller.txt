@@ -1,0 +1,5 @@
+name: dwarven driller
+mana cost: {3}{R}
+types: creature dwarf
+power toughness: 2/2
+activated[1]: {T}: destroy target land unless its controller has CARDNAME deal 2 damage to them.

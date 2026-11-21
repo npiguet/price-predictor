@@ -1,0 +1,4 @@
+name: bleed dry
+mana cost: {2}{B}{B}
+types: instant
+spell[1]: target creature gets -13/-13 until end of turn. if that creature would die this turn, exile it instead.

@@ -1,0 +1,4 @@
+name: burn the accursed
+mana cost: {4}{R}
+types: instant
+spell[1]: CARDNAME deals 5 damage to target creature and 2 damage to that creature's controller. if that creature would die this turn, exile it instead.

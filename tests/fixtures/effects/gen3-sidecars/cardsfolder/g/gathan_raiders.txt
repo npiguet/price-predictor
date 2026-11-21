@@ -1,0 +1,6 @@
+name: gathan raiders
+mana cost: {3}{R}{R}
+types: creature human warrior
+power toughness: 3/3
+alternate cost: morph—discard a card
+static: hellbent — CARDNAME gets +2/+2 as long as you have no cards in hand.

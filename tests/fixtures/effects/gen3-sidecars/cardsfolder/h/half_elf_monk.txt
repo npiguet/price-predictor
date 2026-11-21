@@ -1,6 +1,0 @@
-name: half-elf monk
-mana cost: {3}{W}
-types: creature human elf monk
-power toughness: 1/4
-static: vigilance
-activated[1]: stunning strike — {1}{W}, {T}: tap target creature.

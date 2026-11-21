@@ -1,6 +1,0 @@
-name: somber hoverguard
-mana cost: {5}{U}
-types: creature drone
-power toughness: 3/2
-cost reduction: affinity for artifacts
-static: flying

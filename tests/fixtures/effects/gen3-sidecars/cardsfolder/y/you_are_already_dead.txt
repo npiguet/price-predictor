@@ -1,0 +1,4 @@
+name: you are already dead
+mana cost: {B}
+types: instant
+spell[1]: destroy target creature that was dealt damage this turn.

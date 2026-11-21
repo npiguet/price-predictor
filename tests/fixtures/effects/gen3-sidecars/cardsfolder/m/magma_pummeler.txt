@@ -1,0 +1,6 @@
+name: magma pummeler
+mana cost: {X}{R}{R}
+types: creature elemental
+power toughness: 0/0
+replacement: CARDNAME enters with X +1/+1 counters on it.
+replacement: if damage would be dealt to CARDNAME while it has a +1/+1 counter on it, prevent that damage and remove that many +1/+1 counters from it. when one or more counters are removed from CARDNAME this way, it deals that much damage to any target.

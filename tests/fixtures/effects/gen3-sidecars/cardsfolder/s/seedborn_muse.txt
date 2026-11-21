@@ -1,0 +1,5 @@
+name: seedborn muse
+mana cost: {3}{G}{G}
+types: creature spirit
+power toughness: 2/4
+static: untap all permanents you control during each other player's untap step.

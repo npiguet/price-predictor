@@ -1,0 +1,6 @@
+name: foot mystic
+mana cost: {3}{B}
+types: creature human ninja warlock
+power toughness: 2/4
+static: lifelink
+triggered: disappear — when this creature enters, if a permanent left the battlefield under your control this turn, create a 1/1 black ninja creature token.

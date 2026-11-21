@@ -1,0 +1,6 @@
+name: packsong pup
+mana cost: {1}{G}
+types: creature wolf
+power toughness: 1/1
+triggered: at the beginning of combat on your turn, if you control another wolf or werewolf, put a +1/+1 counter on CARDNAME.
+triggered: when CARDNAME dies, you gain life equal to its power.

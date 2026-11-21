@@ -1,5 +1,0 @@
-name: horizon seeker
-mana cost: {2}{G}
-types: creature human warrior
-power toughness: 3/2
-activated[1]: boast — {1}{G}: search your library for a basic land card, reveal it, put it into your hand, then shuffle.

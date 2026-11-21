@@ -1,0 +1,6 @@
+name: dockworker drone
+mana cost: {1}{W}
+types: artifact creature robot
+power toughness: 1/1
+replacement: CARDNAME enters with a +1/+1 counter on it.
+triggered: when this creature dies, put its counters on target creature you control.

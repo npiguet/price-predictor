@@ -1,3 +1,0 @@
-name: oasis
-types: land
-activated[1]: {T}: prevent the next 1 damage that would be dealt to target creature this turn.

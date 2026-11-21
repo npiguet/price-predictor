@@ -1,0 +1,4 @@
+name: windborne charge
+mana cost: {2}{W}{W}
+types: sorcery
+spell[1]: two target creatures you control each get +2/+2 and gain flying until end of turn.

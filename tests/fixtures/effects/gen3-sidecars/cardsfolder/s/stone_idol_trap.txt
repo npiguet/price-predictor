@@ -1,0 +1,5 @@
+name: stone idol trap
+mana cost: {5}{R}
+types: instant trap
+spell[1]: create a 6/12 colorless construct artifact creature token with trample. exile it at the beginning of your next end step.
+static: this spell costs {1} less to cast for each attacking creature.

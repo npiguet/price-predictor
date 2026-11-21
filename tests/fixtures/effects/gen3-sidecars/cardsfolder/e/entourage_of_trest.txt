@@ -1,0 +1,6 @@
+name: entourage of trest
+mana cost: {4}{G}
+types: creature elf soldier
+power toughness: 4/4
+triggered: when CARDNAME enters, you become the monarch.
+static: CARDNAME can block an additional creature each combat as long as you're the monarch.

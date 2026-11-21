@@ -1,0 +1,5 @@
+name: jackal pup
+mana cost: {R}
+types: creature jackal
+power toughness: 2/1
+triggered: whenever CARDNAME is dealt damage, it deals that much damage to you.

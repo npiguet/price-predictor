@@ -1,7 +1,0 @@
-name: professional face-breaker
-mana cost: {2}{R}
-types: creature human warrior
-power toughness: 2/3
-static: menace
-activated[1]: sacrifice a treasure: exile the top card of your library. you may play it this turn.
-triggered: whenever one or more creatures you control deal combat damage to a player, create a treasure token.

@@ -1,0 +1,4 @@
+name: radiant grove
+types: land forest plains
+replacement: CARDNAME enters tapped.
+activated[1]: {T}: add {W} or {G}.

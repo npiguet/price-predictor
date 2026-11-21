@@ -1,0 +1,6 @@
+name: mukotai ambusher
+mana cost: {3}{B}
+types: artifact creature rat ninja
+power toughness: 3/2
+alternate cost: ninjutsu {1}{B}
+static: lifelink

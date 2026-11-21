@@ -1,0 +1,6 @@
+name: daru mender
+mana cost: {W}
+types: creature human cleric
+power toughness: 1/1
+alternate cost: morph {W}
+triggered: when CARDNAME is turned face up, regenerate target creature.

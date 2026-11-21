@@ -1,0 +1,6 @@
+name: wizard class
+mana cost: {U}
+types: enchantment class
+level[1]: you have no maximum hand size.
+level[2]: {2}{U}: when this class becomes level 2, draw two cards.
+level[3]: {4}{U}: whenever you draw a card, put a +1/+1 counter on target creature you control.

@@ -1,0 +1,6 @@
+name: gempalm avenger
+mana cost: {5}{W}
+types: creature human soldier
+power toughness: 3/5
+activated[1]: cycling {2}{W}
+triggered: when you cycle CARDNAME, soldier creatures get +1/+1 and gain first strike until end of turn.

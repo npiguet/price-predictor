@@ -1,0 +1,7 @@
+name: jewel thief
+mana cost: {2}{G}
+types: creature cat rogue
+power toughness: 3/3
+static: trample
+static: vigilance
+triggered: when CARDNAME enters, create a treasure token.

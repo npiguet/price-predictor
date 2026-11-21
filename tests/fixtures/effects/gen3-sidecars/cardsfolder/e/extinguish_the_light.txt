@@ -1,0 +1,4 @@
+name: extinguish the light
+mana cost: {2}{B}{B}
+types: instant
+spell[1]: destroy target creature or planeswalker. if its mana value was 3 or less, you gain 3 life.

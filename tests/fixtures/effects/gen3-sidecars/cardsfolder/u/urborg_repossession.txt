@@ -1,0 +1,5 @@
+name: urborg repossession
+mana cost: {B}
+types: sorcery
+additional cost: kicker {1}{G}
+spell[1]: return target creature card from your graveyard to your hand. you gain 2 life. if this spell was kicked, return another target permanent card from your graveyard to your hand.

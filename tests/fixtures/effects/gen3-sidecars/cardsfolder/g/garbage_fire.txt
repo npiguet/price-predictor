@@ -1,0 +1,6 @@
+name: garbage fire
+mana cost: {2}{R}
+types: instant
+draft: reveal CARDNAME as you draft it.
+draft: note how many cards you've drafted this draft round, including CARDNAME.
+spell[1]: CARDNAME deals damage to target creature equal to the highest number you noted for cards named CARDNAME.

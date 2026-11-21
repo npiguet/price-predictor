@@ -1,0 +1,6 @@
+name: warden of geometries
+mana cost: {4}
+types: creature eldrazi drone
+power toughness: 2/3
+static: vigilance
+activated[1]: {T}: add {C}.

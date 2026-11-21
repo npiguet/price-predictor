@@ -1,0 +1,5 @@
+name: archghoul of thraben
+mana cost: {2}{B}
+types: creature zombie cleric
+power toughness: 3/2
+triggered: whenever CARDNAME or another zombie you control dies, look at the top card of your library. if it's a zombie card, you may reveal it and put it into your hand. if you don't put the card into your hand, you may put it into your graveyard.

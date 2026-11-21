@@ -1,0 +1,6 @@
+name: goblin dark-dwellers
+mana cost: {3}{R}{R}
+types: creature goblin
+power toughness: 4/4
+static: menace
+triggered: when CARDNAME enters, you may cast target instant or sorcery card with mana value 3 or less from your graveyard without paying its mana cost. if that spell would be put into your graveyard this turn, exile it instead.

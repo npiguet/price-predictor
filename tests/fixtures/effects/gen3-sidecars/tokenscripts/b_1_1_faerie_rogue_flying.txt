@@ -1,0 +1,4 @@
+name: faerie rogue token
+types: creature faerie rogue
+power toughness: 1/1
+static: flying

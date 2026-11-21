@@ -1,0 +1,4 @@
+name: spore swarm
+mana cost: {3}{G}
+types: instant
+spell[1]: create three 1/1 green saproling creature tokens.

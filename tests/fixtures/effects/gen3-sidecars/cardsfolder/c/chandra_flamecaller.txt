@@ -1,0 +1,8 @@
+name: chandra, flamecaller
+mana cost: {4}{R}{R}
+types: legendary planeswalker chandra
+loyalty: 4
+planeswalker[1]: [+1]: create two 3/1 red elemental creature tokens with haste. exile them at the beginning of the next end step.
+planeswalker[2]: [0]: discard all the cards in your hand, then draw that many cards plus one.
+planeswalker[3]: [-X]: CARDNAME deals X damage to each creature.
+replacement: CARDNAME enters with four loyalty counters on it.

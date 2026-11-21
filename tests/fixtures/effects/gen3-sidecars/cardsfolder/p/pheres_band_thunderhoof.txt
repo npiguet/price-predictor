@@ -1,0 +1,5 @@
+name: pheres-band thunderhoof
+mana cost: {4}{G}
+types: creature centaur warrior
+power toughness: 3/4
+triggered: heroic — whenever you cast a spell that targets CARDNAME, put two +1/+1 counters on CARDNAME.

@@ -1,0 +1,5 @@
+name: thraben foulbloods
+mana cost: {2}{B}
+types: creature zombie dog
+power toughness: 3/2
+static: delirium — CARDNAME gets +1/+1 and has menace as long as there are four or more card types among cards in your graveyard.

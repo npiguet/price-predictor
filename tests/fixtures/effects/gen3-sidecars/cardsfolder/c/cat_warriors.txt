@@ -1,5 +1,0 @@
-name: cat warriors
-mana cost: {1}{G}{G}
-types: creature cat warrior
-power toughness: 2/2
-static: forestwalk

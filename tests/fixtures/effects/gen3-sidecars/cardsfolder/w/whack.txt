@@ -1,0 +1,5 @@
+name: whack
+mana cost: {3}{B}
+types: sorcery
+spell[1]: target creature gets -4/-4 until end of turn.
+static: this spell costs {3} less to cast if it targets a white creature.

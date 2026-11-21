@@ -1,5 +1,0 @@
-name: law-rune enforcer
-mana cost: {W}
-types: creature human soldier
-power toughness: 1/2
-activated[1]: {1}, {T}: tap target creature with mana value 2 or greater.

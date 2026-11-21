@@ -1,0 +1,6 @@
+name: knights of the black rose
+mana cost: {3}{W}{B}
+types: creature human knight
+power toughness: 4/4
+triggered: when CARDNAME enters, you become the monarch.
+triggered: whenever an opponent becomes the monarch, if you were the monarch as the turn began, that player loses 2 life and you gain 2 life.

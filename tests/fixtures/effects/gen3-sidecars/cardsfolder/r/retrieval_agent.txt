@@ -1,0 +1,5 @@
+name: retrieval agent
+mana cost: {3}{U}
+types: creature human soldier
+power toughness: 2/5
+activated[1]: {2}: CARDNAME gets +1/-1 until end of turn.

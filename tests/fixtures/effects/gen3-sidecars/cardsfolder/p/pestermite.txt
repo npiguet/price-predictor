@@ -1,0 +1,7 @@
+name: pestermite
+mana cost: {2}{U}
+types: creature faerie rogue
+power toughness: 2/1
+static: flash
+static: flying
+triggered: when CARDNAME enters, you may tap or untap target permanent.

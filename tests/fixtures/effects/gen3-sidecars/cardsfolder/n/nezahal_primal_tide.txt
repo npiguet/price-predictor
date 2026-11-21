@@ -1,0 +1,8 @@
+name: nezahal, primal tide
+mana cost: {5}{U}{U}
+types: legendary creature elder dinosaur
+power toughness: 7/7
+activated[1]: discard three cards: exile CARDNAME. return it to the battlefield tapped under its owner's control at the beginning of the next end step. return CARDNAME to the battlefield tapped under its owner's control.
+triggered: whenever an opponent casts a noncreature spell, draw a card.
+static: you have no maximum hand size.
+replacement: this spell can't be countered.

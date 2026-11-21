@@ -1,0 +1,5 @@
+name: crystal grotto
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}: add one mana of any color.
+triggered: when CARDNAME enters, scry 1.

@@ -1,0 +1,6 @@
+name: charmed sleep
+mana cost: {1}{U}{U}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, tap enchanted creature.
+replacement: enchanted creature doesn't untap during its controller's untap step.

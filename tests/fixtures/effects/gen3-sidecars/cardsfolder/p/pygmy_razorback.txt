@@ -1,5 +1,0 @@
-name: pygmy razorback
-mana cost: {1}{G}
-types: creature boar
-power toughness: 2/1
-static: trample

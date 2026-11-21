@@ -1,0 +1,5 @@
+name: tuktuk scrapper
+mana cost: {3}{R}
+types: creature goblin artificer ally
+power toughness: 2/2
+triggered: whenever CARDNAME or another ally you control enters, you may destroy target artifact. if that artifact is put into a graveyard this way, CARDNAME deals damage to that artifact's controller equal to the number of allies you control.

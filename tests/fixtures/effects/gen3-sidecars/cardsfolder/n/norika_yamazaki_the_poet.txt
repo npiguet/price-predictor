@@ -1,0 +1,6 @@
+name: norika yamazaki, the poet
+mana cost: {2}{W}
+types: legendary creature human samurai
+power toughness: 3/2
+static: vigilance
+triggered: whenever a samurai or warrior you control attacks alone, you may cast target enchantment card from your graveyard this turn.

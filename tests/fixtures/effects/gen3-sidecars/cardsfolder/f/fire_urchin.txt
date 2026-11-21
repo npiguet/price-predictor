@@ -1,6 +1,0 @@
-name: fire urchin
-mana cost: {1}{R}
-types: creature elemental
-power toughness: 1/3
-static: trample
-triggered: whenever you cast an instant or sorcery spell, CARDNAME gets +1/+0 until end of turn.

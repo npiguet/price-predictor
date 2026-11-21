@@ -1,0 +1,6 @@
+name: valorous stance
+mana cost: {1}{W}
+types: instant
+spell[1]: choose one
+option[2]: target creature gains indestructible until end of turn.
+option[3]: destroy target creature with toughness 4 or greater.

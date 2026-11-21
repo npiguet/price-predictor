@@ -1,0 +1,6 @@
+name: farideh's fireball
+mana cost: {3}{R}{R}
+types: instant
+spell[1]: CARDNAME deals 5 damage to target creature or planeswalker. roll a d20.
+option[2]: 1—9 | CARDNAME deals 2 damage to each player.
+option[3]: 10—20 | CARDNAME deals 2 damage to each opponent.

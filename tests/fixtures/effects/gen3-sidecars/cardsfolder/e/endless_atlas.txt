@@ -1,0 +1,4 @@
+name: endless atlas
+mana cost: {2}
+types: artifact
+activated[1]: {2}, {T}: draw a card. activate only if you control three or more lands with the same name.

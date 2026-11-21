@@ -1,4 +1,0 @@
-name: enshrouding mist
-mana cost: {W}
-types: instant
-spell[1]: target creature gets +1/+1 until end of turn. prevent all damage that would be dealt to it this turn. if it's renowned, untap it.

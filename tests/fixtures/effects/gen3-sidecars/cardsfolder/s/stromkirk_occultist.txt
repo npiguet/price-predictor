@@ -1,0 +1,7 @@
+name: stromkirk occultist
+mana cost: {2}{R}
+types: creature vampire horror
+power toughness: 3/2
+alternate cost: madness {1}{R}
+static: trample
+triggered: whenever CARDNAME deals combat damage to a player, exile the top card of your library. until end of turn, you may play that card.

@@ -1,5 +1,0 @@
-name: goblin digging team
-mana cost: {R}
-types: creature goblin
-power toughness: 1/1
-activated[1]: {T}, sacrifice CARDNAME: destroy target wall.

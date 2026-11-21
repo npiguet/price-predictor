@@ -1,5 +1,0 @@
-name: satyr wayfinder
-mana cost: {1}{G}
-types: creature satyr
-power toughness: 1/1
-triggered: when CARDNAME enters, reveal the top four cards of your library. you may put a land card from among them into your hand. put the rest into your graveyard.

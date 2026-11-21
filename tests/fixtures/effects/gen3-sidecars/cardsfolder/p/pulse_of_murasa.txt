@@ -1,0 +1,4 @@
+name: pulse of murasa
+mana cost: {2}{G}
+types: instant
+spell[1]: return target creature or land card from a graveyard to its owner's hand. you gain 6 life.

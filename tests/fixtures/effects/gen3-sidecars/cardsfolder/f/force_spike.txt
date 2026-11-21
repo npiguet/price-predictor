@@ -1,0 +1,4 @@
+name: force spike
+mana cost: {U}
+types: instant
+spell[1]: counter target spell unless its controller pays {1}.

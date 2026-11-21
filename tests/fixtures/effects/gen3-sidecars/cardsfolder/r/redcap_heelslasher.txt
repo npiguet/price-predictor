@@ -1,0 +1,6 @@
+name: redcap heelslasher
+mana cost: {3}{R}
+types: creature goblin rogue
+power toughness: 2/3
+triggered: backup 1
+static: first strike

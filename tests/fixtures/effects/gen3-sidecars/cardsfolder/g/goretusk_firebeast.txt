@@ -1,0 +1,5 @@
+name: goretusk firebeast
+mana cost: {5}{R}
+types: creature elemental boar beast
+power toughness: 2/2
+triggered: when CARDNAME enters, it deals 4 damage to target player or planeswalker.

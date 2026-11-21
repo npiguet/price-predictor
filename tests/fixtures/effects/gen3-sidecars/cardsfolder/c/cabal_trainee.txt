@@ -1,5 +1,0 @@
-name: cabal trainee
-mana cost: {B}
-types: creature human minion
-power toughness: 1/1
-activated[1]: sacrifice CARDNAME: target creature gets -2/-0 until end of turn.

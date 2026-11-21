@@ -1,0 +1,6 @@
+name: conclave mentor
+mana cost: {G}{W}
+types: creature centaur cleric
+power toughness: 2/2
+triggered: when CARDNAME dies, you gain life equal to its power.
+replacement: if one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead.

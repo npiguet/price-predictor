@@ -1,0 +1,3 @@
+name: unholy citadel
+types: land
+static: black legendary creatures you control have "bands with other legendary creatures."

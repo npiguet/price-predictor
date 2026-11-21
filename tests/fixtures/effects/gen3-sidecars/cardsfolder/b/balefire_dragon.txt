@@ -1,0 +1,6 @@
+name: balefire dragon
+mana cost: {5}{R}{R}
+types: creature dragon
+power toughness: 6/6
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, it deals that much damage to each creature that player controls.

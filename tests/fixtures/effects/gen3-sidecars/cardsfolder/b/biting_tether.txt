@@ -1,0 +1,6 @@
+name: biting tether
+mana cost: {4}{U}
+types: enchantment aura
+static: enchant creature
+triggered: at the beginning of your upkeep, put a -1/-1 counter on enchanted creature.
+static: you control enchanted creature.

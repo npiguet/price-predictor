@@ -1,5 +1,0 @@
-name: phalanx leader
-mana cost: {W}{W}
-types: creature human soldier
-power toughness: 1/1
-triggered: heroic — whenever you cast a spell that targets CARDNAME, put a +1/+1 counter on each creature you control.

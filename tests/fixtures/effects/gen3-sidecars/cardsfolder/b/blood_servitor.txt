@@ -1,0 +1,5 @@
+name: blood servitor
+mana cost: {3}
+types: artifact creature construct
+power toughness: 2/2
+triggered: when CARDNAME enters, create a blood token.

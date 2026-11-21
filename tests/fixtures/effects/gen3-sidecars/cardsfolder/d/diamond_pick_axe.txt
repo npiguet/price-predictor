@@ -1,0 +1,6 @@
+name: diamond pick-axe
+mana cost: {R}
+types: artifact equipment
+activated[1]: equip {2}
+static: indestructible
+static: equipped creature gets +1/+1 and has "whenever this creature attacks, create a treasure token."

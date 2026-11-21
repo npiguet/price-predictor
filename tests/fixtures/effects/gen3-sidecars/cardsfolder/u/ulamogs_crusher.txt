@@ -1,0 +1,6 @@
+name: ulamog's crusher
+mana cost: {8}
+types: creature eldrazi
+power toughness: 8/8
+triggered: annihilator 2
+static: CARDNAME attacks each combat if able.

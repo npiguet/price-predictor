@@ -1,6 +1,0 @@
-name: sarcomite myr
-mana cost: {2}{U}
-types: artifact creature phyrexian myr
-power toughness: 2/1
-activated[1]: {2}: CARDNAME gains flying until end of turn.
-activated[2]: {2}, sacrifice CARDNAME: draw a card.

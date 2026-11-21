@@ -1,0 +1,4 @@
+name: sanctum of calm waters
+mana cost: {3}{U}
+types: legendary enchantment shrine
+triggered: at the beginning of your first main phase, you may draw X cards, where X is the number of shrines you control. if you do, discard a card.

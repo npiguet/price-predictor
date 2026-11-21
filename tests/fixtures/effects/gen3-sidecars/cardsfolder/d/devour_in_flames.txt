@@ -1,0 +1,4 @@
+name: devour in flames
+mana cost: {2}{R}
+types: sorcery
+spell[1]: as an additional cost to cast this spell, return a land you control to its owner's hand. CARDNAME deals 5 damage to target creature or planeswalker.

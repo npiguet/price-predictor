@@ -1,0 +1,8 @@
+name: cemetery illuminator
+mana cost: {1}{U}{U}
+types: creature spirit
+power toughness: 2/3
+static: flying
+triggered: when CARDNAME enters or attacks, exile a card from a graveyard.
+static: you may look at the top card of your library any time.
+static: once each turn, you may cast a spell from the top of your library if it shares a card type with a card exiled with CARDNAME.

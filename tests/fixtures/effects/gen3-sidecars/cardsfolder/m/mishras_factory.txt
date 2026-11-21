@@ -1,5 +1,0 @@
-name: mishra's factory
-types: land
-activated[1]: {T}: add {C}.
-activated[2]: {1}: CARDNAME becomes a 2/2 assembly-worker artifact creature until end of turn. it's still a land.
-activated[3]: {T}: target assembly-worker creature gets +1/+1 until end of turn.

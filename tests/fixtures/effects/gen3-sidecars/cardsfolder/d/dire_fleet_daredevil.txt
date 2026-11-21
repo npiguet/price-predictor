@@ -1,6 +1,0 @@
-name: dire fleet daredevil
-mana cost: {1}{R}
-types: creature human pirate
-power toughness: 2/1
-static: first strike
-triggered: when CARDNAME enters, exile target instant or sorcery card from an opponent's graveyard. you may cast it this turn, and you may spend mana as though it were mana of any type to cast that spell. if that spell would be put into a graveyard this turn, exile it instead. if that card would be put into your graveyard this turn, exile it instead.

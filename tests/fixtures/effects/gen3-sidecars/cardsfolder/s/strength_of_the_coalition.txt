@@ -1,0 +1,5 @@
+name: strength of the coalition
+mana cost: {G}
+types: instant
+additional cost: kicker {2}{W}
+spell[1]: target creature you control gets +2/+2 until end of turn. if this spell was kicked, put a +1/+1 counter on each creature you control.

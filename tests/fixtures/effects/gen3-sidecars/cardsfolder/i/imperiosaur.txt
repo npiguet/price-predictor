@@ -1,0 +1,5 @@
+name: imperiosaur
+mana cost: {2}{G}{G}
+types: creature dinosaur
+power toughness: 5/5
+static: spend only mana produced by basic lands to cast this spell.

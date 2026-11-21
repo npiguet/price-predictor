@@ -1,0 +1,5 @@
+name: quest for ula's temple
+mana cost: {U}
+types: enchantment
+triggered: at the beginning of your upkeep, you may look at the top card of your library. if it's a creature card, you may reveal it and put a quest counter on quest for CARDNAME.
+triggered: at the beginning of each end step, if there are three or more quest counters on CARDNAME, you may put a kraken, leviathan, octopus, or serpent creature card from your hand onto the battlefield.

@@ -1,4 +1,0 @@
-name: turn to frog
-mana cost: {1}{U}
-types: instant
-spell[1]: until end of turn, target creature loses all abilities and becomes a blue frog with base power and toughness 1/1.

@@ -1,4 +1,0 @@
-name: collar the culprit
-mana cost: {3}{W}
-types: instant
-spell[1]: destroy target creature with toughness 4 or greater.

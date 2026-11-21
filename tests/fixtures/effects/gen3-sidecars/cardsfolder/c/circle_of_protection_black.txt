@@ -1,4 +1,0 @@
-name: circle of protection: black
-mana cost: {1}{W}
-types: enchantment
-activated[1]: {1}: the next time a black source of your choice would deal damage to you this turn, prevent that damage. the next time the chosen black source deals damage to you, prevent that damage.

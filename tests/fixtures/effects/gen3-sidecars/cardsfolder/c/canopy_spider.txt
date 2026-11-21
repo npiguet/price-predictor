@@ -1,5 +1,0 @@
-name: canopy spider
-mana cost: {1}{G}
-types: creature spider
-power toughness: 1/3
-static: reach

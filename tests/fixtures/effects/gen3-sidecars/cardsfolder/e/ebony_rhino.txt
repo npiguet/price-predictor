@@ -1,5 +1,0 @@
-name: ebony rhino
-mana cost: {7}
-types: artifact creature rhino
-power toughness: 4/5
-static: trample

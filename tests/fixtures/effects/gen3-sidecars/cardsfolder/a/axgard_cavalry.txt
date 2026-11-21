@@ -1,5 +1,0 @@
-name: axgard cavalry
-mana cost: {1}{R}
-types: creature dwarf berserker
-power toughness: 2/2
-activated[1]: {T}: target creature gains haste until end of turn.

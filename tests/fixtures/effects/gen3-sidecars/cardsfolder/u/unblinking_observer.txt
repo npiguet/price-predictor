@@ -1,5 +1,0 @@
-name: unblinking observer
-mana cost: {1}{U}
-types: creature homunculus
-power toughness: 2/1
-activated[1]: {T}: add {U}. spend this mana only to pay a disturb cost or cast an instant or sorcery spell.

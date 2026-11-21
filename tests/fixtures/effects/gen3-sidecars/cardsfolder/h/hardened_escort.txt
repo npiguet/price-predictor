@@ -1,5 +1,0 @@
-name: hardened escort
-mana cost: {2}{W}
-types: creature human soldier
-power toughness: 2/4
-triggered: whenever CARDNAME attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.

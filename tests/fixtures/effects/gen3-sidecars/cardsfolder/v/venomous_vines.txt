@@ -1,0 +1,4 @@
+name: venomous vines
+mana cost: {2}{G}{G}
+types: sorcery
+spell[1]: destroy target enchanted permanent.

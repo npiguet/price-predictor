@@ -1,6 +1,0 @@
-name: staunch throneguard
-mana cost: {5}
-types: artifact creature construct
-power toughness: 2/5
-static: vigilance
-triggered: when CARDNAME enters, you become the monarch.

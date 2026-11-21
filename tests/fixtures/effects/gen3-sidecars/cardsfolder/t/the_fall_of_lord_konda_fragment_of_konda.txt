@@ -1,0 +1,16 @@
+layout: transform
+name: the fall of lord konda
+mana cost: {2}{W}
+types: enchantment saga
+chapter: I — exile target creature an opponent controls with mana value 4 or greater.
+chapter: II — each player gains control of all permanents they own.
+chapter: III — exile this saga, then return it to the battlefield transformed under your control.
+replacement: CARDNAME enters with a lore counter on it.
+
+ALTERNATE
+
+name: fragment of konda
+types: enchantment creature human noble
+power toughness: 1/3
+static: defender
+triggered: when CARDNAME dies, draw a card.

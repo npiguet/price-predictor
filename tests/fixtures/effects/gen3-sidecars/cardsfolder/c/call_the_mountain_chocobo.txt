@@ -1,5 +1,0 @@
-name: call the mountain chocobo
-mana cost: {3}{R}
-types: sorcery
-alternate cost: flashback {5}{R}
-spell[1]: search your library for a mountain card, reveal it, put it into your hand, then shuffle. create a 2/2 green bird creature token with "whenever a land you control enters, this token gets +1/+0 until end of turn."

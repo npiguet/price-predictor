@@ -1,0 +1,6 @@
+name: aftermath analyst
+mana cost: {1}{G}
+types: creature elf detective
+power toughness: 1/3
+activated[1]: {3}{G}, sacrifice CARDNAME: return all land cards from your graveyard to the battlefield tapped.
+triggered: when CARDNAME enters, mill three cards.

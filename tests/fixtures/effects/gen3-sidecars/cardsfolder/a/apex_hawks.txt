@@ -1,0 +1,7 @@
+name: apex hawks
+mana cost: {2}{W}
+types: creature bird
+power toughness: 2/2
+additional cost: multikicker {1}{W}
+static: flying
+replacement: CARDNAME enters with a +1/+1 counter on it for each time it was kicked.

@@ -1,0 +1,5 @@
+name: moon-blessed cleric
+mana cost: {2}{W}
+types: creature human elf cleric
+power toughness: 3/2
+triggered: divine intervention — when CARDNAME enters, you may search your library for an enchantment card, reveal it, then shuffle and put that card on top.

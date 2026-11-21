@@ -1,0 +1,7 @@
+name: return from the wilds
+mana cost: {2}{G}
+types: sorcery
+spell[1]: choose two
+option[2]: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+option[3]: create a 1/1 white human creature token.
+option[4]: create a food token.

@@ -1,0 +1,6 @@
+name: parish-blade trainee
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 1/2
+triggered: training
+triggered: when CARDNAME dies, put its counters on target creature you control.

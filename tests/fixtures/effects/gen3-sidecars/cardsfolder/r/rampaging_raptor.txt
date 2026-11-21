@@ -1,0 +1,8 @@
+name: rampaging raptor
+mana cost: {2}{R}{R}
+types: creature dinosaur
+power toughness: 4/4
+static: haste
+static: trample
+activated[1]: {2}{R}: CARDNAME gets +2/+0 until end of turn.
+triggered: whenever CARDNAME deals combat damage to an opponent, it deals that much damage to target planeswalker that player controls or battle that player protects.

@@ -1,0 +1,7 @@
+name: void grafter
+mana cost: {1}{G}{U}
+types: creature eldrazi drone
+power toughness: 2/4
+static: devoid
+static: flash
+triggered: when CARDNAME enters, another target creature you control gains hexproof until end of turn.

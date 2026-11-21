@@ -1,0 +1,4 @@
+name: forgotten monument
+types: land cave
+activated[1]: {T}: add {C}.
+static: other caves you control have "{T}, pay 1 life: add one mana of any color."

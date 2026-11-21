@@ -1,0 +1,5 @@
+name: tatyova, benthic druid
+mana cost: {3}{G}{U}
+types: legendary creature merfolk druid
+power toughness: 3/3
+triggered: landfall — whenever a land you control enters, you gain 1 life and draw a card.

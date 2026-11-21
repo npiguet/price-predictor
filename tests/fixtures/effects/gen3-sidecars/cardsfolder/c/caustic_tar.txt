@@ -1,0 +1,5 @@
+name: caustic tar
+mana cost: {4}{B}{B}
+types: enchantment aura
+static: enchant land
+static: enchanted land has "{T}: target player loses 3 life."

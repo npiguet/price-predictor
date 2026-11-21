@@ -1,0 +1,5 @@
+name: brink of disaster
+mana cost: {2}{B}{B}
+types: enchantment aura
+static: enchant creature or land
+triggered: when enchanted permanent becomes tapped, destroy it.

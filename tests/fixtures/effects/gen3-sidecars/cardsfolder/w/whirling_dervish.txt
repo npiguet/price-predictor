@@ -1,0 +1,6 @@
+name: whirling dervish
+mana cost: {G}{G}
+types: creature human monk
+power toughness: 1/1
+static: protection from black
+triggered: at the beginning of each end step, if CARDNAME dealt damage to an opponent this turn, put a +1/+1 counter on it.

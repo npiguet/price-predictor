@@ -1,0 +1,5 @@
+name: ice over
+mana cost: {1}{U}
+types: enchantment aura
+static: enchant artifact or creature
+replacement: enchanted permanent doesn't untap during its controller's untap step.

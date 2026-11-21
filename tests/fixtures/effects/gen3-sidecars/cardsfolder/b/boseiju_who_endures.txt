@@ -1,0 +1,4 @@
+name: boseiju, who endures
+types: legendary land
+activated[1]: {T}: add {G}.
+activated[2]: channel — {1}{G}, discard CARDNAME: destroy target artifact, enchantment, or nonbasic land an opponent controls. that player may search their library for a land card with a basic land type, put it onto the battlefield, then shuffle. this ability costs {1} less to activate for each legendary creature you control.

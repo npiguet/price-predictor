@@ -1,0 +1,6 @@
+name: blooming stinger
+mana cost: {1}{G}
+types: creature plant scorpion
+power toughness: 2/2
+static: deathtouch
+triggered: when this creature enters, another target creature you control gains deathtouch until end of turn.

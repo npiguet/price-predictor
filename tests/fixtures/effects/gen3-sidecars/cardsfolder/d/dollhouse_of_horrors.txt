@@ -1,0 +1,4 @@
+name: dollhouse of horrors
+mana cost: {5}
+types: artifact
+activated[1]: {1}, {T}, exile a creature card from your graveyard: create a token that's a copy of the exiled card, except it's a 0/0 construct artifact in addition to its other types and it has "this creature gets +1/+1 for each construct you control." that creature gains haste until end of turn. activate only as a sorcery.

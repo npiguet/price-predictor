@@ -1,0 +1,6 @@
+name: tattered haunter
+mana cost: {1}{U}
+types: creature spirit
+power toughness: 2/1
+static: flying
+static: CARDNAME can block only creatures with flying.

@@ -1,0 +1,5 @@
+name: chupacabra echo
+mana cost: {2}{B}{B}
+types: creature beast horror spirit
+power toughness: 3/2
+triggered: fathomless descent — when CARDNAME enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.

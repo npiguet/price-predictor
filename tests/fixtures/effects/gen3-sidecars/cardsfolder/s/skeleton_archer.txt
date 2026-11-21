@@ -1,0 +1,5 @@
+name: skeleton archer
+mana cost: {3}{B}
+types: creature skeleton archer
+power toughness: 3/3
+triggered: when CARDNAME enters, it deals 1 damage to any target.

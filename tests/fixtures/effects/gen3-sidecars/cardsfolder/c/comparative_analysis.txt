@@ -1,0 +1,5 @@
+name: comparative analysis
+mana cost: {3}{U}
+types: instant
+alternate cost: surge {2}{U}
+spell[1]: target player draws two cards.

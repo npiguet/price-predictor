@@ -1,4 +1,0 @@
-name: thermokarst
-mana cost: {1}{G}{G}
-types: sorcery
-spell[1]: destroy target land. if that land was a snow land, you gain 1 life.

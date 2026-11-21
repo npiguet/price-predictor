@@ -1,5 +1,0 @@
-name: invigorate
-mana cost: {2}{G}
-types: instant
-spell[1]: target creature gets +4/+4 until end of turn.
-static: if you control a forest, rather than pay this spell's mana cost, you may have an opponent gain 3 life.

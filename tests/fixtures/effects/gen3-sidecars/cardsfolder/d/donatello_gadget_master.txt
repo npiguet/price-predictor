@@ -1,0 +1,6 @@
+name: donatello, gadget master
+mana cost: {2}{U}
+types: legendary creature mutant ninja turtle
+power toughness: 3/2
+alternate cost: sneak {1}{U}
+triggered: whenever CARDNAME deals combat damage to a player, create a token that's a copy of target artifact you control.

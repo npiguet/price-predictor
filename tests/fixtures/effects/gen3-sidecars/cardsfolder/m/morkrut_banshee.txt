@@ -1,0 +1,5 @@
+name: morkrut banshee
+mana cost: {3}{B}{B}
+types: creature spirit
+power toughness: 4/4
+triggered: morbid — when CARDNAME enters, if a creature died this turn, target creature gets -4/-4 until end of turn.

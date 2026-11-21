@@ -1,4 +1,0 @@
-name: field of souls
-mana cost: {2}{W}{W}
-types: enchantment
-triggered: whenever a nontoken creature is put into your graveyard from the battlefield, create a 1/1 white spirit creature token with flying.

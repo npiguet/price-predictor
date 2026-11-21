@@ -1,0 +1,6 @@
+name: thieving sprite
+mana cost: {2}{B}
+types: creature faerie rogue
+power toughness: 1/1
+static: flying
+triggered: when CARDNAME enters, target player reveals X cards from their hand, where X is the number of faeries you control. you choose one of those cards. that player discards that card.

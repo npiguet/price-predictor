@@ -1,4 +1,0 @@
-name: strafe
-mana cost: {R}
-types: sorcery
-spell[1]: CARDNAME deals 3 damage to target nonred creature.

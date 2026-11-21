@@ -1,6 +1,0 @@
-name: noble templar
-mana cost: {5}{W}
-types: creature human cleric soldier
-power toughness: 3/6
-activated[1]: plainscycling {2}
-static: vigilance

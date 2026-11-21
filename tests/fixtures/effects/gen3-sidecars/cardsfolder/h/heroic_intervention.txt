@@ -1,0 +1,4 @@
+name: heroic intervention
+mana cost: {1}{G}
+types: instant
+spell[1]: permanents you control gain hexproof and indestructible until end of turn.

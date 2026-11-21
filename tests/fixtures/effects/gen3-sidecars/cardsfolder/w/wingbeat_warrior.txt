@@ -1,0 +1,7 @@
+name: wingbeat warrior
+mana cost: {2}{W}
+types: creature bird soldier warrior
+power toughness: 2/1
+alternate cost: morph {2}{W}
+static: flying
+triggered: when CARDNAME is turned face up, target creature gains first strike until end of turn.

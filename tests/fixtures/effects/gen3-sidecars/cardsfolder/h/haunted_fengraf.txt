@@ -1,4 +1,0 @@
-name: haunted fengraf
-types: land
-activated[1]: {T}: add {C}.
-activated[2]: {3}, {T}, sacrifice CARDNAME: return a creature card at random from your graveyard to your hand.

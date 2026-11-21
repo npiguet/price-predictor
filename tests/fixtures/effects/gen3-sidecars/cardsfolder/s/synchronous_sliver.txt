@@ -1,5 +1,0 @@
-name: synchronous sliver
-mana cost: {4}{U}
-types: creature sliver
-power toughness: 3/3
-static: all sliver creatures have vigilance.

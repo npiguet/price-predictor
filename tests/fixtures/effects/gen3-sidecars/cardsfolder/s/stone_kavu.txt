@@ -1,6 +1,0 @@
-name: stone kavu
-mana cost: {4}{G}
-types: creature kavu
-power toughness: 3/3
-activated[1]: {R}: CARDNAME gets +1/+0 until end of turn.
-activated[2]: {W}: CARDNAME gets +0/+1 until end of turn.

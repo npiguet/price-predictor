@@ -1,0 +1,4 @@
+name: snake basket
+mana cost: {4}
+types: artifact
+activated[1]: {X}, sacrifice CARDNAME: create X 1/1 green snake creature tokens. activate only as a sorcery.

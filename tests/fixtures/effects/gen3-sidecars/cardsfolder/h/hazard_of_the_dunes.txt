@@ -1,7 +1,0 @@
-name: hazard of the dunes
-mana cost: {3}{G}
-types: creature wurm
-power toughness: 4/4
-static: reach
-static: trample
-activated[1]: exhaust — {6}{G}: put three +1/+1 counters on this creature.

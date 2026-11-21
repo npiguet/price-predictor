@@ -1,0 +1,6 @@
+name: skeletal changeling
+mana cost: {1}{B}
+types: creature shapeshifter
+power toughness: 1/1
+static: changeling
+activated[1]: {1}{B}: regenerate CARDNAME.

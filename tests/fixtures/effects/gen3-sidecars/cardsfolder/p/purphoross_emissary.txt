@@ -1,0 +1,7 @@
+name: purphoros's emissary
+mana cost: {3}{R}
+types: enchantment creature ox
+power toughness: 3/3
+alternate cost: bestow {6}{R}
+static: menace
+static: enchanted creature gets +3/+3 and has menace.

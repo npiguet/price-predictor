@@ -1,0 +1,6 @@
+name: searchlight companion
+mana cost: {3}
+types: artifact creature drone
+power toughness: 1/1
+static: flying
+triggered: when CARDNAME enters, create a 1/1 colorless spirit creature token.

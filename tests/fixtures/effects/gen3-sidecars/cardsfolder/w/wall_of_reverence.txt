@@ -1,7 +1,0 @@
-name: wall of reverence
-mana cost: {3}{W}
-types: creature spirit wall
-power toughness: 1/6
-static: defender
-static: flying
-triggered: at the beginning of your end step, you may gain life equal to the power of target creature you control.

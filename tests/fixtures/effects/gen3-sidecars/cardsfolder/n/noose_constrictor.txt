@@ -1,0 +1,6 @@
+name: noose constrictor
+mana cost: {1}{G}
+types: creature snake
+power toughness: 2/2
+static: reach
+activated[1]: discard a card: CARDNAME gets +1/+1 until end of turn.

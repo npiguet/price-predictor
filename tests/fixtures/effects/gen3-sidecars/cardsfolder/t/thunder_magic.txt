@@ -1,8 +1,0 @@
-name: thunder magic
-mana cost: {R}
-types: instant
-additional cost: tiered
-spell[1]: choose one
-option[2]: {0} — thunder — CARDNAME deals 2 damage to target creature.
-option[3]: {3} — thundara — CARDNAME deals 4 damage to target creature.
-option[4]: {5}{R} — thundaga — CARDNAME deals 8 damage to target creature.

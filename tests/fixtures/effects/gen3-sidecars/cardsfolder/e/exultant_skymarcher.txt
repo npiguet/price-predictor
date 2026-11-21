@@ -1,0 +1,5 @@
+name: exultant skymarcher
+mana cost: {1}{W}{W}
+types: creature vampire soldier
+power toughness: 2/3
+static: flying

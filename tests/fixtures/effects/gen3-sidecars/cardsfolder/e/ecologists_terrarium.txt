@@ -1,0 +1,5 @@
+name: ecologist's terrarium
+mana cost: {2}
+types: artifact
+activated[1]: {2}, {T}, sacrifice CARDNAME: put a +1/+1 counter on target creature. activate only as a sorcery.
+triggered: when CARDNAME enters, you may search your library for a basic land card, reveal it, put it into your hand, then shuffle.

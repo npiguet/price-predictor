@@ -1,0 +1,5 @@
+name: spore crawler
+mana cost: {2}{G}
+types: creature fungus
+power toughness: 3/2
+triggered: when CARDNAME dies, draw a card.

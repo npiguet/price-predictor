@@ -1,5 +1,0 @@
-name: eternal witness
-mana cost: {1}{G}{G}
-types: creature human shaman
-power toughness: 2/1
-triggered: when CARDNAME enters, you may return target card from your graveyard to your hand.

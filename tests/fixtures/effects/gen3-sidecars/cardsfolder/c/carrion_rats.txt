@@ -1,5 +1,0 @@
-name: carrion rats
-mana cost: {B}
-types: creature rat
-power toughness: 2/1
-triggered: whenever CARDNAME attacks or blocks, any player may exile a card from their graveyard. if a player does, CARDNAME assigns no combat damage this turn.

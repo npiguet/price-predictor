@@ -1,0 +1,5 @@
+name: krosan verge
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}, sacrifice CARDNAME: search your library for a forest card and a plains card, put them onto the battlefield tapped, then shuffle.
+replacement: CARDNAME enters tapped.

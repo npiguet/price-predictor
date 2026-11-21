@@ -1,0 +1,5 @@
+name: vivid meadow
+types: land
+activated[1]: {T}: add {W}.
+activated[2]: {T}, remove a charge counter from CARDNAME: add one mana of any color.
+replacement: CARDNAME enters tapped with two charge counters on it.

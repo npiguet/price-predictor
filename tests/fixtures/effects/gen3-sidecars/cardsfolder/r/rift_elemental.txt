@@ -1,0 +1,5 @@
+name: rift elemental
+mana cost: {R}
+types: creature elemental
+power toughness: 1/1
+activated[1]: {1}{R}, remove a time counter from a permanent you control or suspended card you own: CARDNAME gets +2/+0 until end of turn.

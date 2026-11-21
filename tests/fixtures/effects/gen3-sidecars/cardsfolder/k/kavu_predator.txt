@@ -1,6 +1,0 @@
-name: kavu predator
-mana cost: {1}{G}
-types: creature kavu
-power toughness: 2/2
-static: trample
-triggered: whenever an opponent gains life, put that many +1/+1 counters on CARDNAME.

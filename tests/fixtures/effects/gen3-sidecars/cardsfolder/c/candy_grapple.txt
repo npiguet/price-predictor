@@ -1,0 +1,5 @@
+name: candy grapple
+mana cost: {1}{B}
+types: instant
+additional cost: bargain
+spell[1]: target creature gets -3/-3 until end of turn. if this spell was bargained, that creature gets -5/-5 until end of turn instead.

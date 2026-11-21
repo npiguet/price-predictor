@@ -1,0 +1,6 @@
+name: surveillance monitor
+mana cost: {3}{U}
+types: creature vedalken detective
+power toughness: 3/3
+triggered: when CARDNAME enters, you may collect evidence 4.
+triggered: whenever you collect evidence, create a 1/1 colorless thopter artifact creature token with flying.

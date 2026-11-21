@@ -1,0 +1,5 @@
+name: essence sliver
+mana cost: {3}{W}
+types: creature sliver
+power toughness: 3/3
+triggered: whenever a sliver deals damage, its controller gains that much life.

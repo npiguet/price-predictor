@@ -1,0 +1,6 @@
+name: storm entity
+mana cost: {1}{R}
+types: creature elemental
+power toughness: 1/1
+static: haste
+replacement: CARDNAME enters with a +1/+1 counter on it for each other spell cast this turn.

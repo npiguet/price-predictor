@@ -1,0 +1,4 @@
+name: reaver ambush
+mana cost: {2}{B}
+types: instant
+spell[1]: exile target creature with power 3 or less.

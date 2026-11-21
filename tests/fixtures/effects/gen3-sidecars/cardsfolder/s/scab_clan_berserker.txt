@@ -1,0 +1,7 @@
+name: scab-clan berserker
+mana cost: {1}{R}{R}
+types: creature human berserker
+power toughness: 2/2
+static: haste
+triggered: renown 1
+triggered: whenever an opponent casts a noncreature spell, if CARDNAME is renowned, CARDNAME deals 2 damage to that player.

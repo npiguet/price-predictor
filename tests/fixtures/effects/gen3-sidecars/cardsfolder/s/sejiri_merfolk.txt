@@ -1,0 +1,5 @@
+name: sejiri merfolk
+mana cost: {1}{U}
+types: creature merfolk soldier
+power toughness: 2/1
+static: as long as you control a plains, CARDNAME has first strike and lifelink.

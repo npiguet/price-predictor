@@ -1,4 +1,0 @@
-name: blur
-mana cost: {2}{U}
-types: instant
-spell[1]: exile target creature you control, then return that card to the battlefield under their owner's control. draw a card.

@@ -1,5 +1,0 @@
-name: wildheart invoker
-mana cost: {2}{G}{G}
-types: creature elf shaman
-power toughness: 4/3
-activated[1]: {8}: target creature gets +5/+5 and gains trample until end of turn.

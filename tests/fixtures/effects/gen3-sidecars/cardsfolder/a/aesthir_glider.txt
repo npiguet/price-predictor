@@ -1,6 +1,0 @@
-name: aesthir glider
-mana cost: {3}
-types: artifact creature bird construct
-power toughness: 2/1
-static: flying
-static: CARDNAME can't block.

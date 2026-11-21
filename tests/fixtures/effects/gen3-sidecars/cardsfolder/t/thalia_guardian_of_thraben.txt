@@ -1,0 +1,6 @@
+name: thalia, guardian of thraben
+mana cost: {1}{W}
+types: legendary creature human soldier
+power toughness: 2/1
+static: first strike
+static: noncreature spells cost {1} more to cast.

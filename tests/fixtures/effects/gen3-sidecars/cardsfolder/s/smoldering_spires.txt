@@ -1,0 +1,5 @@
+name: smoldering spires
+types: land
+activated[1]: {T}: add {R}.
+triggered: when CARDNAME enters, target creature can't block this turn.
+replacement: CARDNAME enters tapped.

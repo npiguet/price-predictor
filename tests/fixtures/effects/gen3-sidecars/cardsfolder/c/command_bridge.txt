@@ -1,0 +1,5 @@
+name: command bridge
+types: land
+activated[1]: {T}: add one mana of any color.
+triggered: when this land enters, sacrifice it unless you tap an untapped permanent you control.
+replacement: this land enters tapped.

@@ -1,0 +1,7 @@
+name: braids's frightful return
+mana cost: {2}{B}
+types: enchantment saga
+chapter: I — you may sacrifice a creature. if you do, each opponent discards a card.
+chapter: II — return target creature card from your graveyard to your hand.
+chapter: III — target opponent may sacrifice a nonland, nontoken permanent. if they don't, they lose 2 life and you draw a card.
+static: read ahead

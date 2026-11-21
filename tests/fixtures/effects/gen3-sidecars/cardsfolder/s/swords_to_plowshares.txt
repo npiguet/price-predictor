@@ -1,4 +1,0 @@
-name: swords to plowshares
-mana cost: {W}
-types: instant
-spell[1]: exile target creature. its controller gains life equal to its power.

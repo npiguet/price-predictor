@@ -1,0 +1,5 @@
+name: intercessor's arrest
+mana cost: {2}{W}
+types: enchantment aura
+static: enchant permanent
+static: enchanted permanent can't attack, block, or crew vehicles. its activated abilities can't be activated unless they're mana abilities.

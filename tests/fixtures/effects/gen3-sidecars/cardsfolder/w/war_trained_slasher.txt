@@ -1,0 +1,6 @@
+name: war-trained slasher
+mana cost: {3}{R}
+types: creature wolverine dinosaur
+power toughness: 4/3
+static: menace
+triggered: whenever CARDNAME attacks a battle, double its power until end of turn.

@@ -1,0 +1,6 @@
+name: daru stinger
+mana cost: {3}{W}
+types: creature soldier
+power toughness: 1/1
+static: amplify 1
+activated[1]: {T}: CARDNAME deals damage equal to the number of +1/+1 counters on it to target attacking or blocking creature.

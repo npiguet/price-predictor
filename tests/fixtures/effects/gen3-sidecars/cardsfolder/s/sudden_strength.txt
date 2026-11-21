@@ -1,4 +1,0 @@
-name: sudden strength
-mana cost: {3}{G}
-types: instant
-spell[1]: target creature gets +3/+3 until end of turn. draw a card.

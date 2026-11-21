@@ -1,0 +1,6 @@
+name: walker of the wastes
+mana cost: {4}{C}
+types: creature eldrazi
+power toughness: 4/4
+static: trample
+static: CARDNAME gets +1/+1 for each land you control named wastes.

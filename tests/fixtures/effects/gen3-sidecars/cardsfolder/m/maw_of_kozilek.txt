@@ -1,0 +1,6 @@
+name: maw of kozilek
+mana cost: {3}{R}
+types: creature eldrazi drone
+power toughness: 2/5
+static: devoid
+activated[1]: {C}: CARDNAME gets +2/-2 until end of turn.

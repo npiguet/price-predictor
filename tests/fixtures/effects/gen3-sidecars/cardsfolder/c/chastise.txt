@@ -1,0 +1,4 @@
+name: chastise
+mana cost: {3}{W}
+types: instant
+spell[1]: destroy target attacking creature. you gain life equal to its power.

@@ -1,0 +1,5 @@
+name: skirsdag cultist
+mana cost: {2}{R}{R}
+types: creature human shaman
+power toughness: 2/2
+activated[1]: {R}, {T}, sacrifice a creature: CARDNAME deals 2 damage to any target.

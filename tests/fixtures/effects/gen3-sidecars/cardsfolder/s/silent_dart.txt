@@ -1,0 +1,4 @@
+name: silent dart
+mana cost: {1}
+types: artifact
+activated[1]: {4}, {T}, sacrifice CARDNAME: it deals 3 damage to target creature.

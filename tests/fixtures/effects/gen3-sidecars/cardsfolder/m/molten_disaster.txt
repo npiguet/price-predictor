@@ -1,0 +1,6 @@
+name: molten disaster
+mana cost: {X}{R}{R}
+types: sorcery
+additional cost: kicker {R}
+spell[1]: CARDNAME deals X damage to each creature without flying and each player.
+static: if this spell was kicked, it has split second.

@@ -1,0 +1,4 @@
+name: tasha's hideous laughter
+mana cost: {1}{U}{U}
+types: sorcery
+spell[1]: each opponent exiles cards from the top of their library until that player has exiled cards with total mana value 20 or more.

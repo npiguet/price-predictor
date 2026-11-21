@@ -1,0 +1,4 @@
+name: aggravated assault
+mana cost: {2}{R}
+types: enchantment
+activated[1]: {3}{R}{R}: untap all creatures you control. after this main phase, there is an additional combat phase followed by an additional main phase. activate only as a sorcery.

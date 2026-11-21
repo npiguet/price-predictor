@@ -1,0 +1,6 @@
+name: goblin javelineer
+mana cost: {R}
+types: creature goblin warrior
+power toughness: 1/1
+static: haste
+triggered: whenever CARDNAME becomes blocked, it deals 1 damage to target creature blocking it.

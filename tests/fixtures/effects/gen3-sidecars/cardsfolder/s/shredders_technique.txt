@@ -1,0 +1,5 @@
+name: shredder's technique
+mana cost: {2}{B}
+types: sorcery
+alternate cost: sneak {B}
+spell[1]: destroy target creature or enchantment. if an enchantment was destroyed this way, you lose 2 life.

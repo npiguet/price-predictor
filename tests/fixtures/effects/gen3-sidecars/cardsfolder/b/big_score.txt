@@ -1,4 +1,0 @@
-name: big score
-mana cost: {3}{R}
-types: instant
-spell[1]: as an additional cost to cast this spell, discard a card. draw two cards and create two treasure tokens.

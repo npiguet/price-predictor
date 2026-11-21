@@ -1,0 +1,7 @@
+name: aven heartstabber
+mana cost: {U}{B}
+types: creature bird assassin
+power toughness: 1/1
+static: flying
+triggered: when CARDNAME dies, mill two cards, then draw a card.
+static: as long as there are five or more mana values among cards in your graveyard, CARDNAME gets +2/+2 and has deathtouch.

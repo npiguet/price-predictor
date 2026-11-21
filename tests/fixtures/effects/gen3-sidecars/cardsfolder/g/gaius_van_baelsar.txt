@@ -1,8 +1,0 @@
-name: gaius van baelsar
-mana cost: {2}{B}{B}
-types: legendary creature human soldier
-power toughness: 3/2
-triggered: when CARDNAME enters, choose one
-option[1]: each player sacrifices a creature token of their choice.
-option[2]: each player sacrifices a nontoken creature of their choice.
-option[3]: each player sacrifices an enchantment of their choice.

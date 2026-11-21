@@ -1,5 +1,0 @@
-name: snag
-mana cost: {3}{G}
-types: instant
-spell[1]: prevent all combat damage that would be dealt by unblocked creatures this turn.
-static: you may discard a forest card rather than pay this spell's mana cost.

@@ -1,0 +1,5 @@
+name: gixian infiltrator
+mana cost: {1}{B}
+types: creature phyrexian human
+power toughness: 2/1
+triggered: whenever you sacrifice another permanent, put a +1/+1 counter on CARDNAME.

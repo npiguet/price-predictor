@@ -1,0 +1,4 @@
+name: grasp of darkness
+mana cost: {B}{B}
+types: instant
+spell[1]: target creature gets -4/-4 until end of turn.

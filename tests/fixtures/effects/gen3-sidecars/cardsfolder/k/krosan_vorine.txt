@@ -1,0 +1,6 @@
+name: krosan vorine
+mana cost: {3}{G}
+types: creature cat beast
+power toughness: 3/2
+triggered: provoke
+static: CARDNAME can't be blocked by more than one creature.

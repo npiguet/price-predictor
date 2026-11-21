@@ -1,0 +1,5 @@
+name: mind flayer
+mana cost: {3}{U}{U}
+types: creature horror
+power toughness: 3/3
+triggered: dominate monster — when CARDNAME enters, gain control of target creature for as long as you control CARDNAME.

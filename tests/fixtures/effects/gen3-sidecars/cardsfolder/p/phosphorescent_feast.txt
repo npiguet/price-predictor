@@ -1,0 +1,4 @@
+name: phosphorescent feast
+mana cost: {2}{G}{G}{G}
+types: sorcery
+spell[1]: chroma — reveal any number of cards in your hand. you gain 2 life for each green mana symbol in those cards' mana costs.

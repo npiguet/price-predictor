@@ -1,0 +1,15 @@
+layout: transform
+name: twinblade geist
+mana cost: {1}{W}
+types: creature spirit warrior
+power toughness: 1/1
+alternate cost: disturb {2}{W}
+static: double strike
+
+ALTERNATE
+
+name: twinblade invocation
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has double strike.
+replacement: if CARDNAME would be put into a graveyard from anywhere, exile it instead.

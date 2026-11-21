@@ -1,8 +1,0 @@
-name: illuna, apex of wishes
-mana cost: {2}{G}{U}{R}
-types: legendary creature beast elemental dinosaur
-power toughness: 6/6
-alternate cost: mutate {3}{R/G}{U}{U}
-static: flying
-static: trample
-triggered: whenever this creature mutates, exile cards from the top of your library until you exile a nonland permanent card. put that card onto the battlefield or into your hand.

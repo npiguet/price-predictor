@@ -1,0 +1,5 @@
+name: arc blade
+mana cost: {3}{R}{R}
+types: sorcery
+alternate cost: suspend 3—{2}{R}
+spell[1]: CARDNAME deals 2 damage to any target. exile CARDNAME with three time counters on it.

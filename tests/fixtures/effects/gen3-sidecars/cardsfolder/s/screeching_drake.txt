@@ -1,6 +1,0 @@
-name: screeching drake
-mana cost: {3}{U}
-types: creature drake
-power toughness: 2/2
-static: flying
-triggered: when CARDNAME enters, draw a card, then discard a card.

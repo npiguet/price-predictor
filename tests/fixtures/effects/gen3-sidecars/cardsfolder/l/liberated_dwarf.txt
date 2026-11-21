@@ -1,5 +1,0 @@
-name: liberated dwarf
-mana cost: {R}
-types: creature dwarf
-power toughness: 1/1
-activated[1]: {R}, sacrifice CARDNAME: target green creature gets +1/+0 and gains first strike until end of turn.

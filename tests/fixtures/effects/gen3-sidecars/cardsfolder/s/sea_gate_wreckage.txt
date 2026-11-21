@@ -1,0 +1,4 @@
+name: sea gate wreckage
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {2}{C}, {T}: draw a card. activate only if you have no cards in hand.

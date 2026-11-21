@@ -1,0 +1,4 @@
+name: demon's due
+mana cost: {3}{B}
+types: instant
+spell[1]: scry 2, then draw two cards. you lose 2 life.

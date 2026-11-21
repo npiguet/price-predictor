@@ -1,0 +1,6 @@
+name: rhox pummeler
+mana cost: {5}{G}
+types: creature rhino soldier
+power toughness: 6/3
+replacement: CARDNAME enters with a shield counter on it.
+static: CARDNAME has trample as long as it has a shield counter on it.

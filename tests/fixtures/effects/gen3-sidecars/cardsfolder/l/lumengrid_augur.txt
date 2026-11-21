@@ -1,5 +1,0 @@
-name: lumengrid augur
-mana cost: {3}{U}
-types: creature vedalken wizard
-power toughness: 2/2
-activated[1]: {1}, {T}: target player draws a card, then discards a card. if that player discards an artifact card this way, untap CARDNAME.

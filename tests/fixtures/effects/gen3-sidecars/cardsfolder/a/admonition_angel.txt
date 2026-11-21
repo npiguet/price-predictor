@@ -1,0 +1,7 @@
+name: admonition angel
+mana cost: {3}{W}{W}{W}
+types: creature angel
+power toughness: 6/6
+static: flying
+triggered: landfall — whenever a land you control enters, you may exile target nonland permanent other than CARDNAME.
+triggered: when CARDNAME leaves the battlefield, return all cards exiled with it to the battlefield under their owners' control.

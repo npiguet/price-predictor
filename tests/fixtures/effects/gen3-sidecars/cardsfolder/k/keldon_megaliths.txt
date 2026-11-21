@@ -1,0 +1,5 @@
+name: keldon megaliths
+types: land
+activated[1]: {T}: add {R}.
+activated[2]: hellbent — {1}{R}, {T}: CARDNAME deals 1 damage to any target. activate only if you have no cards in hand.
+replacement: CARDNAME enters tapped.

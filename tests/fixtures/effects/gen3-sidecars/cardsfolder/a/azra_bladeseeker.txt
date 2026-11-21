@@ -1,5 +1,0 @@
-name: azra bladeseeker
-mana cost: {2}{R}
-types: creature azra warrior
-power toughness: 3/2
-triggered: when CARDNAME enters, each player on your team may discard a card, then each player who discarded a card this way draws a card.

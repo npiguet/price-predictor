@@ -1,0 +1,5 @@
+name: lieutenants of the guard
+mana cost: {4}{W}
+types: creature human soldier
+power toughness: 2/2
+triggered: council's dilemma — when CARDNAME enters, starting with you, each player votes for strength or numbers. put a +1/+1 counter on CARDNAME for each strength vote and create a 1/1 white soldier creature token for each numbers vote.

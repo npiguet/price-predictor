@@ -1,4 +1,0 @@
-name: price of betrayal
-mana cost: {B}
-types: sorcery
-spell[1]: remove up to five counters from target artifact, creature, planeswalker, or opponent.

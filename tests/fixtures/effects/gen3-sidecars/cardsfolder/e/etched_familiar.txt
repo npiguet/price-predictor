@@ -1,0 +1,5 @@
+name: etched familiar
+mana cost: {2}{B}
+types: artifact creature phyrexian fox
+power toughness: 3/2
+triggered: when CARDNAME dies, each opponent loses 2 life and you gain 2 life.

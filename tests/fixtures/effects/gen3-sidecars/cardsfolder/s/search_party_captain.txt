@@ -1,6 +1,0 @@
-name: search party captain
-mana cost: {3}{W}
-types: creature human soldier
-power toughness: 2/2
-triggered: when CARDNAME enters, draw a card.
-static: this spell costs {1} less to cast for each creature you attacked with this turn.

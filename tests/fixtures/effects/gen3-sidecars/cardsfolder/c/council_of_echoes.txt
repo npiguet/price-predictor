@@ -1,0 +1,6 @@
+name: council of echoes
+mana cost: {4}{U}{U}
+types: creature spirit advisor
+power toughness: 4/4
+static: flying
+triggered: descend 4 — when CARDNAME enters, if there are four or more permanent cards in your graveyard return up to one target nonland permanent other than CARDNAME to its owner's hand.

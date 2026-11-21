@@ -1,0 +1,6 @@
+name: corrupted zendikon
+mana cost: {1}{B}
+types: enchantment aura
+static: enchant land
+triggered: when enchanted land dies, return that card to its owner's hand.
+static: enchanted land is a 3/3 black ooze creature. it's still a land.

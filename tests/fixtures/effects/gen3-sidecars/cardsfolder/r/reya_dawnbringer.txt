@@ -1,6 +1,0 @@
-name: reya dawnbringer
-mana cost: {6}{W}{W}{W}
-types: legendary creature angel
-power toughness: 4/6
-static: flying
-triggered: at the beginning of your upkeep, you may return target creature card from your graveyard to the battlefield.

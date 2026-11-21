@@ -1,0 +1,5 @@
+name: cephalid constable
+mana cost: {1}{U}{U}
+types: creature octopus wizard
+power toughness: 1/1
+triggered: whenever CARDNAME deals combat damage to a player, return up to that many target permanents that player controls to their owner's hand.

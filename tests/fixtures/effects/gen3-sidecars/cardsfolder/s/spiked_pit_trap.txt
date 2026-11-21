@@ -1,7 +1,0 @@
-name: spiked pit trap
-mana cost: {1}
-types: artifact
-static: flash
-activated[1]: {5}, {T}, sacrifice CARDNAME: choose target creature, then roll a d20.
-option[2]: 1—9 | CARDNAME deals 5 damage to that creature.
-option[3]: 10—20 | CARDNAME deals 5 damage to that creature. create a treasure token.

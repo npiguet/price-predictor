@@ -1,7 +1,0 @@
-name: kjeldoran skycaptain
-mana cost: {4}{W}
-types: creature human soldier
-power toughness: 2/2
-static: banding
-static: first strike
-static: flying

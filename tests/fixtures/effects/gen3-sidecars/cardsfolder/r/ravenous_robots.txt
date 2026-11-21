@@ -1,0 +1,6 @@
+name: ravenous robots
+mana cost: {1}{R}
+types: artifact creature robot
+power toughness: 2/1
+activated[1]: {R}, {T}: creature tokens you control gain haste until end of turn.
+triggered: whenever you cast an artifact spell, create a 1/1 colorless robot artifact creature token.

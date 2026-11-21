@@ -1,0 +1,5 @@
+name: silvergill douser
+mana cost: {1}{U}
+types: creature merfolk wizard
+power toughness: 1/1
+activated[1]: {T}: target creature gets -X/-0 until end of turn, where X is the number of merfolk and/or faeries you control.

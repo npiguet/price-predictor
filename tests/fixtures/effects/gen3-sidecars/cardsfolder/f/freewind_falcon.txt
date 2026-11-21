@@ -1,0 +1,6 @@
+name: freewind falcon
+mana cost: {1}{W}
+types: creature bird
+power toughness: 1/1
+static: flying
+static: protection from red

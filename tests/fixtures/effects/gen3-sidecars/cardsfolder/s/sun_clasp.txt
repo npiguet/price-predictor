@@ -1,0 +1,6 @@
+name: sun clasp
+mana cost: {1}{W}
+types: enchantment aura
+static: enchant creature
+activated[1]: {W}: return enchanted creature to its owner's hand.
+static: enchanted creature gets +1/+3.

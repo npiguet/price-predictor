@@ -1,0 +1,5 @@
+name: goblin lookout
+mana cost: {1}{R}
+types: creature goblin
+power toughness: 1/2
+activated[1]: {T}, sacrifice a goblin: goblin creatures get +2/+0 until end of turn.

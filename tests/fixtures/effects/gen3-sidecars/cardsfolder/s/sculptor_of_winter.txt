@@ -1,5 +1,0 @@
-name: sculptor of winter
-mana cost: {1}{G}
-types: snow creature elf rogue
-power toughness: 2/2
-activated[1]: {T}: untap target snow land.

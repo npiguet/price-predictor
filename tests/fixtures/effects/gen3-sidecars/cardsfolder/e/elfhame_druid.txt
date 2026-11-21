@@ -1,0 +1,6 @@
+name: elfhame druid
+mana cost: {1}{G}
+types: creature elf druid
+power toughness: 0/2
+activated[1]: {T}: add {G}.
+activated[2]: {T}: add {G}{G}. spend this mana only to cast kicked spells.

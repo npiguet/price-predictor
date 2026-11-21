@@ -1,5 +1,0 @@
-name: wall of ice
-mana cost: {2}{G}
-types: creature wall
-power toughness: 0/7
-static: defender

@@ -1,0 +1,4 @@
+name: puncturing light
+mana cost: {1}{W}
+types: instant
+spell[1]: destroy target attacking or blocking creature with power 3 or less.

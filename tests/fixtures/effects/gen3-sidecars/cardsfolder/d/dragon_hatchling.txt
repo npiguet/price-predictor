@@ -1,6 +1,0 @@
-name: dragon hatchling
-mana cost: {1}{R}
-types: creature dragon
-power toughness: 0/1
-static: flying
-activated[1]: {R}: CARDNAME gets +1/+0 until end of turn.

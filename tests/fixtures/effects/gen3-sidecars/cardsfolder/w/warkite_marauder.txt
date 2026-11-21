@@ -1,6 +1,0 @@
-name: warkite marauder
-mana cost: {1}{U}
-types: creature human pirate
-power toughness: 2/1
-static: flying
-triggered: whenever CARDNAME attacks, target creature defending player controls loses all abilities and has base power and toughness 0/1 until end of turn.

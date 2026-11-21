@@ -1,0 +1,5 @@
+name: solidarity of heroes
+mana cost: {1}{G}
+types: instant
+additional cost: strive {1}{G}
+spell[1]: choose any number of target creatures. double the number of +1/+1 counters on each of them.

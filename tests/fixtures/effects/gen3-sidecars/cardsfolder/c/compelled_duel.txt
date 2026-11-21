@@ -1,0 +1,4 @@
+name: compelled duel
+mana cost: {1}{G}
+types: sorcery
+spell[1]: target creature gets +3/+3 until end of turn and must be blocked this turn if able.

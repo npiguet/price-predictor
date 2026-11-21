@@ -1,5 +1,0 @@
-name: bala ged scorpion
-mana cost: {3}{B}
-types: creature scorpion
-power toughness: 2/3
-triggered: when CARDNAME enters, you may destroy target creature with power 1 or less.

@@ -1,0 +1,5 @@
+name: deep freeze
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has base power and toughness 0/4, has defender, loses all other abilities, and is a blue wall in addition to its other colors and types.

@@ -1,5 +1,0 @@
-name: the last ronin's technique
-mana cost: {3}{W}
-types: instant
-alternate cost: sneak {1}{W}
-spell[1]: create three 1/1 white ninja turtle spirit creature tokens. if this spell's sneak cost was paid, they enter tapped and attacking.

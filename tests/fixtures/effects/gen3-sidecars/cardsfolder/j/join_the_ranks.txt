@@ -1,0 +1,4 @@
+name: join the ranks
+mana cost: {3}{W}
+types: instant
+spell[1]: create two 1/1 white soldier ally creature tokens.

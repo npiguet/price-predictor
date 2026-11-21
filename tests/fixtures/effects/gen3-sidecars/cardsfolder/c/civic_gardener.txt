@@ -1,0 +1,5 @@
+name: civic gardener
+mana cost: {1}{G}
+types: creature human citizen
+power toughness: 2/2
+triggered: whenever CARDNAME attacks, untap target creature or land.

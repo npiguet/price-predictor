@@ -1,5 +1,0 @@
-name: ember beast
-mana cost: {2}{R}
-types: creature beast
-power toughness: 3/4
-static: CARDNAME can't attack or block alone.

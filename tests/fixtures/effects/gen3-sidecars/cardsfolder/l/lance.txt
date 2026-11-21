@@ -1,5 +1,0 @@
-name: lance
-mana cost: {W}
-types: enchantment aura
-static: enchant creature
-static: enchanted creature has first strike.

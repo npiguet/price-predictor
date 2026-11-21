@@ -1,0 +1,5 @@
+name: sunbathing rootwalla
+mana cost: {1}{G}
+types: creature lizard
+power toughness: 2/2
+activated[1]: domain — {3}{G}: until end of turn, CARDNAME gets +1/+1 for each basic land type among lands you control. activate only once each turn.

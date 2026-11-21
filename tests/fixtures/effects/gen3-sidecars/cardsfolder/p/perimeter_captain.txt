@@ -1,0 +1,6 @@
+name: perimeter captain
+mana cost: {W}
+types: creature human soldier
+power toughness: 0/4
+static: defender
+triggered: whenever a creature you control with defender blocks, you may gain 2 life.

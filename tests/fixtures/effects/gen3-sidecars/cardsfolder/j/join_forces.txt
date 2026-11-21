@@ -1,4 +1,0 @@
-name: join forces
-mana cost: {2}{W}
-types: instant
-spell[1]: untap up to two target creatures. they each get +2/+2 until end of turn.

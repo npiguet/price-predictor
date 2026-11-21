@@ -1,0 +1,5 @@
+name: generous visitor
+mana cost: {G}
+types: creature spirit
+power toughness: 1/1
+triggered: whenever you cast an enchantment spell, put a +1/+1 counter on target creature.

@@ -1,5 +1,0 @@
-name: hibernation's end
-mana cost: {4}{G}
-types: enchantment
-triggered: cumulative upkeep {1}
-triggered: whenever you pay CARDNAME's cumulative upkeep, you may search your library for a creature card with mana value equal to the number of age counters on CARDNAME, put it onto the battlefield, then shuffle.

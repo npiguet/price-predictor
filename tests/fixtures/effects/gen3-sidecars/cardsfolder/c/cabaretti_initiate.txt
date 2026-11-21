@@ -1,0 +1,5 @@
+name: cabaretti initiate
+mana cost: {G}
+types: creature raccoon citizen
+power toughness: 1/2
+activated[1]: {2}{R/W}: CARDNAME gains double strike until end of turn.

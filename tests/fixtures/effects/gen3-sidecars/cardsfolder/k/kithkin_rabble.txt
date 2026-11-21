@@ -1,0 +1,6 @@
+name: kithkin rabble
+mana cost: {3}{W}
+types: creature kithkin
+power toughness: */*
+static: vigilance
+static: CARDNAME's power and toughness are each equal to the number of white permanents you control.

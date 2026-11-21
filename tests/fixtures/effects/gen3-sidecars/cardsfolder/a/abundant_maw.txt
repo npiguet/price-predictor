@@ -1,0 +1,6 @@
+name: abundant maw
+mana cost: {8}
+types: creature eldrazi leech
+power toughness: 6/4
+alternate cost: emerge {6}{B}
+triggered: when you cast this spell, target opponent loses 3 life and you gain 3 life.

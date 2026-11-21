@@ -1,0 +1,4 @@
+name: defossilize
+mana cost: {4}{B}
+types: sorcery
+spell[1]: return target creature card from your graveyard to the battlefield. that creature explores, then it explores again.

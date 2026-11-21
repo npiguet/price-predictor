@@ -1,6 +1,0 @@
-name: scavenging ghoul
-mana cost: {3}{B}
-types: creature zombie
-power toughness: 2/2
-activated[1]: remove a corpse counter from CARDNAME: regenerate CARDNAME.
-triggered: at the beginning of each end step, put a corpse counter on CARDNAME for each creature that died this turn.

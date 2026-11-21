@@ -1,0 +1,6 @@
+name: illuminator virtuoso
+mana cost: {1}{W}
+types: creature human rogue
+power toughness: 1/1
+static: double strike
+triggered: whenever CARDNAME becomes the target of a spell you control, it connives.

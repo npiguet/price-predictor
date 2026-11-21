@@ -1,0 +1,5 @@
+name: person of interest
+mana cost: {3}{R}
+types: creature human rogue
+power toughness: 2/2
+triggered: when CARDNAME enters, suspect it. create a 2/2 white and blue detective creature token.

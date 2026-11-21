@@ -1,5 +1,0 @@
-name: court street denizen
-mana cost: {2}{W}
-types: creature human soldier
-power toughness: 2/2
-triggered: whenever another white creature you control enters, tap target creature an opponent controls.

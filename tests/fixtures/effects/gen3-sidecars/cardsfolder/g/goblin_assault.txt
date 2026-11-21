@@ -1,0 +1,5 @@
+name: goblin assault
+mana cost: {2}{R}
+types: enchantment
+triggered: at the beginning of your upkeep, create a 1/1 red goblin creature token with haste.
+static: goblin creatures attack each combat if able.

@@ -1,0 +1,5 @@
+name: infestation sage
+mana cost: {B}
+types: creature elf warlock
+power toughness: 1/1
+triggered: when this creature dies, create a 1/1 black and green insect token with flying.

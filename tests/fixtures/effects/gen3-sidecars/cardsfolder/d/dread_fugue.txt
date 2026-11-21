@@ -1,0 +1,5 @@
+name: dread fugue
+mana cost: {B}
+types: sorcery
+alternate cost: cleave {2}{B}
+spell[1]: target player reveals their hand. you choose a nonland card from it [with mana value 2 or less]. that player discards that card.

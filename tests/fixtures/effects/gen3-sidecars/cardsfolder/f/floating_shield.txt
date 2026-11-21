@@ -1,7 +1,0 @@
-name: floating shield
-mana cost: {2}{W}
-types: enchantment aura
-replacement: as CARDNAME enters, choose a color.
-static: enchant creature
-activated[1]: sacrifice CARDNAME: target creature gains protection from the chosen color until end of turn.
-static: enchanted creature has protection from the chosen color. this effect doesn't remove CARDNAME.

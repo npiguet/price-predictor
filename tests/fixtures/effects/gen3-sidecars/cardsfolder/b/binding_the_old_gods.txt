@@ -1,7 +1,0 @@
-name: binding the old gods
-mana cost: {2}{B}{G}
-types: enchantment saga
-chapter: I — destroy target nonland permanent an opponent controls.
-chapter: II — search your library for a forest card, put it onto the battlefield tapped, then shuffle.
-chapter: III — creatures you control gain deathtouch until end of turn.
-replacement: CARDNAME enters with a lore counter on it.

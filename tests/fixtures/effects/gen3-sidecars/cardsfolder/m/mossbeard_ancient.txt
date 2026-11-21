@@ -1,0 +1,6 @@
+name: mossbeard ancient
+mana cost: {5}{G}{G}
+types: creature treefolk
+power toughness: 7/7
+static: trample
+triggered: when CARDNAME enters, you gain 5 life.

@@ -1,0 +1,6 @@
+name: trailblazing historian
+mana cost: {1}{R}
+types: creature human shaman
+power toughness: 1/3
+static: haste
+activated[1]: {T}: another target creature gains haste until end of turn.

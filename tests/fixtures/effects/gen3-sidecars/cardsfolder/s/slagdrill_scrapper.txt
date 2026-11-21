@@ -1,0 +1,5 @@
+name: slagdrill scrapper
+mana cost: {R}
+types: artifact creature robot scout
+power toughness: 1/2
+activated[1]: {2}, {T}, sacrifice another artifact or land: draw a card.

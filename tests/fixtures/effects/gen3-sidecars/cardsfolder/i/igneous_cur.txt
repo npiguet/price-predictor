@@ -1,0 +1,5 @@
+name: igneous cur
+mana cost: {1}{R}
+types: creature elemental dog
+power toughness: 1/2
+activated[1]: {1}{R}: CARDNAME gets +2/+0 until end of turn.

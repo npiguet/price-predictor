@@ -1,0 +1,9 @@
+name: djinni windseer
+mana cost: {3}{U}
+types: creature djinn
+power toughness: 3/3
+static: flying
+triggered: when CARDNAME enters, roll a d20.
+option[1]: 1—9 | scry 1.
+option[2]: 10—19 | scry 2.
+option[3]: 20 | scry 3.

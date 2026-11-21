@@ -1,0 +1,4 @@
+name: hard-hitting question
+mana cost: {G}
+types: sorcery
+spell[1]: target creature you control deals damage equal to its power to target creature or planeswalker you don't control.

@@ -1,8 +1,0 @@
-name: dracosaur auxiliary
-mana cost: {4}{R}{R}
-types: creature dinosaur dragon mount
-power toughness: 4/4
-static: flying
-static: haste
-activated[1]: saddle 3
-triggered: whenever this creature attacks while saddled, it deals 2 damage to any target.

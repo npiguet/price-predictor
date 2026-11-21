@@ -1,6 +1,0 @@
-name: ribbon snake
-mana cost: {1}{U}{U}
-types: creature snake
-power toughness: 2/3
-static: flying
-activated[1]: {2}: CARDNAME loses flying until end of turn. any player may activate this ability.

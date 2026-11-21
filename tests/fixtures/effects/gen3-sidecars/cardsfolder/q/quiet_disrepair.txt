@@ -1,7 +1,0 @@
-name: quiet disrepair
-mana cost: {1}{G}
-types: enchantment aura
-static: enchant artifact or enchantment
-triggered: at the beginning of your upkeep, choose one
-option[1]: destroy enchanted permanent.
-option[2]: you gain 2 life.

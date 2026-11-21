@@ -1,6 +1,0 @@
-name: cabal torturer
-mana cost: {1}{B}{B}
-types: creature human minion
-power toughness: 1/1
-activated[1]: {B}, {T}: target creature gets -1/-1 until end of turn.
-activated[2]: threshold — {3}{B}{B}, {T}: target creature gets -2/-2 until end of turn. activate only if there are seven or more cards in your graveyard.

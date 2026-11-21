@@ -1,0 +1,6 @@
+name: marauding brinefang
+mana cost: {5}{U}{U}
+types: creature dinosaur
+power toughness: 6/7
+activated[1]: islandcycling {2}
+static: ward {3}

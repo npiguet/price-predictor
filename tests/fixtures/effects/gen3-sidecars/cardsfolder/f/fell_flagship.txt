@@ -1,7 +1,0 @@
-name: fell flagship
-mana cost: {3}
-types: artifact vehicle
-power toughness: 3/3
-activated[1]: crew 3
-triggered: whenever CARDNAME deals combat damage to a player, that player discards a card.
-static: pirates you control get +1/+0.

@@ -1,0 +1,8 @@
+name: untamed kavu
+mana cost: {1}{G}
+types: creature kavu
+power toughness: 2/2
+additional cost: kicker {3}
+static: trample
+static: vigilance
+replacement: if CARDNAME was kicked, it enters with three +1/+1 counters on it.

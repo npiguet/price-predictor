@@ -1,0 +1,6 @@
+name: falcon abomination
+mana cost: {2}{U}
+types: creature zombie bird
+power toughness: 2/2
+static: flying
+triggered: when CARDNAME enters, create a 2/2 black zombie creature token with decayed.

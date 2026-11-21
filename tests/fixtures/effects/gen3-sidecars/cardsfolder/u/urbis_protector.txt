@@ -1,0 +1,5 @@
+name: urbis protector
+mana cost: {4}{W}{W}
+types: creature human cleric
+power toughness: 1/1
+triggered: when CARDNAME enters, create a 4/4 white angel creature token with flying.

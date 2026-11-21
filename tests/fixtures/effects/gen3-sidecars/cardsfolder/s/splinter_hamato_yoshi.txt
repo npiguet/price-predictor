@@ -1,0 +1,7 @@
+name: splinter, hamato yoshi
+mana cost: {1}{B}
+types: legendary creature mutant ninja rat
+power toughness: 1/3
+alternate cost: sneak {B}
+static: menace
+static: other ninjas you control get +1/+1.

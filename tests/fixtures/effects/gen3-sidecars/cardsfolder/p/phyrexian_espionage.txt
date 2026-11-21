@@ -1,0 +1,5 @@
+name: phyrexian espionage
+mana cost: {2}{U}
+types: sorcery
+additional cost: kicker {1}{B}
+spell[1]: draw two cards. if this spell was kicked, each opponent discards a card.

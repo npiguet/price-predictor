@@ -1,0 +1,5 @@
+name: dead weight
+mana cost: {B}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets -2/-2.

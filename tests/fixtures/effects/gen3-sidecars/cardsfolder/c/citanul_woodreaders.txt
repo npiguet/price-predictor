@@ -1,6 +1,0 @@
-name: citanul woodreaders
-mana cost: {2}{G}
-types: creature human druid
-power toughness: 1/4
-additional cost: kicker {2}{G}
-triggered: when CARDNAME enters, if it was kicked, draw two cards.

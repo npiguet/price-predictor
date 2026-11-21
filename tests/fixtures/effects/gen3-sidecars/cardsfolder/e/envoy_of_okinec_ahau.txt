@@ -1,0 +1,5 @@
+name: envoy of okinec ahau
+mana cost: {2}{W}
+types: creature cat advisor
+power toughness: 3/3
+activated[1]: {4}{W}: create a 1/1 colorless gnome artifact creature token.

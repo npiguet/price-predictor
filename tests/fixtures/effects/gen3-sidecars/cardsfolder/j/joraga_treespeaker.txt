@@ -1,7 +1,0 @@
-name: joraga treespeaker
-mana cost: {G}
-types: creature elf druid
-power toughness: 1/1
-activated[1]: level up {1}{G}
-static: level 1-4 1/2 {T}: add {G}{G}.
-static: level 5+ 1/4 elves you control have "{T}: add {G}{G}."

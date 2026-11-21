@@ -1,5 +1,0 @@
-name: heap gate
-types: land gate
-activated[1]: {T}: add {C}.
-activated[2]: {1}, {T}: add one mana of any color.
-activated[3]: {1}, {T}, tap an untapped gate you control: create a treasure token.

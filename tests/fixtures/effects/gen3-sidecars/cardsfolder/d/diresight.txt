@@ -1,4 +1,0 @@
-name: diresight
-mana cost: {2}{B}
-types: sorcery
-spell[1]: surveil 2, then draw two cards. you lose 2 life.

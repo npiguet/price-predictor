@@ -1,5 +1,0 @@
-name: shambling vent
-types: land
-activated[1]: {T}: add {W} or {B}.
-activated[2]: {1}{W}{B}: until end of turn, this land becomes a 2/3 white and black elemental creature with lifelink. it's still a land.
-replacement: this land enters tapped.

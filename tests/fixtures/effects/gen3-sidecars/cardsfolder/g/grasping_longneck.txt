@@ -1,6 +1,0 @@
-name: grasping longneck
-mana cost: {2}{G}
-types: enchantment creature horror
-power toughness: 4/2
-static: reach
-triggered: when CARDNAME dies, you gain 2 life.

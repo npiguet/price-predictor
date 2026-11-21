@@ -1,4 +1,0 @@
-name: feed the serpent
-mana cost: {2}{B}{B}
-types: instant
-spell[1]: exile target creature or planeswalker.

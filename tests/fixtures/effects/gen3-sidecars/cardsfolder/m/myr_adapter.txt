@@ -1,5 +1,0 @@
-name: myr adapter
-mana cost: {3}
-types: artifact creature myr
-power toughness: 1/1
-static: CARDNAME gets +1/+1 for each equipment attached to it.

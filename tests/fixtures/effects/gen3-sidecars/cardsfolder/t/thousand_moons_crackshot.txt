@@ -1,0 +1,5 @@
+name: thousand moons crackshot
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 2/2
+triggered: whenever CARDNAME attacks, you may pay {2}{W}. when you do, tap target creature.

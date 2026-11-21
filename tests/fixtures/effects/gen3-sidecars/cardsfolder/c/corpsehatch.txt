@@ -1,4 +1,0 @@
-name: corpsehatch
-mana cost: {3}{B}{B}
-types: sorcery
-spell[1]: destroy target nonblack creature. create two 0/1 colorless eldrazi spawn creature tokens. they have "sacrifice this creature: add {C}."

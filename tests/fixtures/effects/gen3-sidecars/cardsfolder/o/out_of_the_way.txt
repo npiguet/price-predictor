@@ -1,0 +1,5 @@
+name: out of the way
+mana cost: {3}{U}
+types: instant
+spell[1]: return target nonland permanent an opponent controls to its owner's hand. draw a card.
+static: this spell costs {2} less to cast if it targets a green permanent.

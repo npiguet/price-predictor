@@ -1,0 +1,6 @@
+name: lotus-eye mystics
+mana cost: {3}{W}
+types: creature human monk
+power toughness: 3/2
+triggered: prowess
+triggered: when CARDNAME enters, return target enchantment card from your graveyard to your hand.

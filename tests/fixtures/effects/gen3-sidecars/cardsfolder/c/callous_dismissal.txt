@@ -1,4 +1,0 @@
-name: callous dismissal
-mana cost: {1}{U}
-types: sorcery
-spell[1]: return target nonland permanent to its owner's hand. amass zombies 1.

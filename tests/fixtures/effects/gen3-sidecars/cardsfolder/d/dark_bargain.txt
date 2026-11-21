@@ -1,4 +1,0 @@
-name: dark bargain
-mana cost: {3}{B}
-types: instant
-spell[1]: look at the top three cards of your library. put two of them into your hand and the other into your graveyard. CARDNAME deals 2 damage to you.

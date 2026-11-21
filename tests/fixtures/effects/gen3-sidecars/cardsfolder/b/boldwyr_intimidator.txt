@@ -1,0 +1,7 @@
+name: boldwyr intimidator
+mana cost: {5}{R}{R}
+types: creature giant warrior
+power toughness: 5/5
+activated[1]: {R}: target creature becomes a coward until end of turn.
+activated[2]: {2}{R}: target creature becomes a warrior until end of turn.
+static: cowards can't block warriors.

@@ -1,6 +1,0 @@
-name: grim wanderer
-mana cost: {1}{B}
-types: creature goblin warlock
-power toughness: 5/3
-static: flash
-static: tragic backstory — cast this spell only if a creature died this turn.

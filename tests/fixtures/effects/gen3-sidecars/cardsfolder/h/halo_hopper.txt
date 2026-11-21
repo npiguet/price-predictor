@@ -1,0 +1,5 @@
+name: halo hopper
+mana cost: {3}
+types: artifact creature frog
+power toughness: 3/2
+cost reduction: convoke

@@ -1,5 +1,0 @@
-name: goblin trailblazer
-mana cost: {1}{R}
-types: creature goblin pirate
-power toughness: 2/1
-static: menace

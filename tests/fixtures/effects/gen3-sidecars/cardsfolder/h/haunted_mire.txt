@@ -1,0 +1,4 @@
+name: haunted mire
+types: land swamp forest
+replacement: CARDNAME enters tapped.
+activated[1]: {T}: add {B} or {G}.

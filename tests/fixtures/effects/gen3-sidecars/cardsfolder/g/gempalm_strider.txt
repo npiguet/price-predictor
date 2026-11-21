@@ -1,0 +1,6 @@
+name: gempalm strider
+mana cost: {1}{G}
+types: creature elf
+power toughness: 2/2
+activated[1]: cycling {2}{G}{G}
+triggered: when you cycle CARDNAME, elf creatures get +2/+2 until end of turn.

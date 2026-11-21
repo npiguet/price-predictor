@@ -1,0 +1,5 @@
+name: arcane teachings
+mana cost: {2}{R}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +2/+2 and has "{T}: this creature deals 1 damage to any target."

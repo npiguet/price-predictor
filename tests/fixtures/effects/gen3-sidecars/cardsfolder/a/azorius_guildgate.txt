@@ -1,0 +1,4 @@
+name: azorius guildgate
+types: land gate
+activated[1]: {T}: add {W} or {U}.
+replacement: CARDNAME enters tapped.

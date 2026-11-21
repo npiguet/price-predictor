@@ -1,0 +1,6 @@
+name: supply-line cranes
+mana cost: {3}{W}{W}
+types: creature bird
+power toughness: 2/4
+static: flying
+triggered: when CARDNAME enters, put a +1/+1 counter on target creature.

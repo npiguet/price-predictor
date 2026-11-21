@@ -1,5 +1,0 @@
-name: kraul foragers
-mana cost: {4}{G}
-types: creature insect scout
-power toughness: 4/4
-triggered: undergrowth — when CARDNAME enters, you gain 1 life for each creature card in your graveyard.

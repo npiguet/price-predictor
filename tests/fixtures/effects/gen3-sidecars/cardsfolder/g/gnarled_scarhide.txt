@@ -1,0 +1,7 @@
+name: gnarled scarhide
+mana cost: {B}
+types: enchantment creature minotaur
+power toughness: 2/1
+alternate cost: bestow {3}{B}
+static: CARDNAME can't block.
+static: enchanted creature gets +2/+1 and can't block.

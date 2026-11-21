@@ -1,5 +1,0 @@
-name: borderland marauder
-mana cost: {1}{R}
-types: creature human warrior
-power toughness: 1/2
-triggered: whenever CARDNAME attacks, it gets +2/+0 until end of turn.

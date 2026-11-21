@@ -1,0 +1,7 @@
+name: osai vultures
+mana cost: {1}{W}
+types: creature bird
+power toughness: 1/1
+static: flying
+activated[1]: remove two carrion counters from CARDNAME: CARDNAME gets +1/+1 until end of turn.
+triggered: at the beginning of each end step, if a creature died this turn, put a carrion counter on CARDNAME.

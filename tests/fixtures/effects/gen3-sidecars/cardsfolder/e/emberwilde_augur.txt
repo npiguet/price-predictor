@@ -1,0 +1,5 @@
+name: emberwilde augur
+mana cost: {1}{R}
+types: creature goblin shaman
+power toughness: 2/1
+activated[1]: sacrifice CARDNAME: it deals 3 damage to target player or planeswalker. activate only during your upkeep.

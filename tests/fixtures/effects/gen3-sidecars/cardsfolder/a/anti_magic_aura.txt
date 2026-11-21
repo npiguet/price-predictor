@@ -1,0 +1,6 @@
+name: anti-magic aura
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature can't be the target of spells.
+static: enchanted creature can't be enchanted by other auras.

@@ -1,6 +1,0 @@
-name: frillscare mentor
-mana cost: {2}{R}
-types: creature human warrior
-power toughness: 3/2
-activated[1]: {2}{R}, {T}: put a +1/+1 counter on each creature you control with menace.
-triggered: when CARDNAME enters, put a menace counter on target non-human creature you control.

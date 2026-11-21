@@ -1,5 +1,0 @@
-name: magnifying glass
-mana cost: {3}
-types: artifact
-activated[1]: {T}: add {C}.
-activated[2]: {4}, {T}: investigate.

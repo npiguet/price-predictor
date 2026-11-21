@@ -1,0 +1,5 @@
+name: crabapple cohort
+mana cost: {4}{G}
+types: creature treefolk warrior
+power toughness: 4/4
+static: CARDNAME gets +1/+1 as long as you control another green creature.

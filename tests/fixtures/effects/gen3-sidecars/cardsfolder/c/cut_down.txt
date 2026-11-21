@@ -1,0 +1,4 @@
+name: cut down
+mana cost: {B}
+types: instant
+spell[1]: destroy target creature with total power and toughness 5 or less.

@@ -1,6 +1,0 @@
-name: ainok survivalist
-mana cost: {1}{G}
-types: creature dog shaman
-power toughness: 2/1
-alternate cost: megamorph {1}{G}
-triggered: when CARDNAME is turned face up, destroy target artifact or enchantment an opponent controls.

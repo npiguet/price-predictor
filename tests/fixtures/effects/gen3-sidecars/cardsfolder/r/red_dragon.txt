@@ -1,0 +1,6 @@
+name: red dragon
+mana cost: {4}{R}{R}
+types: creature dragon
+power toughness: 4/4
+static: flying
+triggered: fire breath — when CARDNAME enters, it deals 4 damage to each opponent.

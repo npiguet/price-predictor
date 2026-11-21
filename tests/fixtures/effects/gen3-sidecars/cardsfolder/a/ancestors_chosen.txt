@@ -1,0 +1,6 @@
+name: ancestor's chosen
+mana cost: {5}{W}{W}
+types: creature human cleric
+power toughness: 4/4
+static: first strike
+triggered: when CARDNAME enters, you gain 1 life for each card in your graveyard.

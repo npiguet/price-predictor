@@ -1,4 +1,0 @@
-name: infinite obliteration
-mana cost: {1}{B}{B}
-types: sorcery
-spell[1]: choose a creature card name. search target opponent's graveyard, hand, and library for any number of cards with that name and exile them. then that player shuffles. then that player shuffles their library.

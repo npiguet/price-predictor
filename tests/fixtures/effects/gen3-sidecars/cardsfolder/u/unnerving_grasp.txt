@@ -1,4 +1,0 @@
-name: unnerving grasp
-mana cost: {2}{U}
-types: sorcery
-spell[1]: return up to one target nonland permanent to its owner's hand. manifest dread.

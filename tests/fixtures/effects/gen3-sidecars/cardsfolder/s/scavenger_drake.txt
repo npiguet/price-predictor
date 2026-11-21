@@ -1,0 +1,6 @@
+name: scavenger drake
+mana cost: {3}{B}
+types: creature drake
+power toughness: 1/1
+static: flying
+triggered: whenever another creature dies, you may put a +1/+1 counter on CARDNAME.

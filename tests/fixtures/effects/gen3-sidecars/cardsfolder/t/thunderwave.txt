@@ -1,6 +1,0 @@
-name: thunderwave
-mana cost: {2}{R}{R}
-types: sorcery
-spell[1]: roll a d20.
-option[2]: 1—9 | CARDNAME deals 3 damage to each creature.
-option[3]: 20 | CARDNAME deals 6 damage to each creature your opponents control.

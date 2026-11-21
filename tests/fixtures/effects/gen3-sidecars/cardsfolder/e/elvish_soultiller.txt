@@ -1,0 +1,5 @@
+name: elvish soultiller
+mana cost: {3}{G}{G}
+types: creature elf mutant
+power toughness: 5/4
+triggered: when CARDNAME dies, choose a creature type. shuffle all creature cards of that type from your graveyard into your library.

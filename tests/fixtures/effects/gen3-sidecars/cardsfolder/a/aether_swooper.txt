@@ -1,0 +1,7 @@
+name: aether swooper
+mana cost: {1}{U}
+types: creature vedalken artificer
+power toughness: 1/2
+static: flying
+triggered: when CARDNAME enters, you get {E}{E}.
+triggered: whenever CARDNAME attacks, you may pay {E}{E}. if you do, create a 1/1 colorless servo artifact creature token.

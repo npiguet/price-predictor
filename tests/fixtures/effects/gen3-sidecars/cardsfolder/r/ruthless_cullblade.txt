@@ -1,0 +1,5 @@
+name: ruthless cullblade
+mana cost: {1}{B}
+types: creature vampire warrior
+power toughness: 2/1
+static: CARDNAME gets +2/+1 as long as an opponent has 10 or less life.

@@ -1,4 +1,0 @@
-name: celestial flare
-mana cost: {W}{W}
-types: instant
-spell[1]: target player sacrifices an attacking or blocking creature.

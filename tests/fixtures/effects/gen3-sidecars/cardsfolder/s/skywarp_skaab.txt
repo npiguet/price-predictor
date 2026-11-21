@@ -1,0 +1,6 @@
+name: skywarp skaab
+mana cost: {3}{U}{U}
+types: creature zombie drake
+power toughness: 2/5
+static: flying
+triggered: when CARDNAME enters, you may exile two creature cards from your graveyard. if you do, draw a card.

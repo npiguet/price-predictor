@@ -1,0 +1,4 @@
+name: devils' playground
+mana cost: {4}{R}{R}
+types: sorcery
+spell[1]: create four 1/1 red devil creature tokens. they have "when this token dies, it deals 1 damage to any target."

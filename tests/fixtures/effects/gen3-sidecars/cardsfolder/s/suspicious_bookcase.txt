@@ -1,0 +1,6 @@
+name: suspicious bookcase
+mana cost: {2}
+types: artifact creature wall
+power toughness: 0/4
+static: defender
+activated[1]: {3}, {T}: target creature can't be blocked this turn.

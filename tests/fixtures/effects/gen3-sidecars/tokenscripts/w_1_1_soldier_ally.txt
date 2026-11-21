@@ -1,0 +1,3 @@
+name: soldier ally token
+types: creature soldier ally
+power toughness: 1/1

@@ -1,4 +1,0 @@
-name: warrior's honor
-mana cost: {2}{W}
-types: instant
-spell[1]: creatures you control get +1/+1 until end of turn.

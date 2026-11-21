@@ -1,0 +1,7 @@
+name: wispmare
+mana cost: {2}{W}
+types: creature elemental
+power toughness: 1/3
+alternate cost: evoke {W}
+static: flying
+triggered: when CARDNAME enters, destroy target enchantment.

@@ -1,0 +1,4 @@
+name: soul's fire
+mana cost: {2}{R}
+types: instant
+spell[1]: target creature you control deals damage equal to its power to any target.

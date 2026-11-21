@@ -1,0 +1,5 @@
+name: shortcut seeker
+mana cost: {3}{U}
+types: creature human rogue
+power toughness: 2/5
+triggered: whenever CARDNAME deals combat damage to a player, venture into the dungeon.

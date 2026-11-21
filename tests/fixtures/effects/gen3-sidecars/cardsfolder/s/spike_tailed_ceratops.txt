@@ -1,5 +1,0 @@
-name: spike-tailed ceratops
-mana cost: {4}{G}
-types: creature dinosaur
-power toughness: 4/4
-static: CARDNAME can block an additional creature each combat.

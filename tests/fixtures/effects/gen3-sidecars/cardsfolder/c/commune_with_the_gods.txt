@@ -1,4 +1,0 @@
-name: commune with the gods
-mana cost: {1}{G}
-types: sorcery
-spell[1]: reveal the top five cards of your library. you may put a creature or enchantment card from among them into your hand. put the rest into your graveyard.

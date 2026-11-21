@@ -1,0 +1,6 @@
+name: gift of granite
+mana cost: {W}
+types: enchantment aura
+static: enchant creature
+static: flash
+static: enchanted creature gets +0/+2.

@@ -1,0 +1,6 @@
+name: anger
+mana cost: {3}{R}
+types: creature incarnation
+power toughness: 2/2
+static: haste
+static: as long as CARDNAME is in your graveyard and you control a mountain, creatures you control have haste.

@@ -1,0 +1,6 @@
+name: heron-blessed geist
+mana cost: {4}{W}
+types: creature spirit
+power toughness: 3/3
+static: flying
+activated[1]: {3}{W}, exile CARDNAME from your graveyard: create two 1/1 white spirit creature tokens with flying. activate only if you control and enchantment and only as a sorcery.

@@ -1,0 +1,7 @@
+name: ruthless ripper
+mana cost: {B}
+types: creature human assassin
+power toughness: 1/1
+alternate cost: morph—reveal a black card from your hand
+static: deathtouch
+triggered: when CARDNAME is turned face up, target player loses 2 life.

@@ -1,0 +1,5 @@
+name: a killer among us
+mana cost: {4}{G}
+types: enchantment
+activated[1]: sacrifice CARDNAME, reveal the chosen creature type: if target attacking creature token is the chosen type, put three +1/+1 counters on it and it gains deathtouch until end of turn.
+triggered: when CARDNAME enters, create a 1/1 white human creature token, a 1/1 blue merfolk creature token, and a 1/1 red goblin creature token. then secretly choose human, merfolk, or goblin.

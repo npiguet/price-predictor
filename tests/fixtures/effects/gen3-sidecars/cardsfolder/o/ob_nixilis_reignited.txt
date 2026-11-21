@@ -1,0 +1,8 @@
+name: ob nixilis reignited
+mana cost: {3}{B}{B}
+types: legendary planeswalker nixilis
+loyalty: 5
+planeswalker[1]: [+1]: you draw a card and you lose 1 life.
+planeswalker[2]: [-3]: destroy target creature.
+planeswalker[3]: [-8]: target opponent gets an emblem with "whenever a player draws a card, you lose 2 life."
+replacement: CARDNAME enters with five loyalty counters on it.

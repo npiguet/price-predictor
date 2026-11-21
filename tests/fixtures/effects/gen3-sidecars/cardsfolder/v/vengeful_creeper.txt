@@ -1,0 +1,6 @@
+name: vengeful creeper
+mana cost: {4}{G}
+types: creature plant elemental
+power toughness: 5/5
+alternate cost: disguise {5}{G}
+triggered: when CARDNAME is turned face up, destroy target artifact or enchantment an opponent controls.

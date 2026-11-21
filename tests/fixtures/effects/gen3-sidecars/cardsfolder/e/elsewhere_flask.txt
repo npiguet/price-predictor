@@ -1,0 +1,5 @@
+name: elsewhere flask
+mana cost: {2}
+types: artifact
+activated[1]: sacrifice CARDNAME: choose a basic land type. each land you control becomes that type until end of turn.
+triggered: when CARDNAME enters, draw a card.

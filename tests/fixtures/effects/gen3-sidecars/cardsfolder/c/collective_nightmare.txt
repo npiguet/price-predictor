@@ -1,0 +1,5 @@
+name: collective nightmare
+mana cost: {2}{B}
+types: instant
+cost reduction: convoke
+spell[1]: target creature gets -3/-3 until end of turn.

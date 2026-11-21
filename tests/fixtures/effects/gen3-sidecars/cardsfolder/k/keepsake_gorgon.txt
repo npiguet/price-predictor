@@ -1,0 +1,7 @@
+name: keepsake gorgon
+mana cost: {3}{B}{B}
+types: creature gorgon
+power toughness: 2/5
+static: deathtouch
+activated[1]: {5}{B}{B}: monstrosity 1
+triggered: when CARDNAME becomes monstrous, destroy target non-gorgon creature an opponent controls.

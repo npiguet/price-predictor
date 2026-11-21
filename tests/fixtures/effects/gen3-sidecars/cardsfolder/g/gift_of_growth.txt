@@ -1,0 +1,5 @@
+name: gift of growth
+mana cost: {1}{G}
+types: instant
+additional cost: kicker {2}
+spell[1]: untap target creature. it gets +2/+2 until end of turn. if this spell was kicked, that creature gets +4/+4 until end of turn instead.

@@ -1,0 +1,6 @@
+name: scarecrow guide
+mana cost: {2}
+types: artifact creature scarecrow
+power toughness: 2/1
+static: reach
+activated[1]: {1}: add one mana of any color. activate only once each turn.

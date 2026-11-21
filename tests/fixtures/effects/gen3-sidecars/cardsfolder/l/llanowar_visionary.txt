@@ -1,0 +1,6 @@
+name: llanowar visionary
+mana cost: {2}{G}
+types: creature elf druid
+power toughness: 2/2
+activated[1]: {T}: add {G}.
+triggered: when CARDNAME enters, draw a card.

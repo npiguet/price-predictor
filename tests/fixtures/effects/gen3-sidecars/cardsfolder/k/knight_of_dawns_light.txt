@@ -1,7 +1,0 @@
-name: knight of dawn's light
-mana cost: {1}{W}
-types: creature human knight
-power toughness: 2/2
-static: first strike
-activated[1]: {1}{W}: CARDNAME gets +1/+1 until end of turn.
-replacement: if you would gain life, you gain that much life plus 1 instead.

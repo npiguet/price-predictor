@@ -1,0 +1,7 @@
+name: mulldrifter
+mana cost: {4}{U}
+types: creature elemental
+power toughness: 2/2
+alternate cost: evoke {2}{U}
+static: flying
+triggered: when CARDNAME enters, draw two cards.

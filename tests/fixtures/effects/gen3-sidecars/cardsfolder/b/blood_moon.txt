@@ -1,4 +1,0 @@
-name: blood moon
-mana cost: {2}{R}
-types: enchantment
-static: nonbasic lands are mountains.

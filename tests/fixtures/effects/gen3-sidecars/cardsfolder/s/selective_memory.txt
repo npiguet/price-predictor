@@ -1,0 +1,4 @@
+name: selective memory
+mana cost: {3}{U}
+types: sorcery
+spell[1]: search your library for any number of nonland cards, exile them, then shuffle.

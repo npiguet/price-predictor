@@ -1,0 +1,6 @@
+name: apprentice sharpshooter
+mana cost: {2}{G}
+types: creature human archer
+power toughness: 1/4
+static: reach
+triggered: training

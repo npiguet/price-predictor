@@ -1,0 +1,5 @@
+name: seven-tail mentor
+mana cost: {3}{W}
+types: creature fox samurai
+power toughness: 2/3
+triggered: when CARDNAME enters or dies, put a +1/+1 counter on target creature or vehicle you control.

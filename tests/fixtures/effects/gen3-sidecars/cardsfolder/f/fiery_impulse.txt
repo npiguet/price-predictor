@@ -1,4 +1,0 @@
-name: fiery impulse
-mana cost: {R}
-types: instant
-spell[1]: CARDNAME deals 2 damage to target creature. spell mastery — if there are two or more instant and/or sorcery cards in your graveyard, CARDNAME deals 3 damage instead.

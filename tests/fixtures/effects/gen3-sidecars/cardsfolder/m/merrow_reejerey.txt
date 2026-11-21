@@ -1,0 +1,6 @@
+name: merrow reejerey
+mana cost: {2}{U}
+types: creature merfolk soldier
+power toughness: 2/2
+triggered: whenever you cast a merfolk spell, you may tap or untap target permanent.
+static: other merfolk creatures you control get +1/+1.

@@ -1,0 +1,6 @@
+name: ghost ship
+mana cost: {2}{U}{U}
+types: creature spirit
+power toughness: 2/4
+static: flying
+activated[1]: {U}{U}{U}: regenerate CARDNAME.

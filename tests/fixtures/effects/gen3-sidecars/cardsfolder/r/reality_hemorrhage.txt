@@ -1,0 +1,5 @@
+name: reality hemorrhage
+mana cost: {1}{R}
+types: instant
+static: devoid
+spell[1]: CARDNAME deals 2 damage to any target.

@@ -1,0 +1,7 @@
+name: shriekmaw
+mana cost: {4}{B}
+types: creature elemental
+power toughness: 3/2
+alternate cost: evoke {1}{B}
+static: fear
+triggered: when CARDNAME enters, destroy target nonartifact, nonblack creature.

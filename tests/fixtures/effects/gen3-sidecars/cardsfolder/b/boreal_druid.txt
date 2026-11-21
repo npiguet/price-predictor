@@ -1,5 +1,0 @@
-name: boreal druid
-mana cost: {G}
-types: snow creature elf druid
-power toughness: 1/1
-activated[1]: {T}: add {C}.

@@ -1,5 +1,0 @@
-name: elderleaf mentor
-mana cost: {3}{G}
-types: creature elf warrior
-power toughness: 3/2
-triggered: when CARDNAME enters, create a 1/1 green elf warrior creature token.

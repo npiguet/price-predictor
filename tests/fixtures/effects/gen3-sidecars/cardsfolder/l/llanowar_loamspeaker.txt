@@ -1,0 +1,6 @@
+name: llanowar loamspeaker
+mana cost: {1}{G}
+types: creature elf druid
+power toughness: 1/3
+activated[1]: {T}: add one mana of any color.
+activated[2]: {T}: target land you control becomes a 3/3 elemental creature with haste until end of turn. it's still a land. activate only as a sorcery.

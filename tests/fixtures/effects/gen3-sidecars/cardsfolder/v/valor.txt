@@ -1,6 +1,0 @@
-name: valor
-mana cost: {3}{W}
-types: creature incarnation
-power toughness: 2/2
-static: first strike
-static: as long as CARDNAME is in your graveyard and you control a plains, creatures you control have first strike.

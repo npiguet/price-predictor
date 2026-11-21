@@ -1,6 +1,0 @@
-name: emissary of sunrise
-mana cost: {2}{W}
-types: creature human cleric
-power toughness: 2/1
-static: first strike
-triggered: when CARDNAME enters, it explores.

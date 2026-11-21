@@ -1,6 +1,0 @@
-name: dandân
-mana cost: {U}{U}
-types: creature fish
-power toughness: 4/1
-triggered: when you control no islands, sacrifice CARDNAME.
-static: CARDNAME can't attack unless defending player controls an island.

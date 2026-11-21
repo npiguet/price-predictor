@@ -1,0 +1,4 @@
+name: rewind
+mana cost: {2}{U}{U}
+types: instant
+spell[1]: counter target spell. untap up to four lands.

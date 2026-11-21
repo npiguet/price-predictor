@@ -1,0 +1,4 @@
+name: construct token
+types: artifact creature construct
+power toughness: 6/12
+static: trample

@@ -1,0 +1,5 @@
+name: gaseous form
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant creature
+replacement: prevent all combat damage that would be dealt to and dealt by enchanted creature.

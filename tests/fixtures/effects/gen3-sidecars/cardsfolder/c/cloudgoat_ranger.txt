@@ -1,0 +1,6 @@
+name: cloudgoat ranger
+mana cost: {3}{W}{W}
+types: creature giant warrior ranger
+power toughness: 3/3
+activated[1]: tap three untapped kithkins you control: CARDNAME gets +2/+0 and gains flying until end of turn.
+triggered: when CARDNAME enters, create three 1/1 white kithkin soldier creature tokens.

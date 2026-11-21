@@ -1,4 +1,0 @@
-name: honden of cleansing fire
-mana cost: {3}{W}
-types: legendary enchantment shrine
-triggered: at the beginning of your upkeep, you gain 2 life for each shrine you control.

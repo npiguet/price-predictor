@@ -1,6 +1,0 @@
-name: fear of falling
-mana cost: {3}{U}{U}
-types: enchantment creature nightmare
-power toughness: 4/4
-static: flying
-triggered: whenever CARDNAME attacks, target creature defending player controls gets -2/-0 and loses flying until your next turn.

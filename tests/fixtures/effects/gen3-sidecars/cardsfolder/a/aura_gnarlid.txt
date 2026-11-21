@@ -1,6 +1,0 @@
-name: aura gnarlid
-mana cost: {2}{G}
-types: creature beast
-power toughness: 2/2
-static: creatures with power less than CARDNAME's power can't block it.
-static: CARDNAME gets +1/+1 for each aura on the battlefield.

@@ -1,0 +1,6 @@
+name: hope of ghirapur
+mana cost: {1}
+types: legendary artifact creature thopter
+power toughness: 1/1
+static: flying
+activated[1]: sacrifice CARDNAME: until your next turn, target player who was dealt combat damage by CARDNAME can't cast noncreature spells.

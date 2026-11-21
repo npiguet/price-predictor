@@ -1,0 +1,7 @@
+name: tough cookie
+mana cost: {1}{G}
+types: artifact creature food golem
+power toughness: 2/2
+activated[1]: {2}{G}: target noncreature artifact you control becomes a 4/4 artifact creature until end of turn.
+activated[2]: {2}, {T}, sacrifice CARDNAME: you gain 3 life.
+triggered: when CARDNAME enters, create a food token.

@@ -1,0 +1,6 @@
+name: thada adel, acquisitor
+mana cost: {1}{U}{U}
+types: legendary creature merfolk rogue
+power toughness: 2/2
+static: islandwalk
+triggered: whenever CARDNAME deals combat damage to a player, search that player's library for an artifact card and exile it. then that player shuffles. until end of turn, you may play that card.

@@ -1,5 +1,0 @@
-name: kavu climber
-mana cost: {3}{G}{G}
-types: creature kavu
-power toughness: 3/3
-triggered: when CARDNAME enters, draw a card.

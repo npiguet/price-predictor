@@ -1,0 +1,5 @@
+name: foundry inspector
+mana cost: {3}
+types: artifact creature construct
+power toughness: 3/2
+static: artifact spells you cast cost {1} less to cast.

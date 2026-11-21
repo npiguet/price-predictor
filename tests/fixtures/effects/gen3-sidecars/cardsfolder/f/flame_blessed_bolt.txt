@@ -1,0 +1,4 @@
+name: flame-blessed bolt
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to target creature or planeswalker. if that creature or planeswalker would die this turn, exile it instead.

@@ -1,7 +1,0 @@
-name: gloryheath lynx
-mana cost: {1}{W}
-types: creature cat mount
-power toughness: 2/3
-static: lifelink
-activated[1]: saddle 2
-triggered: whenever this creature attacks while saddled, search your library for a basic plains card, reveal it, put it into your hand, then shuffle.

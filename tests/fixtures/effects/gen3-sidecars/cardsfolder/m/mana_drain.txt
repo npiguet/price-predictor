@@ -1,0 +1,4 @@
+name: mana drain
+mana cost: {U}{U}
+types: instant
+spell[1]: counter target spell. at the beginning of your next main phase, add an amount of {C} equal to that spell's mana value.

@@ -1,0 +1,14 @@
+layout: adventure
+name: aquatic alchemist
+mana cost: {1}{U}
+types: creature elemental
+power toughness: 1/3
+triggered: whenever you cast your first instant or sorcery spell each turn, CARDNAME gets +2/+0 until end of turn.
+
+ALTERNATE
+
+name: bubble up
+mana cost: {2}{U}
+types: sorcery adventure
+spell[1]: put target instant or sorcery card from your graveyard on top of your library.
+replacement: adventure

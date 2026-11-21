@@ -1,0 +1,6 @@
+name: mischievous mystic
+mana cost: {1}{U}
+types: creature human wizard
+power toughness: 2/1
+static: flying
+triggered: whenever you draw your second card each turn, create a 1/1 blue faerie token with flying.

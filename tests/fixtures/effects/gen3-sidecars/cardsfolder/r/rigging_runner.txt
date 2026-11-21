@@ -1,6 +1,0 @@
-name: rigging runner
-mana cost: {R}
-types: creature goblin pirate
-power toughness: 1/1
-static: first strike
-replacement: raid — CARDNAME enters with a +1/+1 counter on it if you attacked this turn.

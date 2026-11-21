@@ -1,0 +1,5 @@
+name: heroic charge
+mana cost: {2}{W}{W}
+types: instant
+additional cost: kicker {1}{R}
+spell[1]: creatures you control get +2/+1 until end of turn. if this spell was kicked, those creatures also gain trample until end of turn.

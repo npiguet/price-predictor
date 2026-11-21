@@ -1,5 +1,0 @@
-name: felidar cub
-mana cost: {1}{W}
-types: creature cat beast
-power toughness: 2/2
-activated[1]: sacrifice CARDNAME: destroy target enchantment.

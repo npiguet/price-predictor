@@ -1,6 +1,0 @@
-name: general's enforcer
-mana cost: {W}{B}
-types: creature human soldier
-power toughness: 2/3
-activated[1]: {2}{W}{B}: exile target card from a graveyard. if it was a creature card, create a 1/1 white human soldier creature token.
-static: legendary humans you control have indestructible.

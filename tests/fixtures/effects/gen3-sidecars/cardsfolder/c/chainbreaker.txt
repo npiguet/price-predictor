@@ -1,0 +1,6 @@
+name: chainbreaker
+mana cost: {2}
+types: artifact creature scarecrow
+power toughness: 3/3
+replacement: CARDNAME enters with two -1/-1 counters on it.
+activated[1]: {3}, {T}: remove a -1/-1 counter from target creature.

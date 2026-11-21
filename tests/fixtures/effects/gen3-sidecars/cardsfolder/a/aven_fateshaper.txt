@@ -1,7 +1,0 @@
-name: aven fateshaper
-mana cost: {6}{U}
-types: creature bird wizard
-power toughness: 4/5
-static: flying
-activated[1]: {4}{U}: look at the top four cards of your library, then put them back in any order.
-triggered: when CARDNAME enters, look at the top four cards of your library, then put them back in any order.

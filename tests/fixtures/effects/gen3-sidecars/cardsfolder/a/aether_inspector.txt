@@ -1,0 +1,7 @@
+name: aether inspector
+mana cost: {3}{W}
+types: creature dwarf artificer
+power toughness: 2/3
+static: vigilance
+triggered: when CARDNAME enters, you get {E}{E}.
+triggered: whenever CARDNAME attacks, you may pay {E}{E}. if you do, create a 1/1 colorless servo artifact creature token.

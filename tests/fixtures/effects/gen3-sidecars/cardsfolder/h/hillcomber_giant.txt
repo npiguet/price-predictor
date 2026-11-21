@@ -1,0 +1,5 @@
+name: hillcomber giant
+mana cost: {2}{W}{W}
+types: creature giant scout
+power toughness: 3/3
+static: mountainwalk

@@ -1,0 +1,14 @@
+layout: transform
+name: ambitious farmhand
+mana cost: {1}{W}
+types: creature human peasant
+power toughness: 1/1
+activated[1]: coven — {1}{W}{W}: transform CARDNAME. activate only if you control three or more creatures with different powers.
+triggered: when CARDNAME enters, you may search your library for a basic plains card, reveal it, put it into your hand, then shuffle.
+
+ALTERNATE
+
+name: seasoned cathar
+types: creature human knight
+power toughness: 3/3
+static: lifelink

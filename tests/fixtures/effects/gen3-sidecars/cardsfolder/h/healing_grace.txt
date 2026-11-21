@@ -1,0 +1,4 @@
+name: healing grace
+mana cost: {W}
+types: instant
+spell[1]: prevent the next 3 damage that would be dealt to any target this turn by a source of your choice. you gain 3 life.

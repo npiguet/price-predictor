@@ -1,0 +1,4 @@
+name: bestial menace
+mana cost: {3}{G}{G}
+types: sorcery
+spell[1]: create a 1/1 green snake creature token, a 2/2 green wolf creature token, and a 3/3 green elephant creature token.

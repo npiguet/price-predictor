@@ -1,0 +1,6 @@
+name: circuit mender
+mana cost: {3}
+types: artifact creature insect
+power toughness: 2/3
+triggered: when CARDNAME enters, you gain 2 life.
+triggered: when CARDNAME leaves the battlefield, draw a card.

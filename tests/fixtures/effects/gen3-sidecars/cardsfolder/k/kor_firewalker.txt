@@ -1,0 +1,6 @@
+name: kor firewalker
+mana cost: {W}{W}
+types: creature kor soldier
+power toughness: 2/2
+static: protection from red
+triggered: whenever a player casts a red spell, you may gain 1 life.

@@ -1,0 +1,5 @@
+name: mintstrosity
+mana cost: {1}{B}
+types: creature horror
+power toughness: 3/1
+triggered: when CARDNAME dies, create a food token.

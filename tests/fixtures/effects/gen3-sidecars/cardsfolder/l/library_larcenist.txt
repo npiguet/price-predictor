@@ -1,0 +1,5 @@
+name: library larcenist
+mana cost: {2}{U}
+types: creature merfolk rogue
+power toughness: 1/2
+triggered: whenever CARDNAME attacks, draw a card.

@@ -1,0 +1,4 @@
+name: tainted treats
+mana cost: {1}{B}{G}
+types: instant
+spell[1]: destroy target artifact or creature. if its mana value was 4 or less, create a food token.

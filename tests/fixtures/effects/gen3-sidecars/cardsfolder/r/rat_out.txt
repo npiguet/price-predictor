@@ -1,0 +1,4 @@
+name: rat out
+mana cost: {B}
+types: instant
+spell[1]: up to one target creature gets -1/-1 until end of turn. you create a 1/1 black rat creature token with "this creature can't block."

@@ -1,0 +1,8 @@
+name: nemata, primeval warden
+mana cost: {2}{B}{G}
+types: legendary creature treefolk
+power toughness: 3/4
+static: reach
+activated[1]: {G}, sacrifice a saproling: CARDNAME gets +2/+2 until end of turn.
+activated[2]: {1}{B}, sacrifice two saprolings: draw a card.
+replacement: if a creature an opponent controls would die, exile it instead. when you do, create a 1/1 green saproling creature token.

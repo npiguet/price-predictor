@@ -1,0 +1,6 @@
+name: hand of vecna
+mana cost: {3}
+types: legendary artifact equipment
+activated[1]: equip {2}
+activated[2]: equip—pay 1 life for each card in your hand
+triggered: at the beginning of combat on your turn, equipped creature or a creature you control named vecna gets +X/+X until end of turn, where X is the number of cards in your hand.

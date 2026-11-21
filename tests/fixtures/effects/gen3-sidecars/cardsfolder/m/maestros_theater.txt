@@ -1,3 +1,0 @@
-name: maestros theater
-types: land
-triggered: when CARDNAME enters, sacrifice it. when you do, search your library for a basic island, swamp, or mountain card, put it onto the battlefield tapped, then shuffle and you gain 1 life.

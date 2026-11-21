@@ -1,0 +1,5 @@
+name: virus beetle
+mana cost: {1}{B}
+types: artifact creature insect
+power toughness: 1/1
+triggered: when CARDNAME enters, each opponent discards a card.

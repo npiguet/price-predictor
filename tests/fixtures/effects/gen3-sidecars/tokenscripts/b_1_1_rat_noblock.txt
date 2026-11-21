@@ -1,0 +1,4 @@
+name: rat token
+types: creature rat
+power toughness: 1/1
+static: CARDNAME can't block.

@@ -1,0 +1,14 @@
+layout: transform
+name: hookhand mariner
+mana cost: {3}{G}
+types: creature human werewolf
+power toughness: 4/4
+triggered: daybound
+
+ALTERNATE
+
+name: riphook raider
+types: creature werewolf
+power toughness: 6/4
+triggered: nightbound
+static: CARDNAME can't be blocked by creatures with power 2 or less.

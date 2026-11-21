@@ -1,6 +1,0 @@
-name: brightblade stoat
-mana cost: {1}{W}
-types: creature weasel soldier
-power toughness: 2/2
-static: first strike
-static: lifelink

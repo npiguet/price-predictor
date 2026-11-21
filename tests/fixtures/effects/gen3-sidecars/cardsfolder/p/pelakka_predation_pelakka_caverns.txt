@@ -1,0 +1,12 @@
+layout: modal
+name: pelakka predation
+mana cost: {2}{B}
+types: sorcery
+spell[1]: target opponent reveals their hand. you choose a card from it with mana value 3 or greater. that player discards that card.
+
+ALTERNATE
+
+name: pelakka caverns
+types: land
+activated[1]: {T}: add {B}.
+replacement: CARDNAME enters tapped.

@@ -1,0 +1,5 @@
+name: field of the dead
+types: land
+activated[1]: {T}: add {C}.
+triggered: whenever CARDNAME or another land you control enters, if you control seven or more lands with different names, create a 2/2 black zombie creature token.
+replacement: CARDNAME enters tapped.

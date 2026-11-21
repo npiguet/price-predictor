@@ -1,5 +1,0 @@
-name: forcemage advocate
-mana cost: {1}{G}
-types: creature centaur shaman
-power toughness: 2/1
-activated[1]: {T}: return target card from an opponent's graveyard to their hand. put a +1/+1 counter on target creature.

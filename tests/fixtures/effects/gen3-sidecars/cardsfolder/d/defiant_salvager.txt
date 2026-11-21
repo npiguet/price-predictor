@@ -1,0 +1,5 @@
+name: defiant salvager
+mana cost: {2}{B}
+types: creature aetherborn artificer
+power toughness: 2/2
+activated[1]: sacrifice an artifact or creature: put a +1/+1 counter on CARDNAME. activate only as a sorcery.

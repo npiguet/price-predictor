@@ -1,0 +1,4 @@
+name: divine smite
+mana cost: {1}{W}
+types: instant
+spell[1]: target creature or planeswalker an opponent controls phases out. if that permanent is black, exile it instead.

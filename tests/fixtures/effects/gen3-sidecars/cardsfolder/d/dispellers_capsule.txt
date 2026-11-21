@@ -1,0 +1,4 @@
+name: dispeller's capsule
+mana cost: {W}
+types: artifact
+activated[1]: {2}{W}, {T}, sacrifice CARDNAME: destroy target artifact or enchantment.

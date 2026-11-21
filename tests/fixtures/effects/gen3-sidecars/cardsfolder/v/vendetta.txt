@@ -1,4 +1,0 @@
-name: vendetta
-mana cost: {B}
-types: instant
-spell[1]: destroy target nonblack creature. it can't be regenerated. you lose life equal to that creature's toughness.

@@ -1,0 +1,6 @@
+name: shield-wall sentinel
+mana cost: {4}
+types: artifact creature golem
+power toughness: 1/3
+static: defender
+triggered: when CARDNAME enters, you may search your library for a creature card with defender, reveal it, put it into your hand, then shuffle.

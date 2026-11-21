@@ -1,0 +1,5 @@
+name: frontline rebel
+mana cost: {2}{R}
+types: creature human warrior
+power toughness: 3/3
+static: CARDNAME attacks each combat if able.

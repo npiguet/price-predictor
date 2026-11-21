@@ -1,0 +1,6 @@
+name: cryptic coat
+mana cost: {2}{U}
+types: artifact equipment
+activated[1]: {1}{U}: return CARDNAME to its owner's hand.
+triggered: when CARDNAME enters, cloak the top card of your library, then attach CARDNAME to it.
+static: equipped creature gets +1/+0 and can't be blocked.

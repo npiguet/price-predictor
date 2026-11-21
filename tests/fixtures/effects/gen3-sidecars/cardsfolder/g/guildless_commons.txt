@@ -1,5 +1,0 @@
-name: guildless commons
-types: land
-activated[1]: {T}: add {C}{C}.
-triggered: when CARDNAME enters, return a land you control to its owner's hand.
-replacement: CARDNAME enters tapped.

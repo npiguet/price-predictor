@@ -1,0 +1,5 @@
+name: gisa's bidding
+mana cost: {2}{B}{B}
+types: sorcery
+alternate cost: madness {2}{B}
+spell[1]: create two 2/2 black zombie creature tokens.

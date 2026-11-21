@@ -1,0 +1,6 @@
+name: anointed chorister
+mana cost: {W}
+types: creature human cleric
+power toughness: 1/1
+static: lifelink
+activated[1]: {4}{W}: CARDNAME gets +3/+3 until end of turn.

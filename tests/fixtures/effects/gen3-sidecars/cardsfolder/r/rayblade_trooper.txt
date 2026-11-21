@@ -1,0 +1,7 @@
+name: rayblade trooper
+mana cost: {2}{W}
+types: creature human soldier
+power toughness: 2/2
+activated[1]: warp {1}{W}
+triggered: when this creature enters, put a +1/+1 counter on target creature you control.
+triggered: whenever a nontoken creature you control with a +1/+1 counter on it dies, create a 1/1 white human soldier creature token.

@@ -1,5 +1,0 @@
-name: avishkar raceway
-types: land
-static: start your engines
-activated[1]: {T}: add {C}.
-static: max speed — {3}, {T}, discard a card: draw a card.

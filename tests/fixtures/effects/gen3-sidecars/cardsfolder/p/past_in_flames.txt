@@ -1,0 +1,5 @@
+name: past in flames
+mana cost: {3}{R}
+types: sorcery
+alternate cost: flashback {4}{R}
+spell[1]: each instant and sorcery card in your graveyard gains flashback until end of turn. the flashback cost is equal to its mana cost.

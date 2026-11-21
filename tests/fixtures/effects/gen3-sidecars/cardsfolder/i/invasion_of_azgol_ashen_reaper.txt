@@ -1,0 +1,16 @@
+layout: transform
+name: invasion of azgol
+mana cost: {B}{R}
+types: battle siege
+defense: 4
+triggered: when CARDNAME enters, target player sacrifices a creature or planeswalker and loses 1 life.
+triggered: when CARDNAME is defeated, exile it, then cast it transformed.
+replacement: CARDNAME enters with four defense counters on it.
+
+ALTERNATE
+
+name: ashen reaper
+types: creature zombie elemental
+power toughness: 2/1
+static: menace
+triggered: at the beginning of your end step, put a +1/+1 counter on CARDNAME if a permanent was put into a graveyard from the battlefield this turn.

@@ -1,0 +1,5 @@
+name: furor of the bitten
+mana cost: {R}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +2/+2 and attacks each combat if able.

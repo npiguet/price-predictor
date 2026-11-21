@@ -1,7 +1,0 @@
-name: gaea's revenge
-mana cost: {5}{G}{G}
-types: creature elemental
-power toughness: 8/5
-static: haste
-static: CARDNAME can't be the target of nongreen spells or abilities from nongreen sources.
-replacement: this spell can't be countered.

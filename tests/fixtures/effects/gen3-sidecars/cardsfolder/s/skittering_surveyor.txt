@@ -1,0 +1,5 @@
+name: skittering surveyor
+mana cost: {3}
+types: artifact creature construct
+power toughness: 1/2
+triggered: when CARDNAME enters, you may search your library for a basic land card, reveal it, put it into your hand, then shuffle.

@@ -1,0 +1,5 @@
+name: gleeful sabotage
+mana cost: {1}{G}
+types: sorcery
+additional cost: conspire
+spell[1]: destroy target artifact or enchantment.

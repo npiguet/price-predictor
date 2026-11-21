@@ -1,0 +1,5 @@
+name: luminous bonds
+mana cost: {2}{W}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature can't attack or block.

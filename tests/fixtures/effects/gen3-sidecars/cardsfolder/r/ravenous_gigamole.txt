@@ -1,0 +1,5 @@
+name: ravenous gigamole
+mana cost: {3}{B}
+types: creature mole horror
+power toughness: 2/3
+triggered: when CARDNAME enters, mill three cards. you may put a creature card from among the cards milled this way into your hand. if you don't, put a +1/+1 counter on CARDNAME.

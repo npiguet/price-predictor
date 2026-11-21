@@ -1,7 +1,0 @@
-name: stockman, mad fly-entist
-mana cost: {4}{U}
-types: legendary creature insect mutant scientist
-power toughness: 3/4
-static: flying
-activated[1]: islandcycling {2}
-triggered: when CARDNAME enters, draw a card, then discard a card.

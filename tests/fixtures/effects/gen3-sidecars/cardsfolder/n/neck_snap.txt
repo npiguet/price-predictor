@@ -1,0 +1,4 @@
+name: neck snap
+mana cost: {3}{W}
+types: instant
+spell[1]: destroy target attacking or blocking creature.

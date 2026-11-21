@@ -1,0 +1,6 @@
+name: scream puff
+mana cost: {4}{B}
+types: creature horror
+power toughness: 4/5
+static: deathtouch
+triggered: whenever CARDNAME deals combat damage to a player, create a food token.

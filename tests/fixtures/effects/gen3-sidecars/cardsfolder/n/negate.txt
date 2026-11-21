@@ -1,0 +1,4 @@
+name: negate
+mana cost: {1}{U}
+types: instant
+spell[1]: counter target noncreature spell.

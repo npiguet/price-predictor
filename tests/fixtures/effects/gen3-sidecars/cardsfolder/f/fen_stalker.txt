@@ -1,5 +1,0 @@
-name: fen stalker
-mana cost: {3}{B}
-types: creature nightstalker
-power toughness: 3/2
-static: CARDNAME has fear as long as you control no untapped lands.

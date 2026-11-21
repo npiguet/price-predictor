@@ -1,0 +1,6 @@
+name: anurid swarmsnapper
+mana cost: {2}{G}
+types: creature frog beast
+power toughness: 1/4
+static: reach
+activated[1]: {1}{G}: CARDNAME can block an additional creature this turn.

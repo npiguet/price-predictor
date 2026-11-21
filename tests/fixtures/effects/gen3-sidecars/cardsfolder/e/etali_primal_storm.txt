@@ -1,0 +1,5 @@
+name: etali, primal storm
+mana cost: {4}{R}{R}
+types: legendary creature elder dinosaur
+power toughness: 6/6
+triggered: whenever CARDNAME attacks, exile the top card of each player's library, then you may cast any number of spells from among those cards without paying their mana costs.

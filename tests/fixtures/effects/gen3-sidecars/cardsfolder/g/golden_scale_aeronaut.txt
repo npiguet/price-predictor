@@ -1,0 +1,6 @@
+name: golden-scale aeronaut
+mana cost: {4}{W}
+types: creature dwarf pilot
+power toughness: 2/3
+triggered: backup 1
+static: flying

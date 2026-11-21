@@ -1,0 +1,5 @@
+name: krosan wayfarer
+mana cost: {G}
+types: creature human druid
+power toughness: 1/1
+activated[1]: sacrifice CARDNAME: you may put a land card from your hand onto the battlefield.

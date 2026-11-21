@@ -1,6 +1,0 @@
-name: thrakkus the butcher
-mana cost: {3}{R}{G}
-types: legendary creature dragon peasant
-power toughness: 3/4
-static: trample
-triggered: whenever CARDNAME attacks, double the power of each dragon you control until end of turn.

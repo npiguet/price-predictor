@@ -1,0 +1,6 @@
+name: sentinels of glen elendra
+mana cost: {3}{U}
+types: creature faerie soldier
+power toughness: 2/3
+static: flash
+static: flying

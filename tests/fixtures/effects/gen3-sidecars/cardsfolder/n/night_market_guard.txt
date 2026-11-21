@@ -1,0 +1,5 @@
+name: night market guard
+mana cost: {3}
+types: artifact creature construct
+power toughness: 3/1
+static: CARDNAME can block an additional creature each combat.

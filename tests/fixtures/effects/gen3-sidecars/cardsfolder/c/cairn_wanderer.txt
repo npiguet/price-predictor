@@ -1,0 +1,6 @@
+name: cairn wanderer
+mana cost: {4}{B}
+types: creature shapeshifter
+power toughness: 4/4
+static: changeling
+static: as long as a creature card with flying is in a graveyard, CARDNAME has flying. the same is true for fear, first strike, double strike, deathtouch, haste, landwalk, lifelink, protection, reach, trample, shroud, and vigilance.

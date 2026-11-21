@@ -1,4 +1,0 @@
-name: tundra fumarole
-mana cost: {1}{R}{R}
-types: snow sorcery
-spell[1]: CARDNAME deals 4 damage to target creature or planeswalker. add {C} for each {S} spent to cast this spell. until end of turn, you don't lose this mana as steps and phases end.

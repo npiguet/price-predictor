@@ -1,4 +1,0 @@
-name: marwyn's kindred
-mana cost: {X}{2}{G}{G}
-types: sorcery
-spell[1]: conjure a card named marwyn, the nurturer and X cards named llanowar elves onto the battlefield.

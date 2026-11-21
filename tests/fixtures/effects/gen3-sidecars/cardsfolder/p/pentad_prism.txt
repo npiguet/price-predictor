@@ -1,0 +1,5 @@
+name: pentad prism
+mana cost: {2}
+types: artifact
+static: sunburst
+activated[1]: remove a charge counter from CARDNAME: add one mana of any color.

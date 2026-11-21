@@ -1,0 +1,6 @@
+name: vampire envoy
+mana cost: {2}{B}
+types: creature vampire cleric ally
+power toughness: 1/4
+static: flying
+triggered: whenever CARDNAME becomes tapped, you gain 1 life.

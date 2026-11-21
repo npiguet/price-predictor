@@ -1,5 +1,0 @@
-name: coral net
-mana cost: {U}
-types: enchantment aura
-static: enchant green or white creature
-static: enchanted creature has "at the beginning of your upkeep, sacrifice this creature unless you discard a card."

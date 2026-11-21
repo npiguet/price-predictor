@@ -1,0 +1,6 @@
+name: hammer of ruin
+mana cost: {2}
+types: artifact equipment
+activated[1]: equip {2}
+triggered: whenever equipped creature deals combat damage to a player, you may destroy target equipment that player controls.
+static: equipped creature gets +2/+0.

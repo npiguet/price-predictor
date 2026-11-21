@@ -1,5 +1,0 @@
-name: crafty pathmage
-mana cost: {2}{U}
-types: creature human wizard
-power toughness: 1/1
-activated[1]: {T}: target creature with power 2 or less can't be blocked this turn.

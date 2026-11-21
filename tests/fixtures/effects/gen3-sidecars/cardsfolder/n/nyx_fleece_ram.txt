@@ -1,0 +1,5 @@
+name: nyx-fleece ram
+mana cost: {1}{W}
+types: enchantment creature sheep
+power toughness: 0/5
+triggered: at the beginning of your upkeep, you gain 1 life.

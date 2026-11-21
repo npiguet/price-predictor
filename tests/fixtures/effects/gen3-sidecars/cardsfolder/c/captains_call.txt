@@ -1,4 +1,0 @@
-name: captain's call
-mana cost: {3}{W}
-types: sorcery
-spell[1]: create three 1/1 white soldier creature tokens.

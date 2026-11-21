@@ -1,0 +1,7 @@
+name: vampire soulcaller
+mana cost: {4}{B}
+types: creature vampire warlock
+power toughness: 3/2
+static: flying
+triggered: when this creature enters, return target creature card from your graveyard to your hand.
+static: CARDNAME can't block.

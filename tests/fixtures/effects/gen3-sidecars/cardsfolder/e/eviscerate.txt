@@ -1,0 +1,4 @@
+name: eviscerate
+mana cost: {3}{B}
+types: sorcery
+spell[1]: destroy target creature.

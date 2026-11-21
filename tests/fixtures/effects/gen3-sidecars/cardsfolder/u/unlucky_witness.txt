@@ -1,5 +1,0 @@
-name: unlucky witness
-mana cost: {R}
-types: creature human citizen
-power toughness: 1/1
-triggered: when CARDNAME dies, exile the top two cards of your library. until your next end step, you may play one of those cards.

@@ -1,6 +1,0 @@
-name: illusionary forces
-mana cost: {3}{U}
-types: creature illusion
-power toughness: 4/4
-triggered: cumulative upkeep {U}
-static: flying

@@ -1,6 +1,0 @@
-name: dreadmalkin
-mana cost: {B}
-types: creature zombie cat
-power toughness: 1/1
-static: menace
-activated[1]: {2}{B}, sacrifice another creature or planeswalker: put two +1/+1 counters on CARDNAME.

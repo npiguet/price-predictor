@@ -1,0 +1,5 @@
+name: brazen dwarf
+mana cost: {1}{R}
+types: creature dwarf shaman
+power toughness: 1/3
+triggered: whenever you roll one or more dice, CARDNAME deals 1 damage to each opponent.

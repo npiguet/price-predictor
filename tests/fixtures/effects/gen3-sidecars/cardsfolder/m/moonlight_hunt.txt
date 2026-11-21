@@ -1,0 +1,4 @@
+name: moonlight hunt
+mana cost: {1}{G}
+types: instant
+spell[1]: choose target creature you don't control. each creature you control that's a wolf or a werewolf deals damage equal to its power to that creature.

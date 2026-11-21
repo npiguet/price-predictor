@@ -1,5 +1,0 @@
-name: grip of desolation
-mana cost: {4}{B}{B}
-types: instant
-static: devoid
-spell[1]: exile target creature and target land.

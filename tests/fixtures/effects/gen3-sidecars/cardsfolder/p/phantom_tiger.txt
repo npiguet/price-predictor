@@ -1,6 +1,0 @@
-name: phantom tiger
-mana cost: {2}{G}
-types: creature cat spirit
-power toughness: 1/0
-replacement: CARDNAME enters with two +1/+1 counters on it.
-replacement: if damage would be dealt to CARDNAME, prevent that damage. remove a +1/+1 counter from CARDNAME.

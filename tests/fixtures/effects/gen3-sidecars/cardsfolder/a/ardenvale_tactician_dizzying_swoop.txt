@@ -1,0 +1,14 @@
+layout: adventure
+name: ardenvale tactician
+mana cost: {1}{W}{W}
+types: creature human knight
+power toughness: 2/3
+static: flying
+
+ALTERNATE
+
+name: dizzying swoop
+mana cost: {1}{W}
+types: instant adventure
+spell[1]: tap up to two target creatures.
+replacement: adventure

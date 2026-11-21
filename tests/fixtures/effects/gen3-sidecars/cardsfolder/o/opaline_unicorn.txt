@@ -1,0 +1,5 @@
+name: opaline unicorn
+mana cost: {3}
+types: artifact creature unicorn
+power toughness: 1/2
+activated[1]: {T}: add one mana of any color.

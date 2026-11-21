@@ -1,5 +1,0 @@
-name: hunting wilds
-mana cost: {3}{G}
-types: sorcery
-additional cost: kicker {3}{G}
-spell[1]: search your library for up to two forest cards, put them onto the battlefield tapped, then shuffle. if this spell was kicked, untap all forests put onto the battlefield this way. they become 3/3 green creatures with haste that are still lands.

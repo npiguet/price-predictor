@@ -1,6 +1,0 @@
-name: glint weaver
-mana cost: {5}{G}{G}
-types: creature spider
-power toughness: 3/3
-static: reach
-triggered: when CARDNAME enters, distribute three +1/+1 counters among one, two, or three target creatures, then you gain life equal to the greatest toughness among creatures you control.

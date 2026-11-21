@@ -1,5 +1,0 @@
-name: lumengrid gargoyle
-mana cost: {6}
-types: artifact creature gargoyle
-power toughness: 4/4
-static: flying

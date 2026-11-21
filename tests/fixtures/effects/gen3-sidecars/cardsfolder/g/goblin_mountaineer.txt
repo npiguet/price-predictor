@@ -1,0 +1,5 @@
+name: goblin mountaineer
+mana cost: {R}
+types: creature goblin scout
+power toughness: 1/1
+static: mountainwalk

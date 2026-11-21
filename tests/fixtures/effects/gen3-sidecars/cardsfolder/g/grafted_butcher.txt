@@ -1,0 +1,7 @@
+name: grafted butcher
+mana cost: {1}{B}
+types: creature phyrexian samurai
+power toughness: 2/2
+activated[1]: {3}{B}, sacrifice an artifact or creature: return CARDNAME from your graveyard to the battlefield. activate only as a sorcery.
+triggered: when CARDNAME enters, phyrexians you control gain menace until end of turn.
+static: other phyrexians you control get +1/+1.

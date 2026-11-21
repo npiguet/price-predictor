@@ -1,5 +1,0 @@
-name: replicating ring
-mana cost: {3}
-types: snow artifact
-activated[1]: {T}: add one mana of any color.
-triggered: at the beginning of your upkeep, put a night counter on CARDNAME. then if it has eight or more night counters on it, remove all of them and create eight colorless snow artifact tokens named replicated ring with "{T}: add one mana of any color."

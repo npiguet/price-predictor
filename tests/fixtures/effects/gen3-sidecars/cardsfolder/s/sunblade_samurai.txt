@@ -1,0 +1,6 @@
+name: sunblade samurai
+mana cost: {4}{W}
+types: enchantment creature human samurai
+power toughness: 4/4
+static: vigilance
+activated[1]: channel — {2}, discard CARDNAME: search your library for a basic plains card, reveal it, put it into your hand, then shuffle. you gain 2 life.

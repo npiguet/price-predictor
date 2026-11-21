@@ -1,0 +1,6 @@
+name: uneasy alliance
+mana cost: {1}{W}
+types: enchantment aura
+static: enchant creature
+activated[1]: {5}, sacrifice CARDNAME: exile enchanted creature. you create a 1/1 black ninja creature token. activate only as a sorcery.
+static: enchanted creature can't attack or block.

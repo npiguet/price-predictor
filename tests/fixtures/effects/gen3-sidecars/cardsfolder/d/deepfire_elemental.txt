@@ -1,5 +1,0 @@
-name: deepfire elemental
-mana cost: {4}{B}{R}
-types: creature elemental
-power toughness: 4/4
-activated[1]: {X}{X}{1}: destroy target artifact or creature with mana value X.

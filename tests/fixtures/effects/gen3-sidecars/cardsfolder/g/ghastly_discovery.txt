@@ -1,0 +1,5 @@
+name: ghastly discovery
+mana cost: {2}{U}
+types: sorcery
+additional cost: conspire
+spell[1]: draw two cards, then discard a card.

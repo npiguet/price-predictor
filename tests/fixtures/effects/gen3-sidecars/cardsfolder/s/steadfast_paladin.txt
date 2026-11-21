@@ -1,0 +1,5 @@
+name: steadfast paladin
+mana cost: {1}{W}
+types: creature dwarf knight
+power toughness: 2/2
+static: lifelink

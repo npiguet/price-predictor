@@ -1,4 +1,0 @@
-name: zealous persecution
-mana cost: {W}{B}
-types: instant
-spell[1]: until end of turn, creatures you control get +1/+1 and creatures your opponents control get -1/-1.

@@ -1,0 +1,5 @@
+name: wicker warcrawler
+mana cost: {5}
+types: artifact creature scarecrow
+power toughness: 6/6
+triggered: whenever CARDNAME attacks or blocks, put a -1/-1 counter on it at end of combat.

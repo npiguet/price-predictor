@@ -1,5 +1,0 @@
-name: drifting meadow
-types: land
-activated[1]: cycling {2}
-activated[2]: {T}: add {W}.
-replacement: CARDNAME enters tapped.

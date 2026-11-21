@@ -1,0 +1,5 @@
+name: melded moxite
+mana cost: {1}{R}
+types: artifact
+activated[1]: {3}, sacrifice CARDNAME: create a tapped 2/2 colorless robot artifact creature token.
+triggered: when this artifact enters, you may discard a card. if you do, draw two cards.

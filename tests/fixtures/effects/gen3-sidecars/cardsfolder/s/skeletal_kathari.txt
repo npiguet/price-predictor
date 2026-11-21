@@ -1,0 +1,6 @@
+name: skeletal kathari
+mana cost: {4}{B}
+types: creature bird skeleton
+power toughness: 3/2
+static: flying
+activated[1]: {B}, sacrifice a creature: regenerate CARDNAME.

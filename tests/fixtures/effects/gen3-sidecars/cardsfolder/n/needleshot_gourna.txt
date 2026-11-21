@@ -1,0 +1,5 @@
+name: needleshot gourna
+mana cost: {4}{G}{G}
+types: creature beast
+power toughness: 3/6
+static: reach

@@ -1,6 +1,0 @@
-name: imposing vantasaur
-mana cost: {5}{W}
-types: creature dinosaur
-power toughness: 3/6
-activated[1]: cycling {1}
-static: vigilance

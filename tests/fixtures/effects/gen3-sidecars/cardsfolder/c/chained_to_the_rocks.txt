@@ -1,0 +1,5 @@
+name: chained to the rocks
+mana cost: {W}
+types: enchantment aura
+static: enchant mountain you control
+triggered: when CARDNAME enters, exile target creature an opponent controls until CARDNAME leaves the battlefield.

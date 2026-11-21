@@ -1,6 +1,0 @@
-name: coalition relic
-mana cost: {3}
-types: artifact
-activated[1]: {T}: add one mana of any color.
-activated[2]: {T}: put a charge counter on CARDNAME.
-triggered: at the beginning of your first main phase, remove all charge counters from CARDNAME. add one mana of any color for each charge counter removed this way.

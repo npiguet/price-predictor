@@ -1,4 +1,0 @@
-name: intangible virtue
-mana cost: {1}{W}
-types: enchantment
-static: creature tokens you control get +1/+1 and have vigilance.

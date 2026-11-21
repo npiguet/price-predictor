@@ -1,0 +1,4 @@
+name: zhalfirin void
+types: land
+activated[1]: {T}: add {C}.
+triggered: when CARDNAME enters, scry 1.

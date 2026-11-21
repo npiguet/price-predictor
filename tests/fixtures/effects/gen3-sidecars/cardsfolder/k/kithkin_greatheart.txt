@@ -1,0 +1,5 @@
+name: kithkin greatheart
+mana cost: {1}{W}
+types: creature kithkin soldier
+power toughness: 2/1
+static: as long as you control a giant, CARDNAME gets +1/+1 and has first strike.

@@ -1,5 +1,0 @@
-name: duskwielder
-mana cost: {B}
-types: creature elf berserker
-power toughness: 1/2
-activated[1]: boast — {1}: target opponent loses 1 life and you gain 1 life.

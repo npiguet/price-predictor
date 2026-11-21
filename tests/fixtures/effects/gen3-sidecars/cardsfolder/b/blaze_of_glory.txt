@@ -1,4 +1,0 @@
-name: blaze of glory
-mana cost: {W}
-types: instant
-spell[1]: cast CARDNAME only during combat before blockers are declared. target creature defending player controls can block any number of creatures this turn. it blocks each attacking creature this turn if able.

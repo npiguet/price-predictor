@@ -1,0 +1,6 @@
+name: hypnotic specter
+mana cost: {1}{B}{B}
+types: creature specter
+power toughness: 2/2
+static: flying
+triggered: whenever CARDNAME deals damage to an opponent, that player discards a card at random.

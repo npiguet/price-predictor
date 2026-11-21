@@ -1,6 +1,0 @@
-name: gilded ghoda
-mana cost: {1}{R}
-types: creature horse mount
-power toughness: 2/2
-activated[1]: saddle 1
-triggered: whenever this creature attacks while saddled, create a treasure token.

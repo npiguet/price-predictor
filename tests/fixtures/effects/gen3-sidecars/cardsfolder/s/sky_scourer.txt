@@ -1,0 +1,7 @@
+name: sky scourer
+mana cost: {1}{B}
+types: creature eldrazi drone
+power toughness: 1/2
+static: devoid
+static: flying
+triggered: whenever you cast a colorless spell, CARDNAME gets +1/+0 until end of turn.

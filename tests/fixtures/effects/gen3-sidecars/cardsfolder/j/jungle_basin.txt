@@ -1,0 +1,5 @@
+name: jungle basin
+types: land
+activated[1]: {T}: add {C}{G}.
+triggered: when CARDNAME enters, sacrifice it unless you return an untapped forest you control to its owner's hand.
+replacement: CARDNAME enters tapped.

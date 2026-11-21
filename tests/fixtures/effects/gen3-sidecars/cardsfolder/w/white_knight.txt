@@ -1,0 +1,6 @@
+name: white knight
+mana cost: {W}{W}
+types: creature human knight
+power toughness: 2/2
+static: first strike
+static: protection from black

@@ -1,7 +1,0 @@
-name: elven raft-steerer
-mana cost: {2}{U}
-types: creature elf pilot
-power toughness: 3/2
-triggered: landfall — whenever a land you control enters, choose one
-option[1]: tap target creature an opponent controls.
-option[2]: untap target creature you control.

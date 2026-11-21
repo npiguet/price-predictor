@@ -1,6 +1,0 @@
-name: alert heedbonder
-mana cost: {1}{G/W}{G/W}
-types: creature human scout
-power toughness: 2/4
-static: vigilance
-triggered: at the beginning of your end step, you gain 1 life for each creature you control with vigilance.

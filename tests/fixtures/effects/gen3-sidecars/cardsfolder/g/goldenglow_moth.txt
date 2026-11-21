@@ -1,0 +1,6 @@
+name: goldenglow moth
+mana cost: {W}
+types: creature insect
+power toughness: 0/1
+static: flying
+triggered: whenever CARDNAME blocks, you may gain 4 life.

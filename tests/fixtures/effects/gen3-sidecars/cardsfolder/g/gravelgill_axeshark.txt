@@ -1,0 +1,5 @@
+name: gravelgill axeshark
+mana cost: {4}{U/B}
+types: creature merfolk soldier
+power toughness: 3/3
+triggered: persist

@@ -1,0 +1,4 @@
+name: stensia uprising
+mana cost: {2}{R}{R}
+types: enchantment
+triggered: at the beginning of your end step, create a 1/1 red human creature token. then if you control exactly thirteen permanents, you may sacrifice CARDNAME. when you do, it deals 7 damage to any target. when you sacrifice CARDNAME, it deals 7 damage to any target.

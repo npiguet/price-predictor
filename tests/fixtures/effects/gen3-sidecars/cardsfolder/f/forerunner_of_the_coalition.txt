@@ -1,0 +1,6 @@
+name: forerunner of the coalition
+mana cost: {2}{B}
+types: creature human pirate
+power toughness: 2/2
+triggered: when CARDNAME enters, you may search your library for a pirate card, reveal it, then shuffle and put that card on top.
+triggered: whenever another pirate you control enters, each opponent loses 1 life.

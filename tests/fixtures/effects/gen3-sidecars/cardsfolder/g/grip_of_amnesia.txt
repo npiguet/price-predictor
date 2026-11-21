@@ -1,4 +1,0 @@
-name: grip of amnesia
-mana cost: {1}{U}
-types: instant
-spell[1]: counter target spell unless its controller exiles all cards from their graveyard. draw a card.

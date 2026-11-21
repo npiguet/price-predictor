@@ -1,8 +1,0 @@
-name: riftmarked knight
-mana cost: {1}{W}{W}
-types: creature human rebel knight
-power toughness: 2/2
-alternate cost: suspend 3—{1}{W}{W}
-triggered: flanking
-static: protection from black
-triggered: when the last time counter is removed from CARDNAME while it's exiled, create a 2/2 black knight creature token with flanking, protection from white, and haste.

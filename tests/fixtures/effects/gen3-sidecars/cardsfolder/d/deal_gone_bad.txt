@@ -1,0 +1,4 @@
+name: deal gone bad
+mana cost: {3}{B}
+types: instant
+spell[1]: target creature gets -3/-3 until end of turn. target player mills three cards.

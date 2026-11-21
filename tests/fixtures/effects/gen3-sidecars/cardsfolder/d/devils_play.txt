@@ -1,0 +1,5 @@
+name: devil's play
+mana cost: {X}{R}
+types: sorcery
+alternate cost: flashback {X}{R}{R}{R}
+spell[1]: CARDNAME deals X damage to any target.

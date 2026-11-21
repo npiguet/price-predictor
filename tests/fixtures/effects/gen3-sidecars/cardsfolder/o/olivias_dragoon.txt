@@ -1,0 +1,5 @@
+name: olivia's dragoon
+mana cost: {1}{B}
+types: creature vampire berserker
+power toughness: 2/2
+activated[1]: discard a card: CARDNAME gains flying until end of turn.

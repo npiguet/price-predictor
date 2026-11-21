@@ -1,6 +1,0 @@
-name: reclusive artificer
-mana cost: {2}{U}{R}
-types: creature human artificer
-power toughness: 2/3
-static: haste
-triggered: when CARDNAME enters, you may have it deal damage to target creature equal to the number of artifacts you control.

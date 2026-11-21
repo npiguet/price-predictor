@@ -1,0 +1,4 @@
+name: rakdos guildgate
+types: land gate
+activated[1]: {T}: add {B} or {R}.
+replacement: CARDNAME enters tapped.

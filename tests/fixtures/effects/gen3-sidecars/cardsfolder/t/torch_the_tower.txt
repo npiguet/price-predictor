@@ -1,0 +1,5 @@
+name: torch the tower
+mana cost: {R}
+types: instant
+additional cost: bargain
+spell[1]: CARDNAME deals 2 damage to target creature or planeswalker. if this spell was bargained, instead it deals 3 damage to that permanent and you scry 1. if a permanent dealt damage by CARDNAME would die this turn, exile it instead.

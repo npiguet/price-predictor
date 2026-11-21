@@ -1,0 +1,7 @@
+name: etched host doombringer
+mana cost: {4}{B}
+types: creature phyrexian demon
+power toughness: 3/5
+triggered: when CARDNAME enters, choose one
+option[1]: target opponent loses 2 life and you gain 2 life.
+option[2]: choose target battle. if an opponent protects it, remove three defense counters from it. otherwise, put three defense counters on it.

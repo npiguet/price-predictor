@@ -1,5 +1,0 @@
-name: loyal sentry
-mana cost: {W}
-types: creature human soldier
-power toughness: 1/1
-triggered: when CARDNAME blocks a creature, destroy that creature and CARDNAME.

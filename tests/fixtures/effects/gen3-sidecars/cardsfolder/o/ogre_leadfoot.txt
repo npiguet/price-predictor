@@ -1,5 +1,0 @@
-name: ogre leadfoot
-mana cost: {4}{R}
-types: creature ogre
-power toughness: 3/3
-triggered: whenever CARDNAME becomes blocked by an artifact creature, destroy that creature.

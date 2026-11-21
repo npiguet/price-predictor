@@ -1,0 +1,4 @@
+name: holdout settlement
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}, tap an untapped creature you control: add one mana of any color.

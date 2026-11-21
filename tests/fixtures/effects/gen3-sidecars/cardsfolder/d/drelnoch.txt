@@ -1,5 +1,0 @@
-name: drelnoch
-mana cost: {4}{U}
-types: creature yeti mutant
-power toughness: 3/3
-triggered: whenever CARDNAME becomes blocked, you may draw two cards.

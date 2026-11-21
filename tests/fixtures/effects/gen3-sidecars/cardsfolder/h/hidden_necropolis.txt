@@ -1,0 +1,5 @@
+name: hidden necropolis
+types: land cave
+activated[1]: {T}: add {B}.
+activated[2]: {4}{B}, {T}, sacrifice CARDNAME: discover 4. activate only as a sorcery.
+replacement: CARDNAME enters tapped.

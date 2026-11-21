@@ -1,0 +1,6 @@
+name: runaway trash-bot
+mana cost: {3}
+types: artifact creature construct
+power toughness: 0/4
+static: trample
+static: CARDNAME gets +1/+0 for each artifact and/or enchantment card in your graveyard.

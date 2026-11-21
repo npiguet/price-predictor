@@ -1,0 +1,5 @@
+name: fallaji archaeologist
+mana cost: {1}{U}
+types: creature human scout
+power toughness: 0/3
+triggered: when CARDNAME enters, mill three cards. you may put a noncreature, nonland card from among the cards milled this way into your hand. if you don't, put a +1/+1 counter on CARDNAME.

@@ -1,0 +1,4 @@
+name: aether tradewinds
+mana cost: {2}{U}
+types: instant
+spell[1]: return target permanent you control and target permanent you don't control to their owners' hands.

@@ -1,0 +1,6 @@
+name: hedge whisperer
+mana cost: {G}
+types: creature elf druid detective
+power toughness: 0/3
+static: you may choose not to untap CARDNAME during your untap step.
+activated[1]: {3}{G}, {T}, collect evidence 4: target land you control becomes a 5/5 green plant boar creature with haste for as long as CARDNAME remains tapped. it's still a land. activate only as a sorcery.

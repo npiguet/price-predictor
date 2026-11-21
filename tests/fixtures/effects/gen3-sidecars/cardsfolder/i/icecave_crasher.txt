@@ -1,0 +1,6 @@
+name: icecave crasher
+mana cost: {3}{G}
+types: creature beast
+power toughness: 4/4
+static: trample
+triggered: landfall — whenever a land you control enters, this creature gets +1/+0 until end of turn.

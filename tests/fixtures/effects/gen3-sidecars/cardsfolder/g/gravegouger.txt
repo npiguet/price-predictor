@@ -1,6 +1,0 @@
-name: gravegouger
-mana cost: {2}{B}
-types: creature nightmare horror
-power toughness: 2/2
-triggered: when CARDNAME enters, exile up to two target cards from a single graveyard.
-triggered: when CARDNAME leaves the battlefield, return the exiled cards to their owner's graveyard.

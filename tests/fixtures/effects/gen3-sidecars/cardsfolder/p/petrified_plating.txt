@@ -1,0 +1,6 @@
+name: petrified plating
+mana cost: {2}{G}
+types: enchantment aura
+alternate cost: suspend 2—{G}
+static: enchant creature
+static: enchanted creature gets +2/+2.

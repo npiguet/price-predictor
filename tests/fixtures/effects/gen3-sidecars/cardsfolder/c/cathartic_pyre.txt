@@ -1,0 +1,6 @@
+name: cathartic pyre
+mana cost: {1}{R}
+types: instant
+spell[1]: choose one
+option[2]: CARDNAME deals 3 damage to target creature or planeswalker.
+option[3]: discard up to two cards, then draw that many cards.

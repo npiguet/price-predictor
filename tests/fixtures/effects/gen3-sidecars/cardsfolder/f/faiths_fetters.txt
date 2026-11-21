@@ -1,6 +1,0 @@
-name: faith's fetters
-mana cost: {3}{W}
-types: enchantment aura
-static: enchant permanent
-triggered: when CARDNAME enters, you gain 4 life.
-static: enchanted permanent can't attack or block, and its activated abilities can't be activated unless they're mana abilities.

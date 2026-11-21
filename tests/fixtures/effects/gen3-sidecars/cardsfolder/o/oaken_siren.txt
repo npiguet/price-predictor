@@ -1,0 +1,7 @@
+name: oaken siren
+mana cost: {1}{U}
+types: artifact creature siren pirate
+power toughness: 1/2
+static: flying
+static: vigilance
+activated[1]: {T}: add {U}. spend this mana only to cast an artifact spell or activate an ability of an artifact source.

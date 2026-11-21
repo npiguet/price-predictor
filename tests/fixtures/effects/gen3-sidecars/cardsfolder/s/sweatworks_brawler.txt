@@ -1,0 +1,6 @@
+name: sweatworks brawler
+mana cost: {3}{R}
+types: creature human artificer
+power toughness: 3/3
+cost reduction: improvise
+static: menace

@@ -1,4 +1,0 @@
-name: rage into the valley
-mana cost: {2}{B}
-types: sorcery
-spell[1]: you draw a card and lose 1 life. amass goblins 2.

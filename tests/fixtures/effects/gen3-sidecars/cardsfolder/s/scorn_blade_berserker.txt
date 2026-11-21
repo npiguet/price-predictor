@@ -1,0 +1,6 @@
+name: scorn-blade berserker
+mana cost: {B}
+types: creature human berserker
+power toughness: 0/1
+triggered: backup 1
+activated[1]: {1}, sacrifice this creature: draw a card.

@@ -1,0 +1,4 @@
+name: sure strike
+mana cost: {1}{R}
+types: instant
+spell[1]: target creature gets +3/+0 and gains first strike until end of turn.

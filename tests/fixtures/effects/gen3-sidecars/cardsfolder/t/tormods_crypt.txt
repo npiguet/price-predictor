@@ -1,4 +1,0 @@
-name: tormod's crypt
-mana cost: {0}
-types: artifact
-activated[1]: {T}, sacrifice CARDNAME: exile all cards from target player's graveyard.

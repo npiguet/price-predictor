@@ -1,0 +1,5 @@
+name: totem speaker
+mana cost: {4}{G}
+types: creature elf druid
+power toughness: 3/3
+triggered: whenever a beast enters, you may gain 3 life.

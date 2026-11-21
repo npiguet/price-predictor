@@ -1,0 +1,6 @@
+name: aven redeemer
+mana cost: {3}{W}
+types: creature bird cleric
+power toughness: 2/2
+static: flying
+activated[1]: {T}: prevent the next 2 damage that would be dealt to any target this turn.

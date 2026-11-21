@@ -1,5 +1,0 @@
-name: frantic purification
-mana cost: {2}{W}
-types: instant
-alternate cost: madness {W}
-spell[1]: destroy target enchantment.

@@ -1,4 +1,0 @@
-name: future sight
-mana cost: {2}{U}{U}{U}
-types: enchantment
-static: play with the top card of your library revealed. you may play lands and cast spells from the top of your library.

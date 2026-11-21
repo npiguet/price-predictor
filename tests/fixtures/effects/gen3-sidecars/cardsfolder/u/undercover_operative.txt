@@ -1,0 +1,5 @@
+name: undercover operative
+mana cost: {2}{U}{U}
+types: creature shapeshifter rogue
+power toughness: 0/0
+replacement: you may have CARDNAME enter as a copy of any creature on the battlefield, except it enters with a shield counter on it if you control that creature.

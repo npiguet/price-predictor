@@ -1,0 +1,7 @@
+name: webspinner cuff
+mana cost: {2}{G}
+types: artifact creature equipment spider
+power toughness: 1/4
+static: reach
+activated[1]: reconfigure {4}
+static: equipped creature gets +1/+4 and has reach.

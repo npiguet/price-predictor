@@ -1,6 +1,0 @@
-name: emerald dragonfly
-mana cost: {1}{G}
-types: creature insect
-power toughness: 1/1
-static: flying
-activated[1]: {G}{G}: CARDNAME gains first strike until end of turn.

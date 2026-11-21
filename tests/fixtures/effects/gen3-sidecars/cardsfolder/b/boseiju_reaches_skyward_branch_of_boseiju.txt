@@ -1,0 +1,16 @@
+layout: transform
+name: boseiju reaches skyward
+mana cost: {3}{G}
+types: enchantment saga
+chapter: I — search your library for up to two basic forest cards, reveal them, put them into your hand, then shuffle.
+chapter: II — put up to one target land card from your graveyard on top of your library.
+chapter: III — exile this saga, then return it to the battlefield transformed under your control.
+replacement: CARDNAME enters with a lore counter on it.
+
+ALTERNATE
+
+name: branch of boseiju
+types: enchantment creature plant
+power toughness: 0/0
+static: reach
+static: CARDNAME gets +1/+1 for each land you control.

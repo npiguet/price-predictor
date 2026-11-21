@@ -1,0 +1,8 @@
+name: toxrill, the corrosive
+mana cost: {5}{B}{B}
+types: legendary creature slug horror
+power toughness: 7/7
+activated[1]: {U}{B}, sacrifice a slug: draw a card.
+triggered: at the beginning of each end step, put a slime counter on each creature you don't control.
+triggered: whenever a creature you don't control with a slime counter on it dies, create a 1/1 black slug creature token.
+static: creatures you don't control get -1/-1 for each slime counter on them.

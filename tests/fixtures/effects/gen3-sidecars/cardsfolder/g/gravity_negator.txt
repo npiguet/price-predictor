@@ -1,0 +1,7 @@
+name: gravity negator
+mana cost: {3}{U}
+types: creature eldrazi drone
+power toughness: 2/3
+static: devoid
+static: flying
+triggered: whenever CARDNAME attacks, you may pay {C}. if you do, another target creature gains flying until end of turn.

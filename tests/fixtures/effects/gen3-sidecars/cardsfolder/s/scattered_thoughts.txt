@@ -1,0 +1,4 @@
+name: scattered thoughts
+mana cost: {3}{U}
+types: instant
+spell[1]: look at the top four cards of your library. put two of those cards into your hand and the rest into your graveyard.

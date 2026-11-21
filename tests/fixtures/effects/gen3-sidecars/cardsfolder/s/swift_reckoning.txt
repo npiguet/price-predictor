@@ -1,5 +1,0 @@
-name: swift reckoning
-mana cost: {1}{W}
-types: sorcery
-spell[1]: destroy target tapped creature.
-static: spell mastery — if there are two or more instant and/or sorcery cards in your graveyard, you may cast CARDNAME as though it had flash.

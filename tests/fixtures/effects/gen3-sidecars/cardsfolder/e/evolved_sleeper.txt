@@ -1,0 +1,7 @@
+name: evolved sleeper
+mana cost: {B}
+types: creature human
+power toughness: 1/1
+activated[1]: {B}: CARDNAME becomes a human cleric with base power and toughness 2/2.
+activated[2]: {1}{B}: if CARDNAME is a cleric, put a deathtouch counter on it and it becomes a phyrexian human cleric with base power and toughness 3/3.
+activated[3]: {1}{B}{B}: if CARDNAME is a phyrexian, put a +1/+1 counter on it, then you draw a card and you lose 1 life.

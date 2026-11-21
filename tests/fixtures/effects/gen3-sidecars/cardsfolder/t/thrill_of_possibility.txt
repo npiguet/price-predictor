@@ -1,0 +1,4 @@
+name: thrill of possibility
+mana cost: {1}{R}
+types: instant
+spell[1]: as an additional cost to cast this spell, discard a card. draw two cards.

@@ -1,0 +1,6 @@
+name: avian changeling
+mana cost: {2}{W}
+types: creature shapeshifter
+power toughness: 2/2
+static: changeling
+static: flying

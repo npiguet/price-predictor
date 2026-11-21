@@ -1,0 +1,5 @@
+name: sight beyond sight
+mana cost: {3}{U}
+types: sorcery
+static: rebound
+spell[1]: look at the top two cards of your library. put one of them into your hand and the other on the bottom of your library.

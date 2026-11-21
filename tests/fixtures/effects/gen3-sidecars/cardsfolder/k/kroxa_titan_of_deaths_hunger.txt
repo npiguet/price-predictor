@@ -1,0 +1,7 @@
+name: kroxa, titan of death's hunger
+mana cost: {B}{R}
+types: legendary creature elder giant
+power toughness: 6/6
+alternate cost: escape—{B}{B}{R}{R}, exile five other cards from your graveyard
+triggered: when CARDNAME enters, sacrifice it unless it escaped.
+triggered: whenever CARDNAME enters or attacks, each opponent discards a card, then each opponent who didn't discard a nonland card this way loses 3 life.

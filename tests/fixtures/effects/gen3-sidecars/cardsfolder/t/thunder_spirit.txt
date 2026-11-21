@@ -1,0 +1,6 @@
+name: thunder spirit
+mana cost: {1}{W}{W}
+types: creature elemental spirit
+power toughness: 2/2
+static: first strike
+static: flying

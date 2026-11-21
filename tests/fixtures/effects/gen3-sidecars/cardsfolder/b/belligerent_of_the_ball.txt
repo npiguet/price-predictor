@@ -1,0 +1,5 @@
+name: belligerent of the ball
+mana cost: {2}{R}
+types: creature ogre warrior
+power toughness: 3/3
+triggered: celebration — at the beginning of combat on your turn, if two or more nonland permanents entered the battlefield under your control this turn, target creature you control gets +1/+0 and gains menace until end of turn.

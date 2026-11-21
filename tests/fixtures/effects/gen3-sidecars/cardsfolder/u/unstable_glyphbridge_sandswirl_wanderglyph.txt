@@ -1,0 +1,15 @@
+layout: transform
+name: unstable glyphbridge
+mana cost: {3}{W}{W}
+types: artifact
+activated[1]: craft with artifact {3}{W}{W}
+triggered: when CARDNAME enters, if you cast it, for each player, choose a creature with power 2 or less that player controls. then destroy all creatures except creatures chosen this way.
+
+ALTERNATE
+
+name: sandswirl wanderglyph
+types: artifact creature golem
+power toughness: 5/3
+static: flying
+triggered: whenever an opponent casts a spell during their turn, they can't attack you or planeswalkers you control this turn.
+static: each opponent who attacked you or a planeswalker you control this turn can't cast spells.

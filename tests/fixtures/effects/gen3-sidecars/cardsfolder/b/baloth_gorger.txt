@@ -1,0 +1,6 @@
+name: baloth gorger
+mana cost: {2}{G}{G}
+types: creature beast
+power toughness: 4/4
+additional cost: kicker {4}
+replacement: if CARDNAME was kicked, it enters with three +1/+1 counters on it.

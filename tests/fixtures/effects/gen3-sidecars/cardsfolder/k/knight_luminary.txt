@@ -1,0 +1,6 @@
+name: knight luminary
+mana cost: {3}{W}
+types: creature human knight
+power toughness: 3/2
+activated[1]: warp {1}{W}
+triggered: when this creature enters, create a 1/1 white human soldier creature token.

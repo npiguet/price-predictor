@@ -1,5 +1,0 @@
-name: eldrazi conscription
-mana cost: {8}
-types: kindred enchantment eldrazi aura
-static: enchant creature
-static: enchanted creature gets +10/+10 and has trample and annihilator 2.

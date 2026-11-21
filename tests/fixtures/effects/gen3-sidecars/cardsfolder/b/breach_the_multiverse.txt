@@ -1,0 +1,4 @@
+name: breach the multiverse
+mana cost: {5}{B}{B}
+types: sorcery
+spell[1]: each player mills ten cards. for each player, choose a creature or planeswalker card in that player's graveyard. put those cards onto the battlefield under your control. then each creature you control becomes a phyrexian in addition to its other types.

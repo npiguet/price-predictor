@@ -1,0 +1,5 @@
+name: nemesis trap
+mana cost: {4}{B}{B}
+types: instant trap
+spell[1]: exile target attacking creature. create a token that's a copy of that creature. exile it at the beginning of the next end step.
+static: if a white creature is attacking, you may pay {B}{B} rather than pay this spell's mana cost.

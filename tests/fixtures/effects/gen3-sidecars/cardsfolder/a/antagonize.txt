@@ -1,0 +1,4 @@
+name: antagonize
+mana cost: {1}{R}
+types: instant
+spell[1]: target creature gets +4/+3 until end of turn.

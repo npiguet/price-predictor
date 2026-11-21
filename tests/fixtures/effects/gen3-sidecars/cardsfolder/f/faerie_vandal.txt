@@ -1,0 +1,7 @@
+name: faerie vandal
+mana cost: {1}{U}
+types: creature faerie rogue
+power toughness: 1/2
+static: flash
+static: flying
+triggered: whenever you draw your second card each turn, put a +1/+1 counter on CARDNAME.

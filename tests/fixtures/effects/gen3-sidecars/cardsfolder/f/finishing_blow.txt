@@ -1,0 +1,4 @@
+name: finishing blow
+mana cost: {4}{B}
+types: instant
+spell[1]: destroy target creature or planeswalker.

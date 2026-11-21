@@ -1,4 +1,0 @@
-name: recoil
-mana cost: {1}{U}{B}
-types: instant
-spell[1]: return target permanent to its owner's hand. then that player discard a card.

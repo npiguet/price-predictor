@@ -1,0 +1,6 @@
+name: daru sanctifier
+mana cost: {3}{W}
+types: creature human cleric
+power toughness: 1/4
+alternate cost: morph {1}{W}
+triggered: when CARDNAME is turned face up, destroy target enchantment.

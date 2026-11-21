@@ -1,0 +1,5 @@
+name: skirsdag high priest
+mana cost: {1}{B}
+types: creature human cleric
+power toughness: 1/2
+activated[1]: morbid — {T}, tap two untapped creatures you control: create a 5/5 black demon creature token with flying. activate only if a creature died this turn.

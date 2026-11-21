@@ -1,5 +1,0 @@
-name: diabolic machine
-mana cost: {7}
-types: artifact creature construct
-power toughness: 4/4
-activated[1]: {3}: regenerate CARDNAME.

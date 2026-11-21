@@ -1,0 +1,5 @@
+name: opal lake gatekeepers
+mana cost: {3}{U}
+types: creature vedalken soldier
+power toughness: 2/4
+triggered: when CARDNAME enters, if you control two or more gates, you may draw a card.

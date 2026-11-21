@@ -1,5 +1,0 @@
-name: kinjalli's caller
-mana cost: {W}
-types: creature human cleric
-power toughness: 0/3
-static: dinosaur spells you cast cost {1} less to cast.

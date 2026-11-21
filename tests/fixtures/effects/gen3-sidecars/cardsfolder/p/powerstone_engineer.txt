@@ -1,0 +1,5 @@
+name: powerstone engineer
+mana cost: {1}{W}
+types: creature human artificer
+power toughness: 2/1
+triggered: when CARDNAME dies, create a tapped powerstone token.

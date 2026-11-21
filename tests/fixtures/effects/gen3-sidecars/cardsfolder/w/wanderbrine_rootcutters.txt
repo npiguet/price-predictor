@@ -1,0 +1,5 @@
+name: wanderbrine rootcutters
+mana cost: {2}{U/B}{U/B}
+types: creature merfolk rogue
+power toughness: 3/3
+static: CARDNAME can't be blocked by green creatures.

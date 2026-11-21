@@ -1,0 +1,4 @@
+name: play with fire
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to any target. if a player is dealt damage this way, scry 1.

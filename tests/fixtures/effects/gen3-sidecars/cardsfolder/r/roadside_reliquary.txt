@@ -1,0 +1,4 @@
+name: roadside reliquary
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}, sacrifice CARDNAME: draw a card if you control an artifact. draw a card if you control an enchantment.

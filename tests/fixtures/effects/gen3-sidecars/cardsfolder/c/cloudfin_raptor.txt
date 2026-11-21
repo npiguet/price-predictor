@@ -1,0 +1,6 @@
+name: cloudfin raptor
+mana cost: {U}
+types: creature bird mutant
+power toughness: 0/1
+triggered: evolve
+static: flying

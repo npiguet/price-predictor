@@ -1,5 +1,0 @@
-name: hitchclaw recluse
-mana cost: {2}{G}
-types: creature spider
-power toughness: 1/4
-static: reach

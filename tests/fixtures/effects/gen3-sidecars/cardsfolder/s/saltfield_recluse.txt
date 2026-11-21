@@ -1,5 +1,0 @@
-name: saltfield recluse
-mana cost: {2}{W}
-types: creature human rebel cleric
-power toughness: 1/2
-activated[1]: {T}: target creature gets -2/-0 until end of turn.

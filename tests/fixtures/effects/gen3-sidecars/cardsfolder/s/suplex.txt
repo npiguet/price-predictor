@@ -1,6 +1,0 @@
-name: suplex
-mana cost: {1}{R}
-types: sorcery
-spell[1]: choose one
-option[2]: CARDNAME deals 3 damage to target creature. if that creature would die this turn, exile it instead.
-option[3]: exile target artifact.

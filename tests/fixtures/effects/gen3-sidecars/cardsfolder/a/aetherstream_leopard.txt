@@ -1,0 +1,7 @@
+name: aetherstream leopard
+mana cost: {2}{G}
+types: creature cat
+power toughness: 2/3
+static: trample
+triggered: when CARDNAME enters, you get {E}.
+triggered: whenever CARDNAME attacks, you may pay {E}. if you do, it gets +2/+0 until end of turn.

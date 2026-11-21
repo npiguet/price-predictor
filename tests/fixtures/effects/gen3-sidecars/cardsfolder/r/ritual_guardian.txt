@@ -1,5 +1,0 @@
-name: ritual guardian
-mana cost: {2}{W}
-types: creature human soldier
-power toughness: 3/2
-triggered: coven — at the beginning of combat on your turn, if you control three or more creatures with different powers, CARDNAME gains lifelink until end of turn.

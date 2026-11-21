@@ -1,0 +1,7 @@
+name: skitter of lizards
+mana cost: {R}
+types: creature lizard
+power toughness: 1/1
+additional cost: multikicker {1}{R}
+static: haste
+replacement: CARDNAME enters with a +1/+1 counter on it for each time it was kicked.

@@ -1,0 +1,5 @@
+name: grotag thrasher
+mana cost: {4}{R}
+types: creature lizard
+power toughness: 3/3
+triggered: whenever CARDNAME attacks, target creature can't block this turn.

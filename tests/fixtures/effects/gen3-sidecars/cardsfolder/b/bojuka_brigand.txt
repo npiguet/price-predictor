@@ -1,0 +1,6 @@
+name: bojuka brigand
+mana cost: {1}{B}
+types: creature human warrior ally
+power toughness: 1/1
+triggered: whenever CARDNAME or another ally you control enters, you may put a +1/+1 counter on CARDNAME.
+static: CARDNAME can't block.

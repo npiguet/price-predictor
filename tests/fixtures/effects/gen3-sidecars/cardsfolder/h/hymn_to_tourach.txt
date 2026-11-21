@@ -1,4 +1,0 @@
-name: hymn to tourach
-mana cost: {B}{B}
-types: sorcery
-spell[1]: target player discards two cards at random.

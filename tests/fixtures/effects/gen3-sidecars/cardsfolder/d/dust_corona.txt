@@ -1,6 +1,0 @@
-name: dust corona
-mana cost: {R}
-types: enchantment aura
-static: enchant creature
-static: enchanted creature gets +2/+0 and can't be blocked by creatures with flying.
-static: enchanted creature can't be blocked by creatures with flying.

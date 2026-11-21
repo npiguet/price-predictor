@@ -1,0 +1,5 @@
+name: rampaging ceratops
+mana cost: {4}{R}
+types: creature dinosaur
+power toughness: 5/4
+static: CARDNAME can't be blocked except by three or more creatures.

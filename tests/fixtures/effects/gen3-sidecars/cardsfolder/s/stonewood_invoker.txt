@@ -1,0 +1,5 @@
+name: stonewood invoker
+mana cost: {1}{G}
+types: creature elf mutant
+power toughness: 2/2
+activated[1]: {7}{G}: CARDNAME gets +5/+5 until end of turn.

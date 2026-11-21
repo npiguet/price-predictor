@@ -1,0 +1,5 @@
+name: bearer of memory
+mana cost: {2}{G}
+types: enchantment creature human monk
+power toughness: 3/2
+activated[1]: {5}{G}: put a +1/+1 counter on target enchantment creature. it gains trample until end of turn.

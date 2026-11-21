@@ -1,7 +1,0 @@
-name: cloud of faeries
-mana cost: {1}{U}
-types: creature faerie
-power toughness: 1/1
-activated[1]: cycling {2}
-static: flying
-triggered: when CARDNAME enters, untap up to two lands.

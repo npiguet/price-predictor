@@ -1,6 +1,0 @@
-name: featherbrained filcher
-mana cost: {W}
-types: creature bird mutant
-power toughness: 0/2
-static: flying
-triggered: when this creature leaves the battlefield, create a food token.

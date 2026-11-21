@@ -1,4 +1,0 @@
-name: forked bolt
-mana cost: {R}
-types: sorcery
-spell[1]: CARDNAME deals 2 damage divided as you choose among one or two targets.

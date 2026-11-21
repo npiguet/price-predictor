@@ -1,0 +1,6 @@
+name: undead gladiator
+mana cost: {1}{B}{B}
+types: creature zombie barbarian
+power toughness: 3/1
+activated[1]: cycling {1}{B}
+activated[2]: {1}{B}, discard a card: return CARDNAME from your graveyard to your hand. activate only during your upkeep.

@@ -1,0 +1,7 @@
+name: sightless brawler
+mana cost: {1}{W}
+types: enchantment creature human warrior
+power toughness: 3/2
+alternate cost: bestow {4}{W}
+static: CARDNAME can't attack alone.
+static: enchanted creature gets +3/+2 and can't attack alone.

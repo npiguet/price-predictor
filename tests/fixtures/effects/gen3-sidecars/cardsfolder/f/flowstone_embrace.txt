@@ -1,0 +1,5 @@
+name: flowstone embrace
+mana cost: {1}{R}
+types: enchantment aura
+static: enchant creature
+activated[1]: {T}: enchanted creature gets +2/-2 until end of turn.

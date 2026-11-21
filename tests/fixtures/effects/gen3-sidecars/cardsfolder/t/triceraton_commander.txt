@@ -1,7 +1,0 @@
-name: triceraton commander
-mana cost: {X}{X}{W}{W}
-types: creature dinosaur soldier
-power toughness: 2/2
-static: flying
-triggered: whenever this creature attacks, dinosaurs you control other than this creature get +1/+1 and gain flying until end of turn.
-triggered: when this creature enters, create X 2/2 white dinosaur soldier creature tokens.

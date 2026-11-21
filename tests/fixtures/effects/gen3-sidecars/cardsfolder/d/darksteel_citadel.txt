@@ -1,0 +1,4 @@
+name: darksteel citadel
+types: artifact land
+static: indestructible
+activated[1]: {T}: add {C}.

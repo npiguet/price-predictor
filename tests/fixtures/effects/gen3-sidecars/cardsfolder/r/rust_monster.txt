@@ -1,0 +1,6 @@
+name: rust monster
+mana cost: {2}{R}
+types: creature beast
+power toughness: 2/1
+static: first strike
+activated[1]: sacrifice an artifact: CARDNAME gets +2/+0 until end of turn.

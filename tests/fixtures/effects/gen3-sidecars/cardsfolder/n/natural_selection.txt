@@ -1,4 +1,0 @@
-name: natural selection
-mana cost: {G}
-types: instant
-spell[1]: look at the top 3 cards of target player's library and put them back in any order. you may have that player shuffle their library.

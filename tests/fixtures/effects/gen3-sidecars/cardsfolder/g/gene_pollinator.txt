@@ -1,0 +1,5 @@
+name: gene pollinator
+mana cost: {G}
+types: artifact creature robot insect
+power toughness: 1/2
+activated[1]: {T}, tap an untapped permanent you control: add one mana of any color.

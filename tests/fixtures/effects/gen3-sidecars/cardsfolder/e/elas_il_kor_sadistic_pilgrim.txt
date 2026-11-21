@@ -1,0 +1,7 @@
+name: elas il-kor, sadistic pilgrim
+mana cost: {W}{B}
+types: legendary creature phyrexian kor cleric
+power toughness: 2/2
+static: deathtouch
+triggered: whenever another creature you control enters, you gain 1 life.
+triggered: whenever another creature you control dies, each opponent loses 1 life.

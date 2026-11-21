@@ -1,0 +1,5 @@
+name: hidden nursery
+types: land cave
+activated[1]: {T}: add {G}.
+activated[2]: {4}{G}, {T}, sacrifice CARDNAME: discover 4. activate only as a sorcery.
+replacement: CARDNAME enters tapped.

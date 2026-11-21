@@ -1,0 +1,6 @@
+name: indulgent aristocrat
+mana cost: {B}
+types: creature vampire noble
+power toughness: 1/1
+static: lifelink
+activated[1]: {2}, sacrifice a creature: put a +1/+1 counter on each vampire you control.

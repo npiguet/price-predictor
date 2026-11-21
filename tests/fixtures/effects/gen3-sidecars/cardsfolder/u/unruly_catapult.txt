@@ -1,0 +1,7 @@
+name: unruly catapult
+mana cost: {2}{R}
+types: artifact creature construct
+power toughness: 0/4
+static: defender
+activated[1]: {T}: CARDNAME deals 1 damage to each opponent.
+triggered: whenever you cast an instant or sorcery spell, untap CARDNAME.

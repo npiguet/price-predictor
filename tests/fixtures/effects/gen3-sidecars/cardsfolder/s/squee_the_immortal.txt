@@ -1,0 +1,5 @@
+name: squee, the immortal
+mana cost: {1}{R}{R}
+types: legendary creature goblin
+power toughness: 2/1
+static: you may cast CARDNAME from your graveyard or from exile.

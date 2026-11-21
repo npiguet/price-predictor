@@ -1,4 +1,0 @@
-name: manifest dread
-mana cost: {1}{G}
-types: sorcery
-spell[1]: manifest dread.

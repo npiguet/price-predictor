@@ -1,5 +1,0 @@
-name: burning anger
-mana cost: {4}{R}
-types: enchantment aura
-static: enchant creature
-static: enchanted creature has "{T}: this creature deals damage equal to its power to any target."

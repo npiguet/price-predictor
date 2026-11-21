@@ -1,0 +1,6 @@
+name: general traag, heart of stone
+mana cost: {3}{R}{R}
+types: legendary artifact creature elemental soldier
+power toughness: 4/3
+static: trample
+triggered: when CARDNAME enters, you may sacrifice another artifact. when you do, CARDNAME deals 4 damage to target creature.

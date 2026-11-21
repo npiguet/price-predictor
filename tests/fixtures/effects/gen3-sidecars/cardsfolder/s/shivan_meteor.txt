@@ -1,5 +1,0 @@
-name: shivan meteor
-mana cost: {3}{R}{R}
-types: sorcery
-alternate cost: suspend 2—{1}{R}{R}
-spell[1]: CARDNAME deals 13 damage to target creature.

@@ -1,6 +1,0 @@
-name: case of the gateway express
-mana cost: {1}{W}
-types: enchantment case
-triggered: when this case enters, choose target creature you don't control. each creature you control deals 1 damage to that creature.
-triggered: to solve — three or more creatures attacked this turn.
-static: solved — creatures you control get +1/+0.

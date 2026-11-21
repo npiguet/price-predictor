@@ -1,7 +1,0 @@
-name: down, down to goblin-town
-mana cost: {2}{B}
-types: enchantment saga
-chapter: I — target opponent reveals their hand. you choose a nonland card from it. that player discards that card.
-chapter: II — amass goblins 1.
-chapter: III, IV — target player loses 1 life and you gain 1 life.
-replacement: CARDNAME enters with a lore counter on it.

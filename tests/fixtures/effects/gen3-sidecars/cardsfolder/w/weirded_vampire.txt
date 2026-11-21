@@ -1,0 +1,5 @@
+name: weirded vampire
+mana cost: {3}{B}
+types: creature vampire horror
+power toughness: 3/3
+alternate cost: madness {2}{B}

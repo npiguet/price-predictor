@@ -1,0 +1,5 @@
+name: seer's lantern
+mana cost: {3}
+types: artifact
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}: scry 1.

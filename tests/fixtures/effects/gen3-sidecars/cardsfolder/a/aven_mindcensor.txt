@@ -1,7 +1,0 @@
-name: aven mindcensor
-mana cost: {2}{W}
-types: creature bird wizard
-power toughness: 2/1
-static: flash
-static: flying
-static: if an opponent would search a library, that player searches the top four cards of that library instead.

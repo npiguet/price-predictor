@@ -1,5 +1,0 @@
-name: noxious field
-mana cost: {1}{B}{B}
-types: enchantment aura
-static: enchant land
-static: enchanted land has "{T}: this land deals 1 damage to each creature and player."

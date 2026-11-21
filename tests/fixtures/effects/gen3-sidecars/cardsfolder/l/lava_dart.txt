@@ -1,0 +1,5 @@
+name: lava dart
+mana cost: {R}
+types: instant
+alternate cost: flashback—sacrifice a mountain
+spell[1]: CARDNAME deals 1 damage to any target.

@@ -1,0 +1,6 @@
+name: twisted embrace
+mana cost: {2}{B}{B}
+types: enchantment aura
+static: enchant artifact or creature you control
+triggered: when CARDNAME enters, destroy target creature or planeswalker an opponent controls.
+static: as long as enchanted permanent is a creature, it gets +1/+1.

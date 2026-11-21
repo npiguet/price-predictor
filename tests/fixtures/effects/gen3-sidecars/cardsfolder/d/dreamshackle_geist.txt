@@ -1,0 +1,8 @@
+name: dreamshackle geist
+mana cost: {1}{U}{U}
+types: creature spirit
+power toughness: 3/1
+static: flying
+triggered: at the beginning of combat on your turn, choose up to one
+option[1]: tap target creature.
+option[2]: target creature doesn't untap during its controller's next untap step.

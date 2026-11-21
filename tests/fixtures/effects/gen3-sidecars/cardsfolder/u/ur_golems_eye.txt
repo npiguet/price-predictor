@@ -1,4 +1,0 @@
-name: ur-golem's eye
-mana cost: {4}
-types: artifact
-activated[1]: {T}: add {C}{C}.

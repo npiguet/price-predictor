@@ -1,0 +1,4 @@
+name: viridescent wisps
+mana cost: {G}
+types: instant
+spell[1]: target creature becomes green and gets +1/+0 until end of turn. draw a card.

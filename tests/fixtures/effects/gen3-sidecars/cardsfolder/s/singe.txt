@@ -1,4 +1,0 @@
-name: singe
-mana cost: {R}
-types: instant
-spell[1]: CARDNAME deals 1 damage to target creature. that creature becomes black until end of turn.

@@ -1,0 +1,5 @@
+name: moonrager's slash
+mana cost: {2}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target.
+static: this spell costs {2} less to cast if it's night.

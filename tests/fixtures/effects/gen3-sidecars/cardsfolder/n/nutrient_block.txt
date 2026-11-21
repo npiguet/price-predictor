@@ -1,0 +1,6 @@
+name: nutrient block
+mana cost: {1}
+types: artifact food
+static: indestructible
+activated[1]: {2}, {T}, sacrifice CARDNAME: you gain 3 life.
+triggered: when this artifact is put into a graveyard from the battlefield, draw a card.

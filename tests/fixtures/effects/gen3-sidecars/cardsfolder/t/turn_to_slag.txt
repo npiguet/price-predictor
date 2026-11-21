@@ -1,0 +1,4 @@
+name: turn to slag
+mana cost: {3}{R}{R}
+types: sorcery
+spell[1]: CARDNAME deals 5 damage to target creature. destroy all equipment attached to that creature.

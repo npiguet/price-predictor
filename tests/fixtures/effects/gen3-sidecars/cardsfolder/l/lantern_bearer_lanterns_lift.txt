@@ -1,0 +1,15 @@
+layout: transform
+name: lantern bearer
+mana cost: {U}
+types: creature spirit
+power toughness: 1/1
+alternate cost: disturb {2}{U}
+static: flying
+
+ALTERNATE
+
+name: lanterns' lift
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +1/+1 and has flying.
+replacement: if CARDNAME would be put into a graveyard from anywhere, exile it instead.

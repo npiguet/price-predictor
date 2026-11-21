@@ -1,0 +1,6 @@
+name: master of the feast
+mana cost: {1}{B}{B}
+types: enchantment creature demon
+power toughness: 5/5
+static: flying
+triggered: at the beginning of your upkeep, each opponent draws a card.

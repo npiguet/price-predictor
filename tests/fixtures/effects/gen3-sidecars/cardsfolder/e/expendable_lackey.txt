@@ -1,0 +1,5 @@
+name: expendable lackey
+mana cost: {U}
+types: creature human citizen
+power toughness: 1/1
+activated[1]: {1}{U}, exile CARDNAME from your graveyard: create a 1/1 blue fish creature token with "this creature can't be blocked." activate only as a sorcery.

@@ -1,6 +1,0 @@
-name: lore weaver
-mana cost: {3}{U}
-types: creature human wizard
-power toughness: 2/2
-triggered: partner with ley weaver
-activated[1]: {5}{U}{U}: target player draws two cards.

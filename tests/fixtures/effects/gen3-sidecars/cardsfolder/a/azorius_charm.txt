@@ -1,0 +1,7 @@
+name: azorius charm
+mana cost: {W}{U}
+types: instant
+spell[1]: choose one
+option[2]: creatures you control gain lifelink until end of turn.
+option[3]: draw a card.
+option[4]: put target attacking or blocking creature on top of its owner's library.

@@ -1,0 +1,15 @@
+layout: transform
+name: extricator of sin
+mana cost: {2}{W}
+types: creature human cleric
+power toughness: 0/3
+triggered: when CARDNAME enters, you may sacrifice another permanent. if you do, create a 3/2 colorless eldrazi horror creature token.
+triggered: delirium — at the beginning of your upkeep, if there are four or more card types among cards in your graveyard, transform CARDNAME.
+
+ALTERNATE
+
+name: extricator of flesh
+types: creature eldrazi horror
+power toughness: 3/5
+activated[1]: {2}, {T}, sacrifice a non-eldrazi creature: create a 3/2 colorless eldrazi horror creature token.
+static: eldrazi you control have vigilance.

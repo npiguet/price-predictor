@@ -1,5 +1,0 @@
-name: sea gate
-types: land gate
-replacement: as CARDNAME enters, choose a color other than blue.
-activated[1]: {T}: add {U} or one mana of the chosen color.
-replacement: CARDNAME enters tapped.

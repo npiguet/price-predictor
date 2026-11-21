@@ -1,0 +1,5 @@
+name: youthful knight
+mana cost: {1}{W}
+types: creature human knight
+power toughness: 2/1
+static: first strike

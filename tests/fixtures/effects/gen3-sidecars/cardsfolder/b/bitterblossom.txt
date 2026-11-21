@@ -1,0 +1,4 @@
+name: bitterblossom
+mana cost: {1}{B}
+types: kindred enchantment faerie
+triggered: at the beginning of your upkeep, you lose 1 life and create a 1/1 black faerie rogue creature token with flying.

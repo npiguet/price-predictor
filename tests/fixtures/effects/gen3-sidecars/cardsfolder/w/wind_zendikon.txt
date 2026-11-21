@@ -1,0 +1,6 @@
+name: wind zendikon
+mana cost: {U}
+types: enchantment aura
+static: enchant land
+triggered: when enchanted land dies, return that card to its owner's hand.
+static: enchanted land is a 2/2 blue elemental creature with flying. it's still a land.

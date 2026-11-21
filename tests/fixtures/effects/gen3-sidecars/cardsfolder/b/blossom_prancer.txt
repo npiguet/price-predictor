@@ -1,0 +1,6 @@
+name: blossom prancer
+mana cost: {3}{G}{G}
+types: creature spirit
+power toughness: 4/4
+static: reach
+triggered: when CARDNAME enters, look at the top five cards of your library. you may reveal a creature or enchantment card from among them and put it into your hand. put the rest on the bottom of your library in a random order. if you didn't put a card into your hand this way, you gain 4 life.

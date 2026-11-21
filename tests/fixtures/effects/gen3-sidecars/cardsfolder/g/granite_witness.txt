@@ -1,0 +1,8 @@
+name: granite witness
+mana cost: {2}{W}{U}
+types: artifact creature gargoyle detective
+power toughness: 3/2
+alternate cost: disguise {W/U}{W/U}
+static: flying
+static: vigilance
+triggered: when CARDNAME is turned face up, you may tap or untap target creature.

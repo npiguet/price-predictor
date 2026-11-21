@@ -1,0 +1,4 @@
+name: massive might
+mana cost: {G}
+types: instant
+spell[1]: target creature gets +2/+2 and gains trample until end of turn.

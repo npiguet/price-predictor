@@ -1,0 +1,6 @@
+name: gibbering barricade
+mana cost: {2}{B}
+types: creature nightmare wall
+power toughness: 2/4
+static: defender
+activated[1]: {2}{B}, sacrifice a creature: you gain 1 life and draw a card.

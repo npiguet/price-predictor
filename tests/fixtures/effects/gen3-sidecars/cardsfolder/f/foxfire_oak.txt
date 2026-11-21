@@ -1,0 +1,5 @@
+name: foxfire oak
+mana cost: {5}{G}
+types: creature treefolk shaman
+power toughness: 3/6
+activated[1]: {R/G}{R/G}{R/G}: CARDNAME gets +3/+0 until end of turn.

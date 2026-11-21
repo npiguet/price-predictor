@@ -1,0 +1,5 @@
+name: rampaging cyclops
+mana cost: {3}{R}
+types: creature cyclops
+power toughness: 4/4
+static: CARDNAME gets -2/-0 as long as two or more creatures are blocking it.

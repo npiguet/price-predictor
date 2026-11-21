@@ -1,0 +1,8 @@
+name: pixie illusionist
+mana cost: {U}
+types: creature faerie wizard
+power toughness: 1/1
+additional cost: kicker {3}{G}
+static: flying
+replacement: if CARDNAME was kicked, it enters with two +1/+1 counters on it.
+activated[1]: {T}: target land you control becomes the basic land type of your choice until end of turn.

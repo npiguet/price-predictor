@@ -1,0 +1,4 @@
+name: buy your silence
+mana cost: {4}{W}
+types: sorcery
+spell[1]: exile target nonland permanent. its controller creates a treasure token.

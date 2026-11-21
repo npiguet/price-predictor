@@ -1,0 +1,7 @@
+name: tomb of annihilation
+types: dungeon
+triggered: trapped entry — each player loses 1 life.
+triggered: veils of fear — each player loses 2 life unless they discard a card.
+triggered: oubliette — discard a card and sacrifice an artifact, a creature, and a land.
+triggered: sandfall cell — each player loses 2 life unless they sacrifice an artifact, a creature, or a land.
+triggered: cradle of the death god — create the atropal, a legendary 4/4 black god horror creature token with deathtouch.

@@ -1,4 +1,0 @@
-name: damping matrix
-mana cost: {3}
-types: artifact
-static: activated abilities of artifacts and creatures can't be activated unless they're mana abilities.

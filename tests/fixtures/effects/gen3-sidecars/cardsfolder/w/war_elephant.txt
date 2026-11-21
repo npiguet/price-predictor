@@ -1,6 +1,0 @@
-name: war elephant
-mana cost: {3}{W}
-types: creature elephant
-power toughness: 2/2
-static: banding
-static: trample

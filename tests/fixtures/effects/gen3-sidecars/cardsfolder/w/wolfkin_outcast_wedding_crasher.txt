@@ -1,0 +1,15 @@
+layout: transform
+name: wolfkin outcast
+mana cost: {5}{G}
+types: creature human werewolf
+power toughness: 5/4
+triggered: daybound
+static: this spell costs {2} less to cast if you control a wolf or a werewolf.
+
+ALTERNATE
+
+name: wedding crasher
+types: creature werewolf
+power toughness: 6/5
+triggered: nightbound
+triggered: whenever CARDNAME or another wolf or werewolf you control dies, draw a card.

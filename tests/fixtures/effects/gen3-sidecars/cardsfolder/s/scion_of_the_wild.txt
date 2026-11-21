@@ -1,0 +1,5 @@
+name: scion of the wild
+mana cost: {1}{G}{G}
+types: creature avatar
+power toughness: */*
+static: CARDNAME's power and toughness are each equal to the number of creatures you control.

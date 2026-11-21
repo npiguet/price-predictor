@@ -1,4 +1,0 @@
-name: churning eddy
-mana cost: {3}{U}
-types: sorcery
-spell[1]: return target creature and target land to their owners' hands.

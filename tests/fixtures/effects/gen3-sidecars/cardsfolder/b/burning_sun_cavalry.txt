@@ -1,0 +1,5 @@
+name: burning sun cavalry
+mana cost: {1}{R}
+types: creature human knight
+power toughness: 2/2
+triggered: whenever CARDNAME attacks or blocks while you control a dinosaur, CARDNAME gets +1/+1 until end of turn.

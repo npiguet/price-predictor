@@ -1,4 +1,0 @@
-name: nature's lore
-mana cost: {1}{G}
-types: sorcery
-spell[1]: search your library for a forest card, put that card onto the battlefield, then shuffle.

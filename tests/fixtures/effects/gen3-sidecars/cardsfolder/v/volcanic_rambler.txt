@@ -1,5 +1,0 @@
-name: volcanic rambler
-mana cost: {5}{R}
-types: creature elemental
-power toughness: 6/4
-activated[1]: {2}{R}: CARDNAME deals 1 damage to target player or planeswalker.

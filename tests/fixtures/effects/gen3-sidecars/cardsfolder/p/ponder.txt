@@ -1,0 +1,4 @@
+name: ponder
+mana cost: {U}
+types: sorcery
+spell[1]: look at the top three cards of your library, then put them back in any order. you may shuffle. draw a card.

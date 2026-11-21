@@ -1,0 +1,5 @@
+name: toxic abomination
+mana cost: {1}{B}
+types: creature phyrexian zombie
+power toughness: 3/2
+triggered: when CARDNAME enters, you lose 2 life.

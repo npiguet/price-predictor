@@ -1,5 +1,0 @@
-name: multani's harmony
-mana cost: {G}
-types: enchantment aura
-static: enchant creature
-static: enchanted creature has "{T}: add one mana of any color."

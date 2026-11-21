@@ -1,7 +1,0 @@
-name: tibalt, rakish instigator
-mana cost: {2}{R}
-types: legendary planeswalker tibalt
-loyalty: 5
-planeswalker[1]: [-2]: create a 1/1 red devil creature token with "when this token dies, it deals 1 damage to any target."
-static: your opponents can't gain life.
-replacement: CARDNAME enters with five loyalty counters on it.

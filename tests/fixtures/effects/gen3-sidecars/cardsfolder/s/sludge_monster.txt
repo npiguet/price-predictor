@@ -1,0 +1,6 @@
+name: sludge monster
+mana cost: {3}{U}{U}
+types: creature horror
+power toughness: 5/5
+triggered: whenever CARDNAME enters or attacks, put a slime counter on up to one other target creature.
+static: non-horror creatures with slime counters on them lose all abilities and have base power and toughness 2/2.

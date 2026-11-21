@@ -1,0 +1,5 @@
+name: embraal gear-smasher
+mana cost: {2}{R}
+types: creature human warrior
+power toughness: 2/3
+activated[1]: {T}, sacrifice an artifact: CARDNAME deals 2 damage to each opponent.

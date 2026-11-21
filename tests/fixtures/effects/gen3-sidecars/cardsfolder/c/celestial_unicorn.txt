@@ -1,5 +1,0 @@
-name: celestial unicorn
-mana cost: {2}{W}
-types: creature unicorn
-power toughness: 3/2
-triggered: whenever you gain life, put a +1/+1 counter on CARDNAME.

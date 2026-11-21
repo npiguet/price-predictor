@@ -1,0 +1,7 @@
+name: reckless bushwhacker
+mana cost: {2}{R}
+types: creature goblin warrior ally
+power toughness: 2/1
+alternate cost: surge {1}{R}
+static: haste
+triggered: when CARDNAME enters, if its surge cost was paid, other creatures you control get +1/+0 and gain haste until end of turn.

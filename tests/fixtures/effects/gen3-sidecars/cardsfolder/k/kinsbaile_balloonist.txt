@@ -1,0 +1,6 @@
+name: kinsbaile balloonist
+mana cost: {3}{W}
+types: creature kithkin soldier
+power toughness: 2/2
+static: flying
+triggered: whenever CARDNAME attacks, you may have target creature gain flying until end of turn.

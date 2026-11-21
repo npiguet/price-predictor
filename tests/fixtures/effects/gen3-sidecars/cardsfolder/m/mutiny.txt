@@ -1,4 +1,0 @@
-name: mutiny
-mana cost: {R}
-types: sorcery
-spell[1]: target creature an opponent controls deals damage equal to its power to another target creature that player controls.

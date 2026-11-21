@@ -1,0 +1,5 @@
+name: chrome cat
+mana cost: {3}
+types: artifact creature cat
+power toughness: 3/2
+triggered: when CARDNAME enters, scry 1.

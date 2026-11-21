@@ -1,5 +1,0 @@
-name: demon bolt
-mana cost: {2}{R}
-types: instant
-alternate cost: foretell {R}
-spell[1]: CARDNAME deals 4 damage to target creature or planeswalker.

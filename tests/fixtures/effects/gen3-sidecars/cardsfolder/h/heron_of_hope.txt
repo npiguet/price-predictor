@@ -1,0 +1,7 @@
+name: heron of hope
+mana cost: {3}{W}
+types: creature bird
+power toughness: 2/3
+static: flying
+activated[1]: {1}{W}: CARDNAME gains lifelink until end of turn.
+replacement: if you would gain life, you gain that much life plus 1 instead.

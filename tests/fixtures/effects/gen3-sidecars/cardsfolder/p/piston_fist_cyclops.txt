@@ -1,6 +1,0 @@
-name: piston-fist cyclops
-mana cost: {1}{U/R}{U/R}
-types: creature cyclops
-power toughness: 4/3
-static: defender
-static: as long as you've cast an instant or sorcery spell this turn, CARDNAME can attack as though it didn't have defender.

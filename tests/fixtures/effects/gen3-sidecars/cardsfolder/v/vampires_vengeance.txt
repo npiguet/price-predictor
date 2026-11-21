@@ -1,0 +1,4 @@
+name: vampires' vengeance
+mana cost: {2}{R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to each non-vampire creature. create a blood token.

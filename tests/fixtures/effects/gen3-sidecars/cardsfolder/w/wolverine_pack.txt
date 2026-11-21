@@ -1,0 +1,5 @@
+name: wolverine pack
+mana cost: {2}{G}{G}
+types: creature wolverine
+power toughness: 2/4
+triggered: rampage 2

@@ -1,0 +1,6 @@
+name: bogardan lancer
+mana cost: {1}{R}
+types: creature human knight
+power toughness: 1/1
+static: bloodthirst 1
+triggered: flanking

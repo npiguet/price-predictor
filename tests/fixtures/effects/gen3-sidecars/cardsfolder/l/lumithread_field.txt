@@ -1,0 +1,5 @@
+name: lumithread field
+mana cost: {1}{W}
+types: enchantment
+alternate cost: morph {1}{W}
+static: creatures you control get +0/+1.

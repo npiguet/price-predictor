@@ -1,0 +1,4 @@
+name: coercion
+mana cost: {2}{B}
+types: sorcery
+spell[1]: target opponent reveals their hand. you choose a card from it. that player discards that card.

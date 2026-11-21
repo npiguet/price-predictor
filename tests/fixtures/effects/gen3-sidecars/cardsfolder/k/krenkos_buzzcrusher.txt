@@ -1,7 +1,0 @@
-name: krenko's buzzcrusher
-mana cost: {2}{R}{R}
-types: artifact creature insect thopter
-power toughness: 4/4
-static: flying
-static: trample
-triggered: when CARDNAME enters, for each player, destroy up to one nonbasic land that player controls. for each land destroyed this way, its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.

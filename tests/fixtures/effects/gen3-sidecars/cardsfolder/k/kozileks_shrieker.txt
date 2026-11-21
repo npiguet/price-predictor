@@ -1,0 +1,6 @@
+name: kozilek's shrieker
+mana cost: {2}{B}
+types: creature eldrazi drone
+power toughness: 3/2
+static: devoid
+activated[1]: {C}: CARDNAME gets +1/+0 and gains menace until end of turn.

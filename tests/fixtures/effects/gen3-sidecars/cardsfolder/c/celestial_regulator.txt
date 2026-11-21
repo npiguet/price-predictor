@@ -1,0 +1,6 @@
+name: celestial regulator
+mana cost: {1}{W}{U}
+types: creature angel advisor
+power toughness: 2/3
+static: flying
+triggered: when CARDNAME enters, choose target creature you don't control and tap it. if you control a creature with a counter on it, the chosen creature doesn't untap during its controller's next untap step.

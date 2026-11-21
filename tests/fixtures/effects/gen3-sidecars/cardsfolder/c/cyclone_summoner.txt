@@ -1,5 +1,0 @@
-name: cyclone summoner
-mana cost: {5}{U}{U}
-types: creature giant wizard
-power toughness: 7/7
-triggered: when CARDNAME enters, if you cast it from your hand, return all permanents to their owners' hands except for giants, wizards, and lands.

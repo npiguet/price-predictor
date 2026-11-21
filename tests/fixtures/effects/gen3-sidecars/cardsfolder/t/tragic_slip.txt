@@ -1,4 +1,0 @@
-name: tragic slip
-mana cost: {B}
-types: instant
-spell[1]: target creature gets -1/-1 until end of turn. morbid — that creature gets -13/-13 instead if a creature died this turn.

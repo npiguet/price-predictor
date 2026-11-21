@@ -1,0 +1,5 @@
+name: garrulous sycophant
+mana cost: {2}{B}
+types: creature human advisor
+power toughness: 1/4
+triggered: at the beginning of your end step, if you're the monarch, each opponent loses 1 life and you gain 1 life.

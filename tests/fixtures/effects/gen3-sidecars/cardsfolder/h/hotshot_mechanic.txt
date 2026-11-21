@@ -1,0 +1,5 @@
+name: hotshot mechanic
+mana cost: {W}
+types: artifact creature fox pilot
+power toughness: 2/1
+static: CARDNAME crews vehicles as though its power were 2 greater.

@@ -1,0 +1,6 @@
+name: zada's commando
+mana cost: {1}{R}
+types: creature goblin archer ally
+power toughness: 2/1
+static: first strike
+activated[1]: cohort — {T}, tap an untapped ally you control: CARDNAME deals 1 damage to target opponent or planeswalker.

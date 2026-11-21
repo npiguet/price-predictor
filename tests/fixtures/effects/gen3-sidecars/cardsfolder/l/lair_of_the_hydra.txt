@@ -1,0 +1,5 @@
+name: lair of the hydra
+types: land
+activated[1]: {T}: add {G}.
+activated[2]: {X}{G}: until end of turn, CARDNAME becomes an X/X green hydra creature. it's still a land. X can't be 0.
+replacement: if you control two or more other lands, CARDNAME enters tapped.

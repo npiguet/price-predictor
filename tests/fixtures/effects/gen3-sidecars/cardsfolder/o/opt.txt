@@ -1,0 +1,4 @@
+name: opt
+mana cost: {U}
+types: instant
+spell[1]: scry 1. draw a card.

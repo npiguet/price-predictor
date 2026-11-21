@@ -1,0 +1,5 @@
+name: cathodion
+mana cost: {3}
+types: artifact creature construct
+power toughness: 3/3
+triggered: when CARDNAME dies, add {C}{C}{C}.

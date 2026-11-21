@@ -1,0 +1,5 @@
+name: judge of currents
+mana cost: {1}{W}
+types: creature merfolk wizard
+power toughness: 1/1
+triggered: whenever a merfolk you control becomes tapped, you may gain 1 life.

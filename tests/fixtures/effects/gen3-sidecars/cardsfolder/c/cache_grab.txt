@@ -1,4 +1,0 @@
-name: cache grab
-mana cost: {1}{G}
-types: instant
-spell[1]: mill four cards. you may put a permanent card from among the cards milled this way into your hand. if you control a squirrel or returned a squirrel card to your hand this way, create a food token.

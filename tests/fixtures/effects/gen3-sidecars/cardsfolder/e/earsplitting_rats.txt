@@ -1,0 +1,6 @@
+name: earsplitting rats
+mana cost: {3}{B}
+types: creature rat
+power toughness: 2/1
+activated[1]: discard a card: regenerate CARDNAME.
+triggered: when CARDNAME enters, each player discards a card.

@@ -1,0 +1,7 @@
+name: deepcavern imp
+mana cost: {2}{B}
+types: creature imp rebel
+power toughness: 2/2
+triggered: echo—discard a card
+static: flying
+static: haste

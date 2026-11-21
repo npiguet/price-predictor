@@ -1,7 +1,0 @@
-name: sawblade skinripper
-mana cost: {1}{B}{R}
-types: creature human assassin
-power toughness: 3/2
-static: menace
-activated[1]: {2}, sacrifice another creature or enchantment: put a +1/+1 counter on CARDNAME.
-triggered: at the beginning of your end step, if you sacrificed one or more permanents this turn, CARDNAME deals that much damage to any target.

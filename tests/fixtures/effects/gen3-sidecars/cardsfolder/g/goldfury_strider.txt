@@ -1,0 +1,6 @@
+name: goldfury strider
+mana cost: {4}{R}
+types: artifact creature golem
+power toughness: 3/5
+static: trample
+activated[1]: tap two untapped artifacts and/or creatureses you control: target creature gets +2/+0 until end of turn. activate only as a sorcery.

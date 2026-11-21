@@ -1,0 +1,5 @@
+name: giant turtle
+mana cost: {1}{G}{G}
+types: creature turtle
+power toughness: 2/4
+static: CARDNAME can't attack if it attacked during your last turn.

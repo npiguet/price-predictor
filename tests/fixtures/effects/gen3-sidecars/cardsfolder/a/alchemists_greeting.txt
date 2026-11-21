@@ -1,0 +1,5 @@
+name: alchemist's greeting
+mana cost: {4}{R}
+types: sorcery
+alternate cost: madness {1}{R}
+spell[1]: CARDNAME deals 4 damage to target creature.

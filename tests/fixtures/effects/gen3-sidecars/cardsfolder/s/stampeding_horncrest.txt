@@ -1,0 +1,5 @@
+name: stampeding horncrest
+mana cost: {4}{R}
+types: creature dinosaur
+power toughness: 4/4
+static: CARDNAME has haste as long as you control another dinosaur.

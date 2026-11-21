@@ -1,0 +1,6 @@
+name: aven augur
+mana cost: {3}{U}
+types: creature bird wizard
+power toughness: 2/2
+static: flying
+activated[1]: sacrifice CARDNAME: return up to two target creatures to their owners' hands. activate only during your upkeep.

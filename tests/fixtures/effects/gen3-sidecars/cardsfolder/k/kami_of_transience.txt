@@ -1,0 +1,7 @@
+name: kami of transience
+mana cost: {1}{G}
+types: creature spirit
+power toughness: 2/2
+static: trample
+triggered: whenever you cast an enchantment spell, put a +1/+1 counter on CARDNAME.
+triggered: at the beginning of each end step, if an enchantment was put into your graveyard from the battlefield this turn, you may return CARDNAME from your graveyard to your hand.

@@ -1,6 +1,0 @@
-name: spineseeker centipede
-mana cost: {2}{G}
-types: creature insect
-power toughness: 2/1
-triggered: when CARDNAME enters, search your library for a basic land card, reveal it, put it into your hand, then shuffle.
-static: delirium — CARDNAME gets +1/+2 and has vigilance as long as there are four or more card types among cards in your graveyard.

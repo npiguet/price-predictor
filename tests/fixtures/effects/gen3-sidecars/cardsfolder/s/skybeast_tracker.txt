@@ -1,0 +1,6 @@
+name: skybeast tracker
+mana cost: {3}{G}
+types: creature giant archer
+power toughness: 2/4
+static: reach
+triggered: whenever you cast a spell with mana value 5 or greater, create a food token.

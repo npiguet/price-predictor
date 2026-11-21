@@ -1,5 +1,0 @@
-name: fleet swallower
-mana cost: {5}{U}{U}
-types: creature fish
-power toughness: 6/6
-triggered: whenever CARDNAME attacks, target player mills half their library, rounded up.

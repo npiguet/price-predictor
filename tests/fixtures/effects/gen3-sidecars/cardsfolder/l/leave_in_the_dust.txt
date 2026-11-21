@@ -1,0 +1,4 @@
+name: leave in the dust
+mana cost: {3}{U}
+types: instant
+spell[1]: return target nonland permanent to its owner's hand. draw a card.

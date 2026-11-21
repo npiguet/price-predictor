@@ -1,5 +1,0 @@
-name: wall of heat
-mana cost: {2}{R}
-types: creature wall
-power toughness: 2/6
-static: defender

@@ -1,5 +1,0 @@
-name: deeproot warrior
-mana cost: {1}{G}
-types: creature merfolk warrior
-power toughness: 2/2
-triggered: whenever CARDNAME becomes blocked, it gets +1/+1 until end of turn.

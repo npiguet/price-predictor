@@ -1,0 +1,6 @@
+name: nashi, moon sage's scion
+mana cost: {1}{B}{B}
+types: legendary creature rat ninja
+power toughness: 3/2
+alternate cost: ninjutsu {3}{B}
+triggered: whenever CARDNAME deals combat damage to a player, exile the top card of each player's library. until end of turn, you may play one of those cards. if you cast a spell this way, pay life equal to its mana value rather than paying its mana cost.

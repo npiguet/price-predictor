@@ -1,0 +1,5 @@
+name: corpse harvester
+mana cost: {3}{B}{B}
+types: creature zombie wizard
+power toughness: 3/3
+activated[1]: {1}{B}, {T}, sacrifice a creature: search your library for a zombie card and a swamp card, reveal them, put them into your hand, then shuffle.

@@ -1,6 +1,0 @@
-name: guardian beast
-mana cost: {3}{B}
-types: creature beast
-power toughness: 2/4
-static: as long as CARDNAME is untapped, noncreature artifacts you control have indestructible, and other players can't gain control of them.
-static: as long as CARDNAME is untapped, noncreature artifacts you control can't be enchanted. this effect doesn't remove auras already attached to those artifacts.

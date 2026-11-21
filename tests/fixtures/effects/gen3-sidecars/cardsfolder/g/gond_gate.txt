@@ -1,5 +1,0 @@
-name: gond gate
-types: land gate
-activated[1]: {T}: add {C}.
-activated[2]: {T}: add one mana of any color that a gate you control could produce.
-replacement: gates you control enter untapped.

@@ -1,4 +1,0 @@
-name: ashnod's altar
-mana cost: {3}
-types: artifact
-activated[1]: sacrifice a creature: add {C}{C}.

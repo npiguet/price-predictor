@@ -1,0 +1,4 @@
+name: pointed discussion
+mana cost: {2}{B}
+types: sorcery
+spell[1]: you draw two cards, lose 2 life, then create a blood token.

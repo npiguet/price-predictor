@@ -1,0 +1,15 @@
+layout: transform
+name: infestation expert
+mana cost: {4}{G}
+types: creature human werewolf
+power toughness: 3/4
+triggered: daybound
+triggered: whenever CARDNAME enters or attacks, create a 1/1 green insect creature token.
+
+ALTERNATE
+
+name: infested werewolf
+types: creature werewolf
+power toughness: 4/5
+triggered: nightbound
+triggered: whenever CARDNAME enters or attacks, create two 1/1 green insect creature tokens.

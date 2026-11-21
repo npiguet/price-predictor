@@ -1,0 +1,6 @@
+name: raffine's silencer
+mana cost: {2}{B}
+types: creature human assassin
+power toughness: 1/1
+triggered: when CARDNAME enters, it connives.
+triggered: when CARDNAME dies, target creature an opponent controls gets -X/-X until end of turn, where X is CARDNAME's power.

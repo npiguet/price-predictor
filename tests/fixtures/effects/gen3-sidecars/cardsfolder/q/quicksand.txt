@@ -1,0 +1,4 @@
+name: quicksand
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}, sacrifice CARDNAME: target attacking creature without flying gets -1/-2 until end of turn.

@@ -1,0 +1,6 @@
+name: aven fogbringer
+mana cost: {3}{U}
+types: creature bird wizard
+power toughness: 2/1
+static: flying
+triggered: when CARDNAME enters, return target land to its owner's hand.

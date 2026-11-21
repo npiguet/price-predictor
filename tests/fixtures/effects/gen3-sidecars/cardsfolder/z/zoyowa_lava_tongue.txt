@@ -1,0 +1,6 @@
+name: zoyowa lava-tongue
+mana cost: {B}{R}
+types: legendary creature goblin warlock
+power toughness: 2/2
+static: deathtouch
+triggered: at the beginning of your end step, if you descended this turn, each opponent may discard a card or sacrifice a permanent. CARDNAME deals 3 damage to each opponent who didn't.

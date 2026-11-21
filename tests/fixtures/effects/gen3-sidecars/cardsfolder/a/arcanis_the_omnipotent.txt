@@ -1,6 +1,0 @@
-name: arcanis the omnipotent
-mana cost: {3}{U}{U}{U}
-types: legendary creature wizard
-power toughness: 3/4
-activated[1]: {T}: draw three cards.
-activated[2]: {2}{U}{U}: return CARDNAME to its owner's hand.

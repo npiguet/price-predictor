@@ -1,0 +1,7 @@
+name: quag vampires
+mana cost: {B}
+types: creature vampire rogue
+power toughness: 1/1
+additional cost: multikicker {1}{B}
+static: swampwalk
+replacement: CARDNAME enters with a +1/+1 counter on it for each time it was kicked.

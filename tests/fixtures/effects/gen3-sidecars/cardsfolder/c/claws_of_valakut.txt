@@ -1,0 +1,5 @@
+name: claws of valakut
+mana cost: {1}{R}{R}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +1/+0 for each mountain you control and has first strike.

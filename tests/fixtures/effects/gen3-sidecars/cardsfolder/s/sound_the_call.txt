@@ -1,4 +1,0 @@
-name: sound the call
-mana cost: {2}{G}
-types: sorcery
-spell[1]: create a 1/1 green wolf creature token. it has "this creature gets +1/+1 for each card named CARDNAME in each graveyard."

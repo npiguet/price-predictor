@@ -1,0 +1,4 @@
+name: majestic metamorphosis
+mana cost: {2}{U}
+types: instant
+spell[1]: until end of turn, target artifact or creature becomes a 4/4 angel artifact creature and gains flying. draw a card.

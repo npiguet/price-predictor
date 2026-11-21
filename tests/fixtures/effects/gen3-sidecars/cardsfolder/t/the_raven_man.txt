@@ -1,0 +1,6 @@
+name: the raven man
+mana cost: {1}{B}
+types: legendary creature human wizard
+power toughness: 2/1
+activated[1]: {3}{B}, {T}: each opponent discards a card.
+triggered: at the beginning of each end step, if a player discarded a card this turn, create a 1/1 black bird creature token with flying and "this creature can't block."

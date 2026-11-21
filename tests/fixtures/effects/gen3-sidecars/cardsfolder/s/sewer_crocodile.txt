@@ -1,0 +1,5 @@
+name: sewer crocodile
+mana cost: {5}{U}
+types: creature crocodile
+power toughness: 4/6
+activated[1]: {3}{U}: CARDNAME can't be blocked this turn. this ability costs {3} less to activate if there are five or more mana values among cards in your graveyard.

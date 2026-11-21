@@ -1,0 +1,6 @@
+name: culvert ambusher
+mana cost: {3}{G}{G}
+types: creature wurm horror
+power toughness: 4/5
+alternate cost: disguise {4}{G}
+triggered: when CARDNAME enters or is turned face up, target creature blocks this turn if able.

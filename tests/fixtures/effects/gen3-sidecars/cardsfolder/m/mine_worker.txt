@@ -1,0 +1,5 @@
+name: mine worker
+mana cost: {2}
+types: artifact creature assembly-worker
+power toughness: 2/1
+activated[1]: {T}: you gain 1 life. if you control creatures named power plant worker and tower worker, you gain 3 life instead.

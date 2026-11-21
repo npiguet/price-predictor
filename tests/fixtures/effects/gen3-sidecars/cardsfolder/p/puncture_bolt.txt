@@ -1,0 +1,4 @@
+name: puncture bolt
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 1 damage to target creature. put a -1/-1 counter on that creature.

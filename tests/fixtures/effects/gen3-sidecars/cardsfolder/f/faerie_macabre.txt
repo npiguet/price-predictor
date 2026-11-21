@@ -1,0 +1,6 @@
+name: faerie macabre
+mana cost: {1}{B}{B}
+types: creature faerie rogue
+power toughness: 2/2
+static: flying
+activated[1]: discard CARDNAME: exile up to two target cards from graveyards.

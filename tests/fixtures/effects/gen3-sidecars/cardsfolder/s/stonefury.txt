@@ -1,4 +1,0 @@
-name: stonefury
-mana cost: {3}{R}{R}
-types: instant
-spell[1]: CARDNAME deals damage to target creature equal to the number of lands you control.

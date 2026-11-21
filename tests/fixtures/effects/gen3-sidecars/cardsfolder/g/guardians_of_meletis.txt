@@ -1,5 +1,0 @@
-name: guardians of meletis
-mana cost: {3}
-types: artifact creature golem
-power toughness: 0/6
-static: defender

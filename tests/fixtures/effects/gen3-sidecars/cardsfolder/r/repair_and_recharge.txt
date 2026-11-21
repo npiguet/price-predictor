@@ -1,0 +1,4 @@
+name: repair and recharge
+mana cost: {3}{W}{W}
+types: sorcery
+spell[1]: return target artifact, enchantment, or planeswalker card from your graveyard to the battlefield. create a tapped powerstone token.

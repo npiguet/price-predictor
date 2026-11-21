@@ -1,0 +1,17 @@
+layout: transform
+name: urabrask
+mana cost: {2}{R}{R}
+types: legendary creature phyrexian praetor
+power toughness: 4/4
+static: first strike
+activated[1]: {R}: exile CARDNAME, then return it to the battlefield transformed under its owner's control. activate only as a sorcery and only if you've cast three or more instant and/or sorcery spells this turn.
+triggered: whenever you cast an instant or sorcery spell, CARDNAME deals 1 damage to target opponent. add {R}.
+
+ALTERNATE
+
+name: the great work
+types: enchantment saga
+chapter: I — CARDNAME deals 3 damage to target opponent and each creature they control.
+chapter: II — create three treasure tokens.
+chapter: III — until end of turn, you may cast instant and sorcery spells from any graveyard. if a spell cast this way would be put into a graveyard, exile it instead. exile CARDNAME, then return it to the battlefield.
+replacement: CARDNAME enters with a lore counter on it.

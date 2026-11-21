@@ -1,0 +1,5 @@
+name: bull elephant
+mana cost: {3}{G}
+types: creature elephant
+power toughness: 4/4
+triggered: when CARDNAME enters, sacrifice it unless you return two forests you control to their owner's hand.

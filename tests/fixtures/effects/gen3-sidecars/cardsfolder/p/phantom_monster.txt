@@ -1,5 +1,0 @@
-name: phantom monster
-mana cost: {3}{U}
-types: creature illusion
-power toughness: 3/3
-static: flying

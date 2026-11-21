@@ -1,5 +1,0 @@
-name: master skald
-mana cost: {4}{W}
-types: creature dwarf warrior
-power toughness: 4/4
-triggered: when CARDNAME enters, you may exile a creature card from your graveyard. if you do, return target artifact or enchantment card from your graveyard to your hand.

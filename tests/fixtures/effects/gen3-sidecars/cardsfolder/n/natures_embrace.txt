@@ -1,0 +1,6 @@
+name: nature's embrace
+mana cost: {2}{G}
+types: enchantment aura
+static: enchant creature or land
+static: as long as enchanted permanent is a creature, it gets +2/+2.
+static: as long as enchanted permanent is a land, it has "{T}: add two mana of any one color."

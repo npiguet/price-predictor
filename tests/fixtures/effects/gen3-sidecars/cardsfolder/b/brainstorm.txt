@@ -1,0 +1,4 @@
+name: brainstorm
+mana cost: {U}
+types: instant
+spell[1]: draw three cards, then put two cards from your hand on top of your library in any order. then puts two cards from their hand on top of their library in any order.

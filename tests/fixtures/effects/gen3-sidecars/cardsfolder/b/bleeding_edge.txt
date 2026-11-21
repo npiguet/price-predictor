@@ -1,4 +1,0 @@
-name: bleeding edge
-mana cost: {1}{B}{B}
-types: sorcery
-spell[1]: up to one target creature gets -2/-2 until end of turn. amass zombies 2.

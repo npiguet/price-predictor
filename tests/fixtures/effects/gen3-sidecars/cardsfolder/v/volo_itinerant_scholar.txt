@@ -1,7 +1,0 @@
-name: volo, itinerant scholar
-mana cost: {2}{U}
-types: legendary creature human wizard
-power toughness: 2/3
-static: choose a background
-activated[1]: {2}, {T}: draw a card for each creature type noted for target permanent you control named volo's journal.
-triggered: when CARDNAME enters, create volo's journal, a legendary colorless artifact token with hexproof and "whenever you cast a creature spell, note one of its creature types that hasn't been noted for volo's journal."

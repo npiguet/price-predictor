@@ -1,0 +1,5 @@
+name: bird token
+types: creature bird
+power toughness: 1/1
+static: flying
+static: CARDNAME can't block.

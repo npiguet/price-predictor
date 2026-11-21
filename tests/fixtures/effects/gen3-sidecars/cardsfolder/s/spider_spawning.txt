@@ -1,0 +1,5 @@
+name: spider spawning
+mana cost: {4}{G}
+types: sorcery
+alternate cost: flashback {6}{B}
+spell[1]: create a 1/2 green spider creature token with reach for each creature card in your graveyard.

@@ -1,5 +1,0 @@
-name: orchard spirit
-mana cost: {2}{G}
-types: creature spirit
-power toughness: 2/2
-static: CARDNAME can't be blocked except by creatures with flying or reach.

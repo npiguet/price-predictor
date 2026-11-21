@@ -1,0 +1,7 @@
+name: ire shaman
+mana cost: {1}{R}
+types: creature orc shaman
+power toughness: 2/1
+alternate cost: megamorph {R}
+static: menace
+triggered: when CARDNAME is turned face up, exile the top card of your library. until end of turn, you may play that card.

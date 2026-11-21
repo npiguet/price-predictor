@@ -1,0 +1,4 @@
+name: death wind
+mana cost: {X}{B}
+types: instant
+spell[1]: target creature gets -X/-X until end of turn.

@@ -1,0 +1,5 @@
+name: bane of bala ged
+mana cost: {7}
+types: creature eldrazi
+power toughness: 7/5
+triggered: whenever CARDNAME attacks, defending player exiles two permanents they control.

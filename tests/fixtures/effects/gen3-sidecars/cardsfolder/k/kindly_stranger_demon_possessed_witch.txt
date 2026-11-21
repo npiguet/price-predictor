@@ -1,0 +1,13 @@
+layout: transform
+name: kindly stranger
+mana cost: {2}{B}
+types: creature human
+power toughness: 2/3
+activated[1]: delirium — {2}{B}: transform CARDNAME. activate only if there are four or more card types among cards in your graveyard.
+
+ALTERNATE
+
+name: demon-possessed witch
+types: creature human shaman
+power toughness: 4/3
+triggered: when this creature transforms into CARDNAME, you may destroy target creature.

@@ -1,0 +1,5 @@
+name: flourishing hunter
+mana cost: {4}{G}{G}
+types: creature wolf spirit
+power toughness: 6/6
+triggered: when CARDNAME enters, you gain life equal to the greatest toughness among other creatures you control.

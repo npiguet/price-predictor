@@ -1,0 +1,6 @@
+name: fetid imp
+mana cost: {1}{B}
+types: creature imp
+power toughness: 1/2
+static: flying
+activated[1]: {B}: CARDNAME gains deathtouch until end of turn.

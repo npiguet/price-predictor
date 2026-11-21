@@ -1,5 +1,0 @@
-name: whip sergeant
-mana cost: {2}{R}
-types: creature human soldier
-power toughness: 2/1
-activated[1]: {R}: target creature gains haste until end of turn.

@@ -1,5 +1,0 @@
-name: martyr of bones
-mana cost: {B}
-types: creature human wizard
-power toughness: 1/1
-activated[1]: {1}, reveal X black cards from your hand, sacrifice CARDNAME: exile up to X target cards from a single graveyard.

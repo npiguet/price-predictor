@@ -1,0 +1,6 @@
+name: cleric class
+mana cost: {W}
+types: enchantment class
+level[1]: if you would gain life, you gain that much life plus 1 instead.
+level[2]: {3}{W}: whenever you gain life, put a +1/+1 counter on target creature you control.
+level[3]: {4}{W}: when this class becomes level 3, return target creature card from your graveyard to the battlefield. you gain life equal to its toughness.

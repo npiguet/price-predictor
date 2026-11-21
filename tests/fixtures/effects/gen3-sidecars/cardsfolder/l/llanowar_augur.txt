@@ -1,0 +1,5 @@
+name: llanowar augur
+mana cost: {G}
+types: creature elf shaman
+power toughness: 0/3
+activated[1]: sacrifice CARDNAME: target creature gets +3/+3 and gains trample until end of turn. activate only during your upkeep.

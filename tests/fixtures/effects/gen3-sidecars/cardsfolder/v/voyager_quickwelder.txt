@@ -1,5 +1,0 @@
-name: voyager quickwelder
-mana cost: {2}{W}
-types: artifact creature robot artificer
-power toughness: 2/4
-static: artifact spells you cast cost {1} less to cast.

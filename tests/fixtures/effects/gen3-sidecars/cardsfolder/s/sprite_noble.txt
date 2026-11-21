@@ -1,7 +1,0 @@
-name: sprite noble
-mana cost: {1}{U}{U}
-types: creature faerie noble
-power toughness: 2/2
-static: flying
-activated[1]: {T}: other creatures you control with flying get +1/+0 until end of turn.
-static: other creatures you control with flying get +0/+1.
