@@ -10,7 +10,7 @@ have kept. Naming one anyway is a deliberate experiment, so it is supported.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 import numpy as np
@@ -88,10 +88,10 @@ def _capture(
 
     captured: dict = {}
 
-    def capture(agent_checkpoints, mix_labels, **kwargs):
+    def capture(agent_checkpoints, mix_labels, options):
         captured["agent_checkpoints"] = agent_checkpoints
         captured["mix_labels"] = mix_labels
-        captured.update(kwargs)
+        captured.update({f.name: getattr(options, f.name) for f in fields(options)})
         raise _Captured
 
     monkeypatch.setattr(

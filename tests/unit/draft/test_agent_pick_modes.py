@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from draft.application.agent_pick_service import AgentPickService
-from draft.application.agent_registry import AgentRegistry
+from draft.application.agent_registry import AgentRegistry, BuildOptions
 from draft.application.generate_draft_data import PickRequest
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.infrastructure.cli import build_parser
@@ -76,7 +76,7 @@ def test_distinct_labels_build_distinct_services(tmp_path) -> None:
     a = _checkpoint(tmp_path, "a.pt", init_seed=1)
     b = _checkpoint(tmp_path, "b.pt", init_seed=2)
     registry = AgentRegistry.build(
-        {"a": a, "b": b}, {"forge-full", "a", "b"}, locator=_FakeLocator(0),
+        {"a": a, "b": b}, {"forge-full", "a", "b"}, BuildOptions(locator=_FakeLocator(0)),
     )
     assert registry.external_labels == frozenset({"a", "b"})
     assert registry._services["a"] is not registry._services["b"]

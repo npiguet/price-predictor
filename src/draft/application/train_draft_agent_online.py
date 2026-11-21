@@ -267,7 +267,7 @@ class TrainDraftAgentOnlineUseCase:
         temperature: float,
     ) -> _DraftField:
         """The labeler, the pick registry over every preloaded service, and the supervisor."""
-        from draft.application.agent_registry import AgentRegistry
+        from draft.application.agent_registry import AgentRegistry, BuildOptions
         from draft.application.generate_draft_data import (
             GenerateDraftDataSupervisor,
             build_labeler,
@@ -281,9 +281,7 @@ class TrainDraftAgentOnlineUseCase:
         registry = AgentRegistry.build(
             {},
             {label for label, _ in config.mix},
-            locator=locator,
-            device=loaded.device,
-            preloaded=services,
+            BuildOptions(locator=locator, device=loaded.device, preloaded=services),
         )
         supervisor = GenerateDraftDataSupervisor(
             gen_config, labeler=labeler, registry=registry,

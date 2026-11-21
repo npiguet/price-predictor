@@ -587,7 +587,7 @@ class GenerateDraftDataSupervisor:
         return self._run_id
 
     def _build_registry(self) -> Any:
-        from draft.application.agent_registry import AgentRegistry
+        from draft.application.agent_registry import AgentRegistry, BuildOptions
         from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
         locator = ConvertedCardLocator(
@@ -596,8 +596,10 @@ class GenerateDraftDataSupervisor:
         mix_labels = {label for label, _ in self._config.agent_mix}
         return AgentRegistry.build(
             self._config.agent_checkpoints, mix_labels,
-            locator=locator, pick_mode=self._config.pick_mode,
-            temperature=self._config.temperature, seed=self._config.seed,
+            BuildOptions(
+                locator=locator, pick_mode=self._config.pick_mode,
+                temperature=self._config.temperature, seed=self._config.seed,
+            ),
         )
 
     def _default_launch_worker(self, external_labels: frozenset[str]) -> Callable[[], Any]:

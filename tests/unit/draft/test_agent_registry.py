@@ -10,6 +10,7 @@ import torch
 from draft.application.agent_registry import (
     AgentRegistry,
     AgentRegistryError,
+    BuildOptions,
     parse_agent_checkpoints,
 )
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
@@ -21,6 +22,10 @@ EMB_DIM = 8
 class _FakeLocator:
     def load_embedding(self, name: str):
         return None
+
+
+def _options(**kwargs) -> BuildOptions:
+    return BuildOptions(locator=_FakeLocator(), **kwargs)
 
 
 def _save(tmp_path, name, *, packs=3, P=15):
@@ -58,14 +63,14 @@ def test_unknown_mix_label_fails_fast(tmp_path) -> None:
     with pytest.raises(AgentRegistryError):
         # "rival" is neither a Forge built-in nor bound.
         AgentRegistry.build(
-            {"a": ckpt}, {"forge-full", "a", "rival"}, locator=_FakeLocator(),
+            {"a": ckpt}, {"forge-full", "a", "rival"}, _options(),
         )
 
 
 def test_forge_builtins_and_bound_labels_pass(tmp_path) -> None:
     ckpt = _save(tmp_path, "a.pt")
     registry = AgentRegistry.build(
-        {"a": ckpt}, {"forge-full", "forge-r30", "a"}, locator=_FakeLocator(),
+        {"a": ckpt}, {"forge-full", "forge-r30", "a"}, _options(),
     )
     assert registry.external_labels == frozenset({"a"})
 
@@ -75,19 +80,19 @@ def test_forge_builtins_and_bound_labels_pass(tmp_path) -> None:
 def test_packs_mismatch_fails_fast(tmp_path) -> None:
     ckpt = _save(tmp_path, "a.pt", packs=2)  # live PACKS is 3
     with pytest.raises(AgentRegistryError):
-        AgentRegistry.build({"a": ckpt}, {"a"}, locator=_FakeLocator())
+        AgentRegistry.build({"a": ckpt}, {"a"}, _options())
 
 
 def test_capacity_below_pack_size_fails_fast(tmp_path) -> None:
     ckpt = _save(tmp_path, "a.pt", P=10)
     with pytest.raises(AgentRegistryError):
-        AgentRegistry.build({"a": ckpt}, {"a"}, locator=_FakeLocator(), pack_size=15)
+        AgentRegistry.build({"a": ckpt}, {"a"}, _options(pack_size=15))
 
 
 def test_missing_checkpoint_file_fails_fast(tmp_path) -> None:
     with pytest.raises(AgentRegistryError):
         AgentRegistry.build(
-            {"a": tmp_path / "nope.pt"}, {"a"}, locator=_FakeLocator(),
+            {"a": tmp_path / "nope.pt"}, {"a"}, _options(),
         )
 
 
@@ -110,8 +115,7 @@ def test_preloaded_label_counts_as_bound(tmp_path) -> None:
     ckpt = _save(tmp_path, "gen1.pt")
     registry = AgentRegistry.build(
         {"gen-1": ckpt}, {"gen-3", "gen-1", "forge-r30"},
-        locator=_FakeLocator(),
-        preloaded={"gen-3": _preloaded_service()},
+        _options(preloaded={"gen-3": _preloaded_service()}),
     )
     assert registry.external_labels == frozenset({"gen-1", "gen-3"})
 
@@ -119,24 +123,22 @@ def test_preloaded_label_counts_as_bound(tmp_path) -> None:
 def test_preloaded_does_not_excuse_an_unknown_mix_label(tmp_path) -> None:
     with pytest.raises(AgentRegistryError):
         AgentRegistry.build(
-            {}, {"gen-3", "rival"}, locator=_FakeLocator(),
-            preloaded={"gen-3": _preloaded_service()},
+            {}, {"gen-3", "rival"}, _options(preloaded={"gen-3": _preloaded_service()}),
         )
 
 
 def test_preloaded_services_get_the_same_geometry_checks() -> None:
     with pytest.raises(AgentRegistryError, match="packs"):
         AgentRegistry.build(
-            {}, {"gen-3"}, locator=_FakeLocator(),
-            preloaded={"gen-3": _preloaded_service(packs=2)},
+            {}, {"gen-3"}, _options(preloaded={"gen-3": _preloaded_service(packs=2)}),
         )
 
 
 def test_preloaded_service_pack_size_capacity_is_checked() -> None:
     with pytest.raises(AgentRegistryError, match="capacity"):
         AgentRegistry.build(
-            {}, {"gen-3"}, locator=_FakeLocator(), pack_size=15,
-            preloaded={"gen-3": _preloaded_service(P=10)},
+            {}, {"gen-3"}, _options(pack_size=15,
+            preloaded={"gen-3": _preloaded_service(P=10)}),
         )
 
 
@@ -144,15 +146,14 @@ def test_a_label_bound_both_ways_is_rejected(tmp_path) -> None:
     ckpt = _save(tmp_path, "gen3.pt")
     with pytest.raises(AgentRegistryError):
         AgentRegistry.build(
-            {"gen-3": ckpt}, {"gen-3"}, locator=_FakeLocator(),
-            preloaded={"gen-3": _preloaded_service()},
+            {"gen-3": ckpt}, {"gen-3"}, _options(preloaded={"gen-3": _preloaded_service()}),
         )
 
 
 def test_preloaded_service_is_the_instance_used_for_picks() -> None:
     service = _preloaded_service()
     registry = AgentRegistry.build(
-        {}, {"gen-3"}, locator=_FakeLocator(), preloaded={"gen-3": service},
+        {}, {"gen-3"}, _options(preloaded={"gen-3": service}),
     )
     assert registry._services["gen-3"] is service
 
@@ -160,7 +161,7 @@ def test_preloaded_service_is_the_instance_used_for_picks() -> None:
 def test_omitting_preloaded_is_unchanged(tmp_path) -> None:
     ckpt = _save(tmp_path, "a.pt")
     registry = AgentRegistry.build(
-        {"a": ckpt}, {"forge-full", "a"}, locator=_FakeLocator(),
+        {"a": ckpt}, {"forge-full", "a"}, _options(),
     )
     assert registry.external_labels == frozenset({"a"})
 
@@ -189,9 +190,10 @@ def test_build_level_pick_mode_never_overrides_a_preloaded_service() -> None:
     registry = AgentRegistry.build(
         {},                                   # nothing loaded from a path
         {"gen-3", "gen-1", "forge-full"},
-        locator=_FakeLocator(),
-        pick_mode="sample", temperature=99.0, seed=7,   # must all be ignored
-        preloaded={"gen-3": learner, "gen-1": frozen},
+        _options(
+            pick_mode="sample", temperature=99.0, seed=7,   # must all be ignored
+            preloaded={"gen-3": learner, "gen-1": frozen},
+        ),
     )
 
     assert registry._services["gen-3"] is learner
@@ -204,11 +206,9 @@ def test_an_all_preloaded_build_still_validates_labels_and_geometry() -> None:
     """With agent_checkpoints empty, the usual checks must still apply."""
     with pytest.raises(AgentRegistryError, match="rival"):
         AgentRegistry.build(
-            {}, {"gen-3", "rival"}, locator=_FakeLocator(),
-            preloaded={"gen-3": _preloaded_service()},
+            {}, {"gen-3", "rival"}, _options(preloaded={"gen-3": _preloaded_service()}),
         )
     with pytest.raises(AgentRegistryError, match="packs"):
         AgentRegistry.build(
-            {}, {"gen-3"}, locator=_FakeLocator(),
-            preloaded={"gen-3": _preloaded_service(packs=2)},
+            {}, {"gen-3"}, _options(preloaded={"gen-3": _preloaded_service(packs=2)}),
         )
