@@ -151,7 +151,8 @@ public final class HookFailures {
      * A failure the connector contains outside a hook's listener and a bus
      * subscriber, counted under {@code key}: a phase boundary's step
      * ({@code "boundary step <name>"}), a decision candidate the rules check
-     * could not read ({@code "decision candidate unreadable"}).
+     * could not read ({@code "decision candidate unreadable"}), a random-seat
+     * gate that threw on a candidate ({@code "random seat gate unreadable"}).
      */
     static void countContained(FailureKey key) {
         counter(key).incrementAndGet();

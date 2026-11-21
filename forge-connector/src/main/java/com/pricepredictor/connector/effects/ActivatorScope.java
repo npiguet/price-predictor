@@ -48,6 +48,15 @@ final class ActivatorScope {
     }
 
     /**
+     * A scope over the candidate alone, with no scan: for a reader that
+     * sets nothing on any other ability (a gate reading the candidate's own
+     * costs and targets).
+     */
+    static ActivatorScope alone(SpellAbility candidate, Player activator) {
+        return new ActivatorScope(candidate, activator, startingWith(candidate));
+    }
+
+    /**
      * A scope inside this one, over the same abilities as they stand now:
      * what {@link #over} would find in its place, since a check run inside
      * this scope adds no card to the game.

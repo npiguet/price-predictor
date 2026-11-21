@@ -3,8 +3,9 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.ForcedPlayRun;
 import com.pricepredictor.connector.effects.ForcedPlaySeat;
 import com.pricepredictor.connector.effects.FruitlessActivations;
-import com.pricepredictor.connector.effects.PriorityCandidates;
+import com.pricepredictor.connector.effects.LentActivator;
 import com.pricepredictor.connector.effects.MandatoryChoiceAi;
+import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RandomChoices;
 import com.pricepredictor.connector.effects.TargetingClauses;
 import forge.LobbyPlayer;
@@ -268,7 +269,12 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
         SpellAbility ability = candidate.ability();
         return candidate.playable()
                 && !ability.isLandAbility()
-                && !LifeCostGate.wouldLeaveNoLife(ability, player)
+                && LentActivator.holds(ability, player, () -> notBarred(ability));
+    }
+
+    /** The gates, read inside the seat's lend of the activating player ({@link LentActivator}). */
+    private boolean notBarred(SpellAbility ability) {
+        return !LifeCostGate.wouldLeaveNoLife(ability, player)
                 && !RepeatAttachGate.attachesOnlyToWhatItIsOn(ability)
                 && (fruitless == null || !fruitless.isFruitless(ability));
     }
