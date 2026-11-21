@@ -17,7 +17,10 @@ import java.util.Map;
  */
 final class ForkBudget {
 
-    /** At most this many forks may target one real resolution (FR-040). */
+    /**
+     * At most this many forks may target one real resolution (feature 023's
+     * FR-040, the base spec's § Collectors, which gen 3 reuses unchanged).
+     */
     static final int MAX_FORKS_PER_RESOLUTION = 2;
 
     /**
@@ -81,16 +84,20 @@ final class ForkBudget {
      * damage-step keywords unless the run narrows them.
      */
     boolean mayProbe(String keyword) {
+        if (!probesKeyword(keyword)) {
+            return false;
+        }
+        return probesUsed < probesPerGame;
+    }
+
+    /** Whether {@code --probe-keywords} names {@code keyword}, false for none. */
+    private boolean probesKeyword(String keyword) {
         // Normalized before the check: the flag names keywords the way the
         // corpus spells them (first_strike) and a caller holding a card's
         // keyword has Forge's (First Strike). Compared directly, every probe
         // of a keyword spelled differently would silently decline here.
-        if (keyword == null || probeKeywords.isEmpty()
-                || !probeKeywords.contains(
-                        KeywordEdit.normalize(keyword))) {
-            return false;
-        }
-        return probesUsed < probesPerGame;
+        return keyword != null && !probeKeywords.isEmpty()
+                && probeKeywords.contains(KeywordEdit.normalize(keyword));
     }
 
     /** Spend one probe. */
