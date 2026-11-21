@@ -269,18 +269,8 @@ class EventAttributionTest {
                 java.util.regex.Pattern.compile("Duration\\$\\s*([^|\\r\\n]+)");
         java.util.Set<String> spelled = new java.util.TreeSet<>();
         for (java.nio.file.Path tree : List.of(cards, cards.resolveSibling("tokenscripts"))) {
-            if (!java.nio.file.Files.isDirectory(tree)) {
-                continue;
-            }
-            try (var files = java.nio.file.Files.walk(tree)) {
-                for (java.nio.file.Path file : files.filter(java.nio.file.Files::isRegularFile)
-                        .toList()) {
-                    var found = declared.matcher(new String(java.nio.file.Files.readAllBytes(
-                            file), java.nio.charset.StandardCharsets.ISO_8859_1));
-                    while (found.find()) {
-                        spelled.add(found.group(1).strip());
-                    }
-                }
+            if (java.nio.file.Files.isDirectory(tree)) {
+                spelled.addAll(durationsSpelledUnder(tree, declared));
             }
         }
         assertFalse(spelled.isEmpty(), "no Duration$ read under " + cards);
@@ -288,6 +278,22 @@ class EventAttributionTest {
         assertEquals(java.util.Set.of(), spelled,
                 "Duration$ values no bucket lists: add each to DURATIONS and, where it ends"
                         + " on an object change, to FloatingEffects.bucket's until_leaves");
+    }
+
+    private static java.util.Set<String> durationsSpelledUnder(
+            java.nio.file.Path tree, java.util.regex.Pattern declared) throws java.io.IOException {
+        java.util.Set<String> spelled = new java.util.TreeSet<>();
+        try (var files = java.nio.file.Files.walk(tree)) {
+            for (java.nio.file.Path file : files.filter(java.nio.file.Files::isRegularFile)
+                    .toList()) {
+                var found = declared.matcher(new String(java.nio.file.Files.readAllBytes(
+                        file), java.nio.charset.StandardCharsets.ISO_8859_1));
+                while (found.find()) {
+                    spelled.add(found.group(1).strip());
+                }
+            }
+        }
+        return spelled;
     }
 
     /**

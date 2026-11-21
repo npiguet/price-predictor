@@ -196,32 +196,29 @@ class BusBracketCollectorTest {
      */
     @Test
     void anOutcomeWithNoNamedSourceNamesTheResolvingCard() throws IOException {
-        BusBracketCollector collector = collector();
-        SpellAbility bolt = damageAbility();
-
-        collector.beginBracket(bolt);
-        collector.onCardChangeZone(new GameEventCardChangeZone(
-                TestCards.build("Grizzly Bears"),
-                zone(ZoneType.Battlefield), zone(ZoneType.Graveyard)));
-        collector.endBracket(bolt.getId(), false);
-        collector.onNextAction();
-
-        String effectHalf = written().get(1);
-        assertTrue(
-                effectHalf.contains("\"cause\":\"E" + bolt.getHostCard().getId() + "\""),
-                effectHalf);
+        assertBracketedEventNamesTheResolvingCard(collector ->
+                collector.onCardChangeZone(new GameEventCardChangeZone(
+                        TestCards.build("Grizzly Bears"),
+                        zone(ZoneType.Battlefield), zone(ZoneType.Graveyard))));
     }
 
     /** A damage event with no source falls back to the bracket like the rest. */
     @Test
     void damageFromNowhereStillNamesTheResolvingCard() throws IOException {
+        assertBracketedEventNamesTheResolvingCard(collector ->
+                collector.onCardDamaged(new GameEventCardDamaged(
+                        TestCards.build("Runeclaw Bear").getView(), null, 1,
+                        GameEventCardDamaged.DamageType.Normal)));
+    }
+
+    /** Opens a bracket on a bolt, delivers one event, closes it, and checks the effect half's cause. */
+    private void assertBracketedEventNamesTheResolvingCard(
+            java.util.function.Consumer<BusBracketCollector> event) throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
-        collector.onCardDamaged(new GameEventCardDamaged(
-                TestCards.build("Runeclaw Bear").getView(), null, 1,
-                GameEventCardDamaged.DamageType.Normal));
+        event.accept(collector);
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
@@ -269,15 +266,21 @@ class BusBracketCollectorTest {
      */
     @Test
     void aCastStillOnTheStackAtTheEndWritesNoEffectHalf() throws IOException {
+        List<String> records = recordsOfACastOpenAtTheEnd(true);
+        assertTrue(records.get(0).contains("\"moment\":\"activation\""), records.get(0));
+    }
+
+    /** Opens a bracket on a bolt, ends the game with it on the stack or not; only its cost half is written. */
+    private List<String> recordsOfACastOpenAtTheEnd(boolean stillOnTheStack) throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
-        collector.finishGame(Set.of(bolt.getId()));
+        collector.finishGame(stillOnTheStack ? Set.of(bolt.getId()) : Set.of());
 
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"moment\":\"activation\""), records.get(0));
+        return records;
     }
 
     /**
@@ -314,14 +317,7 @@ class BusBracketCollectorTest {
      */
     @Test
     void aCastGoneFromTheStackByTheEndWritesNothingMore() throws IOException {
-        BusBracketCollector collector = collector();
-        SpellAbility bolt = damageAbility();
-
-        collector.beginBracket(bolt);
-        collector.finishGame(Set.of());
-
-        List<String> records = written();
-        assertEquals(1, records.size(), records.toString());
+        List<String> records = recordsOfACastOpenAtTheEnd(false);
         assertFalse(records.get(0).contains("countered"), records.get(0));
     }
 

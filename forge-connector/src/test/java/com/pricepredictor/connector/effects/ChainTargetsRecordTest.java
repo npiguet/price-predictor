@@ -5,6 +5,7 @@ import com.pricepredictor.connector.RandomSeatController;
 import com.pricepredictor.connector.RandomSeatLobbyPlayer;
 import forge.ai.LobbyPlayerAi;
 import forge.game.Game;
+import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -93,26 +94,8 @@ class ChainTargetsRecordTest {
         Card wurm = TestBoard.inPlay(game, opponent, "Craw Wurm");
         Card arcTrail = TestBoard.inHand(game, caster, "Arc Trail");
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            SpellAbility spell = TestBoard.spellOf(
-                    game.getAction().moveToStack(arcTrail, null), caster);
-            spell.getTargets().add(wurm);
-            spell.getSubAbility().getTargets().add(opponent);
-            game.getStack().add(spell);
-            game.getStack().resolveStack();
-            TestBoard.priority(game);
-            TestBoard.nextStep(game);
-        });
-
-        String effect = records(records, "resolution").get(0);
-        Map<String, String> bySubject = new java.util.HashMap<>();
-        for (Map<String, Object> event : RecordLines.events(effect)) {
-            if ("damage_dealt".equals(event.get("type"))) {
-                bySubject.put((String) ((List<?>) event.get("subjects")).get(0),
-                        String.valueOf(event.get("attributed_to")));
-            }
-        }
-        assertEquals(Map.of(Refs.of(wurm), "root", Refs.of(opponent), "0"), bySubject, effect);
+        ChainCast cast = new ChainCast(game, caster, arcTrail, wurm, opponent);
+        assertDamageAttribution(cast, Map.of(Refs.of(wurm), "root", Refs.of(opponent), "0"));
     }
 
     /**
@@ -129,11 +112,24 @@ class ChainTargetsRecordTest {
         Card theirs = TestBoard.inPlay(game, opponent, "Hill Giant");
         Card confrontation = TestBoard.inHand(game, caster, "Epic Confrontation");
 
+        ChainCast cast = new ChainCast(game, caster, confrontation, mine, theirs);
+        assertDamageAttribution(cast, Map.of(Refs.of(mine), "0", Refs.of(theirs), "0"));
+    }
+
+    /** A two-link spell cast from hand: the card, and what its root and its sub-ability target. */
+    private record ChainCast(Game game, Player caster, Card spellCard,
+                             GameEntity rootTarget, GameEntity subTarget) {
+    }
+
+    /** Resolves the cast and checks which link each damage_dealt event is attributed to, by subject. */
+    private void assertDamageAttribution(ChainCast cast, Map<String, String> expected)
+            throws Throwable {
+        Game game = cast.game();
         List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
             SpellAbility spell = TestBoard.spellOf(
-                    game.getAction().moveToStack(confrontation, null), caster);
-            spell.getTargets().add(mine);
-            spell.getSubAbility().getTargets().add(theirs);
+                    game.getAction().moveToStack(cast.spellCard(), null), cast.caster());
+            spell.getTargets().add(cast.rootTarget());
+            spell.getSubAbility().getTargets().add(cast.subTarget());
             game.getStack().add(spell);
             game.getStack().resolveStack();
             TestBoard.priority(game);
@@ -148,7 +144,7 @@ class ChainTargetsRecordTest {
                         String.valueOf(event.get("attributed_to")));
             }
         }
-        assertEquals(Map.of(Refs.of(mine), "0", Refs.of(theirs), "0"), bySubject, effect);
+        assertEquals(expected, bySubject, effect);
     }
 
     /**
