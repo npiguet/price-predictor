@@ -591,23 +591,22 @@ class OutcomeHandlerTest {
      */
     private static void resolveReportingANullAbilityOutcome(
             Channels collectors, SpellAbility ability) {
-        boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
-                "setEffectRecordClauseListener", (proxy, method, args) -> {
-                    if ("onClauseResolving".equals(method.getName())) {
-                        try {
-                            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
-                                    new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-                        } catch (Throwable t) {
-                            throw new RuntimeException(t);
-                        }
-                    }
-                    return null;
-                });
+        boolean installed = PatchHooks.CLAUSE_LISTENER.install((proxy, method, args) -> {
+            if ("onClauseResolving".equals(method.getName())) {
+                try {
+                    collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME,
+                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                } catch (Throwable t) {
+                    throw new RuntimeException(t);
+                }
+            }
+            return null;
+        });
         Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
         try {
             AbilityUtils.resolve(ability);
         } finally {
-            PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
+            PatchHooks.CLAUSE_LISTENER.uninstall();
         }
     }
 

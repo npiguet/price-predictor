@@ -71,11 +71,11 @@ class HookFailuresTest {
      */
     @Test
     void aHookCallShortOfArgumentsIsCounted() throws Throwable {
-        PatchHooks.Hook hook = PatchHooks.PRIORITY_SETTLED_LISTENER;
+        ListenerSetter hook = PatchHooks.PRIORITY_SETTLED_LISTENER;
         Method settled = HookShapes.method(HookShapes.PrioritySettled.class, "onPrioritySettled");
         String key = hook + " " + settled.getName() + " short of arguments";
         long before = HookFailures.counts().getOrDefault(key, 0L);
-        PatchHooks.Listener listener = hook.listener((callback, args) -> {
+        Listener listener = hook.listener((callback, args) -> {
             throw new AssertionError("a short call reached the body");
         });
 

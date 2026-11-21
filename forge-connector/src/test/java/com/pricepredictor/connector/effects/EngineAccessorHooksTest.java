@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchHooks.Hook;
 import forge.card.mana.ManaCost;
 import forge.game.card.Card;
 import forge.game.card.CardState;
@@ -26,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EngineAccessorHooksTest {
 
     /** Every accessor, by the hook that reaches it. */
-    private static final List<Hook> ACCESSORS = List.of(
+    private static final List<InstanceAccessor> ACCESSORS = List.of(
             PatchHooks.PRIMARY_ABILITY, PatchHooks.STATIC_EFFECTS_BY_STATIC,
             PatchHooks.CHANGED_CARD_TYPES, PatchHooks.CHANGED_CARD_COLORS, PatchHooks.COLOR_LAYERS,
             PatchHooks.CHANGED_CARD_MANA_COST, PatchHooks.HIDDEN_EXTRINSIC_KEYWORDS,
@@ -37,7 +36,7 @@ class EngineAccessorHooksTest {
     @Test
     void everyAccessorIsRequiredAndThePatchedCheckoutHasIt() {
         assertTrue(PatchHooks.REQUIRED.containsAll(ACCESSORS));
-        for (Hook accessor : ACCESSORS) {
+        for (InstanceAccessor accessor : ACCESSORS) {
             assertTrue(accessor.present(), "the checkout lacks " + accessor);
         }
     }
@@ -46,7 +45,7 @@ class EngineAccessorHooksTest {
     void theCardTablesAreTheEnginesOwnAndStayTheSameObject() {
         Card card = TestBoard.cardInAnotherGame("Grizzly Bears");
 
-        for (Hook table : List.of(PatchHooks.CHANGED_CARD_TYPES, PatchHooks.CHANGED_CARD_COLORS,
+        for (InstanceAccessor table : List.of(PatchHooks.CHANGED_CARD_TYPES, PatchHooks.CHANGED_CARD_COLORS,
                 PatchHooks.CHANGED_CARD_MANA_COST, PatchHooks.HIDDEN_EXTRINSIC_KEYWORDS,
                 PatchHooks.CANT_HAVE_KEYWORDS)) {
             assertTrue(table.read(card) instanceof Table<?, ?, ?>, table.toString());
@@ -102,11 +101,14 @@ class EngineAccessorHooksTest {
     @Test
     void anAbsentAccessorReadsNullAndEveryReadFallsBack() {
         Card card = TestBoard.cardInAnotherGame("Paralyze");
-        Hook absent = new Hook("forge.game.card.Card", "getEffectRecordNoSuchTable", "nothing");
-        Hook absentThrough = new Hook("forge.game.card.CardState", "getEffectRecordNoSuchThrough", "nothing");
+        InstanceAccessor absent = new InstanceAccessor(
+                new HookSite("forge.game.card.Card", "getEffectRecordNoSuchTable"), "nothing");
+        InstanceAccessor absentThrough = new InstanceAccessor(
+                new HookSite("forge.game.card.CardState", "getEffectRecordNoSuchThrough"), "nothing");
 
         assertNull(absent.read(card));
-        assertNull(absentThrough.read(card.getCurrentState(), Iterable.class, List.of()));
+        assertNull(absentThrough.read(
+                card.getCurrentState(), new InstanceAccessor.Argument(Iterable.class, List.of())));
         assertNull(absent.read(null));
         assertNull(ForgeFields.manaCostChange(new Object()));
     }

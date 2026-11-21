@@ -190,7 +190,7 @@ public final class PlayabilityChannel {
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
      */
-    PatchHooks.Listener legalityHandler() {
+    Listener legalityHandler() {
         return PatchHooks.COMBAT_LISTENER.listener((callback, args) -> {
             // No CardTraitBase here: the defender or attacker is the
             // GameEntity itself, so identity comes straight off it rather

@@ -80,7 +80,7 @@ final class ClauseOutcomeRouter {
      * {@code ClauseContractTest} calls this with a synthesized argument array
      * in the compiler's place.
      */
-    PatchHooks.Listener clauseHandler() {
+    Listener clauseHandler() {
         return clauseHandler(ApiEvents::ruleFor);
     }
 
@@ -88,7 +88,7 @@ final class ClauseOutcomeRouter {
      * The same, building each clause's event from the rules {@code rules}
      * names, so a test can stand a rule that throws in for one API.
      */
-    PatchHooks.Listener clauseHandler(Function<ApiType, ApiEvents.Rule<?>> rules) {
+    Listener clauseHandler(Function<ApiType, ApiEvents.Rule<?>> rules) {
         return PatchHooks.CLAUSE_LISTENER.listener((callback, args) -> {
             SpellAbility clause = args.get(0, SpellAbility.class);
             if (clause == null) {
@@ -274,7 +274,7 @@ final class ClauseOutcomeRouter {
      * either, so this hook's own test calls it directly, the way
      * {@code ClauseContractTest} calls {@code clauseHandler}.
      */
-    PatchHooks.Listener outcomeHandler() {
+    Listener outcomeHandler() {
         return PatchHooks.OUTCOME_LISTENER.listener((callback, args) -> {
             String wireName = args.get(1, String.class);
             if (wireName == null) {
@@ -303,7 +303,7 @@ final class ClauseOutcomeRouter {
     }
 
     /** The outcome's params, empty where the hook passed none. */
-    private static Map<?, ?> paramsOf(PatchHooks.Args args) {
+    private static Map<?, ?> paramsOf(Args args) {
         return args.get(2) instanceof Map<?, ?> given ? given : Map.of();
     }
 

@@ -168,7 +168,7 @@ final class HookShapes {
      * A listener setter, the stand-in for what it takes, and any older shape a
      * worker still accepts in its place.
      */
-    record Declared(PatchHooks.Hook setter, Class<?> shape, List<Class<?>> older) {
+    record Declared(ListenerSetter setter, Class<?> shape, List<Class<?>> older) {
 
         @Override
         public String toString() {

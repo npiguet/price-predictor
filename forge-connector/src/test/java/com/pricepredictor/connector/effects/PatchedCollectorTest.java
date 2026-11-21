@@ -92,10 +92,8 @@ class PatchedCollectorTest {
         long expected = confirm + (AttributionMode.detect() == AttributionMode.DEGRADED
                 ? 0
                 : PatchHooks.REQUIRED.stream()
-                        .filter(hook -> hook.method().startsWith("setEffectRecord")
-                                && hook.method().endsWith("Listener")
-                                && hook != PatchHooks.CONFIRM_LISTENER)
-                        .filter(PatchHooks.Hook::present)
+                        .filter(hook -> hook instanceof ListenerSetter && hook != PatchHooks.CONFIRM_LISTENER)
+                        .filter(Hook::present)
                         .count());
         // A patched checkout whose hooks all went unfound would agree with a
         // collector that installs nothing.
@@ -287,7 +285,7 @@ class PatchedCollectorTest {
     void theLiveGameIsInsideItsStateBasedLoopFromItsBeginToItsEnd() throws Throwable {
         Delivered sink = new Delivered();
         PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
-        PatchHooks.Listener handler = signals.stateBasedLoopHandler();
+        Listener handler = signals.stateBasedLoopHandler();
 
         handler.invoke(null, ON_STATE_BASED_LOOP_BEGIN, new Object[]{TestCards.game()});
         boolean inside = signals.inStateBasedLoop();
@@ -315,7 +313,7 @@ class PatchedCollectorTest {
     void priorityThatSettlesInAnotherGameIsNotDeliveredAndTheLiveGamesIs() throws Throwable {
         Delivered sink = new Delivered();
         PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
-        PatchHooks.Listener handler = signals.prioritySettledHandler();
+        Listener handler = signals.prioritySettledHandler();
         Game fork = TestBoard.anotherGame();
 
         handler.invoke(null, ON_PRIORITY_SETTLED, new Object[]{fork, new Player("fork-seat", fork, 92303)});
@@ -329,7 +327,7 @@ class PatchedCollectorTest {
     void aLoopBegunInsideALoopLeavesTheOuterLoopOpenAtItsEnd() throws Throwable {
         Delivered sink = new Delivered();
         PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
-        PatchHooks.Listener handler = signals.stateBasedLoopHandler();
+        Listener handler = signals.stateBasedLoopHandler();
         Object[] live = {TestCards.game()};
 
         handler.invoke(null, ON_STATE_BASED_LOOP_BEGIN, live);
@@ -382,7 +380,7 @@ class PatchedCollectorTest {
     @Test
     void aThrowingLiveHandlerStillLetsTheForkSeeTheCallback() throws Throwable {
         List<String> forkSaw = new ArrayList<>();
-        PatchHooks.Listener routing = PatchHooks.STATE_BASED_LOOP_LISTENER.listener(
+        Listener routing = PatchHooks.STATE_BASED_LOOP_LISTENER.listener(
                 PatchedCollectors.routing(
                 (callback, args) -> {
                     throw new IllegalStateException("the live handler fails");

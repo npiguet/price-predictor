@@ -190,7 +190,7 @@ public final class BusBracketCollector extends BusEventReader {
      * <p>Fired for every game on this JVM, a fork's included, so a cast of
      * another game's is not this one's.
      */
-    PatchHooks.Listener castHandler() {
+    Listener castHandler() {
         return PatchHooks.CAST_LISTENER.listener((callback, args) -> {
             SpellAbility cast = args.get(0, SpellAbility.class);
             if (cast != null && live.ownsStackAbility(cast)) {
@@ -226,7 +226,7 @@ public final class BusBracketCollector extends BusEventReader {
      * clause. Another game's item is not this game's: a forced
      * resolution's is its fork-bound recording's ({@link ForcedResolution}).
      */
-    PatchHooks.Listener resolutionHandler() {
+    Listener resolutionHandler() {
         return PatchHooks.RESOLUTION_LISTENER.listener((callback, args) -> {
             SpellAbility item = args.get(0, SpellAbility.class);
             if (item == null) {
@@ -1024,7 +1024,7 @@ public final class BusBracketCollector extends BusEventReader {
      * {@link PatchHooks} looks both up by string — and a typo in either
      * degrades this channel silently.
      */
-    PatchHooks.Listener confirmHandler() {
+    Listener confirmHandler() {
         return PatchHooks.CONFIRM_LISTENER.listener((callback, args) -> {
             // This hook is a JVM static, and PlayerControllerAi.confirmAction
             // is exactly what a fork's own forced resolution asks when it

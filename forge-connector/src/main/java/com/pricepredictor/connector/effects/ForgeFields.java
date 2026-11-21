@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
-import com.pricepredictor.connector.effects.PatchHooks.Hook;
 import forge.card.mana.ManaCost;
 import forge.game.CardTraitBase;
 import forge.game.Game;
@@ -149,13 +148,13 @@ final class ForgeFields {
      */
     static List<? extends CardTraitBase> traitsThrough(
             CardState state, TraitKind kind, Iterable<? extends ICardTraitChanges> changes) {
-        Hook assembly = assemblyOf(kind);
+        InstanceAccessor assembly = assemblyOf(kind);
         Collection<?> traits = assembly == null ? null
-                : as(Collection.class, assembly.read(state, Iterable.class, changes));
+                : as(Collection.class, assembly.read(state, new InstanceAccessor.Argument(Iterable.class, changes)));
         return traits == null ? null : traits.stream().map(CardTraitBase.class::cast).toList();
     }
 
-    private static Hook assemblyOf(TraitKind kind) {
+    private static InstanceAccessor assemblyOf(TraitKind kind) {
         return switch (kind) {
             case SPELL -> PatchHooks.SPELL_ABILITIES_THROUGH;
             case TRIGGER -> PatchHooks.TRIGGERS_THROUGH;

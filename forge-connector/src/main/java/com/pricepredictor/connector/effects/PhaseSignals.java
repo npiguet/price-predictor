@@ -95,12 +95,12 @@ final class PhaseSignals {
      * compiler behind it, so its game-identity test calls it with a
      * synthesized argument array.
      */
-    PatchHooks.Listener stateBasedLoopHandler() {
+    Listener stateBasedLoopHandler() {
         return PatchHooks.STATE_BASED_LOOP_LISTENER.listener((callback, args) -> {
             if (!ours(args)) {
                 return;
             }
-            if (callback == PatchHooks.Callback.ON_STATE_BASED_LOOP_BEGIN) {
+            if (callback == Callback.ON_STATE_BASED_LOOP_BEGIN) {
                 begin();
             } else {
                 end();
@@ -123,7 +123,7 @@ final class PhaseSignals {
     }
 
     /** The priority-settled hook's listener. */
-    PatchHooks.Listener prioritySettledHandler() {
+    Listener prioritySettledHandler() {
         return PatchHooks.PRIORITY_SETTLED_LISTENER.listener((callback, args) -> {
             if (ours(args)) {
                 sink.prioritySettled(args.get(1, Player.class));
@@ -132,7 +132,7 @@ final class PhaseSignals {
     }
 
     /** Whether a signal's first argument is this game. */
-    private boolean ours(PatchHooks.Args args) {
+    private boolean ours(Args args) {
         Game game = args.get(0, Game.class);
         return game != null && game == live.game();
     }

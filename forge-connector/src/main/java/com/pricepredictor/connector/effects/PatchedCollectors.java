@@ -58,7 +58,7 @@ final class PatchedCollectors implements AutoCloseable {
      * without {@code SUB_ABILITY} still marks a refused offer {@code declined}
      * on a record the bracket writes off the bus anyway.
      */
-    private final List<PatchHooks.Listener> everyMode;
+    private final List<Listener> everyMode;
 
     /**
      * Every listener the channels install, in the order they are installed,
@@ -68,7 +68,7 @@ final class PatchedCollectors implements AutoCloseable {
      * where the channel builds its handler, and cannot be paired here with a
      * handler built for another.
      */
-    private final List<PatchHooks.Listener> patchedOnly;
+    private final List<Listener> patchedOnly;
 
     /**
      * Whether these are a fork's collectors, which install no hook: the
@@ -173,10 +173,10 @@ final class PatchedCollectors implements AutoCloseable {
      * offering each callback to both sets of collectors hands each its own:
      * dispatch by game identity, on whatever thread the callback comes.
      */
-    private int install(List<PatchHooks.Listener> listeners) {
+    private int install(List<Listener> listeners) {
         int installed = 0;
-        for (PatchHooks.Listener listener : listeners) {
-            PatchHooks.Listener routing = listener.hook().listener(routing(
+        for (Listener listener : listeners) {
+            Listener routing = listener.hook().listener(routing(
                     listener.body(), (callback, args) -> {
                         PatchedCollectors fork = routedFork;
                         if (fork != null) {
@@ -195,7 +195,7 @@ final class PatchedCollectors implements AutoCloseable {
      * threw: the fork's collectors must see the callback the live game's
      * handler failed on. What the body threw still reaches the caller.
      */
-    static PatchHooks.ListenerBody routing(PatchHooks.ListenerBody live, PatchHooks.ListenerBody fork) {
+    static ListenerBody routing(ListenerBody live, ListenerBody fork) {
         return (callback, args) -> {
             try {
                 live.on(callback, args);
@@ -206,16 +206,16 @@ final class PatchedCollectors implements AutoCloseable {
     }
 
     /** Hand one callback of {@code hook} to this fork's own listener for it, if it has one. */
-    private void dispatch(PatchHooks.Hook hook, PatchHooks.Callback callback, PatchHooks.Args args) {
-        Optional<PatchHooks.Listener> own = listenerFor(everyMode, hook);
+    private void dispatch(ListenerSetter hook, Callback callback, Args args) {
+        Optional<Listener> own = listenerFor(everyMode, hook);
         if (own.isEmpty() && context.mode() != AttributionMode.DEGRADED) {
             own = listenerFor(patchedOnly, hook);
         }
         own.ifPresent(listener -> listener.body().on(callback, args));
     }
 
-    private static Optional<PatchHooks.Listener> listenerFor(
-            List<PatchHooks.Listener> listeners, PatchHooks.Hook hook) {
+    private static Optional<Listener> listenerFor(
+            List<Listener> listeners, ListenerSetter hook) {
         return listeners.stream().filter(listener -> listener.hook() == hook).findFirst();
     }
 
@@ -256,8 +256,8 @@ final class PatchedCollectors implements AutoCloseable {
         } finally {
             // Both lists, whatever the mode: uninstalling a hook that was
             // never installed does nothing.
-            patchedOnly.forEach(PatchHooks.Listener::uninstall);
-            everyMode.forEach(PatchHooks.Listener::uninstall);
+            patchedOnly.forEach(Listener::uninstall);
+            everyMode.forEach(Listener::uninstall);
         }
     }
 }

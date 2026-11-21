@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  * the listener <b>keeps being called</b>. So a failing hook does not go
  * quiet; each call that throws loses what that call would have recorded, and
  * only a count says how many were lost. Every listener this side installs is
- * a {@link PatchHooks.Listener}, which counts here what its body throws
+ * a {@link Listener}, which counts here what its body throws
  * before letting it go on to Forge.
  *
  * <p>The first failure of each hook is printed with its stack, which Forge's
@@ -79,7 +79,7 @@ public final class HookFailures {
     }
 
     /** Count one call of {@code hook}'s listener that threw {@code failure}. */
-    static void count(PatchHooks.Hook hook, RuntimeException failure) {
+    static void count(ListenerSetter hook, RuntimeException failure) {
         AtomicLong failures = counter(new FailureKey(hook.toString()));
         if (failures.incrementAndGet() == 1) {
             System.err.println("effect-record hook " + hook + ": its listener threw, which loses what"
@@ -96,7 +96,7 @@ public final class HookFailures {
      * counted under {@code <hook> <method> short of arguments}, the first
      * printed.
      */
-    static void countShortCall(PatchHooks.Hook hook, String method, int given, int read) {
+    static void countShortCall(ListenerSetter hook, String method, int given, int read) {
         FailureKey key = new FailureKey(hook + " " + method + " short of arguments");
         AtomicLong calls = counter(key);
         if (calls.incrementAndGet() == 1) {

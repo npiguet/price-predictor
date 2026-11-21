@@ -215,7 +215,7 @@ final class LayerContributions {
      * though the continuous channel has already declined by then.
      */
     private void addLayerChanges(
-            Card card, String entity, PatchHooks.Hook accessor,
+            Card card, String entity, InstanceAccessor accessor,
             BiConsumer<Object, Contribution> tokens) {
         for (Map.Entry<Long, List<Object>> changed : changesByStatic(card, accessor).entrySet()) {
             Contribution into = contribution(changed.getKey(), entity);
@@ -226,7 +226,7 @@ final class LayerContributions {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<Long, List<Object>> changesByStatic(Card card, PatchHooks.Hook accessor) {
+    private static Map<Long, List<Object>> changesByStatic(Card card, InstanceAccessor accessor) {
         Object answer = accessor.read(card);
         return answer instanceof Map ? (Map<Long, List<Object>>) answer : Map.of();
     }

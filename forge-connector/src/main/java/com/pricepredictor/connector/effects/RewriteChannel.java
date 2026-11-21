@@ -131,7 +131,7 @@ final class RewriteChannel implements EventRouter.EventTap {
      * compiler behind it, so {@code RewriteContractTest} calls this with a
      * synthesized argument array in the compiler's place.
      */
-    PatchHooks.Listener handler() {
+    Listener handler() {
         return PatchHooks.REPLACEMENT_LISTENER.listener((callback, args) -> {
             // A fork's own replacements resolve through this same JVM-static
             // hook (InterventionFork.forceResolution

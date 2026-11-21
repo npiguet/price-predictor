@@ -106,11 +106,11 @@ final class ManaChannel implements EventRouter.EventTap {
      * request is the resolving ability's. Package-private for the reason
      * {@link #handler} is.
      */
-    PatchHooks.Listener paymentHandler() {
+    Listener paymentHandler() {
         return PatchHooks.PAYMENT_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
             if (ability != null && !ability.isManaAbility() && live.owns(ability)
-                    && callback == PatchHooks.Callback.ON_COSTS_PAID) {
+                    && callback == Callback.ON_COSTS_PAID) {
                 // The payment the mana went to is over: no triggered mana of
                 // the last activation comes after it (V3 #15).
                 finishBuilding();
@@ -196,7 +196,7 @@ final class ManaChannel implements EventRouter.EventTap {
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
      */
-    PatchHooks.Listener handler() {
+    Listener handler() {
         return PatchHooks.MANA_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
             if (ability == null) {

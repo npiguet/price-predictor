@@ -257,7 +257,8 @@ final class StaticSuppression {
         if (staticId == null || !changedType(card)) {
             return null;
         }
-        return PatchHooks.LEND_TYPE.lend(card.getCurrentState(), CardTypeView.class, type(card));
+        return PatchHooks.LEND_TYPE.lend(
+                card.getCurrentState(), new InstanceAccessor.Argument(CardTypeView.class, type(card)));
     }
 
     /**
@@ -270,7 +271,8 @@ final class StaticSuppression {
      * when the suppressed static changed no colour of the card.
      */
     Runnable lendColors(Card card) {
-        return staticId == null ? null : PatchHooks.SET_ASIDE_COLORS.lend(card, long.class, staticId);
+        return staticId == null ? null
+                : PatchHooks.SET_ASIDE_COLORS.lend(card, new InstanceAccessor.Argument(long.class, staticId));
     }
 
     /** Whether the suppressed static has a type change on the card. */

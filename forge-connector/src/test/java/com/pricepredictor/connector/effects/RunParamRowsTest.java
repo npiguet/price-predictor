@@ -60,11 +60,11 @@ class RunParamRowsTest {
     }
 
     /** A hook and the callback of it that hands over a trait and its run-parameter map. */
-    private record Hearing(PatchHooks.Hook hook, PatchHooks.Callback callback) {
+    private record Hearing(ListenerSetter hook, Callback callback) {
         static final Hearing CONDITIONS =
-                new Hearing(PatchHooks.TRIGGER_LISTENER, PatchHooks.Callback.ON_CONDITION_EVALUATED);
+                new Hearing(PatchHooks.TRIGGER_LISTENER, Callback.ON_CONDITION_EVALUATED);
         static final Hearing REPLACEMENTS =
-                new Hearing(PatchHooks.REPLACEMENT_LISTENER, PatchHooks.Callback.ON_REPLACEMENT);
+                new Hearing(PatchHooks.REPLACEMENT_LISTENER, Callback.ON_REPLACEMENT);
     }
 
     /**
@@ -89,7 +89,7 @@ class RunParamRowsTest {
 
     private static List<EffectEvent> heard(Hearing hearing, Card host, String mode, Runnable body) {
         List<EffectEvent> events = new ArrayList<>();
-        PatchHooks.Listener listener = hearing.hook().listener((callback, args) -> {
+        Listener listener = hearing.hook().listener((callback, args) -> {
             if (callback == hearing.callback() && isOf(args.get(0), host, mode)) {
                 events.add(RunParamNormalizer.describeParams(args.get(0), args.get(1)));
             }

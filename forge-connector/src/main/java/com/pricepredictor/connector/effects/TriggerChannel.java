@@ -61,8 +61,7 @@ final class TriggerChannel {
         this.dedup = dedup;
         this.negatives = negatives;
         this.positives = positives;
-        this.runsAreTold = PatchHooks.TRIGGER_LISTENER.listenerDeclares(
-                PatchHooks.Callback.ON_TRIGGER_RUN.methodName());
+        this.runsAreTold = PatchHooks.TRIGGER_LISTENER.listenerDeclares(Callback.ON_TRIGGER_RUN);
     }
 
     /**
@@ -77,7 +76,7 @@ final class TriggerChannel {
      * LiveGame#enumerate}): its rules queries run Forge's static check, which
      * evaluates every state trigger, and none of that is the game's.
      */
-    PatchHooks.Listener handler() {
+    Listener handler() {
         return PatchHooks.TRIGGER_LISTENER.listener((callback, args) -> {
             if (!live.enumeratingHere()) {
                 reported(callback, args);
@@ -86,8 +85,8 @@ final class TriggerChannel {
     }
 
     /** A callback of the hook's, outside the collector's own enumeration. */
-    private void reported(PatchHooks.Callback callback, PatchHooks.Args args) {
-        if (callback == PatchHooks.Callback.ON_TRIGGER_RUN) {
+    private void reported(Callback callback, Args args) {
+        if (callback == Callback.ON_TRIGGER_RUN) {
             if (!live.foreign(args.get(0))) {
                 ran(args.get(0), args.get(1));
             }
@@ -97,7 +96,7 @@ final class TriggerChannel {
     }
 
     /** One trigger condition evaluated: drawn against its mode's balance, then filed as a firing or a negative. */
-    private void evaluationReported(PatchHooks.Args args) {
+    private void evaluationReported(Args args) {
         // Checked first, before this evaluation can spend any of the
         // mode's negative-sampling budget (offer/keep below) -- a fork's
         // trigger evaluations must not skew the live game's ratio

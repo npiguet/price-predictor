@@ -481,11 +481,11 @@ final class FloatingEffects {
             return List.of();
         }
         Set<Trigger> thisTurn = identitySet();
-        thisTurn.addAll(triggersIn(PatchHooks.read(pending, "thisTurn")));
+        thisTurn.addAll(triggersIn(PatchHooks.PENDING_THIS_TURN.read(pending)));
         // Forge's own order, each trigger once: thisTurn is a subset of
         // delayed, and a player-defined trigger can join delayed at its turn.
-        List<Trigger> all = triggersIn(PatchHooks.read(pending, "delayed"));
-        if (PatchHooks.read(pending, "playerDefined") instanceof Multimap<?, ?> byPlayer) {
+        List<Trigger> all = triggersIn(PatchHooks.PENDING_DELAYED.read(pending));
+        if (PatchHooks.PENDING_PLAYER_DEFINED.read(pending) instanceof Multimap<?, ?> byPlayer) {
             all.addAll(triggersIn(byPlayer.values()));
         }
         Set<Trigger> listed = identitySet();

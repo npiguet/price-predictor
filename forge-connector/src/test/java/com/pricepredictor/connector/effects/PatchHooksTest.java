@@ -35,34 +35,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class PatchHooksTest {
 
+    /** A setter no Forge declares. */
+    private static final ListenerSetter NO_SUCH_LISTENER = new ListenerSetter(
+            new HookSite("forge.game.trigger.TriggerHandler", "setNoSuchListener"), "nothing", List.of());
+
     @Test
     void anAbsentHookReportsAbsentRatherThanThrowing() {
-        assertFalse(PatchHooks.find(
-                "forge.game.trigger.TriggerHandler", "noSuchHook").isPresent());
+        assertFalse(HookReflection.find(
+                new HookSite("forge.game.trigger.TriggerHandler", "noSuchHook"), Reach.PUBLIC).isPresent());
     }
 
     @Test
     void aMissingClassReportsAbsentRatherThanThrowing() {
-        assertFalse(PatchHooks.find("forge.game.NotAClass", "anything").isPresent());
+        assertFalse(HookReflection.find(new HookSite("forge.game.NotAClass", "anything"), Reach.PUBLIC).isPresent());
     }
 
     @Test
     void readingAnAbsentHookYieldsNull() {
-        assertNull(PatchHooks.readStatic(
-                "forge.game.trigger.TriggerHandler", "noSuchHook"));
+        assertNull(new StaticAccessor(
+                new HookSite("forge.game.trigger.TriggerHandler", "noSuchHook"), "nothing").read());
     }
 
     @Test
     void installingAnAbsentHookIsANoOpRatherThanAFailure() {
-        assertFalse(PatchHooks.install(
-                "forge.game.trigger.TriggerHandler", "setNoSuchListener",
-                (proxy, method, args) -> null));
+        assertFalse(NO_SUCH_LISTENER.install((proxy, method, args) -> null));
     }
 
     @Test
     void uninstallingAnAbsentHookDoesNotThrow() {
-        PatchHooks.uninstall(
-                "forge.game.trigger.TriggerHandler", "setNoSuchListener");
+        NO_SUCH_LISTENER.uninstall();
     }
 
     /**
@@ -123,9 +124,16 @@ class PatchHooksTest {
         }
     }
 
-    /** {@code hook}, looked up on {@code owner} instead of its Forge class. */
-    private static PatchHooks.Hook on(Class<?> owner, PatchHooks.Hook hook) {
-        return new PatchHooks.Hook(owner.getName(), hook.method(), hook.unlocks(), hook.callbacks(), hook.reach());
+    /** {@code setter}, looked up on {@code owner} instead of its Forge class. */
+    private static ListenerSetter on(Class<?> owner, ListenerSetter setter) {
+        return new ListenerSetter(new HookSite(owner.getName(), setter.site().method()), setter.unlocks(),
+                setter.callbacks());
+    }
+
+    /** {@code accessor}, looked up on {@code owner} instead of its Forge class. */
+    private static StaticAccessor on(Class<?> owner, StaticAccessor accessor) {
+        return new StaticAccessor(new HookSite(owner.getName(), accessor.site().method()), accessor.unlocks(),
+                accessor.reach());
     }
 
     /**
@@ -134,7 +142,7 @@ class PatchHooksTest {
      */
     @Test
     void thePrivateConfirmHookIsFoundAndCalledThrough() {
-        PatchHooks.Hook note = on(StaleForge.class, PatchHooks.NOTE_CONFIRM);
+        StaticAccessor note = on(StaleForge.class, PatchHooks.NOTE_CONFIRM);
 
         assertTrue(note.present());
         assertEquals(false, note.call(null, false));
@@ -148,7 +156,7 @@ class PatchHooksTest {
      */
     @Test
     void aForgeWithoutThePrivateConfirmHookIsNamed() {
-        PatchHooks.Hook note = on(TriggerFireWithoutRuns.class, PatchHooks.NOTE_CONFIRM);
+        StaticAccessor note = on(TriggerFireWithoutRuns.class, PatchHooks.NOTE_CONFIRM);
 
         String report = PatchHooks.report(List.of(note));
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> note.call(null, true));
@@ -159,7 +167,7 @@ class PatchHooksTest {
 
     /**
      * Each current stand-in passes every callback its hook dispatches, with
-     * every argument the collectors read: the counts in {@link PatchHooks.Callback}
+     * every argument the collectors read: the counts in {@link Callback}
      * agree with the shapes {@link #eachStandInIsForgesOwnDeclaration} checks
      * against Forge.
      */
@@ -167,7 +175,7 @@ class PatchHooksTest {
     @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
     void eachStandInLacksNoCallbackItsHookReads(HookShapes.Declared standIn) {
         assertEquals(List.of(),
-                PatchHooks.callbacksLacking(standIn.shape(), standIn.setter().callbacks()));
+                standIn.setter().lacking(standIn.shape()));
     }
 
     /**
@@ -242,9 +250,9 @@ class PatchHooksTest {
 
         Object pending = PatchHooks.PENDING_DELAYED_TRIGGERS.read(handler);
 
-        assertEquals(List.of(trigger), PatchHooks.read(pending, "delayed"));
-        assertEquals(List.of(trigger), PatchHooks.read(pending, "thisTurn"));
-        assertTrue(PatchHooks.read(pending, "playerDefined") instanceof Multimap<?, ?> byPlayer
+        assertEquals(List.of(trigger), PatchHooks.PENDING_DELAYED.read(pending));
+        assertEquals(List.of(trigger), PatchHooks.PENDING_THIS_TURN.read(pending));
+        assertTrue(PatchHooks.PENDING_PLAYER_DEFINED.read(pending) instanceof Multimap<?, ?> byPlayer
                 && byPlayer.isEmpty(), String.valueOf(pending));
     }
 
@@ -293,10 +301,10 @@ class PatchHooksTest {
         Set<String> declared = Arrays.stream(standIn.shape().getDeclaredMethods())
                 .map(Method::getName).collect(Collectors.toSet());
         Set<String> named = standIn.setter().callbacks().stream()
-                .map(PatchHooks.Callback::methodName).collect(Collectors.toSet());
+                .map(Callback::methodName).collect(Collectors.toSet());
         assertEquals(declared, named, standIn.setter().toString());
 
-        for (PatchHooks.Callback callback : standIn.setter().callbacks()) {
+        for (Callback callback : standIn.setter().callbacks()) {
             for (Class<?> shape : accepted) {
                 if (shape != standIn.shape() && Arrays.stream(shape.getMethods())
                         .noneMatch(m -> m.getName().equals(callback.methodName()))) {
@@ -375,9 +383,9 @@ class PatchHooksTest {
      */
     @Test
     void eachCallOfAListenerThatThrowsIsCountedAgainstItsHook() throws Throwable {
-        PatchHooks.Hook hook = PatchHooks.PRIORITY_SETTLED_LISTENER;
+        ListenerSetter hook = PatchHooks.PRIORITY_SETTLED_LISTENER;
         long before = HookFailures.counts().getOrDefault(hook.toString(), 0L);
-        PatchHooks.Listener failing = hook.listener((callback, args) -> {
+        Listener failing = hook.listener((callback, args) -> {
             throw new IllegalStateException("a card this listener cannot read");
         });
         Method settled = HookShapes.method(HookShapes.PrioritySettled.class, "onPrioritySettled");
@@ -393,7 +401,7 @@ class PatchHooksTest {
     /** A collection holds the proxy: Forge may keep its listener in one, and a null hash would throw. */
     @Test
     void theListenerProxyAnswersTheObjectMethods() {
-        PatchHooks.Listener listener = PatchHooks.PRIORITY_SETTLED_LISTENER.listener(
+        Listener listener = PatchHooks.PRIORITY_SETTLED_LISTENER.listener(
                 (callback, args) -> { });
         Object proxy = java.lang.reflect.Proxy.newProxyInstance(
                 HookShapes.PrioritySettled.class.getClassLoader(),
