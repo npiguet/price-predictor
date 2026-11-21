@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.player.Player;
@@ -8,10 +7,9 @@ import forge.game.spellability.AbilityActivated;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
@@ -77,7 +75,26 @@ public record PlayabilityVerdict(
      */
     public static PlayabilityVerdict of(SpellAbility candidate, Player activator) {
         Objects.requireNonNull(activator, "a verdict is for a player");
-        return asActivator(candidate, activator, () -> evaluate(candidate, activator));
+        return asActivator(candidate, activator,
+                () -> evaluate(candidate, activator, new ChargedCost(candidate, activator)));
+    }
+
+    /**
+     * The verdict for {@code candidate} played by {@code activator}, as
+     * {@link #of} gives it, then {@code reader} over it and the cost it
+     * charged, both in one {@link #asActivator} scope: the verdict runs in a
+     * scope of its own inside it ({@link ActivatorScope#inner}), which puts
+     * back what the checks set before the reader runs, with no second scan
+     * of the game's abilities, and the cost is computed once for both.
+     */
+    static <T> T reading(SpellAbility candidate, Player activator,
+                         BiFunction<PlayabilityVerdict, ChargedCost, T> reader) {
+        ChargedCost charged = new ChargedCost(candidate, activator);
+        ActivatorScope scope = ActivatorScope.over(candidate, activator);
+        return scope.run(() -> {
+            PlayabilityVerdict verdict = scope.inner().run(() -> evaluate(candidate, activator, charged));
+            return reader.apply(verdict, charged);
+        });
     }
 
     /**
@@ -85,47 +102,24 @@ public record PlayabilityVerdict(
      * player, then put back every activating player and the host's cast
      * ability as they were: the checks set the candidate's activating player,
      * the mana check those of the mana abilities it counts on, and Forge's
-     * cast-prohibition check the host's cast ability. The body runs with no
-     * target chosen on any clause the candidate offers, and the choices come
-     * back after it, also when it throws ({@link TargetingClauses#withNoneChosen}),
-     * so every reader inside it, the verdict, {@code legal_targets} and the
-     * sample, counts what the rules offer before a choice.
+     * cast-prohibition check the host's cast ability ({@link ActivatorScope}).
+     * The body runs with no target chosen on any clause the candidate offers,
+     * and the choices come back after it, also when it throws
+     * ({@link TargetingClauses#withNoneChosen}), so every reader inside it,
+     * the verdict, {@code legal_targets} and the sample, counts what the
+     * rules offer before a choice.
      */
     public static <T> T asActivator(SpellAbility candidate, Player activator, Supplier<T> body) {
-        Map<SpellAbility, Player> activators = new IdentityHashMap<>();
-        activators.put(candidate, candidate.getActivatingPlayer());
-        for (Card card : activator.getGame().getCardsInGame()) {
-            for (SpellAbility ability : card.getSpellAbilities()) {
-                activators.putIfAbsent(ability, ability.getActivatingPlayer());
-            }
-        }
-        Card host = candidate.getHostCard();
-        SpellAbility castBefore = host == null ? null : host.getCastSA();
-        candidate.setActivatingPlayer(activator);
-        try {
-            return TargetingClauses.withNoneChosen(candidate, body);
-        } finally {
-            activators.forEach((ability, before) -> {
-                if (ability.getActivatingPlayer() != before) {
-                    ability.setActivatingPlayer(before);
-                }
-            });
-            // The candidate last: an ability of its host may have trickled
-            // another player down to it.
-            candidate.setActivatingPlayer(activators.get(candidate));
-            if (host != null && host.getCastSA() != castBefore) {
-                host.setCastSA(castBefore);
-            }
-        }
+        return ActivatorScope.over(candidate, activator).run(body);
     }
 
-    private static PlayabilityVerdict evaluate(SpellAbility candidate, Player activator) {
+    private static PlayabilityVerdict evaluate(SpellAbility candidate, Player activator, ChargedCost charged) {
         if (candidate.isLandAbility()) {
             return evaluateLand(candidate, activator);
         }
         boolean forgeCanPlay = candidate.canPlay();
         boolean timing = candidate.canCastTiming(activator);
-        boolean affordable = affordable(candidate, activator);
+        boolean affordable = affordable(candidate, activator, charged);
         StaticAbility prohibiting = PlayabilityChecks.prohibitingStatic(candidate, activator);
         List<FailedCheck> failed = PlayabilityChecks.failed(
                 candidate, activator, forgeCanPlay, timing, affordable, prohibiting);
@@ -196,6 +190,10 @@ public record PlayabilityVerdict(
      * candidate's activating player is {@code payer}; X is zero.
      */
     public static boolean affordable(SpellAbility candidate, Player payer) {
+        return affordable(candidate, payer, new ChargedCost(candidate, payer));
+    }
+
+    private static boolean affordable(SpellAbility candidate, Player payer, ChargedCost charged) {
         Cost cost = candidate.getPayCosts();
         if (cost == null) {
             return true;
@@ -203,14 +201,14 @@ public record PlayabilityVerdict(
         if (unpayable(candidate, cost)) {
             return false;
         }
-        RulesCost charged;
+        RulesCost rules;
         try {
-            charged = RulesCost.of(candidate, payer);
+            rules = charged.get();
         } catch (RuntimeException e) {
             // The cost cannot be read on this board: the printed cost.
-            charged = RulesCost.printed(cost);
+            rules = RulesCost.printed(cost);
         }
-        return ManaAffordability.canPay(candidate, payer, charged)
+        return ManaAffordability.canPay(candidate, payer, rules)
                 && CostPayment.canPayAdditionalCosts(cost, candidate, false, payer);
     }
 }

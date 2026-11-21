@@ -49,14 +49,13 @@ public record DecisionCandidate(
      */
     static Optional<DecisionCandidate> read(SpellAbility candidate, Player activator) {
         try {
-            return Optional.of(PlayabilityVerdict.asActivator(candidate, activator, () -> {
+            return Optional.of(PlayabilityVerdict.reading(candidate, activator, (verdict, charged) -> {
                 boolean landPlay = candidate.isLandAbility();
-                PlayabilityVerdict verdict = PlayabilityVerdict.of(candidate, activator);
                 return new DecisionCandidate(
                         ProvenanceResolver.keysOf(candidate),
                         // A land play targets nothing and costs nothing (FR-033a).
                         landPlay ? List.of() : legalTargetsOf(candidate),
-                        landPlay ? null : adjustedManaCost(candidate, activator),
+                        landPlay ? null : adjustedManaCost(charged),
                         verdict,
                         landPlay,
                         DecisionSample.of(candidate, activator, verdict));
@@ -68,17 +67,18 @@ public record DecisionCandidate(
     }
 
     /**
-     * The mana the rules charge for {@code candidate} now, after every cost
+     * The mana the rules charge for the candidate now, after every cost
      * increase and reduction (rule 601.2f), less the most its convoke,
      * improvise, waterbend and delve can pay ({@link RulesCost#mostReduced}),
      * as a cost string; null where it has no costs or the cost cannot be
      * computed on this board. X stays an unpaid {X}: at a priority stop
-     * nothing is announced.
+     * nothing is announced. The cost is the one its verdict's
+     * {@code affordable} read, where that check computed it.
      */
-    static String adjustedManaCost(SpellAbility candidate, Player payer) {
+    static String adjustedManaCost(ChargedCost charged) {
         try {
-            RulesCost charged = RulesCost.of(candidate, payer);
-            return charged == null ? null : String.valueOf(charged.mostReduced().toManaCost());
+            RulesCost cost = charged.get();
+            return cost == null ? null : String.valueOf(cost.mostReduced().toManaCost());
         } catch (RuntimeException e) {
             return null;
         }
