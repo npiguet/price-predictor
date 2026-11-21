@@ -109,22 +109,39 @@ final class ManaChannel implements EventRouter.EventTap {
     Listener paymentHandler() {
         return PatchHooks.PAYMENT_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
-            if (ability != null && !ability.isManaAbility() && live.owns(ability)
-                    && callback == Callback.ON_COSTS_PAID) {
-                // The payment the mana went to is over: no triggered mana of
-                // the last activation comes after it (V3 #15).
-                finishBuilding();
-            }
-            if (ability == null || !ability.isManaAbility() || !live.owns(ability)
-                    || !reservoir.keepsAny()) {
+            if (ability == null) {
                 return;
             }
-            switch (callback) {
-                case ON_PAYING_COSTS -> payingCosts(ability);
-                case ON_COSTS_PAID -> costsPaid(ability, Boolean.TRUE.equals(args.get(2)));
-                default -> { }
+            if (ability.isManaAbility()) {
+                manaPayment(callback, ability, args);
+            } else {
+                otherPayment(callback, ability);
             }
         });
+    }
+
+    /**
+     * A spell's or a non-mana ability's payment: once this game's is over,
+     * so is the last activation's record.
+     */
+    private void otherPayment(Callback callback, SpellAbility ability) {
+        if (live.owns(ability) && callback == Callback.ON_COSTS_PAID) {
+            // The payment the mana went to is over: no triggered mana of
+            // the last activation comes after it (V3 #15).
+            finishBuilding();
+        }
+    }
+
+    /** A mana ability's own payment, read when it is this game's and a record is kept at all. */
+    private void manaPayment(Callback callback, SpellAbility ability, Args args) {
+        if (!live.owns(ability) || !reservoir.keepsAny()) {
+            return;
+        }
+        switch (callback) {
+            case ON_PAYING_COSTS -> payingCosts(ability);
+            case ON_COSTS_PAID -> costsPaid(ability, Boolean.TRUE.equals(args.get(2)));
+            default -> { }
+        }
     }
 
     private void payingCosts(SpellAbility ability) {
@@ -143,22 +160,54 @@ final class ManaChannel implements EventRouter.EventTap {
      */
     @Override
     public boolean take(EffectEvent event, String namedCause) {
-        if (pending.isEmpty() && building == null) {
+        if (nothingUnderWay()) {
             return false;
         }
-        Object clause = PatchHooks.currentSubAbility();
-        if (clause instanceof SpellAbility resolving && resolving.getRootAbility() != null
-                && resolving.getRootAbility().isManaAbility()) {
-            SpellAbility root = resolving.getRootAbility();
-            List<EffectEvent> into = building != null && building.source() == root
-                    ? building.events()
-                    : pending.containsKey(root) ? pending.get(root).paid : null;
-            if (into == null) {
-                return false;
-            }
-            into.add(EventAttribution.stamp(event, root, namedCause));
-            return true;
+        SpellAbility root = resolvingManaRoot();
+        return root != null
+                ? takeClauseEvent(event, root, namedCause)
+                : takePaymentEvent(event, namedCause);
+    }
+
+    /** No activation is paid for, resolving or building its record. */
+    private boolean nothingUnderWay() {
+        return pending.isEmpty() && building == null;
+    }
+
+    /** The mana ability whose clause resolves now, the resolving clause's root; null for none. */
+    private static SpellAbility resolvingManaRoot() {
+        if (!(PatchHooks.currentSubAbility() instanceof SpellAbility resolving)) {
+            return null;
         }
+        SpellAbility root = resolving.getRootAbility();
+        return root != null && root.isManaAbility() ? root : null;
+    }
+
+    /** An event of a mana ability's own clause: its record's, while one is under way. */
+    private boolean takeClauseEvent(EffectEvent event, SpellAbility root, String namedCause) {
+        List<EffectEvent> into = eventsOf(root);
+        if (into == null) {
+            return false;
+        }
+        into.add(EventAttribution.stamp(event, root, namedCause));
+        return true;
+    }
+
+    /**
+     * Where a clause of {@code root} files its events: the record being
+     * built, when it is root's; else root's activation's payment; null when
+     * neither is under way.
+     */
+    private List<EffectEvent> eventsOf(SpellAbility root) {
+        if (building != null && building.source() == root) {
+            return building.events();
+        }
+        Activation activation = pending.get(root);
+        return activation == null ? null : activation.paid;
+    }
+
+    /** An event of the payment under way: its activation's, but for a tap its taps already say. */
+    private boolean takePaymentEvent(EffectEvent event, String namedCause) {
         Activation paying = payingFor();
         if (paying == null) {
             return false;

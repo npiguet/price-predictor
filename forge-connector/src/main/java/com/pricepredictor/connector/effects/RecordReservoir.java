@@ -56,9 +56,11 @@ final class RecordReservoir {
     /**
      * Which slot this activation takes, or -1 to skip it.
      *
-     * <p>Asked before the record is built, so the expensive part — the state
-     * snapshot — is paid a logarithmic number of times rather than once per
-     * activation.
+     * <p>Asked before the record is built, so the record is built a
+     * logarithmic number of times rather than once per activation. A mana
+     * record's state snapshot is not spared: it is read at every activation,
+     * before its costs are paid, while this is asked once the activation's
+     * mana, part of its key, is known ({@link ManaChannel}).
      */
     int slot(String key) {
         return cap <= 0 ? -1 : draw(seen.merge(key, 1, Integer::sum));
