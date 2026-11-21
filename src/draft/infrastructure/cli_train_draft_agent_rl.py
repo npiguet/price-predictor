@@ -149,7 +149,7 @@ def _add_rl_objective_flags(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--gae-lambda", type=float, default=None, dest="gae_lambda",
-        help="GAE λ (default: 0.95; near 1 leans on Monte-Carlo). Resumable.",
+        help="GAE lambda (default: 0.95; near 1 leans on Monte-Carlo). Resumable.",
     )
     parser.add_argument(
         "--kl-coef", type=float, default=None, dest="kl_coef",
