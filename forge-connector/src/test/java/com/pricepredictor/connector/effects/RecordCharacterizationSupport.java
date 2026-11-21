@@ -7,7 +7,19 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 
 /**
- * What every {@code RecordCharacterization*Test} shares: the sampling caps
+ * Every record kind's rendered line, built the way the collectors build it.
+ *
+ * <p>Each test drives the production collectors — the bracket on the game's
+ * bus, the patched collectors' hook handlers called through a proxy as the
+ * engine calls them, the fork collector's probe — over a fresh game, and
+ * compares the shard's lines with an expected file. Only the envelope's
+ * wall-clock timestamp is replaced.
+ *
+ * <p>Fork records (the damage-step probe and the interventional resolution)
+ * sit in expected files of their own, so a change to what a fork writes
+ * regenerates exactly those.
+ *
+ * <p>What every {@code RecordCharacterization*Test} shares: the sampling caps
  * and a fresh temporary directory per test, run only against the patched
  * checkout the expected records were captured on.
  */
