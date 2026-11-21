@@ -142,3 +142,22 @@ def test_a_plain_run_reads_no_conversion(started, monkeypatch, tmp_path):
         cli.main()
 
     assert (exit_.value.code, len(started)) == (0, 1)
+
+
+def test_a_directory_recording_another_conversion_is_refused_with_both(
+    started, monkeypatch, tmp_path,
+):
+    """The records directory already holds a run of conversion X (KR4)."""
+    first = write_conversion(tmp_path / "x")
+    assert _run(monkeypatch, tmp_path, "--cards-folder", str(first / "cardsfolder"))[0] == 0
+    jar = write_jar(tmp_path / "forge-connector.jar", OTHER_COMMIT)
+    monkeypatch.setattr(forge_classpath, "resolve_connector_jar", lambda: jar)
+    stand_in_checkout(monkeypatch, OTHER_COMMIT)
+    other = write_conversion(tmp_path / "y", conversion_member(OTHER_COMMIT))
+
+    code, entry = _run(monkeypatch, tmp_path, "--cards-folder", str(other / "cardsfolder"))
+
+    assert (code, len(started)) == (1, 1)
+    assert FORGE_COMMIT in entry["outcome"]
+    assert OTHER_COMMIT in entry["outcome"]
+    assert DIGEST in entry["outcome"]

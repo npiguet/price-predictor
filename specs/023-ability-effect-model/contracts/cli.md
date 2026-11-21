@@ -223,9 +223,9 @@ differing only in hyperparameters read the same records.
 
 | Flag | Default |
 |---|---|
-| `--records-dir` | required — raw corpus root; discovery recurses |
+| `--records-dir` | required — raw corpus root; discovery recurses. Exit 1 when a `run.json` under it records a conversion (`sidecar_digest` or Forge commit) other than the `--cards-folder` trees', or when the `run.json` nearest above a shard records none |
 | `--output` | required |
-| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` |
+| `--cards-folder` | `output/effects/gen3/converted/cardsfolder/`, `output/effects/gen3/converted/tokenscripts/` — the conversion their `run.json` records is the one the records were collected against |
 | `--vocab-path` | required — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
 | `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, and a resolution record acting through one is refused as `no-acting-text` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `holdout-cards`; `train-effect-model --corpus` reads both back from the manifest this writes |

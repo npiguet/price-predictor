@@ -83,7 +83,7 @@ def read_conversion(tree: Path) -> Conversion:
     the paths looked at when neither records one."""
     candidates = [Path(tree) / MANIFEST_NAME, Path(tree).parent / MANIFEST_NAME]
     for manifest in candidates:
-        conversion = latest_conversion(_document(manifest), manifest)
+        conversion = latest_conversion(read_document(manifest), manifest)
         if conversion is not None:
             return conversion
     raise ConversionRefused(
@@ -94,7 +94,7 @@ def read_conversion(tree: Path) -> Conversion:
     )
 
 
-def _document(manifest: Path) -> dict[str, Any]:
+def read_document(manifest: Path) -> dict[str, Any]:
     try:
         document = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -123,6 +123,19 @@ def connector_forge_commit(jar: Path) -> str:
     return commit
 
 
+def trees_conversion(trees: Iterable[Path]) -> Conversion:
+    """The one conversion ``trees`` come from; refused when a tree names none
+    or they name two. Nothing is checked against the JAR or the checkout."""
+    conversions = {conversion.manifest: conversion for conversion in map(read_conversion, trees)}
+    if len(conversions) != 1:
+        raise ConversionRefused(
+            "the converted trees come from "
+            + (f"{len(conversions)} conversions ({', '.join(map(str, conversions))}); "
+               "name the trees of one" if conversions else "no conversion: name a tree")
+        )
+    return next(iter(conversions.values()))
+
+
 def collection_conversion(
     trees: Iterable[Path], *, jar: Path | None = None, forge: Path | None = None,
 ) -> Conversion:
@@ -133,14 +146,7 @@ def collection_conversion(
     the checkout is at another commit than the JAR's or is no checkout. A
     conversion from a dirty checkout, or a dirty checkout now, is warned
     about, not refused; the result records whether the checkout is dirty."""
-    conversions = {conversion.manifest: conversion for conversion in map(read_conversion, trees)}
-    if len(conversions) != 1:
-        raise ConversionRefused(
-            "the converted trees come from "
-            + (f"{len(conversions)} conversions ({', '.join(map(str, conversions))}); "
-               "name the trees of one" if conversions else "no conversion: name a tree")
-        )
-    conversion = next(iter(conversions.values()))
+    conversion = trees_conversion(trees)
     jar = _connector_jar() if jar is None else Path(jar)
     jar_commit = connector_forge_commit(jar)
     require_same_commit(conversion, jar_commit, jar)

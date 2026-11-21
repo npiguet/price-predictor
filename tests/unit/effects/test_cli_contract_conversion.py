@@ -149,3 +149,45 @@ def test_a_dirty_conversion_is_recorded_and_warned_about_not_refused(collector, 
     assert (code, collected) == (0, True)
     assert entry["conversion"]["forge_dirty"] is True
     assert "uncommitted changes" in caplog.text
+
+
+# ── a records directory holds one conversion (finding 11.3, task KR4) ───
+
+
+def _reconverted(collector, commit: str = FORGE_COMMIT, digest: str = DIGEST) -> Path:
+    """The tree reconverted into the same place at ``commit`` and ``digest``,
+    with a connector built at the same commit."""
+    collector.jar(commit)
+    stand_in_checkout(collector.monkeypatch, commit)
+    member = conversion_member(commit) | {"sidecar_digest": digest}
+    return collector.converted(member)
+
+
+def test_a_directory_recording_another_conversion_refuses_a_collection_with_both(collector):
+    first = _reconverted(collector, FORGE_COMMIT)
+    assert collector.run(first)[0] == 0
+
+    code, entry, collected = collector.run(_reconverted(collector, OTHER_COMMIT))
+
+    assert (code, collected) == (1, False)
+    assert FORGE_COMMIT in entry["outcome"]
+    assert OTHER_COMMIT in entry["outcome"]
+    assert DIGEST in entry["outcome"]
+
+
+def test_a_directory_recording_another_digest_at_the_same_commit_is_refused(collector):
+    assert collector.run(_reconverted(collector))[0] == 0
+
+    code, entry, collected = collector.run(_reconverted(collector, digest="e" * 64))
+
+    assert (code, collected) == (1, False)
+    assert DIGEST in entry["outcome"]
+    assert "e" * 64 in entry["outcome"]
+
+
+def test_a_directory_recording_the_same_conversion_accepts_another_run(collector):
+    assert collector.run(_reconverted(collector))[0] == 0
+
+    code, _entry, collected = collector.run(_reconverted(collector))
+
+    assert (code, collected) == (0, True)

@@ -48,14 +48,13 @@ def cards_folder_error(args: argparse.Namespace) -> str | None:
 
 def check_conversion(args: argparse.Namespace, effect_records_dir: Path | None) -> None:
     """Refuse a collection whose ``--cards-folder`` names no conversion, or one
-    made at another Forge commit than the connector's
-    (``ConversionRefused``); keep the conversion in the run's ``run.json``.
+    made at another Forge commit than the connector's, or into a records
+    directory already recording another conversion (``ConversionRefused``);
+    keep the conversion in the run's ``run.json``.
     Nothing for a run collecting no effect records."""
     if effect_records_dir is None:
         return
-    from price_predictor.infrastructure.converted_provenance import (
-        collection_conversion,
-        record_conversion,
-    )
+    from price_predictor.infrastructure.converted_provenance import collection_conversion
+    from price_predictor.infrastructure.records_conversion import record_collection
 
-    record_conversion(effect_records_dir, collection_conversion([Path(args.cards_folder)]))
+    record_collection(effect_records_dir, collection_conversion([Path(args.cards_folder)]))

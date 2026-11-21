@@ -155,3 +155,34 @@ def require_checkout_at_jar_commit(
             f"connector JAR {jar}). Check out the connector's commit, or reinstall "
             "Forge and rebuild the connector"
         )
+
+
+def recorded_conversions(document: Mapping[str, Any], manifest: Path) -> list[Conversion]:
+    """Every conversion the invocations of a collection's ``run.json`` record,
+    in order (each collecting command keeps the one it ran against as
+    :data:`CONVERSION_MEMBER`); an invocation that recorded none is passed over."""
+    invocations = document.get("invocations")
+    return [
+        _conversion(entry[CONVERSION_MEMBER], manifest)
+        for entry in (invocations if isinstance(invocations, list) else [])
+        if isinstance(entry, dict) and isinstance(entry.get(CONVERSION_MEMBER), dict)
+    ]
+
+
+def require_same_conversion(recorded: Conversion, wanted: Conversion) -> None:
+    """Refuse records collected against another conversion than ``wanted``'s:
+    one that differs in Forge commit or sidecar digest keyed its records to
+    other lines than ``wanted``'s tree holds."""
+    if (recorded.forge_commit, recorded.sidecar_digest) == (
+        wanted.forge_commit, wanted.sidecar_digest,
+    ):
+        return
+    # Both conversions first, and tersely: run.json's outcome keeps a message's
+    # first 300 characters, and each conversion is 104 of them.
+    raise ConversionRefused(
+        f"records: Forge {recorded.forge_commit} sidecars {recorded.sidecar_digest}; "
+        f"tree: Forge {wanted.forge_commit} sidecars {wanted.sidecar_digest}: a records "
+        f"directory holds one conversion (records {recorded.manifest}, converted tree "
+        f"{wanted.run}). Collect into a new directory, or reconvert the tree at the "
+        "records' conversion"
+    )

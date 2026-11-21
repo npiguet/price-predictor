@@ -630,15 +630,15 @@ def _check_conversion(command: str, config: Any) -> None:
     """The conversion the ``--cards-folder`` trees come from, checked against
     the connector JAR before any worker starts and kept in the run's
     ``run.json`` (finding 11.3): a tree naming no conversion, or one converted
-    at another Forge commit than the JAR's, exits 1 naming both."""
+    at another Forge commit than the JAR's, or a records directory already
+    recording another conversion, exits 1 naming both."""
     from price_predictor.domain.converted_provenance import ConversionRefused
-    from price_predictor.infrastructure.converted_provenance import record_conversion
+    from price_predictor.infrastructure.records_conversion import record_collection
 
     try:
-        conversion = config.source_trees.conversion()
+        record_collection(config.effect_records, config.source_trees.conversion())
     except ConversionRefused as exc:
         raise CollectorRefusal(f"{command}: {exc}") from exc
-    record_conversion(config.effect_records, conversion)
 
 
 def _collector_runner(command: str, config_type: type, module: str) -> Callable:
@@ -737,13 +737,17 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
 
 # A bare ValueError is NOT mapped: `decide`'s cap-mismatch guard and
 # `CapHeap.merge`'s are internal invariants, worth a traceback.
-@exits_with({BuildCorpusError: 1, FileNotFoundError: 1, _MANIFEST_REFUSED: 1})
+@exits_with({
+    BuildCorpusError: 1, FileNotFoundError: 1, _MANIFEST_REFUSED: 1,
+    "price_predictor.domain.converted_provenance.ConversionRefused": 1,
+})
 def run_build_corpus(args: argparse.Namespace) -> int:
     from effects.application import build_corpus as build_corpus_module
+    from effects.infrastructure.corpus_conversion import require_collected_against
 
-    return build_corpus_module.build(config_from_args(
-        BuildCorpusConfig, args, holdout=holdout_rule(args),
-    ))
+    config = config_from_args(BuildCorpusConfig, args, holdout=holdout_rule(args))
+    require_collected_against(config.records_dir, config.cards_folders)
+    return build_corpus_module.build(config)
 
 
 # ── holdout-cards ───────────────────────────────────────────────────────
