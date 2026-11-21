@@ -71,6 +71,13 @@ public enum EventType implements WireNamed {
     MANA_LOST("mana_lost"),
     SPELL_CAST("spell_cast"),
     SPELL_COUNTERED("spell_countered"),
+    /**
+     * An activated or triggered ability a counter took off the stack
+     * (701.6a): no subject, since its host was not countered, and
+     * {@code ability} the ability as a {@code targets} link ends at it, its
+     * line on its host.
+     */
+    ABILITY_COUNTERED("ability_countered"),
     SPELL_COPIED("spell_copied"),
     ATTACKERS_DECLARED("attackers_declared"),
     BLOCKERS_DECLARED("blockers_declared"),

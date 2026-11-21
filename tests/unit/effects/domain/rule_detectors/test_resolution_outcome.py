@@ -74,6 +74,20 @@ def test_a_countering_half_shows_the_countered_object(by_kind):
     assert near.polarity is Polarity.DOES_NOT_FIRE and near.outcome == ("E99",)
 
 
+def test_a_countering_half_shows_the_countered_ability_by_its_host(by_kind):
+    """A countered ability (701.6a) is the countering half's
+    ``ability_countered``, naming it by its line on its host: the host is the
+    object the outcome reads, though no subject of the event."""
+    line = {"entity": "E98", "key": {"script_file": "cardsfolder/p/prodigal_sorcerer.txt",
+                                     "face": 0, "trait_kind": "spell", "index_within_kind": 1}}
+    countering = _effect_half(
+        by_kind, outcome=ResolutionOutcome.RESOLVED,
+        events=(Event(EventType.ABILITY_COUNTERED, params={"ability": line}),))
+    found = FAMILY.match(countering, None, {"outcome": "countered"})
+    assert found.polarity is Polarity.FIRES
+    assert found.condition == ("E98",) and found.outcome == ("E98",)
+
+
 def test_a_cost_half_shows_nothing(by_kind):
     cost = next(r for r in by_kind("resolution") if r.moment.value == "activation")
     stripped = replace(cost, payload=ActivationPayload(costs=Costs(), events=()))

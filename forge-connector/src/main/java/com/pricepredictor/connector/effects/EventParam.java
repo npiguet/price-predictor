@@ -16,6 +16,7 @@ import com.pricepredictor.connector.WireNamed;
  */
 public enum EventParam implements WireNamed {
     ABILITIES("abilities"),
+    ABILITY("ability"),
     AMOUNT("amount"),
     ATTACHED_TO("attached_to"),
     BLOCKED("blocked"),

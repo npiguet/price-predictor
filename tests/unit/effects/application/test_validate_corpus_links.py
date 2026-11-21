@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from effects.application.corpus_validation.findings import Thresholds
 from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import AttributionKind, Event, EventType
@@ -57,11 +59,16 @@ class TestLinkHalvesPair:
         assert not finding.ok
         assert "0/200" in finding.measured and "200 alone" in finding.measured
 
-    def test_a_lone_cost_half_whose_item_was_countered_is_explained(self):
+    @pytest.mark.parametrize("event", [
+        Event(type=EventType.SPELL_COUNTERED, subjects=("E7",),
+              attributed_to=AttributionKind.ROOT),
+        Event(type=EventType.ABILITY_COUNTERED,
+              params={"ability": {"entity": "E7", "key": _KEY.as_dict()}},
+              attributed_to=AttributionKind.ROOT),
+    ], ids=["a spell", "an activated ability, by its host"])
+    def test_a_lone_cost_half_whose_item_was_countered_is_explained(self, event):
         countered = _resolution("run.0-L1.990", game_id="run.0-L1.0",
-                                payload=ResolutionPayload(events=(Event(
-                                    type=EventType.SPELL_COUNTERED, subjects=("E7",),
-                                    attributed_to=AttributionKind.ROOT),)))
+                                payload=ResolutionPayload(events=(event,)))
         paired = [half for i in range(5) for half in (
             self._cast(400 + i, source=f"E{40 + i}"),
             _resolution(f"run.0-L1.{500 + i}", link_id=f"cast.{400 + i}"))]

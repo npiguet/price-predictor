@@ -42,7 +42,8 @@ import java.util.Set;
  * half, on the board read when the resolution starts ({@link
  * #resolutionHandler}), carrying the item's {@code outcome}; a countered item
  * writes none, its fate being the countering clause's {@code spell_countered}
- * and the card's move off the stack. A triggered ability and a copy, which
+ * and the card's move off the stack, or, for an ability, its
+ * {@code ability_countered}. A triggered ability and a copy, which
  * nobody casts, write no cost half.
  *
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a

@@ -1051,7 +1051,8 @@ and that the reporting half never enters the control score.
   half with `events: []`. A spell's effect half MUST hold its card's `zone_change` off the stack after the resolution's own
   events and before the state-based check's deaths. A copy of a spell or ability writes no cost half. A
   countered stack item MUST write no effect half; the countering clause's effect half MUST hold the
-  countered spell's `spell_countered` and its card's move off the stack.
+  countered spell's `spell_countered` and its card's move off the stack, or the countered
+  activated or triggered ability's `ability_countered`, naming the ability by its line on its host.
 - **FR-042c**: A mana record MUST take its snapshot before the mana ability's costs are paid and its
   mana is added, through a Forge hook fired before payment, and MUST carry a `tapped` event for each
   permanent its cost tapped before `mana_produced`. Mana made by a resolving spell or trigger MUST

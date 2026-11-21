@@ -18,6 +18,7 @@ from effects.domain.event_schema import (
     Event,
     EventType,
     attribution_kind,
+    countered_objects,
 )
 
 
@@ -40,6 +41,28 @@ class TestEventNormalization:
             attributed_to="0",
         )
         assert Event.from_dict(event.as_dict()) == event
+
+
+class TestCounteredObjects:
+    """The stack objects an event says were countered (701.6a): a spell by
+    its card, an ability by its host, which no ``ability_countered`` names
+    as a subject; nothing for any other event."""
+
+    def test_a_spell_is_its_card(self):
+        event = Event(type=EventType.SPELL_COUNTERED, subjects=("E1",))
+        assert countered_objects(event) == ("E1",)
+
+    def test_an_ability_is_its_host_whether_or_not_it_keys_to_a_line(self):
+        line = {"entity": "E2", "key": {"script_file": "cardsfolder/s/stifle.txt", "face": 0,
+                                        "trait_kind": "spell", "index_within_kind": 0}}
+        assert countered_objects(Event(type=EventType.ABILITY_COUNTERED,
+                                       params={"ability": line})) == ("E2",)
+        assert countered_objects(Event(type=EventType.ABILITY_COUNTERED,
+                                       params={"ability": "E3"})) == ("E3",)
+
+    def test_no_other_event_counters_anything(self):
+        assert countered_objects(Event(type=EventType.ZONE_CHANGE, subjects=("E1",))) == ()
+        assert countered_objects(Event(type=EventType.ABILITY_COUNTERED)) == ()
 
 
 class TestTheCauseBearingTypes:

@@ -21,7 +21,7 @@ from effects.application.corpus_validation.findings import (
     share_of,
 )
 from effects.domain.canonical_digest import canonical_digest
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import EventType, countered_objects
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
@@ -388,14 +388,15 @@ class Links:
         self.links: dict[str, list[_LinkHalf]] = defaultdict(list)
         #: link_id -> ``(game_id, source)`` of each cost half.
         self.casts: dict[str, tuple[str, str | None]] = {}
-        #: ``(game_id, subject)`` of every ``spell_countered`` an effect half holds.
+        #: ``(game_id, ref)`` of every stack object an effect half says was
+        #: countered: a ``spell_countered``'s card, an ``ability_countered``'s host.
         self.countered: set[tuple[str, str]] = set()
 
     def add(self, record: EffectRecord) -> None:
         if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
             self.countered.update(
-                (record.game_id, subject) for event in record.payload.listed_events()
-                if event.type is EventType.SPELL_COUNTERED for subject in event.subjects)
+                (record.game_id, ref) for event in record.payload.listed_events()
+                for ref in countered_objects(event))
         if record.link_id is not None:
             self.links[record.link_id].append(_LinkHalf(
                 record.moment, tuple(record.ability or ())))
@@ -441,7 +442,7 @@ class Links:
         degenerate = len(self.casts) >= limits.min_cost_evidence and met == 0
         measured = (f"{met}/{len(self.casts)} cost halves met by an effect half; "
                     f"{len(alone)} alone, {countered} of them countered by a "
-                    "spell_countered in their game")
+                    "spell_countered or ability_countered in their game")
         name = "every cost half is met by its effect half unless its item never resolved"
         if degenerate:
             return Finding(name=name, ok=False, measured=measured + (

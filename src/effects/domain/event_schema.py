@@ -82,6 +82,10 @@ class EventType(StrEnum):
     SPELL_CAST = "spell_cast"
     ABILITY_ACTIVATED = "ability_activated"
     SPELL_COUNTERED = "spell_countered"
+    #: An activated or triggered ability a counter took off the stack: no
+    #: subject (its host was not countered), ``ability`` the ability as a
+    #: ``targets`` link ends at it.
+    ABILITY_COUNTERED = "ability_countered"
     SPELL_COPIED = "spell_copied"
     TARGETS_CHANGED = "targets_changed"
     X_CHANGED = "x_changed"
@@ -176,6 +180,8 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.BLOCKERS_DECLARED: ("blocked",),
     EventType.BECAME_BLOCKED: ("blockers",),
     EventType.SPELL_CAST: ("without_paying", "from_zone"),
+    # ability: ``{entity, key}``, the line on its host, else the host's ref.
+    EventType.ABILITY_COUNTERED: ("ability",),
     EventType.SPELL_COPIED: ("count", "new_targets"),
     EventType.TARGETS_CHANGED: ("targets",),
     EventType.X_CHANGED: ("value",),
@@ -315,6 +321,20 @@ class Event:
             duration=data["duration"],
             attributed_to=data["attributed_to"],
         )
+
+
+def countered_objects(event: Event) -> tuple[str, ...]:
+    """The refs of the stack objects ``event`` says were countered (701.6a):
+    a ``spell_countered``'s subjects, the spells' cards; an
+    ``ability_countered``'s ability by its host's ref, which is what a
+    snapshot holds for an ability on the stack; none for any other event."""
+    if event.type is EventType.SPELL_COUNTERED:
+        return event.subjects
+    if event.type is not EventType.ABILITY_COUNTERED:
+        return ()
+    end = event.params.get("ability")
+    host = end.get("entity") if isinstance(end, dict) else end
+    return (host,) if isinstance(host, str) else ()
 
 
 #: The run-parameter modes (an event's provenance ``mode``) whose ``delta``

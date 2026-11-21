@@ -1,7 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -82,8 +84,11 @@ public record ProvenanceKey(
             }
         }
 
-        String toJson() {
-            return Json.object().value("kind", kind).value("index", index).render();
+        Map<String, Object> toJsonMap() {
+            Map<String, Object> members = new LinkedHashMap<>();
+            members.put("kind", kind);
+            members.put("index", index);
+            return members;
         }
     }
 
@@ -174,12 +179,22 @@ public record ProvenanceKey(
 
     /** The JSON object form used inside a record's {@code ability} array. */
     public String toJson() {
-        return withFields(Json.object().value("script_file", scriptFile)).render();
+        return Json.value(toJsonMap());
+    }
+
+    /**
+     * The same members as {@link #toJson}, in its order, as a map: the form a
+     * value written inside another value takes (an event's {@code ability}).
+     */
+    Map<String, Object> toJsonMap() {
+        Map<String, Object> members = new LinkedHashMap<>();
+        members.put("script_file", scriptFile);
+        return withFields(members);
     }
 
     /** The JSON object form used inside a sidecar, where the file is in the header. */
     public String toSidecarJson() {
-        return withFields(Json.object()).render();
+        return Json.value(withFields(new LinkedHashMap<>()));
     }
 
     /**
@@ -190,16 +205,16 @@ public record ProvenanceKey(
      * gen-1 sidecar and a gen-2 root key serialize byte for byte alike. The
      * {@code built} member, likewise, only on a key naming a built trait.
      */
-    private Json.ObjectWriter withFields(Json.ObjectWriter json) {
-        json.value("face", face)
-                .value("trait_kind", traitKind)
-                .value("index_within_kind", indexWithinKind);
+    private Map<String, Object> withFields(Map<String, Object> members) {
+        members.put("face", face);
+        members.put("trait_kind", traitKind);
+        members.put("index_within_kind", indexWithinKind);
         if (option != null) {
-            json.value("option", option);
+            members.put("option", option);
         }
         if (built != null) {
-            json.raw("built", built.toJson());
+            members.put("built", built.toJsonMap());
         }
-        return json;
+        return members;
     }
 }

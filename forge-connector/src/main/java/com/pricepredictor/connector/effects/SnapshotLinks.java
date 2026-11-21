@@ -25,6 +25,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -594,20 +595,35 @@ final class SnapshotLinks {
 
     /** A trait's line on its host, or the host where the trait keys to no line. */
     static String line(Card host, CardTraitBase trait) {
+        Object end = lineEnd(host, trait);
+        return end == null ? null : Json.value(end);
+    }
+
+    /**
+     * The same end as a value written inside another value (an event's
+     * {@code ability}): the line as an {@code {entity, key}} map, the host's
+     * ref where the trait keys to no line, null for no host.
+     */
+    static Object lineEnd(Card host, CardTraitBase trait) {
         if (host == null) {
             return null;
         }
-        return lineOf(Refs.of(host), trait == null ? null : ProvenanceResolver.of(trait));
+        return endOf(Refs.of(host), trait == null ? null : ProvenanceResolver.of(trait));
     }
 
     private static String lineOf(String host, ProvenanceKey key) {
-        if (host == null) {
-            return null;
+        Object end = endOf(host, key);
+        return end == null ? null : Json.value(end);
+    }
+
+    private static Object endOf(String host, ProvenanceKey key) {
+        if (host == null || key == null) {
+            return host;
         }
-        if (key == null) {
-            return Json.string(host);
-        }
-        return Json.object().value("entity", host).raw("key", key.toJson()).render();
+        Map<String, Object> end = new LinkedHashMap<>();
+        end.put("entity", host);
+        end.put("key", key.toJsonMap());
+        return end;
     }
 
     /**

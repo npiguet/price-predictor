@@ -649,7 +649,8 @@ its events and payload are what the moment changed. No board after the moment is
 - The effect half carries the stack item's outcome: resolved, fizzled, partially fizzled or
   declined. A fizzled or declined resolution writes an effect half with no events.
 - A countered stack item writes no effect half. The countering ability's effect half holds the
-  countered spell's events: `spell_countered` and its card's move off the stack.
+  countered spell's events, `spell_countered` and its card's move off the stack, or the countered
+  ability's `ability_countered`, which names the ability by its line on its host.
 - A triggered ability and a copy of a spell or ability have no cost half. Their effect halves
   follow the effect-half row.
 - A record's stat changes are measured from its own snapshot, at the moment the table gives.

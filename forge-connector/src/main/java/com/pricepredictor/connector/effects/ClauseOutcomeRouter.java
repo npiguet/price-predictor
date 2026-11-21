@@ -202,8 +202,8 @@ final class ClauseOutcomeRouter {
      * <p>{@code CARD_REVEALED} and {@code DAMAGE_PREVENTED} come from the two
      * engine choke points ({@code GameAction.reveal},
      * {@code ReplacementHandler.runSingleReplaceDamageEffect}); the other
-     * fourteen, from an effect directly. {@code SPELL_COUNTERED} ({@code
-     * CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
+     * fifteen, from an effect directly. {@code SPELL_COUNTERED} and {@code
+     * ABILITY_COUNTERED} ({@code CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
      * by the six token-making effects) and {@code DICE_ROLLED} ({@code
      * RollDiceEffect}) are the same; {@code PLAYER_WON} is a bus
      * subscription (see {@code BusEventReader#onGameOutcome}), not an
@@ -219,7 +219,7 @@ final class ClauseOutcomeRouter {
             EventType.PILES_MADE, EventType.DUNGEON_VENTURED, EventType.SPELL_COPIED,
             EventType.PERMANENT_COPIED, EventType.CARD_MADE, EventType.RESTRICTION_CHANGE,
             EventType.CARD_REVEALED, EventType.DAMAGE_PREVENTED, EventType.SPELL_COUNTERED,
-            EventType.TOKEN_CREATED, EventType.DICE_ROLLED, EventType.TURN_ENDED,
+            EventType.ABILITY_COUNTERED, EventType.TOKEN_CREATED, EventType.DICE_ROLLED, EventType.TURN_ENDED,
             EventType.TEXT_CHANGE);
 
     /** Raised the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
@@ -309,7 +309,7 @@ final class ClauseOutcomeRouter {
 
     /**
      * The event an outcome's params describe: every entry a generic
-     * parameter, except five.
+     * parameter, except six.
      *
      * <ul>
      *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
@@ -337,6 +337,10 @@ final class ClauseOutcomeRouter {
      *   rules so the description reads the same as the token's entry on the
      *   board: the same script id, and keywords spelled the way an entity's
      *   are. The token itself never reaches the event.
+     *   <li>{@code "ability"} ({@code ability_countered} only), the countered
+     *   ability, is written as a {@code targets} link to it ends
+     *   ({@link SnapshotLinks#lineEnd}): {@code {entity, key}}, its line on
+     *   its host, or the host's ref where it keys to no line.
      * </ul>
      */
     private static EffectEvent outcomeEvent(EventType type, Map<?, ?> params) {
@@ -359,8 +363,19 @@ final class ClauseOutcomeRouter {
             case "source" -> event.param(EventParam.SOURCE, outcomeRefOf(value));
             case "from_zone", "to_zone" -> event.paramNamed(key, outcomeZoneOf(value));
             case "sample" -> addTokenSample(event, entry);
+            case "ability" -> event.param(EventParam.ABILITY, abilityEndOf(value));
             default -> event.paramNamed(key, inKeyOrder(value));
         }
+    }
+
+    /**
+     * A countered ability ({@code ability_countered}) as a {@code targets}
+     * link to it ends: its line on its host, the host where it keys to no
+     * line; null, writing nothing, for anything but an ability.
+     */
+    private static Object abilityEndOf(Object value) {
+        return value instanceof SpellAbility ability
+                ? SnapshotLinks.lineEnd(ability.getHostCard(), ability) : null;
     }
 
     /** The token standing for its batch, as {@code token_script_id} and {@code characteristics}; anything else is no sample. */

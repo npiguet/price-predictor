@@ -8,11 +8,11 @@ outcome is the one it names, and on its near miss when the outcome is one of
 
 The outcome is written on the effect half (root spec § 8.14, FR-042b), and a
 countered object writes no effect half at all: its fate is the countering
-clause's effect half, which holds the countered object's ``spell_countered``
-event. So a ``countered`` observation is a half
-holding ``spell_countered`` (whose subjects are the countered objects), read
-as such only for a rule naming ``countered``, and every other outcome is the
-effect half's own.
+clause's effect half, which holds the countered spell's ``spell_countered``
+event or the countered ability's ``ability_countered``. So a ``countered``
+observation is a half holding either (``event_schema.countered_objects``:
+a spell by its card, an ability by its host), read as such only for a rule
+naming ``countered``, and every other outcome is the effect half's own.
 
 Parameters:
 
@@ -39,7 +39,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import countered_objects
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
     EffectRecord,
@@ -83,8 +83,7 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
         return None
     if countered_asked:
         countered = tuple(dict.fromkeys(
-            subject for event in payload.events if event.type is EventType.SPELL_COUNTERED
-            for subject in event.subjects))
+            ref for event in payload.events for ref in countered_objects(event)))
         if countered:
             return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
     if payload.outcome is None:

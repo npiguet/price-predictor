@@ -403,7 +403,7 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 
 ## Event additions
 
-Two new event types, `name_change` and `mana_cost_change`. Two new parameters outside a type's
+Three new event types, `name_change`, `mana_cost_change` and `ability_countered`. Two new parameters outside a type's
 `EVENT_PARAMS` row, `damage_dealt`'s `damage_type` and `keyword_change`'s `hidden`; every other fact rides a parameter the row already declares, a `characteristics`
 member, or the provenance `mode` any event may carry. `state_flag_change` gains flags outside
 `DESIGNATIONS`, listed below.
@@ -437,6 +437,7 @@ member, or the provenance `mode` any event may carry. `state_flag_change` gains 
 | `keyword_change` | `keywords`, `hidden` | a stat change's `keywords` are sorted, a second instance of a keyword counted as a keyword gained or lost; `hidden: true`, last, on a change of Forge's hidden keywords, whose `keywords` are spelled as Forge writes them (`CARDNAME can't block.`), absent on any other |
 | `ability_change` | from a stat change | the abilities the card gained, other than a keyword's, as `abilities` comma-joined line keys (`ProvenanceKey.describe`, `runtime` for one that keys to no line) with `removed: false`; any it lost as `abilities: ""` with `removed: true`; not written while an `Animate` or `AnimateAll` clause resolves, whose own rule writes its grants |
 | `name_change` | `name` | new type, from a stat change: subjects the permanent, `name` the name it has now; written when the name changes with no face change and no copy effect (an `Animate`'s `Name$`, a `SetName$` static) |
+| `ability_countered` | `ability` | new type, from a `Counter` clause that took an activated or triggered ability off the stack (701.6a): `subjects` `[]`, since the ability's host was not countered; `ability` the countered ability as a `targets` link ends at it, `{entity, key}` (its host's ref and its line's provenance key), or the host's ref where the ability keys to no line. Two activations of one line are one `ability` (one entity and one line slot per ability). No `zone_change` follows: an ability moves no card. A spell countered writes `spell_countered` and never this type |
 | `mana_cost_change` | `mana_cost`, `mana_value` | new type, from a stat change: subjects the permanent, `mana_cost` the cost now as an entity's `mana_cost` spells it (absent for no cost), `mana_value` its mana value; written when the cost changes with no face change and no copy effect (a perpetual `ManaCost$`, an `Incorporate$`) |
 | `card_revealed` | `from_zone`, `subjects` | `from_zone` a zone as an entity's `zone` spells it (`library`, `hand`, …), absent when Forge names none; for a hidden search Forge shows after the move ("search your library for a land card, reveal it, put it into your hand") the zone searched, `library`, not the zone the card was put into; subjects the player who reveals, from any zone and whether or not a clause resolves: `GameAction.reveal`'s `cardOwner` (a Dig's library owner, Duress's target opponent, a reveal cost's payer), and for a clash each clashing player. This replaces the base schema's library owners during a clause. One note per reveal the rules make: a Dig's showing every player the cards a player picked from cards it revealed already (Murmurs from Beyond's opponent's pick) writes none, while a pick among cards only looked at (Commune with Nature's "you may reveal a creature card from among them") is the reveal, by the picker. A move out of a public zone (graveyard, battlefield, stack, command, a face-up card in exile) writes none, though Forge still shows the players the moved cards (Grapple with the Past's return from the graveyard); a hidden zone (library, hand, a face-down card in exile) is noted as above. `library_events.reveal` is set only by a reveal from `library`; a reveal from another zone sets no output |
 | `card_made` | `to_zone` | a zone as an entity's `zone` spells it; absent when Forge names none |
@@ -570,7 +571,7 @@ position a card left a library from, and a search of another player's library.
 - A damage-step probe's combat record holds the events a live record takes from the engine hooks
   rather than the bus: the events a clause's effect API promises (`turn_added`, `choice_made`,
   `continuous_effect_created`, …) and the outcomes an effect reports (`token_created`,
-  `coin_flipped`, `dice_rolled`, `damage_prevented`, `spell_countered`, …).
+  `coin_flipped`, `dice_rolled`, `damage_prevented`, `spell_countered`, `ability_countered`, …).
 - A forced resolution that began to resolve is written whatever it did, as a live one is: one that
   did nothing has empty halves (`events: []`, `outcome: resolved`); a fizzled spell's halves hold
   nothing but its card's move off the stack, in the last half, a fizzled ability's halves nothing,
@@ -600,7 +601,8 @@ position a card left a library from, and a search of another player's library.
   resolution starts for a triggered ability or a copy. The cost half and every effect half of the
   item carry that one reading, never one taken after the resolution.
 - A countered stack item writes no effect half. The countering clause's effect half holds the
-  countered spell's `spell_countered` event and its card's `zone_change` off the stack.
+  countered spell's `spell_countered` event and its card's `zone_change` off the stack, or the
+  countered ability's `ability_countered`, activated or triggered.
 - The acting line's `targets` links are the refs the record's refs block lists for them, in that
   order, `index` the position there:
   - an effect half: its targets as cast, the refs `refs.targets_at_cast` lists (an `L<id>` ref for

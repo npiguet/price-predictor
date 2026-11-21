@@ -83,7 +83,7 @@ class ResolutionOutcome(StrEnum):
 
     Gen-3 writes it on the effect half (root spec § 8.14, FR-042b), never ``countered``: a countered
     item writes no effect half, its fate being the countering clause's
-    ``spell_countered``.
+    ``spell_countered``, or ``ability_countered`` for an ability.
     """
 
     RESOLVED = "resolved"
