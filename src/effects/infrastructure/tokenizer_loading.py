@@ -28,7 +28,6 @@ def load_keyword_definitions(path: Path) -> dict[str, KeywordDefinition]:
         keyword: KeywordDefinition(
             keyword=keyword,
             reminder_template=_normalized(entry.get("reminder_template")),
-            generated_script=entry.get("generated_script"),
             formatter=entry.get("formatter"),
         )
         for keyword, entry in data.items()

@@ -15,12 +15,10 @@ class KeywordDefinition:
     """One keyword's expandable definition.
 
     ``reminder_template`` carries Forge's own ``%s``/``%d`` placeholders.
-    ``generated_script`` is read by no expansion (FR-020). ``formatter``
-    (FR-018) is None in a file written before it was recorded, which fills the
+    ``formatter`` (FR-018) is None in a file written before it was recorded, which fills the
     raw values instead.
     """
 
     keyword: str
     reminder_template: str | None
-    generated_script: str | None = None
     formatter: str | None = None

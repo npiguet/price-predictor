@@ -19,14 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The keyword table, and the part of it that is easy to write and never notice
- * is empty.
- *
- * <p>A fresh {@code KeywordInterface} carries no traits — Forge builds them in
- * {@code createTraits}, against a host card. Read without that call every
- * keyword reports a null script, the file still looks well-formed, and the
- * script surface silently loses the thing it exists to read. So the check here
- * is that the capture produced scripts at all.
+ * The keyword table, and the parts of it that are easy to write and never notice
+ * are empty: every keyword must record how Forge formats its values.
  */
 @ExtendWith(ForgeExtension.class)
 class KeywordDefinitionMainTest {
@@ -137,12 +131,5 @@ class KeywordDefinitionMainTest {
                 ((Map<?, ?>) entry).get("formatter") instanceof String,
                 name + " carries no formatter"));
         assertEquals("SimpleKeyword", entry("Flying").get("formatter"));
-    }
-
-    @Test
-    void aScriptGeneratingKeywordHasOne() {
-        assertNotNull(entry("Cascade").get("generated_script"),
-                "Cascade generates a trigger and should carry its script: createTraits "
-                        + "was probably not called, and the script surface reads nothing");
     }
 }

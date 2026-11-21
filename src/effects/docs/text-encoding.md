@@ -85,7 +85,7 @@ How a key resolves, by case:
 
 - The keyword-definition file `extract-keyword-definitions --output` writes is keyed by display name, because that is what a card's keyword line and the converted text both spell.
 - The encoder expands an unknown keyword unconditionally. This file is what makes a set the vocabulary predates readable rather than a bare `[UNK]`.
-- Both surfaces expand a keyword to its reminder template. `generated_script` is captured but neither scanned into a vocabulary nor used by any expansion; it is null for the engine-coded minority.
+- Both surfaces expand a keyword to its reminder template.
 
 ## Vocabulary
 

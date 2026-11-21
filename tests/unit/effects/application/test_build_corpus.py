@@ -1738,7 +1738,7 @@ def test_a_display_name_match_on_a_non_keyword_line_fails_the_build(tmp_path, a_
 
     definitions = tmp_path / "keyword-definitions.json"
     definitions.write_text(json.dumps({
-        _BOLT_TEXT.upper(): {"reminder_template": "a reminder", "generated_script": None},
+        _BOLT_TEXT.upper(): {"reminder_template": "a reminder"},
     }), encoding="utf-8")
 
     with pytest.raises(BuildCorpusError, match="FR-015"):

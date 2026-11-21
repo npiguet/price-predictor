@@ -345,7 +345,6 @@ def definitions_table(r: Readers, carriers: Counter) -> pd.DataFrame:
             "multi_word": "_" in token,
             "in_vocab": token in r.vocab,
             "host_bodied": name.lower() in HOST_BODIED_KEYWORDS,
-            "has_script": bool(definition.generated_script),
             "placeholder": "%d" in template or "$d" in template or "%s" in template,
             "leftover_percent_tokens": sum(1 for p in parts if p.text == "%"),
             "unk_in_expansion": sum(1 for p in parts if p.token_id == r.tok.unk_id),

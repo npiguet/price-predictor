@@ -78,18 +78,15 @@ def corpus(tmp_path):
                     "This creature can't be blocked except by creatures with "
                     "flying or reach."
                 ),
-                "generated_script": None,
             },
             "Reach": {
                 "reminder_template": (
                     "This creature can block creatures with flying, and is "
                     "never blocked by reach."
                 ),
-                "generated_script": None,
             },
             "Vigilance": {
                 "reminder_template": "Attacking doesn't cause this creature to tap.",
-                "generated_script": None,
             },
         }),
         encoding="utf-8",
@@ -108,77 +105,19 @@ def _config(corpus, tmp_path, **overrides) -> BuildVocabConfig:
     return BuildVocabConfig(**defaults)
 
 
-class TestTheKeywordScanFollowsTheSurface:
-    """A keyword expands to its template on prose, its script from stage four.
+class TestTheProseSurfaceReadsTheSidecarsScript:
+    """A line with no prose (a variant's) reads its script on the prose surface
+    too (finding 1.5), so the prose build stages the trees' script lines."""
 
-    Scanning both put Forge script syntax into a prose vocabulary that can
-    never encode it: 65 tokens of it — ``activezones``, ``cantblockby``,
-    ``counters_ge``, a bare ``_p`` — sitting alongside the words cards are
-    written in. Nothing failed, because a vocabulary with extra entries still
-    loads and still tokenizes; the tokens were simply never going to be seen.
-    """
-
-    @pytest.fixture
-    def scripted(self, corpus, tmp_path):
-        """Two keywords whose scripts use words their reminder text does not.
-
-        Two of each word, because the scan runs at the production
-        ``freq_threshold=2`` — a hapax is corpus noise on 33k cards, and a
-        fixture that tested against a lower threshold would test something the
-        command never does.
-        """
-        cards, tokens, keywords = corpus
-        script = (
-            "Mode$ CantBlockBy | ValidAttacker$ Creature.Self | "
-            "ActiveZones$ Battlefield"
-        )
-        reminder = "This creature can't be blocked except by creatures with it."
-        keywords.write_text(
-            json.dumps({
-                "Flying": {
-                    "reminder_template": reminder,
-                    "generated_script": script,
-                },
-                "Shadow": {
-                    "reminder_template": reminder,
-                    "generated_script": script,
-                },
-            }),
-            encoding="utf-8",
-        )
-        return cards, tokens, keywords
-
-    def test_prose_takes_the_sidecars_script_names_and_not_the_generated_script(
-        self, scripted, tmp_path,
-    ):
-        """A line with no prose (a variant's) reads its script on the prose
-        surface too (finding 1.5), so the prose build stages the trees' script
-        lines; the keyword's generated script is still never scanned."""
-        _scripted_corpus(scripted, ["DB$ PutCounter | CounterNum$ 2"], copies=1)
-        config = _config(scripted, tmp_path, target_size=5000)
+    def test_prose_takes_the_sidecars_script_names(self, corpus, tmp_path):
+        _scripted_corpus(corpus, ["DB$ PutCounter | CounterNum$ 2"], copies=1)
+        config = _config(corpus, tmp_path, target_size=5000)
         run(config)
         vocab = load_vocabulary(config.vocab_path)
         assert {"db", "put", "counter", "num"} <= vocab.keys(), (
             "the prose vocabulary lacks the API name or a parameter key of a script line"
         )
-        assert "activezones" not in vocab and "active" not in vocab
-        assert "cantblockby" not in vocab
         # The reminder text is still scanned: it is what prose expands to.
-        assert "blocked" in vocab
-
-    def test_the_script_surface_does_not_take_the_script_either(
-        self, scripted, tmp_path,
-    ):
-        """No expansion substitutes the generated script, on either surface
-        (FR-020), so scanning it would only seed tokens nothing reads."""
-        config = _config(
-            scripted, tmp_path, surface=Surface.SCRIPT,
-            vocab_path=tmp_path / "vocab-script.txt", target_size=5000,
-        )
-        run(config)
-        vocab = load_vocabulary(config.vocab_path)
-        assert "activezones" not in vocab
-        assert "active" not in vocab and "zones" not in vocab
         assert "blocked" in vocab
 
 
@@ -423,7 +362,7 @@ class TestScriptSurfaceSeeding:
         _cards, _tokens, keywords = corpus
         keywords.write_text(json.dumps({"Ward": {
             "reminder_template": "Counter it unless that player %s.",
-            "generated_script": None, "formatter": "Ward",
+            "formatter": "Ward",
         }}), encoding="utf-8")
         _scripted_corpus(corpus, ["Ward:PayLife<3>"], copies=1)
         config = self._script(corpus, tmp_path, target_size=140)
