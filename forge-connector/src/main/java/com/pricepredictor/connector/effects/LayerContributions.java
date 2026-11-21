@@ -48,73 +48,228 @@ final class LayerContributions {
 
     /** File every layer change {@code card} receives under the static that made it. */
     void addCard(Card card) {
-        String entity = Refs.of(card);
-        for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
-                : card.getPTBoostTable().cellSet()) {
-            contribution(cell.getColumnKey(), entity)
-                    .boost(cell.getValue().getLeft(), cell.getValue().getRight());
-        }
-        // Layer 7a then 7b, so a static writing both ends on the base it set last.
-        for (Table<Long, Long, Pair<Integer, Integer>> layer
-                : List.of(card.getSetPTCharacterDefiningTable(), card.getSetPTTable())) {
-            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell : layer.cellSet()) {
-                contribution(cell.getColumnKey(), entity)
-                        .setPt(cell.getValue().getLeft(), cell.getValue().getRight());
-            }
-        }
-        addNames(card, entity);
-        for (Table.Cell<Long, Long, KeywordsChange> cell
-                : card.getChangedCardKeywords().cellSet()) {
-            Contribution into = contribution(cell.getColumnKey(), entity);
-            // "Loses all abilities" (RemoveAllAbilities$): the keyword line
-            // is set outright, to what the static grants after the marker.
-            if (cell.getValue().isRemoveAllKeywords()) {
-                into.keyword("=");
-            }
-            for (KeywordInterface keyword : cell.getValue().getKeywords()) {
-                into.keyword(keyword.getOriginal());
-            }
-            // The same channel's other half, and the only path to
-            // keywords_lost, which is a head field: without it a static that
-            // takes a keyword away records "loses flying" as "does nothing".
-            for (String removed : cell.getValue().getRemoveKeywords()) {
-                into.keyword("-" + removed);
-            }
-        }
-        addTraits(card, entity);
-        addHiddenKeywords(card, entity);
-        addLayerChanges(card, entity, PatchHooks.CHANGED_TYPES_BY_STATIC,
-                LayerContributions::typeTokens);
-        addLayerChanges(card, entity, PatchHooks.CHANGED_COLORS_BY_STATIC,
-                LayerContributions::colorTokens);
+        new CardLayers(card, Refs.of(card)).addAll();
+    }
+
+    /** File {@code card}'s name changes alone, under {@code entity}; see {@link CardLayers#addNames}. */
+    void addNames(Card card, String entity) {
+        new CardLayers(card, entity).addNames();
     }
 
     /**
-     * Layer 6's ability changes, filed under the static that made each: an
-     * ability it grants as its line's key ({@code ProvenanceKey.describe},
-     * {@code runtime} where it keys to none), and an ability it takes away
-     * as {@code -} and that key, found as the abilities the card has without
-     * the static and lacks with it. A keyword's own traits are its keyword's.
+     * File each permanent a static gives control of under that static, with
+     * the controller it gives.
+     *
+     * <p>Forge files a static's control change under the static's timestamp
+     * rather than its id ({@code Card.addTempController}), so the static is
+     * found from its side: each {@code GainControl$} static in force and the
+     * permanents its effect applies to. A permanent whose controller is the
+     * same without the static — a later control change overrides it — gets
+     * nothing from it.
      */
-    private void addTraits(Card card, String entity) {
-        for (Table.Cell<Long, Long, forge.game.card.ICardTraitChanges> cell
-                : card.getChangedCardTraits().cellSet()) {
-            if (!(cell.getValue() instanceof forge.game.card.CardTraitChanges changes)) {
-                continue;
-            }
-            Contribution into = contribution(cell.getColumnKey(), entity);
-            for (Iterable<? extends forge.game.CardTraitBase> granted : List.of(
-                    changes.getAbilities(), changes.getTriggers(),
-                    changes.getReplacements(), changes.getStaticAbilities())) {
-                for (forge.game.CardTraitBase trait : granted) {
-                    into.ability(nameOf(trait));
+    void addControl(Game game) {
+        List<Card> hosts = new ArrayList<>(
+                game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));
+        for (Card host : hosts) {
+            for (StaticAbility stat : host.getStaticAbilities()) {
+                if (stat.hasParam("GainControl")) {
+                    addControlBy(game, stat);
                 }
             }
-            if (changes.remove() != null && cell.getColumnKey() != 0L) {
-                for (forge.game.CardTraitBase lost : removedBy(card, cell.getColumnKey())) {
-                    into.ability("-" + nameOf(lost));
+        }
+    }
+
+    /** The permanents one {@code GainControl$} static's effect applies to, each under it. */
+    private void addControlBy(Game game, StaticAbility stat) {
+        StaticEffect effect = ForgeFields.staticEffectOf(game, stat);
+        if (effect == null) {
+            return;
+        }
+        for (Card affected : effect.getAffectedCards()) {
+            Player now = affected.getController();
+            if (affected.isInPlay() && now != affected.getControllerWithout(stat.getTimestamp())) {
+                contribution((long) stat.getId(), Refs.of(affected)).controller(Refs.of(now));
+            }
+        }
+    }
+
+    private Contribution contribution(Long staticId, String entity) {
+        return byStatic
+                .computeIfAbsent(staticId, id -> new LinkedHashMap<>())
+                .computeIfAbsent(entity, Contribution::new);
+    }
+
+    /** One card's layer tables, each change filed under the static that made it. */
+    private final class CardLayers {
+        private final Card card;
+        private final String entity;
+
+        CardLayers(Card card, String entity) {
+            this.card = card;
+            this.entity = entity;
+        }
+
+        /** Every layer, in the order the contributions name them. */
+        void addAll() {
+            addBoosts();
+            addSetPt();
+            addNames();
+            addKeywords();
+            addTraits();
+            addHiddenKeywords();
+            addLayerChanges(PatchHooks.CHANGED_TYPES_BY_STATIC, LayerContributions::typeTokens);
+            addLayerChanges(PatchHooks.CHANGED_COLORS_BY_STATIC, LayerContributions::colorTokens);
+        }
+
+        private Contribution under(Long staticId) {
+            return contribution(staticId, entity);
+        }
+
+        private void addBoosts() {
+            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
+                    : card.getPTBoostTable().cellSet()) {
+                under(cell.getColumnKey()).boost(cell.getValue().getLeft(), cell.getValue().getRight());
+            }
+        }
+
+        /** Layer 7a then 7b, so a static writing both ends on the base it set last. */
+        private void addSetPt() {
+            List<Table.Cell<Long, Long, Pair<Integer, Integer>>> cells = new ArrayList<>(
+                    card.getSetPTCharacterDefiningTable().cellSet());
+            cells.addAll(card.getSetPTTable().cellSet());
+            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell : cells) {
+                under(cell.getColumnKey()).setPt(cell.getValue().getLeft(), cell.getValue().getRight());
+            }
+        }
+
+        private void addKeywords() {
+            for (Table.Cell<Long, Long, KeywordsChange> cell
+                    : card.getChangedCardKeywords().cellSet()) {
+                keywordTokens(cell.getValue(), under(cell.getColumnKey()));
+            }
+        }
+
+        /**
+         * Layer 6's ability changes, filed under the static that made each: an
+         * ability it grants as its line's key ({@code ProvenanceKey.describe},
+         * {@code runtime} where it keys to none), and an ability it takes away
+         * as {@code -} and that key, found as the abilities the card has without
+         * the static and lacks with it. A keyword's own traits are its keyword's.
+         */
+        private void addTraits() {
+            for (Table.Cell<Long, Long, forge.game.card.ICardTraitChanges> cell
+                    : card.getChangedCardTraits().cellSet()) {
+                if (cell.getValue() instanceof forge.game.card.CardTraitChanges changes) {
+                    Contribution into = under(cell.getColumnKey());
+                    grantedTokens(changes, into);
+                    lostTokens(changes, cell.getColumnKey(), into);
                 }
             }
+        }
+
+        /** The abilities {@code changes} takes away, when it takes any and names its static. */
+        private void lostTokens(forge.game.card.CardTraitChanges changes, Long staticId, Contribution into) {
+            if (changes.remove() == null || staticId == 0L) {
+                return;
+            }
+            for (forge.game.CardTraitBase lost : removedBy(card, staticId)) {
+                into.ability("-" + nameOf(lost));
+            }
+        }
+
+        /**
+         * A static's {@code AddHiddenKeyword$} grants ("CARDNAME can't block."),
+         * in Forge's hidden-keyword table under the static's id.
+         */
+        private void addHiddenKeywords() {
+            Table<?, ?, ?> hidden = ForgeFields.hiddenExtrinsicKeywords(card);
+            if (hidden == null) {
+                return;
+            }
+            hidden.cellSet().forEach(this::addHiddenKeyword);
+        }
+
+        /** One cell's hidden keywords, when it is keyed by a static id and holds keywords. */
+        private void addHiddenKeyword(Table.Cell<?, ?, ?> cell) {
+            Long staticId = staticIdOf(cell);
+            if (staticId != null && cell.getValue() instanceof Iterable<?> keywords) {
+                Contribution into = under(staticId);
+                keywords.forEach(keyword -> into.hiddenKeyword(String.valueOf(keyword)));
+            }
+        }
+
+        /**
+         * A patched layer accessor's answer, each change filed as tokens under the
+         * static that wrote it.
+         *
+         * <p>Reflective because the accessor is the patch's, and the P/T and keyword
+         * accessors beside it are not: those exist in stock Forge, which is what the
+         * connector compiles against. An unpatched checkout answers an empty map,
+         * though the continuous channel has already declined by then.
+         */
+        private void addLayerChanges(InstanceAccessor accessor, BiConsumer<Object, Contribution> tokens) {
+            for (Map.Entry<Long, List<Object>> changed : changesByStatic(card, accessor).entrySet()) {
+                Contribution into = under(changed.getKey());
+                for (Object change : changed.getValue()) {
+                    tokens.accept(change, into);
+                }
+            }
+        }
+
+        /**
+         * A card's name contribution, filed under the static that wrote it.
+         *
+         * <p>Reflective because {@code getChangedCardNames} is the patch's own
+         * accessor. Unlike the type and colour "ByStatic" readers above, that
+         * table is not split across layers -- it is keyed (timestamp, static id)
+         * exactly like {@code boostPT} -- so its shape here is the P/T loop's
+         * rather than theirs: the raw table, filtered by column key directly
+         * instead of pre-grouped on the Forge side.
+         */
+        private void addNames() {
+            if (PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> names) {
+                names.cellSet().forEach(this::addName);
+            }
+        }
+
+        /** One cell's name, when it is keyed by a static id. */
+        private void addName(Table.Cell<?, ?, ?> cell) {
+            Long staticId = staticIdOf(cell);
+            if (staticId != null) {
+                nameTokens(cell.getValue(), under(staticId));
+            }
+        }
+    }
+
+    /** The static id {@code cell} is filed under, or null for a cell keyed by anything else. */
+    private static Long staticIdOf(Table.Cell<?, ?, ?> cell) {
+        return cell.getColumnKey() instanceof Long staticId ? staticId : null;
+    }
+
+    /** What one keyword-layer entry does, as tokens. */
+    private static void keywordTokens(KeywordsChange change, Contribution into) {
+        // "Loses all abilities" (RemoveAllAbilities$): the keyword line
+        // is set outright, to what the static grants after the marker.
+        if (change.isRemoveAllKeywords()) {
+            into.keyword("=");
+        }
+        for (KeywordInterface keyword : change.getKeywords()) {
+            into.keyword(keyword.getOriginal());
+        }
+        // The same channel's other half, and the only path to
+        // keywords_lost, which is a head field: without it a static that
+        // takes a keyword away records "loses flying" as "does nothing".
+        for (String removed : change.getRemoveKeywords()) {
+            into.keyword("-" + removed);
+        }
+    }
+
+    /** The abilities {@code changes} grants, by their lines' keys. */
+    private static void grantedTokens(forge.game.card.CardTraitChanges changes, Contribution into) {
+        for (Iterable<? extends forge.game.CardTraitBase> granted : List.of(
+                changes.getAbilities(), changes.getTriggers(),
+                changes.getReplacements(), changes.getStaticAbilities())) {
+            granted.forEach(trait -> into.ability(nameOf(trait)));
         }
     }
 
@@ -146,110 +301,10 @@ final class LayerContributions {
         return key == null ? "runtime" : key.describe();
     }
 
-    /**
-     * A static's {@code AddHiddenKeyword$} grants ("CARDNAME can't block."),
-     * in Forge's hidden-keyword table under the static's id.
-     */
-    private void addHiddenKeywords(Card card, String entity) {
-        Table<?, ?, ?> hidden = ForgeFields.hiddenExtrinsicKeywords(card);
-        if (hidden == null) {
-            return;
-        }
-        for (Table.Cell<?, ?, ?> cell : hidden.cellSet()) {
-            if (cell.getColumnKey() instanceof Long staticId
-                    && cell.getValue() instanceof Iterable<?> keywords) {
-                Contribution into = contribution(staticId, entity);
-                for (Object keyword : keywords) {
-                    into.hiddenKeyword(String.valueOf(keyword));
-                }
-            }
-        }
-    }
-
-    /**
-     * File each permanent a static gives control of under that static, with
-     * the controller it gives.
-     *
-     * <p>Forge files a static's control change under the static's timestamp
-     * rather than its id ({@code Card.addTempController}), so the static is
-     * found from its side: each {@code GainControl$} static in force and the
-     * permanents its effect applies to. A permanent whose controller is the
-     * same without the static — a later control change overrides it — gets
-     * nothing from it.
-     */
-    void addControl(Game game) {
-        List<Card> hosts = new ArrayList<>(
-                game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));
-        for (Card host : hosts) {
-            for (StaticAbility stat : host.getStaticAbilities()) {
-                if (!stat.hasParam("GainControl")) {
-                    continue;
-                }
-                StaticEffect effect = ForgeFields.staticEffectOf(game, stat);
-                if (effect == null) {
-                    continue;
-                }
-                for (Card affected : effect.getAffectedCards()) {
-                    Player now = affected.getController();
-                    if (affected.isInPlay() && now != affected.getControllerWithout(stat.getTimestamp())) {
-                        contribution((long) stat.getId(), Refs.of(affected)).controller(Refs.of(now));
-                    }
-                }
-            }
-        }
-    }
-
-    private Contribution contribution(Long staticId, String entity) {
-        return byStatic
-                .computeIfAbsent(staticId, id -> new LinkedHashMap<>())
-                .computeIfAbsent(entity, Contribution::new);
-    }
-
-    /**
-     * A patched layer accessor's answer, each change filed as tokens under the
-     * static that wrote it.
-     *
-     * <p>Reflective because the accessor is the patch's, and the P/T and keyword
-     * accessors beside it are not: those exist in stock Forge, which is what the
-     * connector compiles against. An unpatched checkout answers an empty map,
-     * though the continuous channel has already declined by then.
-     */
-    private void addLayerChanges(
-            Card card, String entity, InstanceAccessor accessor,
-            BiConsumer<Object, Contribution> tokens) {
-        for (Map.Entry<Long, List<Object>> changed : changesByStatic(card, accessor).entrySet()) {
-            Contribution into = contribution(changed.getKey(), entity);
-            for (Object change : changed.getValue()) {
-                tokens.accept(change, into);
-            }
-        }
-    }
-
     @SuppressWarnings("unchecked")
     private static Map<Long, List<Object>> changesByStatic(Card card, InstanceAccessor accessor) {
         Object answer = accessor.read(card);
         return answer instanceof Map ? (Map<Long, List<Object>>) answer : Map.of();
-    }
-
-    /**
-     * A card's name contribution, filed under the static that wrote it.
-     *
-     * <p>Reflective because {@code getChangedCardNames} is the patch's own
-     * accessor. Unlike the type and colour "ByStatic" readers above, that
-     * table is not split across layers -- it is keyed (timestamp, static id)
-     * exactly like {@code boostPT} -- so its shape here is the P/T loop's
-     * rather than theirs: the raw table, filtered by column key directly
-     * instead of pre-grouped on the Forge side.
-     */
-    void addNames(Card card, String entity) {
-        if (!(PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> names)) {
-            return;
-        }
-        for (Table.Cell<?, ?, ?> cell : names.cellSet()) {
-            if (cell.getColumnKey() instanceof Long staticId) {
-                nameTokens(cell.getValue(), contribution(staticId, entity));
-            }
-        }
     }
 
     /**
