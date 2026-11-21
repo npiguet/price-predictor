@@ -69,21 +69,28 @@ final class MustBlock {
     /** {@code MustBeBlockedBy} and {@code MustBeBlockedByAll}, read as {@code CombatUtil} reads them. */
     private static boolean namedByAttacker(Card blocker, Card attacker, Combat combat) {
         for (KeywordInterface instance : attacker.getKeywords()) {
-            String keyword = instance.getOriginal();
-            if (keyword.startsWith(BLOCKED_BY)) {
-                String valid = keyword.substring(BLOCKED_BY.length());
-                if (blocker.isValid(valid, null, null, null) && (combat == null
-                        || CardLists.getValidCardCount(
-                                combat.getBlockers(attacker), valid, null, null, null) == 0)) {
-                    return true;
-                }
-            } else if (keyword.startsWith(BLOCKED_BY_ALL)) {
-                String valid = keyword.split(":")[1];
-                if (blocker.isValid(valid, null, null, null)) {
-                    return true;
-                }
+            if (namesBlocker(instance.getOriginal(), blocker, attacker, combat)) {
+                return true;
             }
         }
         return false;
+    }
+
+    /** Whether one of the attacker's keywords, as written, is a requirement naming {@code blocker}. */
+    private static boolean namesBlocker(String keyword, Card blocker, Card attacker, Combat combat) {
+        if (keyword.startsWith(BLOCKED_BY)) {
+            String valid = keyword.substring(BLOCKED_BY.length());
+            return blocker.isValid(valid, null, null, null) && unblockedByKind(attacker, valid, combat);
+        }
+        if (keyword.startsWith(BLOCKED_BY_ALL)) {
+            return blocker.isValid(keyword.split(":")[1], null, null, null);
+        }
+        return false;
+    }
+
+    /** Whether no creature of the kind blocks the attacker yet; true where there is no combat to read. */
+    private static boolean unblockedByKind(Card attacker, String valid, Combat combat) {
+        return combat == null
+                || CardLists.getValidCardCount(combat.getBlockers(attacker), valid, null, null, null) == 0;
     }
 }
