@@ -102,10 +102,12 @@ final class CastTracker {
      * @param started its cast's start, or null
      */
     OpenResolution openResolution(SpellAbility ability, PendingCast started) {
+        // The board first, then the cost-half test, then the keys and the actor, as before.
+        Snapshot atCast = boardAtPush(ability, started);
+        boolean costHalf = hasCostHalf(ability);
         OpenResolution.Item item = new OpenResolution.Item(
-                ability, ProvenanceResolver.resolve(ability), actorOf(ability),
-                boardAtPush(ability, started));
-        if (!hasCostHalf(ability)) {
+                ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast);
+        if (!costHalf) {
             return new OpenResolution(item);
         }
         return new OpenResolution(item, new OpenResolution.CastWith(
