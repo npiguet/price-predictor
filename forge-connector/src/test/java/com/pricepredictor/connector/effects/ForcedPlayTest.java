@@ -171,13 +171,45 @@ class ForcedPlayTest {
         List<Map<String, Object>> found = new ArrayList<>();
         for (String record : records) {
             for (Map<String, Object> event : events(record)) {
-                if (type.equals(event.get("type")) && event.get("subjects") instanceof List<?> subjects
-                        && subjects.contains(subject)) {
+                if (isOn(event, type, subject)) {
                     found.add(params(event));
                 }
             }
         }
         return found;
+    }
+
+    private static boolean isOn(Map<String, Object> event, String type, String subject) {
+        if (!type.equals(event.get("type"))) {
+            return false;
+        }
+        return event.get("subjects") instanceof List<?> subjects && subjects.contains(subject);
+    }
+
+    /** No fork written, and one more refusal for {@code reason} than {@code before} counted. */
+    private static void assertRefusedUnwritten(List<String> records, String reason, long before) {
+        assertEquals(List.of(), forkOf(records));
+        assertEquals(before + 1, refusals(reason));
+    }
+
+    /** What a dry-run test holds fixed: the game, the live binding and the edit that makes "made". */
+    private record DryRuns(Game game, Binding live, Function<ForcedPlay, Application> made) {
+        void check(Optional<String> expected, ForcedPlay play, String message) {
+            assertEquals(expected, ForcedPlayRun.dryRun(made.apply(play), live, game), message);
+        }
+    }
+
+    /** A directed scheduler and what its refusal test reads back. */
+    private record Scheduled(DirectedForkScheduler scheduler, ForkBudget budget, DirectedForkTally tally,
+                             DirectedRule rule, List<String> forked) {
+        /** A refusal found before the fork: counted, no budget spent, no fork tallied or taken. */
+        void assertRefusedUnspent(long before) {
+            assertEquals(0, scheduler.collect(PhaseType.MAIN1), "no fork where Disfigure cannot take its target");
+            assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE), "counted as a refusal");
+            assertTrue(budget.mayDirect(), "the budget is untouched");
+            assertEquals(0, tally.get(rule.name(), DirectedForkTally.Count.TAKEN), "no fork in the lifetime tally");
+            assertEquals(List.of(), forked);
+        }
     }
 
     private static long refusals(String reason) {
@@ -326,11 +358,7 @@ class ForcedPlayTest {
                 tally, (taken, variant, application, binding) -> forked.add(taken.name()));
         long before = refusals(ForkRefusal.FORCED_NO_LINE);
 
-        assertEquals(0, scheduler.collect(PhaseType.MAIN1), "no fork where Disfigure cannot take its target");
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE), "counted as a refusal");
-        assertTrue(budget.mayDirect(), "the budget is untouched");
-        assertEquals(0, tally.get(rule.name(), DirectedForkTally.Count.TAKEN), "no fork in the lifetime tally");
-        assertEquals(List.of(), forked);
+        new Scheduled(scheduler, budget, tally, rule, forked).assertRefusedUnspent(before);
 
         aimable[0] = true;
         assertEquals(1, scheduler.collect(PhaseType.MAIN1), "the rule's one fork is taken later");
@@ -354,18 +382,19 @@ class ForcedPlayTest {
         Function<ForcedPlay, Application> made = play -> new Application(ForkOperation.LIFE,
                 fork -> new LifeOperation(fork.player("opponent"), 19)).forcing(play)
                 .making("made", (fork, copy) -> fork.card("bears"));
+        DryRuns dryRuns = new DryRuns(game, live, made);
 
-        assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_OPPONENT)), live, game),
+        dryRuns.check(Optional.of(ForkRefusal.FORCED_NO_LINE),
+                ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_OPPONENT),
                 "Disfigure cannot take a player, whatever card the edit makes");
-        assertEquals(Optional.of(ForkRefusal.FORCED_NO_LINE), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast(R_PLAYER, R_BEARS).targeting(R_MADE)), live, game),
+        dryRuns.check(Optional.of(ForkRefusal.FORCED_NO_LINE),
+                ForcedPlay.cast(R_PLAYER, R_BEARS).targeting(R_MADE),
                 "the Bears in play are no spell to cast");
-        assertEquals(Optional.empty(), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_MADE)), live, game),
+        dryRuns.check(Optional.empty(),
+                ForcedPlay.cast(R_PLAYER, R_SPELL).targeting(R_MADE),
                 "the made target is checked on the copy");
-        assertEquals(Optional.empty(), ForcedPlayRun.dryRun(
-                        made.apply(ForcedPlay.cast(R_PLAYER, R_MADE)), live, game),
+        dryRuns.check(Optional.empty(),
+                ForcedPlay.cast(R_PLAYER, R_MADE),
                 "the made source's line is checked on the copy");
     }
 
@@ -382,8 +411,7 @@ class ForcedPlayTest {
                 live -> Binding.empty().with("spell", charm),
                 ForcedPlay.cast(R_PLAYER, R_SPELL)));
 
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE));
+        assertRefusedUnwritten(records, ForkRefusal.FORCED_NO_LINE, before);
     }
 
     /** The edit takes the play's source away: refused on the edited copy, nothing written. */
@@ -400,8 +428,7 @@ class ForcedPlayTest {
                         fork -> new RemovePermanentOperation(fork.card("outlet")))
                         .forcing(ForcedPlay.activate(R_PLAYER, R_OUTLET, ForcedPlay.Line.api("DealDamage")))));
 
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NO_LINE));
+        assertRefusedUnwritten(records, ForkRefusal.FORCED_NO_LINE, before);
     }
 
     /** A play its step passes without, the mana never there: refused, nothing written. */
@@ -415,8 +442,7 @@ class ForcedPlayTest {
                 live -> Binding.empty().with("spell", defenses),
                 ForcedPlay.cast(R_PLAYER, R_SPELL)));
 
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NOT_MADE));
+        assertRefusedUnwritten(records, ForkRefusal.FORCED_NOT_MADE, before);
     }
 
     /**
@@ -434,8 +460,7 @@ class ForcedPlayTest {
                 live -> Binding.empty().with("sanctuary", sanctuary),
                 ForcedPlay.answer(R_PLAYER, R_SANCTUARY, true)));
 
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_NOT_MADE));
+        assertRefusedUnwritten(records, ForkRefusal.FORCED_NOT_MADE, before);
     }
 
     /**
@@ -456,8 +481,7 @@ class ForcedPlayTest {
                 live -> Binding.empty().with("spell", disfigure).with("prowler", prowler),
                 ForcedPlay.cast(R_OPPONENT, R_SPELL).targeting(R_PROWLER)));
 
-        assertEquals(List.of(), forkOf(records));
-        assertEquals(before + 1, refusals(ForkRefusal.FORCED_COST_NOT_PAID));
+        assertRefusedUnwritten(records, ForkRefusal.FORCED_COST_NOT_PAID, before);
     }
 
     /**
@@ -482,6 +506,10 @@ class ForcedPlayTest {
         assertNotNull(chosen, "the rules let the actor cast it");
         assertFalse(you.getController().playChosenSpellAbility(chosen.get(0)));
 
+        assertRefusedUnpaidBeforeItsCardMoved(run, game, disfigure);
+    }
+
+    private static void assertRefusedUnpaidBeforeItsCardMoved(ForcedPlayRun run, Game game, Card disfigure) {
         assertEquals(ForkRefusal.FORCED_COST_NOT_PAID, run.refusal());
         assertFalse(run.made());
         assertTrue(game.getCardState(disfigure).isInZone(ZoneType.Hand), "the Disfigure never moved");
@@ -521,6 +549,10 @@ class ForcedPlayTest {
         assertNotNull(chosen);
         assertEquals(bombardment, chosen.get(0).getHostCard());
         assertTrue(seat.playChosenSpellAbility(chosen.get(0)));
+        assertMadeOnceWithTheBearsPaying(run, game, bears, you);
+    }
+
+    private static void assertMadeOnceWithTheBearsPaying(ForcedPlayRun run, Game game, Card bears, Player you) {
         assertTrue(run.made());
         assertTrue(bears.isInZone(ZoneType.Graveyard) || game.getCardState(bears).isInZone(ZoneType.Graveyard),
                 "the Bears paid the cost");

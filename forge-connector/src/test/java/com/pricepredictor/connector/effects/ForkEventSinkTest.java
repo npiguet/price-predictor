@@ -54,13 +54,16 @@ class ForkEventSinkTest {
         Set<Class<?>> types = new LinkedHashSet<>();
         for (Class<?> type = subscriber; type != null; type = type.getSuperclass()) {
             for (Method method : type.getDeclaredMethods()) {
-                if (method.isAnnotationPresent(Subscribe.class)
-                        && method.getParameterCount() == 1) {
+                if (isSubscriber(method)) {
                     types.add(method.getParameterTypes()[0]);
                 }
             }
         }
         return types;
+    }
+
+    private static boolean isSubscriber(Method method) {
+        return method.isAnnotationPresent(Subscribe.class) && method.getParameterCount() == 1;
     }
 
     /**
