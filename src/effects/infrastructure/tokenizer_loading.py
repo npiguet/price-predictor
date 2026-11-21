@@ -34,11 +34,14 @@ def load_keyword_definitions(path: Path) -> dict[str, KeywordDefinition]:
     }
 
 
-def load_definitions(keyword_path: Path) -> dict[str, KeywordDefinition]:
-    """The keyword definitions at ``keyword_path``; none where it is absent,
-    since a checkpoint trained before the table existed recorded none."""
-    if not Path(keyword_path).exists():
+def load_definitions(keyword_path: Path | None) -> dict[str, KeywordDefinition]:
+    """The keyword definitions at ``keyword_path``; none where it is absent or
+    ``None``, since a checkpoint trained before the table existed recorded
+    none. A directory is no table: it is refused, naming the path."""
+    if keyword_path is None or not Path(keyword_path).exists():
         return {}
+    if not Path(keyword_path).is_file():
+        raise FileNotFoundError(f"The keyword definitions {keyword_path} are not a file.")
     return load_keyword_definitions(Path(keyword_path))
 
 

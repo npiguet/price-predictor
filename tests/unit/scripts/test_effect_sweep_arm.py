@@ -11,7 +11,12 @@ import effect_sweep_arm as arm
 VOCAB = Path("vocab.txt")
 VARIANTS = Path("variants")
 PROBE_SET = Path("probe-set")
-REQUIRED = {"--vocab-path": VOCAB, "--variant-scripts": VARIANTS, "--probe-set-dir": PROBE_SET}
+KEYWORDS = Path("keyword-definitions.json")
+WIN_RATES = Path("win-rates.json")
+REQUIRED = {
+    "--vocab-path": VOCAB, "--variant-scripts": VARIANTS, "--probe-set-dir": PROBE_SET,
+    "--keyword-definitions": KEYWORDS, "--win-rates": WIN_RATES,
+}
 
 
 def _with_paths(argv):
@@ -106,6 +111,40 @@ class TestPlan:
             PROBE_SET)
         train = next(c for s, c, _ in plain if s == "train")
         assert train[train.index("--reports-dir") + 1] == str(PROBE_SET)
+
+
+class TestPlanParses:
+    """Every planned command passes its own program's parser."""
+
+    def _plan(self, tmp_path, *extra):
+        return _plan(["--run-dir", str(tmp_path / "a"), "--corpus", "c", "--freeze-probe-set",
+                      *extra, "--", "--e-dim", "64"])
+
+    def test_every_effects_command_parses(self, tmp_path):
+        from effects.infrastructure.cli import build_parser
+
+        for step, command, _ in self._plan(tmp_path):
+            if "-m" in command:
+                build_parser().parse_args(command[command.index("-m") + 2:])
+
+    def test_the_new_flags_reach_train_and_evaluate_only(self, tmp_path):
+        steps = {s: c for s, c, _ in self._plan(tmp_path)}
+        assert steps["train"][steps["train"].index("--keyword-definitions") + 1] == str(KEYWORDS)
+        assert steps["evaluate"][steps["evaluate"].index("--win-rates") + 1] == str(WIN_RATES)
+        assert "--keyword-definitions" not in steps["freeze"]
+
+    def test_the_scripts_parse(self, tmp_path):
+        import argparse
+
+        from effect_embedding_probes.common import add_probe_arguments
+        from effect_knowledge_probes import run
+
+        for step, command, _ in self._plan(tmp_path):
+            if step in ("freeze", "knowledge-probes"):
+                run.parse_args(command[3:])
+            elif step == "embedding-probes":
+                add_probe_arguments(argparse.ArgumentParser(exit_on_error=True)).parse_known_args(
+                    command[3:])
 
 
 class TestLogging:
@@ -203,7 +242,8 @@ class TestResume:
         assert manifest["commands"] == [
             "python scripts/effect_sweep_arm.py --run-dir "
             f"{tmp_path} --corpus c --vocab-path {VOCAB} --variant-scripts {VARIANTS} "
-            f"--probe-set-dir {PROBE_SET} -- --e-dim 64",
+            f"--probe-set-dir {PROBE_SET} --keyword-definitions {KEYWORDS} "
+            f"--win-rates {WIN_RATES} -- --e-dim 64",
         ]
         assert (manifest["status"], manifest["outcome"]) == ("finished", "exit 0")
 

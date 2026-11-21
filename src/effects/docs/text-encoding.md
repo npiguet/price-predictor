@@ -86,6 +86,7 @@ How a key resolves, by case:
 - The keyword-definition file `extract-keyword-definitions --output` writes is keyed by display name, because that is what a card's keyword line and the converted text both spell.
 - The encoder expands an unknown keyword unconditionally. This file is what makes a set the vocabulary predates readable rather than a bare `[UNK]`.
 - Both surfaces expand a keyword to its reminder template.
+- `load_definitions` reads a file: an absent path, or none (`None`), is no table, since a checkpoint trained before the table existed recorded none; a directory is refused (`FileNotFoundError` naming it). The freeze's scoring step (`selection_deviance.scoring_targets`) passes none: it reads targets only, which the table does not change.
 
 ## Vocabulary
 

@@ -169,6 +169,7 @@ python -u scripts/repair_first_strike_steps.py --corpus output/effects/corpus-ge
 ```bash
 python -u scripts/effect_sweep_arm.py --run-dir models/effects/runs/2026-10-gen2-<arm>/ \
     --corpus output/effects/corpus-gen2/ --vocab-path models/effects/vocab-script.txt \
+    --keyword-definitions output/effects/keyword-definitions.json --win-rates <win-rate table> \
     --variant-scripts output/effects/variant-scripts --probe-set-dir output/effects/reports \
     [--freeze-probe-set] -- \
     --e-dim D --encoder-layers L --encoder-d-model W --e-noise R --withhold-keyword K
@@ -179,8 +180,9 @@ Every arm keeps the trainer's batch size (32) and steps per epoch (5,000).
 `effect_sweep_arm.py` runs, in order: `train-effect-model` with the flags after `--`,
 `encode-abilities`, `evaluate-effect-model`, the eight scripts in `scripts/effect_embedding_probes/`
 (`build_texts` first), and `scripts/effect_knowledge_probes/run.py`. It passes `--variant-scripts`
-to training, encoding and evaluation, and `--vocab-path` to training, defaulting to the paths
-`build-corpus` is given in stage 4. Pass `--freeze-probe-set` on
+to training, encoding and evaluation, `--vocab-path` and `--keyword-definitions` to training, and
+`--win-rates` to evaluation, none defaulting; the first four are the paths `build-corpus` is given
+in stage 4. The freeze takes `--probe-set-dir` as its `--reports-dir`. Pass `--freeze-probe-set` on
 the first arm only; that arm freezes the knowledge-probe set for the corpus before probing.
 
 An arm whose training step was interrupted, by a crash or by the machine stopping, continues from

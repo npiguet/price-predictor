@@ -32,14 +32,13 @@ LATEST_NAME = "latest.pt"
 
 
 
-def content_hash(path: Path) -> str:
-    """SHA-256 of a file's bytes, or ``""`` when there is no such file: a run
-    with no keyword-definition file is degraded, not broken."""
-    path = Path(path)
-    if not path.is_file():
+def content_hash(path: Path | None) -> str:
+    """SHA-256 of a file's bytes, or ``""`` when there is no such file or no
+    path: a run with no keyword-definition file is degraded, not broken."""
+    if path is None or not Path(path).is_file():
         return ""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with Path(path).open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()

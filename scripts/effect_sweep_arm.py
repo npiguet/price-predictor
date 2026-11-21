@@ -2,8 +2,15 @@
 
 Usage::
 
-    python -u scripts/effect_sweep_arm.py --run-dir models/effects/runs/2026-10-gen2-<arm>/ \\
-        --corpus output/effects/corpus-gen2/ -- <train-effect-model flags>
+    python -u scripts/effect_sweep_arm.py --run-dir models/effects/gen3/effect-model/<run>/ \\
+        --corpus <curated corpus> --vocab-path <vocabulary> \\
+        --keyword-definitions <keyword table> --win-rates <win-rate table> \\
+        --variant-scripts <variant tree> --probe-set-dir <selection-set directory> \\
+        -- <train-effect-model flags>
+
+``--keyword-definitions`` goes to ``train-effect-model`` and ``--win-rates`` to
+``evaluate-effect-model``; the freeze takes ``--probe-set-dir`` as its
+``--reports-dir``. Every path is named, none defaults (the artifact layout).
 
 Everything after ``--`` goes to ``train-effect-model`` as given. The arm's run
 directory then holds:
@@ -99,11 +106,14 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
         # refuses a corpus without a selection set.
         commands.append(("freeze", knowledge + [
             "--freeze-probe-set", "--corpus", str(args.corpus),
+            "--reports-dir", str(args.probe_set_dir),
             "--probe-set-dir", str(args.probe_set_dir)], "freeze-selection-set.log"))
     commands += [
         ("train", python + ["-m", "effects", "train-effect-model",
                             "--corpus", str(args.corpus),
-                            "--vocab-path", str(args.vocab_path), *variants,
+                            "--vocab-path", str(args.vocab_path),
+                            "--keyword-definitions", str(args.keyword_definitions),
+                            *variants,
                             "--model-output", str(run_dir),
                             # The control score reads the set the freeze wrote.
                             "--reports-dir", str(args.probe_set_dir), *train_args,
@@ -113,6 +123,7 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
                              "--output-root", abilities],
          "encode.log"),
         ("evaluate", python + ["-m", "effects", "evaluate-effect-model", *probe, *variants,
+                               "--win-rates", str(args.win_rates),
                                "--reports-dir", str(args.probe_set_dir), *pictures],
          "evaluate.log"),
     ]
@@ -144,6 +155,11 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--vocab-path", type=Path,
                         required=True,
                         help="the vocabulary build-corpus was given")
+    parser.add_argument("--keyword-definitions", type=Path, required=True,
+                        help="the keyword table build-corpus was given, passed to "
+                             "train-effect-model")
+    parser.add_argument("--win-rates", type=Path, required=True,
+                        help="the win-rate table evaluate-effect-model reads")
     parser.add_argument("--variant-scripts", type=Path,
                         required=True,
                         help="the variant tree build-corpus was given")
@@ -202,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     # to the same manifest: the arm is one run.
     return run_script(
         run_dir, lambda: _run(args, train_args, argv),
-        ScriptRun(script=__file__, argv=argv, inputs=[args.corpus, args.probe_set_dir]),
+        ScriptRun(script=__file__, argv=argv, inputs=[args.corpus, args.probe_set_dir, args.keyword_definitions, args.win_rates]),
     )
 
 

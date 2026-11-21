@@ -249,7 +249,12 @@ def scoring_targets(corpus: Path, manifest, *, cards_folders: Sequence[Path] | N
                     sample: Sequence[EffectRecord] = ()) -> Callable:
     """``records -> (per-entity targets, head targets)``, a scoring step over ``corpus``,
     built as a training run over it would be, its script-API head off and no
-    rule mask applied; ``sample`` sizes the feature widths."""
+    rule mask applied; ``sample`` sizes the feature widths.
+
+    It reads no keyword table: the step's targets and heads come from the
+    records alone, and the table feeds only the encoder's input text, which
+    this step never builds (``tests/unit/effects/application/test_scoring_targets.py``
+    holds the targets equal with and without it)."""
     from effects.application.run_context import preparer_settings
     from effects.application.step_preparation import StepPreparer
     from effects.application.train_effect_model import (
@@ -261,7 +266,8 @@ def scoring_targets(corpus: Path, manifest, *, cards_folders: Sequence[Path] | N
     from effects.domain.effect_head_input import feature_widths
 
     options = {"corpus": str(corpus), "vocab_path": Path(manifest.vocab_path),
-               "api_weight": 0.0}
+               "api_weight": 0.0,
+               "keyword_definitions": None}
     if cards_folders:
         options["cards_folders"] = tuple(Path(folder) for folder in cards_folders)
     config = with_variant_scripts(TrainEffectModelConfig.unpathed(**options), manifest)

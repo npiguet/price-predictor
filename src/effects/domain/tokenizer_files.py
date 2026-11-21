@@ -17,11 +17,11 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class TokenizerFiles:
-    """``--vocab-path`` and ``--keyword-definitions``."""
+    """``--vocab-path`` and ``--keyword-definitions``; no keyword table is ``None``."""
 
     vocab: Path
-    keywords: Path
+    keywords: Path | None
 
     @classmethod
-    def of(cls, vocab: Path | str, keywords: Path | str) -> TokenizerFiles:
-        return cls(Path(vocab), Path(keywords))
+    def of(cls, vocab: Path | str, keywords: Path | str | None) -> TokenizerFiles:
+        return cls(Path(vocab), None if keywords is None else Path(keywords))

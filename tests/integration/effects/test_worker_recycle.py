@@ -53,6 +53,7 @@ from sealed.infrastructure.cli import build_parser
 from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 from sealed.infrastructure.directed_fork_check import directed_fork_error
 from tests.integration.conftest import assert_no_lost_output, require_jar
+from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, write_vocabulary
 
 pytestmark = pytest.mark.integration
 
@@ -270,7 +271,7 @@ def test_rule_counts_reads_the_java_written_shards(recycled_run) -> None:
     run_dir = recycled_run["run_dir"]
     output = recycled_run["root"] / "rule-counts.json"
     result = _cli("-m", "effects", "rule-counts", "--records-dir", str(run_dir),
-                  "--output", str(output), "--workers", "2")
+                  "--output", str(output), "--variant-scripts", "", "--workers", "2")
     assert result.returncode == 0, (result.stdout + result.stderr)[-4000:]
     counts = json.loads(output.read_text(encoding="utf-8"))
     assert counts["generation"] == "gen-3"
@@ -282,7 +283,7 @@ def test_validate_corpus_reports_on_the_java_written_shards(recycled_run) -> Non
     """A report: its verdict on a few games is printed, not asserted; what is
     asserted is that it read every line and found every game ended."""
     result = _cli("-m", "effects", "validate-corpus", "--effect-records",
-                  str(recycled_run["run_dir"]))
+                  str(recycled_run["run_dir"]), "--variant-scripts", "")
     printed = result.stdout + result.stderr
     print(printed)
     assert result.returncode in (0, 1), printed[-4000:]
@@ -313,6 +314,9 @@ def test_build_corpus_reads_the_java_written_shards(recycled_run) -> None:
     result = _cli("-m", "effects", "build-corpus", "--records-dir", str(run_dir),
                   "--cards-folder", "output/effects/gen3/converted/cardsfolder/",
                   "--cards-folder", "output/effects/gen3/converted/tokenscripts/",
+                  "--vocab-path", str(write_vocabulary(
+                      recycled_run["root"] / "vocab-script.txt", "script")),
+                  "--keyword-definitions", str(FIXTURE_KEYWORD_DEFINITIONS),
                   "--output", str(output), "--workers", "2")
     printed = result.stdout + result.stderr
     print(printed)
