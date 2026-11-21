@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 
 from draft.application.validate_builder import compute_diagnostic
-from draft.infrastructure.cli import build_parser, run_validate_builder
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_validate_builder import run_validate_builder
 
 
 def test_perfect_rank_agreement() -> None:

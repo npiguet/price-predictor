@@ -13,7 +13,8 @@ from draft.application.train_draft_agent import (
 )
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_state import NUM_TYPES
-from draft.infrastructure.cli import build_parser, run_train_draft_agent
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_train_draft_agent import run_train_draft_agent
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 
 

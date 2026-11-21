@@ -14,7 +14,8 @@ import torch
 
 from draft.application.train_draft_agent import _make_scheduler, _reapply_resume_lr
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
-from draft.infrastructure.cli import _resolve_train_agent_config, build_parser
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_train_draft_agent import _resolve_train_agent_config
 from draft.infrastructure.draft_record_io import (
     append_record,
     count_complete_records,

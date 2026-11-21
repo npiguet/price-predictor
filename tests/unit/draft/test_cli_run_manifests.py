@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from draft.infrastructure import cli
+from draft.infrastructure import cli, cli_play_draft_games
 from price_predictor.infrastructure import run_manifest
 from price_predictor.infrastructure.cli_run_manifest import READ_ONLY, subcommand_names
 
@@ -33,7 +33,7 @@ def test_play_draft_games_records_an_interrupt(tmp_path: Path, monkeypatch):
         Path(args.output_path).write_text("", encoding="utf-8")
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(cli, "run_play_draft_games", play)
+    monkeypatch.setattr(cli_play_draft_games, "run_play_draft_games", play)
     argv = ["play-draft-games", "--drafts-path", str(drafts), "--output-path", str(out)]
     monkeypatch.setattr(sys, "argv", ["draft", *argv])
 

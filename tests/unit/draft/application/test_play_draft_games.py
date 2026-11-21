@@ -173,7 +173,8 @@ class TestUnboundedRunAndExitCodes:
     """US3: no target means play until interrupted; 130 is a *bare* interrupt."""
 
     def _exit_code(self, summary):
-        from draft.infrastructure.cli import build_parser, run_play_draft_games
+        from draft.infrastructure.cli import build_parser
+        from draft.infrastructure.cli_play_draft_games import run_play_draft_games
 
         args = build_parser().parse_args(
             ["play-draft-games", "--drafts-path", "corpus.jsonl", "--output-path", "out.txt"]

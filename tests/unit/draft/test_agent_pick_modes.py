@@ -9,7 +9,8 @@ from draft.application.agent_pick_service import AgentPickService
 from draft.application.agent_registry import AgentRegistry
 from draft.application.generate_draft_data import PickRequest
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
-from draft.infrastructure.cli import build_parser, run_generate_draft_data
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_generate_draft_data import run_generate_draft_data
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 
 EMB_DIM = 8

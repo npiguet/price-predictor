@@ -8,11 +8,9 @@ from pathlib import Path
 import pytest
 
 from draft.infrastructure import cli
-from draft.infrastructure.cli import (
-    _resolve_train_agent_config,
-    _resolve_train_agent_rl_config,
-    build_parser,
-)
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_train_draft_agent import _resolve_train_agent_config
+from draft.infrastructure.cli_train_draft_agent_rl import _resolve_train_agent_rl_config
 
 _RUN = "models/draft/gen3/agent/2026-11-15-online"
 _CACHE = "output/draft/gen3/cache/2026-11-15-encoder"

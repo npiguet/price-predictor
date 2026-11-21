@@ -11,7 +11,8 @@ from draft.application.analyze_generated_decks import (
     generated_decks_from_drafts,
 )
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
-from draft.infrastructure.cli import build_parser, run_analyze_generated_decks
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_analyze_generated_decks import run_analyze_generated_decks
 
 
 def _record(draft_id, seats, set_code="BLB") -> DraftRecord:

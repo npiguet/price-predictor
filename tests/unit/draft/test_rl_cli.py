@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from draft.infrastructure.cli import (
+from draft.infrastructure.cli import build_parser
+from draft.infrastructure.cli_train_draft_agent_rl import (
     _resolve_train_agent_rl_config,
-    build_parser,
     run_train_draft_agent_rl,
 )
 
