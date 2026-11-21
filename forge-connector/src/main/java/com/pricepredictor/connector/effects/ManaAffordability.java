@@ -51,7 +51,7 @@ final class ManaAffordability {
     private final SpellAbility candidate;
     private final ShardDemand demand;
     private final KeywordPayers payers;
-    private final List<List<List<ManaUnit>>> sources;
+    private final List<ManaSource> sources;
 
     private ManaAffordability(Player payer, SpellAbility candidate, ShardDemand demand, KeywordPayers payers) {
         this.payer = payer;
@@ -80,12 +80,12 @@ final class ManaAffordability {
     }
 
     /** Each source's choices, or only its first where all of them together are too many to try. */
-    private static List<List<List<ManaUnit>>> withinBudget(List<List<List<ManaUnit>>> sources) {
+    private static List<ManaSource> withinBudget(List<ManaSource> sources) {
         long combinations = 1;
-        for (List<List<ManaUnit>> options : sources) {
-            combinations *= options.size();
+        for (ManaSource source : sources) {
+            combinations *= source.choices();
             if (combinations > MAX_COMBINATIONS) {
-                return sources.stream().map(choices -> List.of(choices.get(0))).toList();
+                return sources.stream().map(ManaSource::firstOnly).toList();
             }
         }
         return sources;
@@ -96,7 +96,7 @@ final class ManaAffordability {
         if (next == sources.size()) {
             return covers(units);
         }
-        for (List<ManaUnit> option : sources.get(next)) {
+        for (List<ManaUnit> option : sources.get(next).options()) {
             units.addAll(option);
             boolean paid = payable(units, next + 1);
             units.subList(units.size() - option.size(), units.size()).clear();
@@ -145,22 +145,22 @@ final class ManaAffordability {
     }
 
     /**
-     * Each card's choices of what it pays: the mana each of its mana
+     * Each card with a choice of what it pays: the mana each of its mana
      * abilities would make, and the unit it pays as a keyword's tapper; a
      * card the candidate's own tap cost taps is no source.
      */
-    private static List<List<List<ManaUnit>>> sources(SpellAbility candidate, Player payer, KeywordPayers payers) {
+    private static List<ManaSource> sources(SpellAbility candidate, Player payer, KeywordPayers payers) {
         Cost cost = candidate.getPayCosts();
         Card host = candidate.getHostCard();
         boolean hostTaps = cost != null && cost.hasTapCost();
-        List<List<List<ManaUnit>>> sources = new ArrayList<>();
+        List<ManaSource> sources = new ArrayList<>();
         List<Card> cards = new ArrayList<>(payer.getCardsIn(ZoneType.Battlefield));
         cards.addAll(payer.getCardsIn(ZoneType.Hand));
         for (Card card : cards) {
             List<List<ManaUnit>> options = hostTaps && card == host
                     ? List.of() : optionsOf(card, candidate, payer, payers);
             if (!options.isEmpty()) {
-                sources.add(options);
+                sources.add(new ManaSource(options));
             }
         }
         return sources;
