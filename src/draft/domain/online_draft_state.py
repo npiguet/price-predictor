@@ -96,34 +96,8 @@ class OnlineDraftStateTracker:
             # size (build_state's geometry.pack_size). Model seats see every one
             # of their picks, so the first request is always (pack 1, pick 1).
             self._pack_size = len(pack)
-
-        # Pack boundary: flush still-unresolved PASSED to TAKEN (FR-019b) before
-        # the new pack's first pick, exactly as build_state flushes for p < pack.
-        if self._current_pack is not None and pack_number != self._current_pack:
-            for name in self._passed:
-                self._taken.append(name)
-            self._passed.clear()
-        if pack_number != self._current_pack:
-            self._current_pack = pack_number
-            self._pack_sightings = []
-            self._pack_picks = []
-
-        offset = pick_number - 1
-
-        # Wheel diff (FR-019a): if this booster has wheeled back (held pod picks
-        # ago), the cards I then passed that are gone now were taken by others.
-        if offset >= pod_size:
-            prev = offset - pod_size  # 0-based index of the sighting a wheel ago
-            vis_prev = self._pack_sightings[prev]
-            took_prev = self._pack_picks[prev]
-            others = Counter(vis_prev)
-            others.subtract(Counter(pack))
-            others[took_prev] -= 1
-            for name, n in others.items():
-                for _ in range(max(0, n)):
-                    self._passed.pop(name, None)
-                    self._taken.append(name)
-
+        self._enter_pack(pack_number)
+        self._resolve_wheel(pick_number - 1, pod_size, pack)
         self._pack_sightings.append(list(pack))
 
         # Snapshot last_seen *before* this sighting so recency is "prior to this
@@ -132,32 +106,11 @@ class OnlineDraftStateTracker:
 
         # PACK actions: distinct cards in pick order. Wheel survivors that were
         # in PASSED move back into PACK (drop them from PASSED).
-        pack_actions: list[str] = []
-        seen: set[str] = set()
-        for name in pack:
-            if name not in seen:
-                seen.add(name)
-                pack_actions.append(name)
+        pack_actions = list(dict.fromkeys(pack))
         for name in pack_actions:
             self._passed.pop(name, None)
 
-        instances: list[CardInstance] = []
-
-        def add(name: str, token_type: int) -> None:
-            packs_ago, pick_ago = _recency(
-                prior_last_seen, name, pack_number, pick_number, self._pack_size,
-            )
-            instances.append(CardInstance(name, token_type, packs_ago, pick_ago))
-
-        for name in self._pool:
-            add(name, TYPE_POOL)
-        for name in pack_actions:
-            add(name, TYPE_PACK)
-        for name in self._passed:
-            add(name, TYPE_PASSED)
-        for name in self._taken:
-            add(name, TYPE_TAKEN)
-
+        instances = self._card_instances(prior_last_seen, pack_actions, pack_number, pick_number)
         self._pending = (pack_number, pick_number, list(pack))
         return DraftState(
             pack_number=pack_number,
@@ -166,6 +119,55 @@ class OnlineDraftStateTracker:
             target_index=-1,  # revealed by commit()
             cards=instances,
         )
+
+    def _enter_pack(self, pack_number: int) -> None:
+        """Pack boundary: flush still-unresolved PASSED to TAKEN (FR-019b) before
+        the new pack's first pick, exactly as build_state flushes for p < pack."""
+        if pack_number == self._current_pack:
+            return
+        if self._current_pack is not None:
+            self._taken.extend(self._passed)
+            self._passed.clear()
+        self._current_pack = pack_number
+        self._pack_sightings = []
+        self._pack_picks = []
+
+    def _resolve_wheel(self, offset: int, pod_size: int, pack: list[str]) -> None:
+        """Wheel diff (FR-019a): if this booster has wheeled back (held pod picks
+        ago), the cards I then passed that are gone now were taken by others."""
+        if offset < pod_size:
+            return
+        prev = offset - pod_size  # 0-based index of the sighting a wheel ago
+        others = Counter(self._pack_sightings[prev])
+        others.subtract(Counter(pack))
+        others[self._pack_picks[prev]] -= 1
+        for name, n in others.items():
+            for _ in range(max(0, n)):
+                self._passed.pop(name, None)
+                self._taken.append(name)
+
+    def _card_instances(
+        self,
+        prior_last_seen: dict[str, tuple[int, int]],
+        pack_actions: list[str],
+        pack_number: int,
+        pick_number: int,
+    ) -> list[CardInstance]:
+        """Every typed token, in POOL, PACK, PASSED, TAKEN order, with its recency."""
+        blocks = (
+            (TYPE_POOL, self._pool),
+            (TYPE_PACK, pack_actions),
+            (TYPE_PASSED, self._passed),
+            (TYPE_TAKEN, self._taken),
+        )
+        return [
+            CardInstance(
+                name, token_type,
+                *_recency(prior_last_seen, name, pack_number, pick_number, self._pack_size),
+            )
+            for token_type, names in blocks
+            for name in names
+        ]
 
     def commit(self, card: str) -> None:
         """Record the card the policy chose for the last :meth:`observe`.

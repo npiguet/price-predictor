@@ -47,7 +47,7 @@ Agent wiring:
 - `--agent-temp` must name the learner with a positive value. Sampling is the learner's sole exploration mechanism, and the same value is the temperature the loss evaluates the policy at, so one map keeps rollout and loss in lockstep.
 - Frozen labels default to argmax. Sampling the frozen field would not merely lower its scores: a draft allocates one fixed pool of cards, so a card a frozen agent wrongly declines flows to its podmates and hands the learner cards a properly playing agent would have kept.
 - A Forge built-in cannot be given a temperature; naming one is a startup error.
-- The trainer builds all pick services itself and passes them through `AgentRegistry.build(..., preloaded=...)` with `agent_checkpoints` empty, so the registry's single `pick_mode` argument never applies.
+- The trainer builds all pick services itself and passes them through `AgentRegistry.build(..., BuildOptions(preloaded=...))` with `agent_checkpoints` empty, so `BuildOptions.pick_mode` never applies.
 - Every generated pod carries at least one learner seat, through `-Ddraft.required.agent`. The fat JAR must be rebuilt before the first gen-3 run.
 
 Reading the margin:
