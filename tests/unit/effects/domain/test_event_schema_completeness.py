@@ -284,13 +284,17 @@ def _emitted_event_types() -> set[str]:
     ))
     emitted: set[str] = set()
     for path in _CONNECTOR_EFFECTS.glob("*.java"):
-        if path.name == "EventType.java":
-            continue
-        text = path.read_text(encoding="utf-8")
-        for name, value in constants.items():
-            if re.search(rf"EventType\.{name}\b", text):
-                emitted.add(value)
+        if path.name != "EventType.java":
+            emitted |= _types_referenced_in(path.read_text(encoding="utf-8"), constants)
     return emitted
+
+
+def _types_referenced_in(text: str, constants: dict[str, str]) -> set[str]:
+    """The values of the ``EventType`` constants (name to value) ``text`` references."""
+    return {
+        value for name, value in constants.items()
+        if re.search(rf"EventType\.{name}\b", text)
+    }
 
 
 class TestEveryDeclaredTypeIsReachable:
