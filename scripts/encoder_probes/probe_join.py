@@ -98,16 +98,14 @@ def resolve_card_file(
     if key in exact:
         return exact[key], "name-exact"
     front = name.split(" // ", 1)[0].strip() if " // " in name else None
-    if front:
-        if _norm_name(front) in exact:
-            return exact[_norm_name(front)], "front-face"
+    if front and _norm_name(front) in exact:
+        return exact[_norm_name(front)], "front-face"
     hits = aggressive.get(_aggressive_name(name), ())
     if len(hits) == 1:
         return hits[0], "punct-norm"
-    if front:
-        hits = aggressive.get(_aggressive_name(front), ())
-        if len(hits) == 1:
-            return hits[0], "front-punct"
+    hits = aggressive.get(_aggressive_name(front), ()) if front else ()
+    if len(hits) == 1:
+        return hits[0], "front-punct"
     return None, "unresolved"
 
 
@@ -218,24 +216,33 @@ def load_printing_metadata(
             return pickle.load(f)
     best: dict[str, dict] = {}
     for code, obj in _iter_printing_sets(path):
-        release = obj.get("releaseDate") or "9999-99-99"
-        for card in obj.get("cards", ()):
-            rarity = card.get("rarity", "")
-            keys = {card.get("name", ""), card.get("faceName", "")}
-            keys.discard("")
-            for raw_key in keys:
-                key = _norm_name(raw_key)
-                prev = best.get(key)
-                if prev is None or release < prev["release_date"]:
-                    best[key] = {
-                        "set_code": code,
-                        "release_date": release,
-                        "year": int(release[:4]) if release[:4].isdigit() else None,
-                        "rarity": rarity,
-                    }
+        _keep_earliest_printings(best, code, obj)
     with open(cache, "wb") as f:
         pickle.dump(best, f)
     return best
+
+
+def _keep_earliest_printings(best: dict[str, dict], code: str, obj: dict) -> None:
+    """Record set ``code``'s printings in ``best`` where they predate the one held."""
+    release = obj.get("releaseDate") or "9999-99-99"
+    for card in obj.get("cards", ()):
+        rarity = card.get("rarity", "")
+        keys = {card.get("name", ""), card.get("faceName", "")}
+        keys.discard("")
+        for raw_key in keys:
+            key = _norm_name(raw_key)
+            prev = best.get(key)
+            if prev is None or release < prev["release_date"]:
+                best[key] = _printing(code, release, rarity)
+
+
+def _printing(code: str, release: str, rarity: str) -> dict:
+    return {
+        "set_code": code,
+        "release_date": release,
+        "year": int(release[:4]) if release[:4].isdigit() else None,
+        "rarity": rarity,
+    }
 
 
 # ── the join table ──────────────────────────────────────────────────────
@@ -275,27 +282,43 @@ def build_join(
             unjoined.append({"name": name, "reason": "no converted card file",
                              "n_in_deck": rec["wins_when_in_deck"] + rec["losses_when_in_deck"]})
             continue
-        npz = path.with_suffix(".npz")
-        row = {
-            "name": name,
-            "txt_path": str(path),
-            "npz_path": str(npz) if npz.exists() else None,
-            "join_method": method,
-            "split": "train" if name in train_names else "val",
-        }
-        row.update(rec)
-        row["n_in_deck"] = rec["wins_when_in_deck"] + rec["losses_when_in_deck"]
-        row["n_played"] = rec["wins_when_played"] + rec["losses_when_played"]
-        for head in HEADS:
-            n = head_effective_n(rec, head)
-            row[f"n_{head}"] = n
-            row[f"w_{head}"] = head_weight(n)
-        rows.append(row)
+        rows.append(_join_row(name, rec, (path, method), train_names))
 
     df = pd.DataFrame(rows)
+    _mark_duplicates(df)
+    df = _merge_forge_hints(df)
+    _add_first_printings(df, with_printings)
 
-    # Join diagnostics: files claimed by more than one label row are the
-    # same card spelled two ways across corpus eras; keep the busier row.
+    df = df.sort_values("name").reset_index(drop=True)
+    df.to_pickle(JOIN_TABLE)
+    pd.DataFrame(unjoined).to_csv(SCRATCH / "unjoined.csv", index=False)
+    return df
+
+
+def _join_row(name: str, rec: dict, resolved: tuple[Path, str], train_names: set[str]) -> dict:
+    """One label row of the join table: its files, join method, split and weights."""
+    path, method = resolved
+    npz = path.with_suffix(".npz")
+    row = {
+        "name": name,
+        "txt_path": str(path),
+        "npz_path": str(npz) if npz.exists() else None,
+        "join_method": method,
+        "split": "train" if name in train_names else "val",
+    }
+    row.update(rec)
+    row["n_in_deck"] = rec["wins_when_in_deck"] + rec["losses_when_in_deck"]
+    row["n_played"] = rec["wins_when_played"] + rec["losses_when_played"]
+    for head in HEADS:
+        n = head_effective_n(rec, head)
+        row[f"n_{head}"] = n
+        row[f"w_{head}"] = head_weight(n)
+    return row
+
+
+def _mark_duplicates(df: pd.DataFrame) -> None:
+    """Join diagnostics: files claimed by more than one label row are the
+    same card spelled two ways across corpus eras; keep the busier row."""
     counts = df.groupby("txt_path")["name"].transform("size")
     df["dup_group"] = counts > 1
     df["is_primary"] = True
@@ -303,32 +326,31 @@ def build_join(
         keep = group["n_in_deck"].idxmax()
         df.loc[group.index.difference([keep]), "is_primary"] = False
 
+
+def _merge_forge_hints(df: pd.DataFrame) -> pd.DataFrame:
+    """``df`` with the ``forge_hints`` columns and ``has_forge_hint``."""
     hints = load_forge_hints()
-    if hints is not None:
-        hints = hints.rename(columns={"name": "_hint_name"})
-        hints["_key"] = hints["_hint_name"].map(_norm_name)
-        hints = hints.drop_duplicates("_key").drop(columns=["_hint_name"])
-        # forge_hints.csv keys on Forge's single-face names, so a "A // B"
-        # label row only matches through its front face.
-        keys = set(hints["_key"])
-        df["_key"] = [_hint_key(name, keys) for name in df["name"]]
-        df = df.merge(hints, on="_key", how="left").drop(columns=["_key"])
-        df["has_forge_hint"] = df["ai_remove_deck"].notna()
-    else:
+    if hints is None:
         df["has_forge_hint"] = False
-
-    if with_printings and ALLPRINTINGS.exists():
-        meta = load_printing_metadata()
-        for col in ("set_code", "year", "rarity"):
-            df[f"first_{col}"] = [
-                (meta.get(_norm_name(n)) or {}).get(col) for n in df["name"]
-            ]
-    else:
-        for col in ("set_code", "year", "rarity"):
-            df[f"first_{col}"] = None
-
-    df = df.sort_values("name").reset_index(drop=True)
-    df.to_pickle(JOIN_TABLE)
-    pd.DataFrame(unjoined).to_csv(SCRATCH / "unjoined.csv", index=False)
+        return df
+    hints = hints.rename(columns={"name": "_hint_name"})
+    hints["_key"] = hints["_hint_name"].map(_norm_name)
+    hints = hints.drop_duplicates("_key").drop(columns=["_hint_name"])
+    # forge_hints.csv keys on Forge's single-face names, so a "A // B"
+    # label row only matches through its front face.
+    keys = set(hints["_key"])
+    df["_key"] = [_hint_key(name, keys) for name in df["name"]]
+    df = df.merge(hints, on="_key", how="left").drop(columns=["_key"])
+    df["has_forge_hint"] = df["ai_remove_deck"].notna()
     return df
 
+
+def _add_first_printings(df: pd.DataFrame, with_printings: bool) -> None:
+    """The earliest-printing ``first_*`` columns, None throughout without a scan."""
+    meta = load_printing_metadata() if with_printings and ALLPRINTINGS.exists() else None
+    for col in ("set_code", "year", "rarity"):
+        df[f"first_{col}"] = None if meta is None else _printing_column(meta, df["name"], col)
+
+
+def _printing_column(meta: dict[str, dict], names: pd.Series, col: str) -> list:
+    return [(meta.get(_norm_name(n)) or {}).get(col) for n in names]

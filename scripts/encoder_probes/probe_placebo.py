@@ -68,38 +68,53 @@ def placebo_edits(text: str, freq: Counter | None = None) -> dict[str, str | Non
         "swap_static": None, "subtype_swap": None, "swap_ability_lines": None,
     }
 
-    statics = [i for i, ln in enumerate(lines) if ln.startswith("static:")]
+    statics = _line_indices(lines, "static:")
     if len(statics) >= 2:
-        edited = list(lines)
-        a, b = statics[0], statics[1]
-        edited[a], edited[b] = edited[b], edited[a]
-        out["swap_static"] = "\n".join(edited)
-
-    for i, line in enumerate(lines):
-        if not line.startswith("types:"):
-            continue
-        words = line[6:].split()
-        if "creature" not in words:
-            continue
-        subs = subtypes(words)
-        if not subs:
-            continue
-        victim = subs[-1]
-        replacement = _same_frequency_subtype(victim, freq, set(subs))
-        if replacement is None:
-            continue
-        edited = list(lines)
-        edited[i] = "types: " + " ".join(
-            replacement if w == victim else w for w in words
-        )
-        out["subtype_swap"] = "\n".join(edited)
-        break
-
-    abilities = [i for i, ln in enumerate(lines) if ln.startswith(ABILITY_PREFIXES)]
+        out["swap_static"] = _swap_lines(lines, statics[0], statics[1])
+    out["subtype_swap"] = _subtype_swap(lines, freq)
+    abilities = _line_indices(lines, ABILITY_PREFIXES)
     if len(abilities) >= 2:
-        a, b = abilities[0], abilities[-1]
-        edited = list(lines)
-        edited[a], edited[b] = edited[b], edited[a]
-        out["swap_ability_lines"] = "\n".join(edited)
+        out["swap_ability_lines"] = _swap_lines(lines, abilities[0], abilities[-1])
     return out
 
+
+def _line_indices(lines: list[str], prefix: str | tuple[str, ...]) -> list[int]:
+    return [i for i, ln in enumerate(lines) if ln.startswith(prefix)]
+
+
+def _swap_lines(lines: list[str], a: int, b: int) -> str:
+    """The text with lines ``a`` and ``b`` exchanged."""
+    edited = list(lines)
+    edited[a], edited[b] = edited[b], edited[a]
+    return "\n".join(edited)
+
+
+def _subtype_swap(lines: list[str], freq: Counter) -> str | None:
+    """The text with its first swappable creature ``types:`` line swapped, or None."""
+    for i, line in enumerate(lines):
+        swapped = _swapped_types_line(line, freq)
+        if swapped is not None:
+            edited = list(lines)
+            edited[i] = swapped
+            return "\n".join(edited)
+    return None
+
+
+def _swapped_types_line(line: str, freq: Counter) -> str | None:
+    """A creature ``types:`` line with its last subtype replaced by a
+    corpus-frequency-matched other subtype; None when the line cannot take one."""
+    if not line.startswith("types:"):
+        return None
+    words = line[6:].split()
+    if "creature" not in words:
+        return None
+    subs = subtypes(words)
+    if not subs:
+        return None
+    victim = subs[-1]
+    replacement = _same_frequency_subtype(victim, freq, set(subs))
+    if replacement is None:
+        return None
+    return "types: " + " ".join(
+        replacement if w == victim else w for w in words
+    )
