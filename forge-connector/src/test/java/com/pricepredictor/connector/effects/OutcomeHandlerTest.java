@@ -155,24 +155,10 @@ class OutcomeHandlerTest {
         Map<String, Object> written = onlyEvent(
                 new Object[]{sa, "token_created", Map.of("sample", bat, "count", 2)});
 
-        assertEquals("token_created", written.get("type"), written.toString());
-        Map<String, Object> params = params(written);
-        assertEquals(Set.of("token_script_id", "characteristics", "count"),
-                params.keySet(), written.toString());
-        assertEquals("b_1_1_bat_flying", CardSpelling.tokenScriptIdOf(bat));
-        assertEquals("b_1_1_bat_flying", params.get("token_script_id"), written.toString());
-        assertEquals(2L, params.get("count"), written.toString());
-        assertEquals(List.of("flying"), CardSpelling.keywordNames(bat.getKeywords()));
-        Map<String, Object> traits = new java.util.HashMap<>();
-        traits.put("power", 1L);
-        traits.put("toughness", 1L);
-        traits.put("types", bat.getType().toString());
-        traits.put("keywords", List.of("flying"));
-        traits.put("controller", null);
-        traits.put("counters", Map.of());
-        assertEquals(traits, params.get("characteristics"), written.toString());
-        assertFalse(written.toString().contains("sample"), written.toString());
-        assertEquals(List.of(), written.get("subjects"), written.toString());
+        assertTokenEventShape(written);
+        assertTokenScriptIdAndCount(written, bat);
+        assertTokenCharacteristics(written, bat);
+        assertTokenSampleLeftNoTrace(written);
     }
 
     /**
@@ -214,13 +200,9 @@ class OutcomeHandlerTest {
                 new Object[]{null, "damage_prevented",
                         Map.of("amount", 2, "subjects", List.of())});
 
-        assertEquals(3, events.size(), events.toString());
-        assertEquals(List.of(Refs.of(creature)), events.get(0).get("subjects"),
-                events.get(0).toString());
-        assertEquals(Set.of("amount"), params(events.get(0)).keySet(), events.get(0).toString());
-        assertEquals(List.of(Refs.of(player)), events.get(1).get("subjects"),
-                events.get(1).toString());
-        assertEquals(List.of(), events.get(2).get("subjects"), events.get(2).toString());
+        assertCreatureRecipient(events, creature);
+        assertAmountOnlyThenPlayerRecipient(events, player);
+        assertNoRecipient(events);
     }
 
     /**
@@ -258,14 +240,9 @@ class OutcomeHandlerTest {
                 new Object[]{null, "card_revealed",
                         Map.of("count", 1, "from_zone", "Hand", "subjects", List.of(second))});
 
-        assertEquals(2, events.size(), events.toString());
-        Map<String, Object> fromLibraries = events.get(0);
-        assertEquals(List.of(Refs.of(first), Refs.of(second)),
-                fromLibraries.get("subjects"), fromLibraries.toString());
-        assertEquals(Map.of("count", 2L, "from_zone", "library"), params(fromLibraries),
-                fromLibraries.toString());
-        assertEquals(List.of(Refs.of(second)), events.get(1).get("subjects"), events.get(1).toString());
-        assertEquals("hand", params(events.get(1)).get("from_zone"), events.get(1).toString());
+        assertBothRevealersNamed(events, first, second);
+        assertLibraryRevealParams(events);
+        assertHandRevealNamesItsRevealer(events, second);
     }
 
     /**
@@ -283,11 +260,8 @@ class OutcomeHandlerTest {
                         Map.of("card_name", "Grizzly Bears", "to_zone", "null", "count", 1)},
                 new Object[]{null, "card_revealed", Map.of("count", 1, "from_zone", "?")});
 
-        assertEquals(3, events.size(), events.toString());
-        assertEquals("hand", params(events.get(0)).get("to_zone"), events.get(0).toString());
-        assertEquals(Set.of("card_name", "count"), params(events.get(1)).keySet(),
-                events.get(1).toString());
-        assertEquals(Set.of("count"), params(events.get(2)).keySet(), events.get(2).toString());
+        assertNamedZoneLowerCased(events);
+        assertUnnamedZonesWriteNoParameter(events);
     }
 
     /**
@@ -720,5 +694,95 @@ class OutcomeHandlerTest {
                         + shard);
         assertTrue(shard.contains("\"amount\":4"),
                 "the live report beside it is written: " + shard);
+    }
+
+    /** The token event is a token_created whose parameters are exactly its script id, characteristics and count. */
+    private static void assertTokenEventShape(Map<String, Object> written) {
+        assertEquals("token_created", written.get("type"), written.toString());
+        Map<String, Object> params = params(written);
+        assertEquals(Set.of("token_script_id", "characteristics", "count"),
+                params.keySet(), written.toString());
+    }
+
+    /** The sample's script id and the group's count are written. */
+    private static void assertTokenScriptIdAndCount(Map<String, Object> written, Card bat) {
+        Map<String, Object> params = params(written);
+        assertEquals("b_1_1_bat_flying", CardSpelling.tokenScriptIdOf(bat));
+        assertEquals("b_1_1_bat_flying", params.get("token_script_id"), written.toString());
+        assertEquals(2L, params.get("count"), written.toString());
+    }
+
+    /** The sample's keywords are spelled as an entity's, and its characteristics are the board's rendering of it. */
+    private static void assertTokenCharacteristics(Map<String, Object> written, Card bat) {
+        Map<String, Object> params = params(written);
+        assertEquals(List.of("flying"), CardSpelling.keywordNames(bat.getKeywords()));
+        Map<String, Object> traits = new java.util.HashMap<>();
+        traits.put("power", 1L);
+        traits.put("toughness", 1L);
+        traits.put("types", bat.getType().toString());
+        traits.put("keywords", List.of("flying"));
+        traits.put("controller", null);
+        traits.put("counters", Map.of());
+        assertEquals(traits, params.get("characteristics"), written.toString());
+    }
+
+    /** The sample itself never reaches the event, and the event names no subject. */
+    private static void assertTokenSampleLeftNoTrace(Map<String, Object> written) {
+        assertFalse(written.toString().contains("sample"), written.toString());
+        assertEquals(List.of(), written.get("subjects"), written.toString());
+    }
+
+    /** Three events came out, the first naming the creature as its subject. */
+    private static void assertCreatureRecipient(List<Map<String, Object>> events, Card creature) {
+        assertEquals(3, events.size(), events.toString());
+        assertEquals(List.of(Refs.of(creature)), events.get(0).get("subjects"),
+                events.get(0).toString());
+    }
+
+    /** The first event's only parameter is the amount; the second names the player as its subject. */
+    private static void assertAmountOnlyThenPlayerRecipient(List<Map<String, Object>> events, Player player) {
+        assertEquals(Set.of("amount"), params(events.get(0)).keySet(), events.get(0).toString());
+        assertEquals(List.of(Refs.of(player)), events.get(1).get("subjects"),
+                events.get(1).toString());
+    }
+
+    /** The third event names no recipient. */
+    private static void assertNoRecipient(List<Map<String, Object>> events) {
+        assertEquals(List.of(), events.get(2).get("subjects"), events.get(2).toString());
+    }
+
+    /** Two reveal events came out; the first names both clashers. */
+    private static void assertBothRevealersNamed(
+            List<Map<String, Object>> events, Player first, Player second) {
+        assertEquals(2, events.size(), events.toString());
+        Map<String, Object> fromLibraries = events.get(0);
+        assertEquals(List.of(Refs.of(first), Refs.of(second)),
+                fromLibraries.get("subjects"), fromLibraries.toString());
+    }
+
+    /** The library reveal writes its count and a lower-cased zone. */
+    private static void assertLibraryRevealParams(List<Map<String, Object>> events) {
+        Map<String, Object> fromLibraries = events.get(0);
+        assertEquals(Map.of("count", 2L, "from_zone", "library"), params(fromLibraries),
+                fromLibraries.toString());
+    }
+
+    /** The hand reveal names its revealer and spells its zone lower-cased. */
+    private static void assertHandRevealNamesItsRevealer(List<Map<String, Object>> events, Player second) {
+        assertEquals(List.of(Refs.of(second)), events.get(1).get("subjects"), events.get(1).toString());
+        assertEquals("hand", params(events.get(1)).get("from_zone"), events.get(1).toString());
+    }
+
+    /** Three events came out and a named zone is spelled lower-cased. */
+    private static void assertNamedZoneLowerCased(List<Map<String, Object>> events) {
+        assertEquals(3, events.size(), events.toString());
+        assertEquals("hand", params(events.get(0)).get("to_zone"), events.get(0).toString());
+    }
+
+    /** A zone of "null" or "?" writes no zone parameter. */
+    private static void assertUnnamedZonesWriteNoParameter(List<Map<String, Object>> events) {
+        assertEquals(Set.of("card_name", "count"), params(events.get(1)).keySet(),
+                events.get(1).toString());
+        assertEquals(Set.of("count"), params(events.get(2)).keySet(), events.get(2).toString());
     }
 }

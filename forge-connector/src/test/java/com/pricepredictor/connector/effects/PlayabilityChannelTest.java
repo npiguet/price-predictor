@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import static com.pricepredictor.connector.effects.TestCaps.caps;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -191,22 +192,9 @@ class PlayabilityChannelTest {
      */
     @Test
     void aPacifiedBlockerNamesPacifismAsItsResponsibleStatic() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
-        Player attacking = game.getPlayers().get(0);
-        Player blocking = game.getPlayers().get(1);
-        Card attacker = TestBoard.inPlay(game, attacking, "Grizzly Bears");
-        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
-        Card pacifism = TestBoard.inPlay(game, attacking, "Pacifism");
-        pacifism.attachToEntity(blocker, null);
-        Combat combat = new Combat(attacking);
-        combat.addAttacker(attacker, blocking);
-        game.getPhaseHandler().setCombat(combat);
-
-        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
-                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
-                        new Object[]{blocking, attacker, List.of(blocker), List.of(), 1}));
-
-        String record = recordsOf(lines).get(0);
+        String record = bearsAgainstGiantRecord((seats, blocker) ->
+                TestBoard.inPlay(seats.game(), seats.attacking(), "Pacifism")
+                        .attachToEntity(blocker, null));
         assertTrue(record.contains("\"responsible_static\":[{\"script_file\":\"cardsfolder/p/pacifism.txt\""),
                 record);
         assertFalse(record.contains("required_elsewhere"), record);
@@ -219,22 +207,7 @@ class PlayabilityChannelTest {
      */
     @Test
     void aBlockerALureCallsElsewhereIsRequiredElsewhere() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
-        Player attacking = game.getPlayers().get(0);
-        Player blocking = game.getPlayers().get(1);
-        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
-        Card unicorn = TestBoard.inPlay(game, attacking, "Prized Unicorn");
-        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
-        Combat combat = new Combat(attacking);
-        combat.addAttacker(bears, blocking);
-        combat.addAttacker(unicorn, blocking);
-        game.getPhaseHandler().setCombat(combat);
-
-        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
-                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
-                        new Object[]{blocking, bears, List.of(blocker), List.of(), 1}));
-
-        String record = recordsOf(lines).get(0);
+        String record = lureAgainstGiantRecord("Grizzly Bears");
         assertTrue(record.contains("\"required_elsewhere\":true"), record);
         assertTrue(record.contains("\"responsible_static\":[]"), record);
     }
@@ -246,22 +219,7 @@ class PlayabilityChannelTest {
      */
     @Test
     void aLuredBlockerAFlyerShutsOutIsNotRequiredElsewhere() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
-        Player attacking = game.getPlayers().get(0);
-        Player blocking = game.getPlayers().get(1);
-        Card drake = TestBoard.inPlay(game, attacking, "Wind Drake");
-        Card unicorn = TestBoard.inPlay(game, attacking, "Prized Unicorn");
-        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
-        Combat combat = new Combat(attacking);
-        combat.addAttacker(drake, blocking);
-        combat.addAttacker(unicorn, blocking);
-        game.getPhaseHandler().setCombat(combat);
-
-        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
-                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
-                        new Object[]{blocking, drake, List.of(blocker), List.of(), 1}));
-
-        String record = recordsOf(lines).get(0);
+        String record = lureAgainstGiantRecord("Wind Drake");
         assertFalse(record.contains("required_elsewhere"), record);
         assertTrue(record.contains("\"responsible_static\":[{\"script_file\":\"cardsfolder/w/wind_drake.txt\""),
                 "the flyer's keyword line keeps the blocker out: " + record);
@@ -274,24 +232,57 @@ class PlayabilityChannelTest {
      */
     @Test
     void aBlockerACantBlockEffectStopsNamesNoStatic() throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
-        Player attacking = game.getPlayers().get(0);
-        Player blocking = game.getPlayers().get(1);
-        Card attacker = TestBoard.inPlay(game, attacking, "Grizzly Bears");
-        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
-        blocker.addHiddenExtrinsicKeywords(game.getNextTimestamp(), 0,
-                List.of("CARDNAME can't block."));
-        Combat combat = new Combat(attacking);
-        combat.addAttacker(attacker, blocking);
-        game.getPhaseHandler().setCombat(combat);
-
-        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
-                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
-                        new Object[]{blocking, attacker, List.of(blocker), List.of(), 1}));
-
-        String record = recordsOf(lines).get(0);
+        String record = bearsAgainstGiantRecord((seats, blocker) ->
+                blocker.addHiddenExtrinsicKeywords(seats.game().getNextTimestamp(), 0,
+                        List.of("CARDNAME can't block.")));
         assertTrue(record.contains("\"responsible_static\":[]"), record);
         assertFalse(record.contains("required_elsewhere"), record);
+    }
+
+    /** The two players of a blockers declaration: who attacks, who may block, and their game. */
+    private record BlockSeats(Game game, Player attacking, Player blocking) {
+        static BlockSeats atBlockersDeclaration() {
+            Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+            return new BlockSeats(game, game.getPlayers().get(0), game.getPlayers().get(1));
+        }
+
+        /** Sets a combat in which each of the attackers attacks the blocking player. */
+        Combat declare(List<Card> attackers) {
+            Combat combat = new Combat(attacking);
+            for (Card attacker : attackers) {
+                combat.addAttacker(attacker, blocking);
+            }
+            game.getPhaseHandler().setCombat(combat);
+            return combat;
+        }
+    }
+
+    /** The blockers record of one blocker, given no legal blocker, against the anchor. */
+    private String lonelyBlockerRecord(BlockSeats seats, Card anchor, List<Card> attackers,
+            Card blocker) throws Throwable {
+        seats.declare(attackers);
+        List<String> lines = ShardRun.records(tempDir, seats.game(), (bracket, collectors) ->
+                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
+                        new Object[]{seats.blocking(), anchor, List.of(blocker), List.of(), 1}));
+        return recordsOf(lines).get(0);
+    }
+
+    /** The blockers record of a Hill Giant against a Grizzly Bears, once the restriction is put on the giant. */
+    private String bearsAgainstGiantRecord(BiConsumer<BlockSeats, Card> restriction) throws Throwable {
+        BlockSeats seats = BlockSeats.atBlockersDeclaration();
+        Card attacker = TestBoard.inPlay(seats.game(), seats.attacking(), "Grizzly Bears");
+        Card blocker = TestBoard.inPlay(seats.game(), seats.blocking(), "Hill Giant");
+        restriction.accept(seats, blocker);
+        return lonelyBlockerRecord(seats, attacker, List.of(attacker), blocker);
+    }
+
+    /** The blockers record of a Hill Giant against the named anchor, a Prized Unicorn attacking beside it. */
+    private String lureAgainstGiantRecord(String anchorName) throws Throwable {
+        BlockSeats seats = BlockSeats.atBlockersDeclaration();
+        Card anchor = TestBoard.inPlay(seats.game(), seats.attacking(), anchorName);
+        Card unicorn = TestBoard.inPlay(seats.game(), seats.attacking(), "Prized Unicorn");
+        Card blocker = TestBoard.inPlay(seats.game(), seats.blocking(), "Hill Giant");
+        return lonelyBlockerRecord(seats, anchor, List.of(anchor, unicorn), blocker);
     }
 
     /**
@@ -301,13 +292,11 @@ class PlayabilityChannelTest {
      */
     private int declarations;
 
-    private String blockersRecord(Game game, Player attacking, Player blocking, Card anchor,
+    private String blockersRecord(BlockSeats seats, Card anchor,
             List<Card> attackers, List<Card> candidates) throws Throwable {
-        Combat combat = new Combat(attacking);
-        for (Card attacker : attackers) {
-            combat.addAttacker(attacker, blocking);
-        }
-        game.getPhaseHandler().setCombat(combat);
+        Game game = seats.game();
+        Player blocking = seats.blocking();
+        Combat combat = seats.declare(attackers);
         List<Card> legal = candidates.stream()
                 .filter(c -> forge.game.combat.CombatUtil.canBlock(anchor, c, combat)).toList();
         List<String> lines = ShardRun.records(
@@ -343,7 +332,7 @@ class PlayabilityChannelTest {
         Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
 
         String record = blockersRecord(
-                game, attacking, blocking, bears, List.of(bears, required), List.of(blocker));
+                new BlockSeats(game, attacking, blocking), bears, List.of(bears, required), List.of(blocker));
 
         assertTrue(record.contains("\"legal_blockers\":[]"), "Forge refuses the block: " + record);
         assertTrue(record.contains("\"forbidden\":[{\"entity\":\"" + Refs.of(blocker)
@@ -360,7 +349,7 @@ class PlayabilityChannelTest {
         Card grakk = TestBoard.inPlay(game, blocking, "Grakk the Pacifist");
 
         String record = blockersRecord(
-                game, attacking, blocking, bears, List.of(bears), List.of(grakk));
+                new BlockSeats(game, attacking, blocking), bears, List.of(bears), List.of(grakk));
 
         assertTrue(record.contains("\"forbidden\":[{\"entity\":\"" + Refs.of(grakk)
                 + "\",\"responsible_static\":[{\"script_file\":\"cardsfolder/g/grakk_the_pacifist.txt\""
@@ -382,14 +371,14 @@ class PlayabilityChannelTest {
         Card flunkies = TestBoard.inPlay(game, blocking, "Mogg Flunkies");
 
         String alone = blockersRecord(
-                game, attacking, blocking, bears, List.of(bears), List.of(flunkies));
+                new BlockSeats(game, attacking, blocking), bears, List.of(bears), List.of(flunkies));
         assertTrue(alone.contains("\"responsible_static\":[{\"script_file\":"
                 + "\"cardsfolder/m/mogg_flunkies.txt\""), alone);
         assertTrue(alone.contains("\"responsible_own\":true"), alone);
 
         Card friend = TestBoard.inPlay(game, blocking, "Hill Giant");
         String together = blockersRecord(
-                game, attacking, blocking, bears, List.of(bears), List.of(flunkies, friend));
+                new BlockSeats(game, attacking, blocking), bears, List.of(bears), List.of(flunkies, friend));
         assertTrue(together.contains("\"forbidden\":[]"), together);
     }
 
@@ -404,7 +393,7 @@ class PlayabilityChannelTest {
         TestBoard.inPlay(game, attacking, "Pacifism").attachToEntity(blocker, null);
 
         String record = blockersRecord(
-                game, attacking, blocking, bears, List.of(bears), List.of(blocker));
+                new BlockSeats(game, attacking, blocking), bears, List.of(bears), List.of(blocker));
 
         assertTrue(record.contains("cardsfolder/p/pacifism.txt"), record);
         assertFalse(record.contains("responsible_own"), record);
@@ -435,7 +424,7 @@ class PlayabilityChannelTest {
                 != null, "the effect's static keeps the blocker out");
 
         String record = blockersRecord(
-                game, attacking, blocking, bears, List.of(bears), List.of(blocker));
+                new BlockSeats(game, attacking, blocking), bears, List.of(bears), List.of(blocker));
 
         assertTrue(record.contains("\"responsible_static\":[],\"responsible_unresolved\":\"engine_effect\""),
                 record);

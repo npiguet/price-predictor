@@ -64,10 +64,19 @@ class ForkPlayForwardIntegrationTest {
             this.recording = recording;
         }
 
+        private boolean forksAt(GameEventTurnPhase event) {
+            if (forkedOnTurn >= 0) {
+                return false;
+            }
+            if (event.phase() != PhaseType.MAIN2) {
+                return false;
+            }
+            return live.getPhaseHandler().getTurn() >= 5;
+        }
+
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
-            if (forkedOnTurn >= 0 || event.phase() != PhaseType.MAIN2
-                    || live.getPhaseHandler().getTurn() < 5) {
+            if (!forksAt(event)) {
                 return;
             }
             forkedOnTurn = live.getPhaseHandler().getTurn();
