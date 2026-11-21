@@ -302,6 +302,18 @@ many cut games the counts left out (`cut_games`). Before launching a collection,
 - A kill loses the game in progress only: every finished game is on disk whole, its marker
   included, before the next one starts.
 
+After the first full gen-3 round, the directed-fork list is decided from gen-3 counts. Until then
+it stays as Stage 1 decided it from gen-2's counts: a pilot is too small to say which rules are
+rare, and its directed forks count as records of the rules they forced. Run `directed-rules` on
+`$counts`, the round's `rule-counts` above. Records whose source is `aimed` are the directed
+forks' own. `directed-rules` counts them with the rest, so a rule whose forked side only `aimed`
+records show (118.12b in the 2026-11-21 review pilots) reads as covered and leaves the list;
+judge each leaving rule on its counts without `aimed`. The command rewrites the three files
+under `rules/` in place; show every rule that enters or leaves the list, with its counts, and
+change it only with the user's agreement (it drives the next collection). Then commit the counts
+and the list, and remove `GEN3_ONLY_RULES` from `tests/unit/scripts/test_rules_catalogue.py`, so
+that its test compares the whole list.
+
 ## Stage 6 — curate and freeze (story 6, story 8)
 
 ```powershell
