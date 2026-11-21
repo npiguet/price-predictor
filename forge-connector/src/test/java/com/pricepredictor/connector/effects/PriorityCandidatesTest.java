@@ -215,6 +215,11 @@ class PriorityCandidatesTest {
         String decision = recordOf(records, shock);
         Map<String, Object> refs = RecordLines.asMap(RecordLines.asMap(
                 RecordLines.parse(decision).get("state")).get("refs"));
+        assertRefsNameOnlyTheSource(refs, shock, decision);
+    }
+
+    /** The refs name {@code shock} as the source and carry no targets, X, modes or choices. */
+    private static void assertRefsNameOnlyTheSource(Map<String, Object> refs, Card shock, String decision) {
         assertEquals(Refs.of(shock), refs.get("source"), decision);
         assertEquals(List.of(), refs.get("targets"), decision);
         assertEquals(null, refs.get("x"), decision);
@@ -290,18 +295,26 @@ class PriorityCandidatesTest {
                 (bracket, collectors) -> settle(collectors, game, a)));
 
         String second = recordOf(records, mountain);
+        assertLandPlayVerdictFailsOnlyTheLimit(second);
+        assertLandPlayHasNoTargetsOrCostAdjustment(second);
+        for (Player player : game.getPlayers()) {
+            assertTrue(PriorityCandidates.candidatesOf(game, player).stream()
+                    .noneMatch(c -> c.ability().isManaAbility()), "a mana ability is no candidate");
+        }
+    }
+
+    private static void assertLandPlayVerdictFailsOnlyTheLimit(String second) {
         assertEquals(true, candidateOf(second).get("land_play"), second);
         assertEquals(false, verdictOf(second).get("can_play"), second);
         assertEquals(true, verdictOf(second).get("affordable"), second);
         assertEquals(true, verdictOf(second).get("timing"), "only the limit fails it: " + second);
         assertEquals(true, verdictOf(second).get("has_legal_target"), second);
         assertEquals(List.of("land_play_limit"), failedChecks(second));
+    }
+
+    private static void assertLandPlayHasNoTargetsOrCostAdjustment(String second) {
         assertEquals(List.of(), candidateOf(second).get("legal_targets"));
         assertEquals(Map.of(), candidateOf(second).get("cost_after_adjustment"));
-        for (Player player : game.getPlayers()) {
-            assertTrue(PriorityCandidates.candidatesOf(game, player).stream()
-                    .noneMatch(c -> c.ability().isManaAbility()), "a mana ability is no candidate");
-        }
     }
 
     /** The mana a candidate in A's hand would be charged, as its decision record writes it. */
@@ -362,10 +375,14 @@ class PriorityCandidatesTest {
 
         String land = recordOf(records, island);
         assertTrue(land.contains("\"actor_player\":\"" + Refs.of(b) + "\""), land);
+        assertLandPlayFailsTimingAndCanPlay(land);
+        assertEquals(List.of("casting_speed", "whose_turn"), failedChecks(land));
+    }
+
+    private static void assertLandPlayFailsTimingAndCanPlay(String land) {
         assertEquals(true, candidateOf(land).get("land_play"), land);
         assertEquals(false, verdictOf(land).get("timing"), land);
         assertEquals(false, verdictOf(land).get("can_play"), land);
-        assertEquals(List.of("casting_speed", "whose_turn"), failedChecks(land));
     }
 
     /** A modal double-faced card's land face is a land-play candidate; its spell face is not. */
@@ -513,6 +530,10 @@ class PriorityCandidatesTest {
 
         assertTrue(read > 5, "the board offers candidates to evaluate: " + read);
         assertEquals(before, digest(game));
+        assertEnumeratedGameKeepsItsZones(game, a, b);
+    }
+
+    private static void assertEnumeratedGameKeepsItsZones(Game game, Player a, Player b) {
         assertEquals(1, game.getStack().size());
         assertEquals(6, a.getCardsIn(ZoneType.Hand).size());
         assertEquals(6, b.getCardsIn(ZoneType.Hand).size());

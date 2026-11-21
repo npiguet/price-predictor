@@ -83,22 +83,21 @@ class RandomChoicesTest {
         SpellAbility charm = TestBoard.charmOf(TestBoard.inHand(game, caster, "Abzan Charm"), caster);
         List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
 
+        assertEquals(Set.of(1), modeIndexesDrawn(charm, choices), "no creature: only the mode that targets nothing");
+
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
+        assertEquals(Set.of(0, 1, 2), modeIndexesDrawn(charm, choices), "a 3-power creature: every mode");
+    }
+
+    /** The indexes among {@code choices} of every mode a charm draws over all the seeds. */
+    private static Set<Integer> modeIndexesDrawn(SpellAbility charm, List<AbilitySub> choices) {
         Set<Integer> seen = new HashSet<>();
         for (int seed = 0; seed < SEEDS; seed++) {
             for (AbilitySub mode : drawsFor(seed).drawModes(charm).orElseThrow()) {
                 seen.add(choices.indexOf(mode));
             }
         }
-        assertEquals(Set.of(1), seen, "no creature: only the mode that targets nothing");
-
-        TestBoard.inPlay(game, game.getPlayers().get(1), "Hill Giant");
-        seen.clear();
-        for (int seed = 0; seed < SEEDS; seed++) {
-            for (AbilitySub mode : drawsFor(seed).drawModes(charm).orElseThrow()) {
-                seen.add(choices.indexOf(mode));
-            }
-        }
-        assertEquals(Set.of(0, 1, 2), seen, "a 3-power creature: every mode");
+        return seen;
     }
 
     /**
