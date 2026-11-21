@@ -15,6 +15,7 @@ import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
+import forge.util.MyRandom;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class ForkPlayForwardIntegrationTest {
+
+    /**
+     * Seeds Forge's shared generator, which shuffles the libraries and drives
+     * seat B's AI. Pinned so that the fork's turn is always one in which the
+     * seat to act casts a spell: on most games nothing resolves between turn
+     * 5's second main phase and its end, the fork rightly writes no record,
+     * and the assertion that it wrote some failed about every other run.
+     * Seed 3 gave a fork with records in 34 of 34 runs; the rest of the match
+     * still differs a little from run to run, so the game is not replayed
+     * exactly.
+     */
+    private static final long MATCH_SEED = 3L;
 
     @TempDir
     Path tempDir;
@@ -90,6 +103,16 @@ class ForkPlayForwardIntegrationTest {
 
     @Test
     void aForkPlaysOnInsideARealMatchAndTheMatchPlaysOn() throws Throwable {
+        Random was = MyRandom.getRandom();
+        MyRandom.setRandom(new Random(MATCH_SEED));
+        try {
+            playAndCheck();
+        } finally {
+            MyRandom.setRandom(was);
+        }
+    }
+
+    private void playAndCheck() throws Throwable {
         Deck red = deck("Mountain", Map.of(
                 "Goblin Piker", 4, "Hill Giant", 4, "Lightning Bolt", 4, "Gray Ogre", 4,
                 "Raging Goblin", 4, "Shock", 3));
