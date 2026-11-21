@@ -288,8 +288,11 @@ final class RewriteChannel implements EventRouter.EventTap {
             EffectRecord record, Rewrite rewrite, boolean bufferedRan,
             List<EffectEvent> bufferedEvents) {
         record.payload(RecordPayloads.rewritePayload(
-                rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
-                rewrite.incomingUnknown(), rewrite.buffered(), bufferedRan, bufferedEvents));
+                rewritten(rewrite),
+                rewrite.buffered() == null
+                        ? null
+                        : new RecordPayloads.Buffered(
+                                rewrite.buffered(), bufferedRan, bufferedEvents)));
     }
 
     /**
@@ -369,9 +372,15 @@ final class RewriteChannel implements EventRouter.EventTap {
             Object replacedBy, RecordState state) {
         Rewrite rewrite = rewrite(
                 new Reported(trait, before, after, result, replacedBy, null), null);
-        return shell(trait, rewrite.incoming(), state).payload(RecordPayloads.rewritePayload(
+        return shell(trait, rewrite.incoming(), state)
+                .payload(RecordPayloads.rewritePayload(rewritten(rewrite), null));
+    }
+
+    /** What the rewrite says of the replacement itself. */
+    private static RecordPayloads.Rewritten rewritten(Rewrite rewrite) {
+        return new RecordPayloads.Rewritten(
                 rewrite.incoming(), rewrite.outgoing(), rewrite.result(), rewrite.replacedBy(),
-                rewrite.incomingUnknown(), null, false, List.of()));
+                rewrite.incomingUnknown());
     }
 
     /** A rewrite record but for its payload, on {@code state}, or on the board now. */

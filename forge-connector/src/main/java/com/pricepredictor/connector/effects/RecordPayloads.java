@@ -125,47 +125,70 @@ final class RecordPayloads {
     static RecordPayload rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
-        return rewritePayload(incoming, outgoing, result, replacedBy, false, null, false, List.of());
+        return rewritePayload(new Rewritten(incoming, outgoing, result, replacedBy, false), null);
+    }
+
+    /**
+     * What a rewrite record says of the replacement itself: the event as it
+     * arrived and as it left, the wire result, the abilities that stood in,
+     * and whether Forge could not copy the incoming event.
+     *
+     * @param incomingUnknown true where Forge could not copy the event as it
+     *                        arrived ({@code incoming} is then the event as it
+     *                        left, and {@code outgoing} null)
+     */
+    record Rewritten(
+            EffectEvent incoming, EffectEvent outgoing, String result,
+            List<ProvenanceKey> replacedBy, boolean incomingUnknown) {
+    }
+
+    /**
+     * The ability a damage replacement set aside: its keys, whether Forge ran
+     * it, and the events of its run the record took.
+     */
+    record Buffered(List<ProvenanceKey> keys, boolean ran, List<EffectEvent> events) {
     }
 
     /**
      * The same, with what a gen-3 rewrite record adds after
      * {@code replaced_by}, each only where it says something:
      * {@code incoming_unknown: true} where Forge could not copy the event as
-     * it arrived ({@code incoming} is then the event as it left, and
-     * {@code outgoing} null); and, for a damage replacement that set an
+     * it arrived; and, for a damage replacement that set an
      * ability aside, {@code buffered} (that ability's keys),
      * {@code buffered_ran} (whether Forge ran it) and
      * {@code buffered_events} (the events of its run this record took).
      *
-     * @param buffered the buffered ability's keys, or null when none was set aside
+     * @param buffered the ability set aside, or null when none was
      */
-    static RecordPayload rewritePayload(
-            EffectEvent incoming, EffectEvent outgoing, String result,
-            List<ProvenanceKey> replacedBy, boolean incomingUnknown,
-            List<ProvenanceKey> buffered, boolean bufferedRan, List<EffectEvent> bufferedEvents) {
+    static RecordPayload rewritePayload(Rewritten rewritten, Buffered buffered) {
         var payload = Json.object()
-                .raw("incoming", incoming.toJson())
-                .raw("outgoing", outgoing == null ? "null" : outgoing.toJson())
-                .value("result", result)
-                .raw("replaced_by",
-                        ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy));
-        if (incomingUnknown) {
+                .raw("incoming", rewritten.incoming().toJson())
+                .raw("outgoing", rewritten.outgoing() == null ? "null" : rewritten.outgoing().toJson())
+                .value("result", rewritten.result())
+                .raw("replaced_by", ProvenanceKey.toJsonArray(
+                        rewritten.replacedBy() == null ? List.of() : rewritten.replacedBy()));
+        if (rewritten.incomingUnknown()) {
             payload.value("incoming_unknown", true);
         }
         List<EffectEvent> named = new ArrayList<>();
-        named.add(incoming);
-        if (outgoing != null) {
-            named.add(outgoing);
+        named.add(rewritten.incoming());
+        if (rewritten.outgoing() != null) {
+            named.add(rewritten.outgoing());
         }
         if (buffered != null) {
-            List<EffectEvent> ran = happened(bufferedEvents);
-            payload.raw("buffered", ProvenanceKey.toJsonArray(buffered))
-                    .value("buffered_ran", bufferedRan)
-                    .raw("buffered_events", eventArray(ran));
-            named.addAll(ran);
+            named.addAll(addBuffered(payload, buffered));
         }
         return holding(payload.render(), named);
+    }
+
+    /** Write the buffered ability's three fields; the events of its run that were written. */
+    private static List<EffectEvent> addBuffered(
+            Json.ObjectWriter payload, Buffered buffered) {
+        List<EffectEvent> ran = happened(buffered.events());
+        payload.raw("buffered", ProvenanceKey.toJsonArray(buffered.keys()))
+                .value("buffered_ran", buffered.ran())
+                .raw("buffered_events", eventArray(ran));
+        return ran;
     }
 
     /**
