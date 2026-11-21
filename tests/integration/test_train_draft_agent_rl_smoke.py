@@ -24,7 +24,7 @@ DIM = 8  # concat_width 24 is divisible by the default 8 heads
 
 
 class _FakeLocator:
-    def __init__(self, _path) -> None:
+    def __init__(self, _path, embeddings_path=None) -> None:
         self._tbl: dict[str, np.ndarray] = {}
 
     def load_embedding(self, name: str) -> np.ndarray:
