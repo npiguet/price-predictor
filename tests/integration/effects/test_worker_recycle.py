@@ -2,8 +2,10 @@
 
 ``MatchOutcomeSupervisor`` and its ``ForgeWorkerPool`` run one Forge worker the
 way ``sealed match-outcomes --effect-records`` runs it, inside the command's own
-``run.json`` (``run_recorded``), except for the recycle time: the command line
-refuses one under 300 s, so the supervisor is handed a short one directly, and
+``run.json`` (``run_recorded``) after the command's conversion check against the
+gen-3 converted tree, which records the conversion there, except for the
+recycle time: the command line refuses one under 300 s, so the supervisor is
+handed a short one directly, and
 for the status interval: the pool's periodic kill of its longest-running
 worker (``ForgeWorkerPool._kill_oldest_worker``, tested on stand-in workers in
 ``tests/unit/infrastructure/test_worker_stop_protocol.py``) would end the one
@@ -51,6 +53,7 @@ from price_predictor.infrastructure.worker_stops import STOPPED_LINE, WorkerStop
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from sealed.infrastructure.cli import build_parser
 from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
+from sealed.infrastructure.collection_conversion import check_conversion
 from sealed.infrastructure.directed_fork_check import directed_fork_error
 from tests.integration.conftest import assert_no_lost_output, require_jar
 from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, write_vocabulary
@@ -65,6 +68,10 @@ _STOP_TIMEOUT = 300
 #: The whole run's bound: two Forge starts, the recycle time, a few games.
 _RUN_SECONDS = 600
 _POLL_SECONDS = 2
+#: The gen-3 converted tree the records' keys join against, as the command's
+#: ``--cards-folder``: its conversion is checked against the connector JAR and
+#: recorded in the run's ``run.json``, which ``build-corpus`` reads back.
+_CARDS_FOLDER = _REPOSITORY / "output" / "effects" / "gen3" / "converted" / "cardsfolder"
 
 
 def _directed_rules() -> list[str]:
@@ -87,7 +94,7 @@ def recycled_run(tmp_path_factory):
     args = build_parser().parse_args([
         "match-outcomes", "--effect-records", str(run_dir), "--workers", "1",
         "--best-of", "1", "--directed-fork-rules", ",".join(rules),
-        "--directed-fork-probability", "1",
+        "--directed-fork-probability", "1", "--cards-folder", str(_CARDS_FOLDER),
     ])
     # The command's startup check, over the whole list: one DirectedRulesMain run.
     startup_error = directed_fork_error(args.directed_fork_rules, args.directed_fork_probability)
@@ -120,11 +127,16 @@ def recycled_run(tmp_path_factory):
     handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
     started = time.monotonic()
     watcher.start()
+
+    def collect() -> int:
+        # The command's conversion check, inside the run's manifest as the
+        # command runs it: refused or recorded before any worker starts.
+        check_conversion(args, run_dir)
+        supervisor.run()
+        return 0
+
     try:
-        code = run_recorded(
-            run_dir, lambda: (supervisor.run(), 0)[1],
-            RunCommand("sealed match-outcomes (test)"),
-        )
+        code = run_recorded(run_dir, collect, RunCommand("sealed match-outcomes (test)"))
     finally:
         for sig, handler in handlers.items():
             signal.signal(sig, handler)
