@@ -190,61 +190,151 @@ public final class PriorityCandidates {
     private static List<SpellAbility> abilitiesOf(Card card, Player player) {
         CardState original = card.getOriginalState(CardStateName.Original);
         List<SpellAbility> abilities = new ArrayList<>();
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.isAdventure() && card.isOnAdventure()) {
-                continue;
-            }
-            abilities.add(sa);
-            abilities.addAll(GameActionUtil.getAlternativeCosts(sa, player, false));
-        }
-        if (card.isFaceDown() && card.isInZone(ZoneType.Exile)) {
-            for (SpellAbility sa : original.getSpellAbilities()) {
-                abilities.addAll(GameActionUtil.getAlternativeCosts(sa, player, false));
-            }
-        }
-        if (card.isFaceDown() && card.isInZone(ZoneType.Command)) {
-            for (Keyword agenda : List.of(Keyword.HIDDEN_AGENDA, Keyword.DOUBLE_AGENDA)) {
-                for (KeywordInterface keyword : original.getCachedKeyword(agenda)) {
-                    abilities.addAll(keyword.getAbilities());
-                }
-            }
-        }
-        if (card.isModal() && card.hasState(CardStateName.Backside)) {
-            for (SpellAbility sa : card.getState(CardStateName.Backside).getSpellAbilities()) {
-                if (sa.isSpell() || sa.isLandAbility()) {
-                    abilities.add(sa);
-                    abilities.addAll(GameActionUtil.getAlternativeCosts(sa, player, false));
-                }
-            }
-        }
-        if (card.isInPlay() && !card.isPhasedOut() && player.canCastSorcery()) {
-            CardStateName state = card.getCurrentStateName();
-            if (state == CardStateName.RightSplit || state == CardStateName.EmptyRoom) {
-                abilities.add(card.getUnlockAbility(CardStateName.LeftSplit));
-            }
-            if (state == CardStateName.LeftSplit || state == CardStateName.EmptyRoom) {
-                abilities.add(card.getUnlockAbility(CardStateName.RightSplit));
-            }
-        }
-        if (card.isInPlay() && card.isFaceDown()) {
-            if (card.getCurrentStateName() == CardStateName.FaceDown) {
-                for (SpellAbility sa : original.getNonManaAbilities()) {
-                    if (sa.isTurnFaceUp()) {
-                        abilities.add(sa);
-                    }
-                }
-            }
-            if (original.getType().isCreature() && original.getManaCost() != null
-                    && !original.getManaCost().isNoCost()) {
-                if (card.isManifested()) {
-                    abilities.add(original.getManifestUp());
-                }
-                if (card.isCloaked()) {
-                    abilities.add(original.getCloakUp());
-                }
-            }
-        }
+        addOwnAbilities(card, player, abilities);
+        addFaceDownExileCosts(card, original, player, abilities);
+        addHiddenAgendas(card, original, abilities);
+        addModalBackside(card, player, abilities);
+        addUnlocks(card, player, abilities);
+        addTurnsFaceUp(card, original, abilities);
         abilities.removeIf(Objects::isNull);
         return abilities;
+    }
+
+    /** The card's own abilities, each with its alternative costs; an adventure's not while it is on one. */
+    private static void addOwnAbilities(Card card, Player player, List<SpellAbility> abilities) {
+        for (SpellAbility sa : card.getSpellAbilities()) {
+            if (!onItsAdventure(card, sa)) {
+                addWithAlternativeCosts(sa, player, abilities);
+            }
+        }
+    }
+
+    private static boolean onItsAdventure(Card card, SpellAbility sa) {
+        return sa.isAdventure() && card.isOnAdventure();
+    }
+
+    private static void addWithAlternativeCosts(SpellAbility sa, Player player, List<SpellAbility> abilities) {
+        abilities.add(sa);
+        abilities.addAll(GameActionUtil.getAlternativeCosts(sa, player, false));
+    }
+
+    /** A face-down card in exile (a foretold one): its face's alternative costs alone. */
+    private static void addFaceDownExileCosts(
+            Card card, CardState original, Player player, List<SpellAbility> abilities) {
+        if (!faceDownIn(card, ZoneType.Exile)) {
+            return;
+        }
+        for (SpellAbility sa : original.getSpellAbilities()) {
+            abilities.addAll(GameActionUtil.getAlternativeCosts(sa, player, false));
+        }
+    }
+
+    /** A face-down card in the command zone: its hidden and double agendas' reveals. */
+    private static void addHiddenAgendas(Card card, CardState original, List<SpellAbility> abilities) {
+        if (!faceDownIn(card, ZoneType.Command)) {
+            return;
+        }
+        for (Keyword agenda : List.of(Keyword.HIDDEN_AGENDA, Keyword.DOUBLE_AGENDA)) {
+            addKeywordAbilities(original, agenda, abilities);
+        }
+    }
+
+    private static void addKeywordAbilities(CardState state, Keyword keyword, List<SpellAbility> abilities) {
+        for (KeywordInterface instance : state.getCachedKeyword(keyword)) {
+            abilities.addAll(instance.getAbilities());
+        }
+    }
+
+    private static boolean faceDownIn(Card card, ZoneType zone) {
+        return card.isFaceDown() && card.isInZone(zone);
+    }
+
+    /** A modal double-faced card's back face: its spells and land plays, each with its alternative costs. */
+    private static void addModalBackside(Card card, Player player, List<SpellAbility> abilities) {
+        if (!modalWithBackside(card)) {
+            return;
+        }
+        for (SpellAbility sa : card.getState(CardStateName.Backside).getSpellAbilities()) {
+            if (castOrPlayed(sa)) {
+                addWithAlternativeCosts(sa, player, abilities);
+            }
+        }
+    }
+
+    private static boolean modalWithBackside(Card card) {
+        return card.isModal() && card.hasState(CardStateName.Backside);
+    }
+
+    private static boolean castOrPlayed(SpellAbility sa) {
+        return sa.isSpell() || sa.isLandAbility();
+    }
+
+    /** A Room on the battlefield at sorcery speed: the unlock of each door still locked. */
+    private static void addUnlocks(Card card, Player player, List<SpellAbility> abilities) {
+        if (!mayUnlock(card, player)) {
+            return;
+        }
+        CardStateName state = card.getCurrentStateName();
+        if (leftLocked(state)) {
+            abilities.add(card.getUnlockAbility(CardStateName.LeftSplit));
+        }
+        if (rightLocked(state)) {
+            abilities.add(card.getUnlockAbility(CardStateName.RightSplit));
+        }
+    }
+
+    private static boolean mayUnlock(Card card, Player player) {
+        return card.isInPlay() && !card.isPhasedOut() && player.canCastSorcery();
+    }
+
+    private static boolean leftLocked(CardStateName state) {
+        return state == CardStateName.RightSplit || state == CardStateName.EmptyRoom;
+    }
+
+    private static boolean rightLocked(CardStateName state) {
+        return state == CardStateName.LeftSplit || state == CardStateName.EmptyRoom;
+    }
+
+    /**
+     * A face-down permanent: its face's turn-face-up abilities (morph,
+     * disguise) while it shows the face-down state, then a manifested or
+     * cloaked creature's turning up for its mana cost.
+     */
+    private static void addTurnsFaceUp(Card card, CardState original, List<SpellAbility> abilities) {
+        if (!faceDownInPlay(card)) {
+            return;
+        }
+        if (card.getCurrentStateName() == CardStateName.FaceDown) {
+            addTurnFaceUpAbilities(original, abilities);
+        }
+        if (creatureWithManaCost(original)) {
+            addManifestedOrCloakedUp(card, original, abilities);
+        }
+    }
+
+    private static boolean faceDownInPlay(Card card) {
+        return card.isInPlay() && card.isFaceDown();
+    }
+
+    private static void addTurnFaceUpAbilities(CardState original, List<SpellAbility> abilities) {
+        for (SpellAbility sa : original.getNonManaAbilities()) {
+            if (sa.isTurnFaceUp()) {
+                abilities.add(sa);
+            }
+        }
+    }
+
+    private static boolean creatureWithManaCost(CardState original) {
+        return original.getType().isCreature() && original.getManaCost() != null
+                && !original.getManaCost().isNoCost();
+    }
+
+    private static void addManifestedOrCloakedUp(Card card, CardState original, List<SpellAbility> abilities) {
+        if (card.isManifested()) {
+            abilities.add(original.getManifestUp());
+        }
+        if (card.isCloaked()) {
+            abilities.add(original.getCloakUp());
+        }
     }
 }
