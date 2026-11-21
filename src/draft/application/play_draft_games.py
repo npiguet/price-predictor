@@ -23,7 +23,7 @@ from draft.domain.seat_table import (
     FORGE_REFERENCE_LABEL,
     write_seat_table,
 )
-from draft.infrastructure.draft_game_connector import DraftGameConnector
+from draft.infrastructure.draft_game_connector import DraftGameConnector, DraftGameLaunch
 from draft.infrastructure.draft_record_io import read_records
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool, PoolOptions
 
@@ -152,14 +152,16 @@ class PlayDraftGamesUseCase:
     ) -> ForgeWorkerPool:
         baseline = _line_count(config.output_path)
 
+        launch = DraftGameLaunch(
+            seats_file=seats_file,
+            output_file=config.output_path,
+            run_id=run_id,
+            best_of=config.best_of,
+            include_mirrors=config.include_mirrors,
+        )
+
         def spawn(worker_id: int):
-            return self._connector.start(
-                seats_file=seats_file,
-                output_file=config.output_path,
-                run_id=run_id,
-                best_of=config.best_of,
-                include_mirrors=config.include_mirrors,
-            )
+            return self._connector.start(launch=launch)
 
         should_stop = None
         if config.n_pairings is not None:

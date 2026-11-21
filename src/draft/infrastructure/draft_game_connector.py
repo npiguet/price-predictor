@@ -13,6 +13,7 @@ work list.
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from price_predictor.infrastructure.forge_classpath import build_forge_classpath
@@ -22,18 +23,21 @@ MAIN_CLASS = "com.pricepredictor.connector.DraftGameWorkerMain"
 WORKER_XMX = "1200m"  # matches the sealed evaluation worker
 
 
+@dataclass(frozen=True)
+class DraftGameLaunch:
+    """Everything a ``DraftGameWorkerMain`` worker is started with."""
+
+    seats_file: Path
+    output_file: Path
+    run_id: str
+    best_of: int
+    include_mirrors: bool
+
+
 class DraftGameConnector:
     """Builds and starts draft game-evaluation workers."""
 
-    def build_command(
-        self,
-        *,
-        seats_file: Path,
-        output_file: Path,
-        run_id: str,
-        best_of: int,
-        include_mirrors: bool,
-    ) -> list[str]:
+    def build_command(self, *, launch: DraftGameLaunch) -> list[str]:
         """Assemble the JVM command for one worker.
 
         The five system properties are the contract in
@@ -46,25 +50,17 @@ class DraftGameConnector:
             classpath=build_forge_classpath(),
             options=JvmOptions(
                 system_properties={
-                    "seats.file": str(seats_file),
-                    "output.file": str(output_file),
-                    "run.id": run_id,
-                    "best.of": str(best_of),
-                    "include.mirrors": "true" if include_mirrors else "false",
+                    "seats.file": str(launch.seats_file),
+                    "output.file": str(launch.output_file),
+                    "run.id": launch.run_id,
+                    "best.of": str(launch.best_of),
+                    "include.mirrors": "true" if launch.include_mirrors else "false",
                 },
                 xmx=WORKER_XMX,
             ),
         )
 
-    def start(
-        self,
-        *,
-        seats_file: Path,
-        output_file: Path,
-        run_id: str,
-        best_of: int,
-        include_mirrors: bool,
-    ) -> subprocess.Popen:
+    def start(self, *, launch: DraftGameLaunch) -> subprocess.Popen:
         """Start one worker.
 
         Worker stdout/stderr are discarded, as the sealed match supervisor does:
@@ -72,13 +68,7 @@ class DraftGameConnector:
         is verbose enough that capturing per-worker logs costs measurable I/O on
         long runs.
         """
-        cmd = self.build_command(
-            seats_file=seats_file,
-            output_file=output_file,
-            run_id=run_id,
-            best_of=best_of,
-            include_mirrors=include_mirrors,
-        )
+        cmd = self.build_command(launch=launch)
         return subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
