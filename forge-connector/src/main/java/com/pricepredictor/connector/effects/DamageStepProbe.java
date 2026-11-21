@@ -182,8 +182,8 @@ final class DamageStepProbe {
      * branch's too: without it the difference gate 2 reads would hold a
      * prevention the stripped keyword did not cause.
      */
-    private static Forks.ForkHooks hooksFiling(ForkEventSink sink) {
-        return new Forks.ForkHooks() {
+    private static ForkHooks hooksFiling(ForkEventSink sink) {
+        return new ForkHooks() {
             @Override
             public void clauseEvent(SpellAbility clause, EffectEvent event) {
                 sink.fileOutcome(event, null);

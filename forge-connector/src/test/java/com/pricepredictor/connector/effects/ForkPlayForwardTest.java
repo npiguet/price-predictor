@@ -554,7 +554,7 @@ class ForkPlayForwardTest {
         String refusal = "directed " + ForkRefusal.GAME_RESTART;
         long refusedBefore = ForkRefusals.counts().getOrDefault(refusal, 0L);
         long movedBefore = HookFailures.counts().getOrDefault("fork directed moved the live game", 0L);
-        int triggerIdsBefore = Forks.LiveMarks.currentTriggerIds();
+        int triggerIdsBefore = LiveMarks.currentTriggerIds();
         RecordShardWriter writer = ShardRun.writer(tempDir);
         Forker forker;
         try (GameRecording recording = new GameRecording(
@@ -585,7 +585,7 @@ class ForkPlayForwardTest {
     }
 
     private static void assertTheLiveGameWasNotMoved(long movedBefore, int triggerIdsBefore, Card karn) {
-        assertTrue(Forks.LiveMarks.currentTriggerIds() >= triggerIdsBefore, "the trigger id counter was not reset");
+        assertTrue(LiveMarks.currentTriggerIds() >= triggerIdsBefore, "the trigger id counter was not reset");
         assertEquals(movedBefore, HookFailures.counts().getOrDefault("fork directed moved the live game", 0L));
         assertEquals(14, karn.getCounters(forge.game.card.CounterEnumType.LOYALTY));
     }

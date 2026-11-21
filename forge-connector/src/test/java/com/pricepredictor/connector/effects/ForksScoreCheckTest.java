@@ -131,7 +131,7 @@ class ForksScoreCheckTest {
         String key = "fork score-test score check";
         long before = HookFailures.counts().getOrDefault(key, 0L);
 
-        assertFalse(Forks.scoreCheck("score-test", live, copier, null, you));
+        assertFalse(Forks.scoreCheck("score-test", new Forks.CopyUnderCheck(live, copier, null, you)));
 
         assertEquals(before + 1, HookFailures.counts().get(key));
     }

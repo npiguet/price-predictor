@@ -224,7 +224,7 @@ class ForkRunTest {
             }, (verified, produced) -> produced).orElse(null);
 
             assertEquals(forge.game.GameStage.RestartedByKarn, written, "the fork's game restarted");
-            assertTrue(Forks.LiveMarks.currentTriggerIds() < ids, "the counter went down");
+            assertTrue(LiveMarks.currentTriggerIds() < ids, "the counter went down");
             assertEquals(before + 1, count("fork run-test-restart moved the live game"));
         } finally {
             // Just above what was handed out: far below Characterization.PinnedForgeIds' base,
