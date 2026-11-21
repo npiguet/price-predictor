@@ -199,9 +199,13 @@ class RunParamRowsTest {
         assertEquals(Map.of("mode", "Surveil"), event.params(), event.toJson());
     }
 
-    /** LoseMana: the map's Mana is the replacement's default answer, not the mana lost. */
+    /**
+     * LoseMana: the mana the pool would lose, read off the pool before the
+     * replacement converts it; the map's Mana is the replacement's default
+     * answer, not the mana lost.
+     */
     @Test
-    void loseManaReadsNoMana() {
+    void loseManaReadsTheManaThePoolWouldLose() {
         Game game = game();
         Card stone = TestBoard.inPlay(game, you(game), "Horizon Stone");
         you(game).getManaPool().addMana(new Mana(MagicColor.GREEN, stone, null, you(game)));
@@ -212,7 +216,7 @@ class RunParamRowsTest {
 
         assertEquals(EventType.MANA_LOST, event.type(), event.toJson());
         assertEquals(List.of(Refs.of(you(game))), event.subjects(), event.toJson());
-        assertEquals(Map.of("mode", "LoseMana"), event.params(), event.toJson());
+        assertEquals(Map.of("mode", "LoseMana", "mana_by_color", Map.of("G", 2)), event.params(), event.toJson());
     }
 
     // ── tokens ──────────────────────────────────────────────────────────

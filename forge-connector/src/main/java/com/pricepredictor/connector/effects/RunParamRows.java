@@ -214,9 +214,9 @@ final class RunParamRows {
             Map.entry("CopySpell", ModeRow.of(EventType.SPELL_COPIED,
                     AFFECTED, count(RunParamAmount.key("Amount")))),
             Map.entry("ProduceMana", ModeRow.of(EventType.MANA_PRODUCED, AFFECTED, RunParamSlots.MANA)),
-            // ManaPool puts Mana "C" as the replacement's default answer (the
-            // mana becomes colourless instead), never the mana being lost.
-            Map.entry("LoseMana", ModeRow.of(EventType.MANA_LOST, AFFECTED)),
+            // The mana the pool would lose, read off the pool: the map's Mana
+            // is the replacement's default answer, never the mana being lost.
+            Map.entry("LoseMana", ModeRow.of(EventType.MANA_LOST, AFFECTED, RunParamSlots.WOULD_BE_LOST_MANA)),
             Map.entry("Attached", ModeRow.of(EventType.ATTACHED, AFFECTED, RunParamSlots.ATTACHED_TO)),
             Map.entry("Transform", ModeRow.of(EventType.FACE_CHANGE, AFFECTED, RunParamSlots.FACE)),
             Map.entry("TurnFaceUp", ModeRow.of(EventType.FACE_CHANGE, AFFECTED, RunParamSlots.FACE)),

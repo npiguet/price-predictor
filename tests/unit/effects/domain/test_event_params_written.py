@@ -37,12 +37,7 @@ WRITTEN_ON_ANOTHER_FILES_EVENT: dict[tuple[str, str], str] = {
 }
 
 #: Declared pairs no writer writes, each with why it stays declared.
-KNOWN_UNWRITTEN: dict[tuple[str, str], str] = {
-    ("mana_lost", "mana_by_color"):
-        "the one mana_lost writer is the LoseMana replacement row, whose map holds "
-        "the replacement's default answer (Mana \"C\"), never the mana lost; "
-        "effect_targets reads the member, so dropping it is a change of its own",
-}
+KNOWN_UNWRITTEN: dict[tuple[str, str], str] = {}
 
 
 def _constants(name: str) -> dict[str, str]:

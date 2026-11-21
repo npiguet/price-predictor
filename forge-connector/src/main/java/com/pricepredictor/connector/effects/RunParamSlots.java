@@ -5,6 +5,7 @@ import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
 import forge.game.keyword.Keyword;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 
@@ -233,6 +234,16 @@ final class RunParamSlots {
      */
     static final ModeRow.Slot MANA = RunParamSlots::mana;
 
+    /**
+     * {@code mana_by_color} of a {@code LoseMana} replacement: the mana the
+     * affected player's pool would have lost ({@link LostMana#wouldBeLost}),
+     * read off the pool as the replacement reports, before {@code
+     * ManaPool.clearPool} converts it. The map's {@code Mana} is the
+     * replacement's default answer (the colour it becomes, {@code "C"}),
+     * never the mana lost.
+     */
+    static final ModeRow.Slot WOULD_BE_LOST_MANA = RunParamSlots::wouldBeLostMana;
+
     /** {@code to_state}: the face the card shows now, in an entity's {@code face_state} spelling. */
     static final ModeRow.Slot FACE = RunParamSlots::face;
 
@@ -296,6 +307,12 @@ final class RunParamSlots {
         if (produced instanceof String text) {
             Map<String, Integer> mana = ProducedMana.byColor(text.trim());
             event.param(EventParam.MANA_BY_COLOR, mana.isEmpty() ? null : mana);
+        }
+    }
+
+    private static void wouldBeLostMana(EffectEvent event, ModeRow.RunParams params) {
+        if (params.get("Affected") instanceof Player player) {
+            event.param(EventParam.MANA_BY_COLOR, LostMana.wouldBeLost(player));
         }
     }
 

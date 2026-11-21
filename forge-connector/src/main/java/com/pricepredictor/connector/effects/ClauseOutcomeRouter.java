@@ -202,10 +202,10 @@ final class ClauseOutcomeRouter {
      * <p>{@code CARD_REVEALED} and {@code DAMAGE_PREVENTED} come from the two
      * engine choke points ({@code GameAction.reveal},
      * {@code ReplacementHandler.runSingleReplaceDamageEffect}); the other
-     * fifteen, from an effect directly. {@code SPELL_COUNTERED} and {@code
+     * sixteen, from an effect directly. {@code SPELL_COUNTERED} and {@code
      * ABILITY_COUNTERED} ({@code CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
-     * by the six token-making effects) and {@code DICE_ROLLED} ({@code
-     * RollDiceEffect}) are the same; {@code PLAYER_WON} is a bus
+     * by the six token-making effects), {@code DICE_ROLLED} ({@code
+     * RollDiceEffect}) and {@code MANA_LOST} ({@code DrainManaEffect}) are the same; {@code PLAYER_WON} is a bus
      * subscription (see {@code BusEventReader#onGameOutcome}), not an
      * outcome-hook type, and does not belong here. {@code TURN_ENDED}
      * ({@code EndTurnEffect}) and {@code TEXT_CHANGE} ({@code
@@ -220,7 +220,7 @@ final class ClauseOutcomeRouter {
             EventType.PERMANENT_COPIED, EventType.CARD_MADE, EventType.RESTRICTION_CHANGE,
             EventType.CARD_REVEALED, EventType.DAMAGE_PREVENTED, EventType.SPELL_COUNTERED,
             EventType.ABILITY_COUNTERED, EventType.TOKEN_CREATED, EventType.DICE_ROLLED, EventType.TURN_ENDED,
-            EventType.TEXT_CHANGE);
+            EventType.TEXT_CHANGE, EventType.MANA_LOST);
 
     /** Raised the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
     private static final OnceWarning UNKNOWN_OUTCOME_TYPE = new OnceWarning();
@@ -309,7 +309,7 @@ final class ClauseOutcomeRouter {
 
     /**
      * The event an outcome's params describe: every entry a generic
-     * parameter, except six.
+     * parameter, except seven.
      *
      * <ul>
      *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
@@ -341,6 +341,9 @@ final class ClauseOutcomeRouter {
      *   ability, is written as a {@code targets} link to it ends
      *   ({@link SnapshotLinks#lineEnd}): {@code {entity, key}}, its line on
      *   its host, or the host's ref where it keys to no line.
+     *   <li>{@code "mana_by_color"} ({@code mana_lost} only), the drained
+     *   pool's {@code Mana} units, is counted by colour ({@link
+     *   LostMana#byColor}), spelled as {@code mana_produced} spells it.
      * </ul>
      */
     private static EffectEvent outcomeEvent(EventType type, Map<?, ?> params) {
@@ -364,6 +367,7 @@ final class ClauseOutcomeRouter {
             case "from_zone", "to_zone" -> event.paramNamed(key, outcomeZoneOf(value));
             case "sample" -> addTokenSample(event, entry);
             case "ability" -> event.param(EventParam.ABILITY, abilityEndOf(value));
+            case "mana_by_color" -> event.param(EventParam.MANA_BY_COLOR, manaByColorOf(value));
             default -> event.paramNamed(key, inKeyOrder(value));
         }
     }
@@ -376,6 +380,11 @@ final class ClauseOutcomeRouter {
     private static Object abilityEndOf(Object value) {
         return value instanceof SpellAbility ability
                 ? SnapshotLinks.lineEnd(ability.getHostCard(), ability) : null;
+    }
+
+    /** The mana units a drain emptied ({@code mana_lost}) by colour; null, writing nothing, for anything else. */
+    private static Object manaByColorOf(Object value) {
+        return value instanceof Iterable<?> units ? LostMana.byColor(units) : null;
     }
 
     /** The token standing for its batch, as {@code token_script_id} and {@code characteristics}; anything else is no sample. */

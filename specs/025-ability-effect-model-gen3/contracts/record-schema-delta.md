@@ -406,12 +406,12 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 Three new event types, `name_change`, `mana_cost_change` and `ability_countered`. Two new parameters outside a type's
 `EVENT_PARAMS` row, `damage_dealt`'s `damage_type` and `keyword_change`'s `hidden`; every other fact rides a parameter the row already declares, a `characteristics`
 member, or the provenance `mode` any event may carry. `state_flag_change` gains flags outside
-`DESIGNATIONS`, listed below. Three parameters the rows declared and no writer wrote are written in gen 3:
-`damage_dealt`'s `excess` and `spell_cast`'s `from_zone` and `without_paying`. Three others no writer wrote
+`DESIGNATIONS`, listed below. Four parameters the rows declared and no writer wrote are written in gen 3:
+`damage_dealt`'s `excess`, `spell_cast`'s `from_zone` and `without_paying`, and `mana_lost`'s
+`mana_by_color`. Three others no writer wrote
 leave their rows: `card_discarded`'s `random`, `type_change`'s `overwrite` and `color_change`'s
 `overwrite`. Every parameter a row declares is one a writer writes
-(`tests/unit/effects/domain/test_event_params_written.py`), except `mana_lost`'s `mana_by_color`,
-which the `LoseMana` row below never fills.
+(`tests/unit/effects/domain/test_event_params_written.py`).
 
 | Event | Field | Shape |
 |---|---|---|
@@ -444,6 +444,7 @@ which the `LoseMana` row below never fills.
 | `keyword_change` | `keywords`, `hidden` | a stat change's `keywords` are sorted, a second instance of a keyword counted as a keyword gained or lost; `hidden: true`, last, on a change of Forge's hidden keywords, whose `keywords` are spelled as Forge writes them (`CARDNAME can't block.`), absent on any other |
 | `ability_change` | from a stat change | the abilities the card gained, other than a keyword's, as `abilities` comma-joined line keys (`ProvenanceKey.describe`, `runtime` for one that keys to no line) with `removed: false`; any it lost as `abilities: ""` with `removed: true`; not written while an `Animate` or `AnimateAll` clause resolves, whose own rule writes its grants |
 | `name_change` | `name` | new type, from a stat change: subjects the permanent, `name` the name it has now; written when the name changes with no face change and no copy effect (an `Animate`'s `Name$`, a `SetName$` static) |
+| `mana_lost` | `mana_by_color`, writers | the mana lost, one count per unit under the letter `mana_produced` spells its colour with (`W`, `U`, `B`, `R`, `G`, `C` for colourless, Forge's colourless atom included), in that order, a colour with none left out; a unit's restrictions or snow source change nothing. Two writers. A `DrainMana` clause (Mana Short, Power Sink, Drain Power, Pygmy Hippo, Worldpurge) writes one on its effect half per player whose pool it emptied, subject that player, `mana_by_color` what the pool held (Forge's note `EffectRecordOutcomes.manaLost`, read off the mana `ManaPool.clearPool` cleared); none for a pool that held nothing or whose mana a `LoseMana` replacement kept. A `LoseMana` replacement's rewrite record (Kruphix, Horizon Stone, Omnath, Locus of All, Ozai) holds one as its `incoming`: the mana the pool would have lost, read off the pool before the replacement converts it, its `outgoing` null (the mana changes colour and stays, an edit no event spells): see the `LoseMana` mode row. Drain Power's mana added to its caster is no event (`ManaPool.addMana` reaches no mana hook). The pool emptying as a step or phase ends with no replacement (500.4) is no ability's effect and writes no `mana_lost` |
 | `ability_countered` | `ability` | new type, from a `Counter` clause that took an activated or triggered ability off the stack (701.6a): `subjects` `[]`, since the ability's host was not countered; `ability` the countered ability as a `targets` link ends at it, `{entity, key}` (its host's ref and its line's provenance key), or the host's ref where the ability keys to no line. Two activations of one line are one `ability` (one entity and one line slot per ability). No `zone_change` follows: an ability moves no card. A spell countered writes `spell_countered` and never this type |
 | `mana_cost_change` | `mana_cost`, `mana_value` | new type, from a stat change: subjects the permanent, `mana_cost` the cost now as an entity's `mana_cost` spells it (absent for no cost), `mana_value` its mana value; written when the cost changes with no face change and no copy effect (a perpetual `ManaCost$`, an `Incorporate$`) |
 | `card_revealed` | `from_zone`, `subjects` | `from_zone` a zone as an entity's `zone` spells it (`library`, `hand`, …), absent when Forge names none; for a hidden search Forge shows after the move ("search your library for a land card, reveal it, put it into your hand") the zone searched, `library`, not the zone the card was put into; subjects the player who reveals, from any zone and whether or not a clause resolves: `GameAction.reveal`'s `cardOwner` (a Dig's library owner, Duress's target opponent, a reveal cost's payer), and for a clash each clashing player. This replaces the base schema's library owners during a clause. One note per reveal the rules make: a Dig's showing every player the cards a player picked from cards it revealed already (Murmurs from Beyond's opponent's pick) writes none, while a pick among cards only looked at (Commune with Nature's "you may reveal a creature card from among them") is the reveal, by the picker. A move out of a public zone (graveyard, battlefield, stack, command, a face-up card in exile) writes none, though Forge still shows the players the moved cards (Grapple with the Past's return from the graveyard); a hidden zone (library, hand, a face-down card in exile) is noted as above. `library_events.reveal` is set only by a reveal from `library`; a reveal from another zone sets no output |
@@ -458,7 +459,8 @@ which the `LoseMana` row below never fills.
 | `state_flag_change` | `flag` `city_blessing` / `dungeon_completed` | `value` true; subject the player, read on the player's command-zone notification (`GameEventZone`) as the state against the state last read: `hasBlessing()` turned true, `getCompletedDungeons().size()` rose. Filed wherever the bus event lands (a resolution's effect half, the held half across the state-based loop) |
 
 Not collected: a battle's protector changing (`Card.setProtectingPlayer` publishes nothing), the
-position a card left a library from, and a search of another player's library.
+position a card left a library from, a search of another player's library, and the mana a pool
+loses as a step or phase ends with no `LoseMana` replacement (500.4).
 
 ## Behaviour changes readers rely on
 
@@ -685,7 +687,7 @@ position a card left a library from, and a search of another player's library.
   | `Surveil` | `card_looked_at` | subject the player, no `count`: Forge puts no number in the map |
   | `Blocks` | `blockers_declared` | subject the blocker (`Blocker`) in every map Forge builds, `blocked` the attackers (`Attackers`) or, in a switch-block effect's map, its one `Attacker` |
   | `CreateToken` (replacement) | `token_created` | subject the affected player, `count` the tokens its table makes for that player (the table's `Affected` row): Forge runs the replacement once per player with one table |
-  | `LoseMana` (replacement) | `mana_lost` | subject the affected player, no `mana_by_color`: the map's `Mana` is the replacement's default answer, never the mana lost |
+  | `LoseMana` (replacement) | `mana_lost` | subject the affected player, `mana_by_color` the mana its pool would lose, read off the pool as the replacement reports, before `ManaPool.clearPool` converts it (the map's `Mana` is the replacement's default answer, never the mana lost): the whole pool for a drain (an effect resolving from the stack), and at a step's or phase's end the pool less the colours a static keeps (`StaticAbilityUnspentMana`: Upwelling, Omnath, Locus of Mana) and, before the cleanup step, less mana that lasts until the turn's end or the combat's end; `{}` when all of it stays. Both sides read the same pool, so `outgoing` is null |
 
   A mode's row (`RunParamRows`) names its event type, the keys its subject is read from (the first
   that names an entity), and every parameter it reads; a mode reads nothing its row does not name. A replacement's subject is `Affected`. The rows not in the table above give their
