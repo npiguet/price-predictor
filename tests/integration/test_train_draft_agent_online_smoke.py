@@ -10,6 +10,7 @@ loadable gen-3 one, round 2 trained on drafts generated *after* round 1's update
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -86,16 +87,21 @@ class _VaryingLabeler:
 
 @pytest.fixture
 def cards_path(tmp_path: Path) -> Path:
-    """A .npz embedding cache covering every card the fake boosters use."""
+    """A .npz embedding cache covering every card the fake boosters use.
+
+    Letter-keyed, as ``ConvertedCardLocator`` reads a ``cardsfolder``: every
+    ``c*`` card sits under ``c/``.
+    """
     folder = tmp_path / "cardsfolder"
-    folder.mkdir()
+    letter = folder / "c"
+    letter.mkdir(parents=True)
     rng = np.random.default_rng(0)
     for name in _cards():
         np.savez(
-            folder / f"{name}.npz",
+            letter / f"{name}.npz",
             embedding=rng.standard_normal(EMB_DIM).astype(np.float32),
         )
-        (folder / f"{name}.txt").write_text(f"name:{name}\n", encoding="utf-8")
+        (letter / f"{name}.txt").write_text(f"name:{name}\n", encoding="utf-8")
     return folder
 
 
@@ -261,6 +267,15 @@ def test_movement_line_carries_both_kls_and_the_lr(run) -> None:
     assert out.count("KL(prev||new)=") == 2
     assert out.count("KL(init||new)=") == 2
     assert out.count("lr=") >= 2
+
+
+def test_every_round_trains_on_the_learner_s_picks(run) -> None:
+    """Every learner pick resolves its cards' embeddings, so each round updates on
+    them: a cache the locator cannot read drops every card and trains on nothing."""
+    _, out, _, _, _ = run
+    picks = [int(count) for count in re.findall(r"\| picks (\d+) ", out)]
+    assert len(picks) == 2, "one picks figure per round"
+    assert min(picks) > 0, f"a round trained on no learner picks: {picks}"
 
 
 def test_startup_echo_reports_the_window_geometry(run) -> None:
