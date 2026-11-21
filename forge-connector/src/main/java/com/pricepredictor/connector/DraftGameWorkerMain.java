@@ -44,8 +44,11 @@ public class DraftGameWorkerMain {
 
         ForgeEnvironmentInitializer.initializeWorker(System.out, "Seat table: " + seatsFile);
 
-        run(seatsFile, outputFile, runId, bestOf, includeMirrors);
+        run(new Settings(seatsFile, outputFile, runId, bestOf, includeMirrors));
     }
+
+    /** What the worker's system properties name: the seat table, the output file, the run, the match length and the mirror switch. */
+    record Settings(Path seatsFile, Path outputFile, String runId, int bestOf, boolean includeMirrors) {}
 
     /**
      * Load the seat table and play pairings until the process is killed.
@@ -55,17 +58,12 @@ public class DraftGameWorkerMain {
      * unless every pairing throws, which {@link WorkerLoop} turns into
      * {@link ExitCode#FAILURE}.
      */
-    static void run(
-            Path seatsFile,
-            Path outputFile,
-            String runId,
-            int bestOf,
-            boolean includeMirrors) {
+    static void run(Settings settings) {
         SeatTableIndex index;
         try {
-            index = SeatTableIndex.load(seatsFile, includeMirrors);
+            index = SeatTableIndex.load(settings.seatsFile(), settings.includeMirrors());
         } catch (IOException e) {
-            throw ToolMain.badConfig("reading " + seatsFile + ": " + e.getMessage());
+            throw ToolMain.badConfig("reading " + settings.seatsFile() + ": " + e.getMessage());
         }
 
         System.out.println(
@@ -77,7 +75,9 @@ public class DraftGameWorkerMain {
         }
 
         DraftGamePlayer player = new DraftGamePlayer(
-                new GamePlayer(bestOf), new CorpusWriter<>(outputFile), runId);
+                new GamePlayer(settings.bestOf()),
+                new CorpusWriter<>(settings.outputFile()),
+                settings.runId());
 
         WorkerLoop.runUntilBroken(
                 () -> {
