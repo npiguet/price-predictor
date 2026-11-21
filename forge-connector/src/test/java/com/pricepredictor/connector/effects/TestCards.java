@@ -118,16 +118,22 @@ final class TestCards {
     static SpellAbility scriptedAbility(String cardName, String api) {
         Card card = build(cardName);
         for (SpellAbility sa : card.getCurrentState().getSpellAbilities()) {
-            if (sa.getApi() != null && api.equals(sa.getApi().name())) {
-                return sa;
-            }
-            for (SpellAbility sub = sa.getSubAbility(); sub != null; sub = sub.getSubAbility()) {
-                if (sub.getApi() != null && api.equals(sub.getApi().name())) {
-                    return sub;
-                }
+            SpellAbility found = firstWithApi(sa, api);
+            if (found != null) {
+                return found;
             }
         }
         throw new AssertionError("no " + api + " ability on " + cardName);
+    }
+
+    /** {@code top} or the first of its sub-ability chain whose API is {@code api}; null when none is. */
+    private static SpellAbility firstWithApi(SpellAbility top, String api) {
+        for (SpellAbility sa = top; sa != null; sa = sa.getSubAbility()) {
+            if (sa.getApi() != null && api.equals(sa.getApi().name())) {
+                return sa;
+            }
+        }
+        return null;
     }
 
     /**
