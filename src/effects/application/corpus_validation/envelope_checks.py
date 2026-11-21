@@ -21,7 +21,7 @@ from effects.application.corpus_validation.findings import (
     share_of,
 )
 from effects.domain.canonical_digest import canonical_digest
-from effects.domain.event_schema import EventType, countered_objects
+from effects.domain.event_schema import countered_objects
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
@@ -85,18 +85,19 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
 
     Its snapshot is from when the mana ability was activated, so it lands
     after later turns and would read as a backward turn jump. Recognised by
-    the payload rather than the acting card: a ``mana_produced`` in an effect
-    half that resolved no stack item (an ``outcome`` written null, which
-    only a mana record and the rescue record write), whatever else the mana
-    ability's payment and sub-abilities did (a pain land's damage, WP7).
-    Nothing defers an activation half, so a jump on one is still a game
-    boundary.
+    the record rather than the acting card or the mana: an effect half that
+    resolved no stack item (an ``outcome`` written null, which only a mana
+    record and the game-end outcome record write) and is not the
+    game-end outcome record (:attr:`EffectRecord.is_game_end_record`: no
+    acting line). A mana ability that tapped for nothing (Paliano's, no
+    revealed colour matched) holds no ``mana_produced`` and is deferred all
+    the same, as is one whose payment and sub-abilities did more (a pain
+    land's damage, WP7). Nothing defers an activation half, so a jump on one
+    is still a game boundary.
     """
     payload = record.payload
-    if not (record.moment is Moment.RESOLUTION and isinstance(payload, ResolutionPayload)
-            and any(event.type is EventType.MANA_PRODUCED for event in payload.events)):
-        return False
-    return payload.outcome is None
+    return (record.moment is Moment.RESOLUTION and isinstance(payload, ResolutionPayload)
+            and payload.outcome is None and not record.is_game_end_record)
 
 
 def _is_deferred_trigger_record(record: EffectRecord) -> bool:

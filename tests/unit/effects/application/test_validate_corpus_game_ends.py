@@ -285,3 +285,35 @@ class TestGameEndMarkers:
                         state=replace(mana.state, global_=_snapshot(turn=2).global_))
         finding = _named(validate_corpus([later, early, self._marker(game)]), "one game")
         assert finding.ok, finding.measured
+
+    @staticmethod
+    def _fixture_records():
+        from effects.infrastructure.shard_io import read_shard
+        from tests.unit.effects.application.collect_coverage_support import _GEN3_SHARD
+
+        return list(read_shard(_GEN3_SHARD))
+
+    def test_a_mana_record_that_made_no_mana_is_deferred_all_the_same(self):
+        """A mana ability that taps for nothing (Paliano's, no revealed colour
+        matched) writes its half with `tapped` only and no `mana_produced`."""
+        mana = next(r for r in self._fixture_records()
+                    if isinstance(r.payload, ResolutionPayload) and r.payload.outcome is None
+                    and not r.is_game_end_record
+                    and any(e.type is EventType.MANA_PRODUCED for e in r.payload.events))
+        payload = replace(mana.payload, events=tuple(
+            e for e in mana.payload.events if e.type is not EventType.MANA_PRODUCED))
+        game = mana.game_id
+        later = self._record(game, 5, state=_snapshot(turn=9))
+        early = replace(mana, record_id=f"{game}.r6", payload=payload,
+                        state=replace(mana.state, global_=_snapshot(turn=2).global_))
+        finding = _named(validate_corpus([later, early, self._marker(game)]), "one game")
+        assert finding.ok, finding.measured
+
+    def test_a_game_end_outcome_record_is_not_taken_for_a_mana_record(self):
+        outcome = next(r for r in self._fixture_records() if r.is_game_end_record)
+        game = outcome.game_id
+        later = self._record(game, 5, state=_snapshot(turn=9))
+        early = replace(outcome, record_id=f"{game}.r6",
+                        state=replace(outcome.state, global_=_snapshot(turn=2).global_))
+        finding = _named(validate_corpus([later, early, self._marker(game)]), "one game")
+        assert not finding.ok and "1 span a backward turn jump" in finding.measured
