@@ -85,6 +85,21 @@ final class StatDiffer {
         if (before == null || before.equals(now)) {
             return control == null ? List.of() : List.of(control);
         }
+        return changes(card, new Move<>(before, now), control);
+    }
+
+    /** A value as last read and as read now. */
+    private record Move<T>(T before, T now) {
+    }
+
+    /** What a set-valued change is called: its event and the two parameters naming what joined and what left. */
+    private record SetChange(EventType type, EventParam added, EventParam removed) {
+    }
+
+    /** Every event between two readings of a card that differ, in the order its fields are read. */
+    private List<EffectEvent> changes(Card card, Move<Stats> stats, EffectEvent control) {
+        Stats before = stats.before();
+        Stats now = stats.now();
         String subject = Refs.of(card);
         List<EffectEvent> events = new ArrayList<>();
 
@@ -92,23 +107,35 @@ final class StatDiffer {
         if (pt != null) {
             events.add(pt);
         }
-        addKeywordEvents(events, subject, before.keywords(), now.keywords(), false);
+        addKeywordEvents(events, subject, new Move<>(before.keywords(), now.keywords()), false);
         // "Can't block", "doesn't untap during its controller's next untap
         // step": Forge's hidden keywords, which no keyword list holds.
-        addKeywordEvents(events, subject, before.hiddenKeywords(), now.hiddenKeywords(), true);
-        addAbilityEvents(events, subject, card, before.abilities(), now.abilities());
-        addSetChangeEvent(events, subject, EventType.TYPE_CHANGE,
-                EventParam.TYPES_ADDED, EventParam.TYPES_REMOVED, before.types(), now.types());
+        addKeywordEvents(events, subject, new Move<>(before.hiddenKeywords(), now.hiddenKeywords()), true);
+        addAbilityEvents(events, subject, card, new Move<>(before.abilities(), now.abilities()));
+        addSetChangeEvent(events, subject,
+                new SetChange(EventType.TYPE_CHANGE, EventParam.TYPES_ADDED, EventParam.TYPES_REMOVED),
+                new Move<>(before.types(), now.types()));
         // colors_removed is this side's addition to the type's normalization:
         // the head has a colors_lost field and the event carried no way to say
         // a colour went away.
-        addSetChangeEvent(events, subject, EventType.COLOR_CHANGE,
-                EventParam.COLORS, EventParam.COLORS_REMOVED, before.colors(), now.colors());
+        addSetChangeEvent(events, subject,
+                new SetChange(EventType.COLOR_CHANGE, EventParam.COLORS, EventParam.COLORS_REMOVED),
+                new Move<>(before.colors(), now.colors()));
         if (control != null) {
             events.add(control);
         }
-        // A name or mana cost a face change or a copy effect brought is that
-        // change's: the face_change and the copy say it already.
+        addNameAndCostEvents(events, card, stats);
+        return events;
+    }
+
+    /**
+     * A name or mana cost a face change or a copy effect brought is that
+     * change's: the face_change and the copy say it already.
+     */
+    private static void addNameAndCostEvents(List<EffectEvent> events, Card card, Move<Stats> stats) {
+        Stats before = stats.before();
+        Stats now = stats.now();
+        String subject = Refs.of(card);
         boolean ownChange = before.face().equals(now.face()) && before.copies() == now.copies();
         if (ownChange && !java.util.Objects.equals(before.name(), now.name())) {
             events.add(new EffectEvent(EventType.NAME_CHANGE)
@@ -121,7 +148,6 @@ final class StatDiffer {
                     .param(EventParam.MANA_COST, CardFacts.manaCostSymbols(card.getManaCost()))
                     .param(EventParam.MANA_VALUE, now.manaValue()));
         }
-        return events;
     }
 
     /** The {@code pt_change} between two readings of a card, or null when its power and toughness did not move. */
@@ -209,10 +235,9 @@ final class StatDiffer {
      * and Forge's own text ("CARDNAME can't block.").
      */
     private static void addKeywordEvents(
-            List<EffectEvent> events, String subject,
-            List<String> before, List<String> now, boolean hidden) {
-        List<String> gained = difference(now, before);
-        List<String> lost = difference(before, now);
+            List<EffectEvent> events, String subject, Move<List<String>> keywords, boolean hidden) {
+        List<String> gained = difference(keywords.now(), keywords.before());
+        List<String> lost = difference(keywords.before(), keywords.now());
         if (!gained.isEmpty()) {
             events.add(keywordEvent(subject, gained, false, hidden));
         }
@@ -242,10 +267,9 @@ final class StatDiffer {
      * anything went.
      */
     private void addAbilityEvents(
-            List<EffectEvent> events, String subject, Card card,
-            List<String> before, List<String> now) {
-        List<String> gained = difference(now, before);
-        List<String> lost = difference(before, now);
+            List<EffectEvent> events, String subject, Card card, Move<List<String>> abilities) {
+        List<String> gained = difference(abilities.now(), abilities.before());
+        List<String> lost = difference(abilities.before(), abilities.now());
         if (!gained.isEmpty()) {
             events.add(new EffectEvent(EventType.ABILITY_CHANGE)
                     .subject(subject)
@@ -278,20 +302,18 @@ final class StatDiffer {
 
     /** One event naming what joined and what left a set, or none when neither did. */
     private static void addSetChangeEvent(
-            List<EffectEvent> events, String subject, EventType type,
-            EventParam addedParam, EventParam removedParam,
-            Set<String> before, Set<String> now) {
-        Set<String> added = new LinkedHashSet<>(now);
-        added.removeAll(before);
-        Set<String> removed = new LinkedHashSet<>(before);
-        removed.removeAll(now);
+            List<EffectEvent> events, String subject, SetChange kind, Move<Set<String>> values) {
+        Set<String> added = new LinkedHashSet<>(values.now());
+        added.removeAll(values.before());
+        Set<String> removed = new LinkedHashSet<>(values.before());
+        removed.removeAll(values.now());
         if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
-        events.add(new EffectEvent(type)
+        events.add(new EffectEvent(kind.type())
                 .subject(subject)
-                .param(addedParam, List.copyOf(added))
-                .param(removedParam, List.copyOf(removed)));
+                .param(kind.added(), List.copyOf(added))
+                .param(kind.removed(), List.copyOf(removed)));
     }
 
     /** {@code from} less {@code without}, as multisets: each repeat counts. */
