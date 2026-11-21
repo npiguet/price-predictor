@@ -39,7 +39,11 @@ from draft.application.imitation_examples import (
     split_draft_disjoint,
 )
 from draft.application.imitation_log import _fmt_dur, _log
-from draft.application.imitation_model_setup import _resume_or_build, _select_device
+from draft.application.imitation_model_setup import (
+    CorpusShape,
+    _resume_or_build,
+    _select_device,
+)
 from draft.application.imitation_validation import _validate
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 from draft.infrastructure.draft_record_io import read_records
@@ -142,7 +146,8 @@ class TrainDraftAgentUseCase:
         )
 
         resume, ck_mean, ck_std = _resume_or_build(
-            config, store, loader.embedding_dim, loader.max_packs, loader.max_pack_size,
+            config, store,
+            CorpusShape(loader.embedding_dim, loader.max_packs, loader.max_pack_size),
         )
         if config.resume is not None or config.checkpoint is not None:
             mean, std = ck_mean, ck_std  # reuse stored standardization on reload

@@ -12,7 +12,7 @@ from draft.application.draft_lr_schedule import (
     _maybe_decay,
     _PlateauLR,
 )
-from draft.application.imitation_model_setup import _resume_or_build
+from draft.application.imitation_model_setup import CorpusShape, _resume_or_build
 from draft.application.train_draft_agent import (
     TrainDraftAgentConfig,
     _validate_lr_decay,
@@ -171,12 +171,12 @@ def _save_agent(tmp_path: Path, *, lr: float, decay_count: int) -> Path:
 def test_resume_inherits_decay_count_when_lr_unchanged(tmp_path: Path) -> None:
     path = _save_agent(tmp_path, lr=3e-5, decay_count=2)
     cfg = _config(resume=path, lr=3e-5)  # same base LR
-    resume, _, _ = _resume_or_build(cfg, DraftAgentStore(), 8, 3, 15)
+    resume, _, _ = _resume_or_build(cfg, DraftAgentStore(), CorpusShape(8, 3, 15))
     assert resume.lr_decay_count == 2
 
 
 def test_resume_resets_decay_count_on_explicit_lr_override(tmp_path: Path) -> None:
     path = _save_agent(tmp_path, lr=3e-5, decay_count=2)
     cfg = _config(resume=path, lr=1e-6)  # different base LR
-    resume, _, _ = _resume_or_build(cfg, DraftAgentStore(), 8, 3, 15)
+    resume, _, _ = _resume_or_build(cfg, DraftAgentStore(), CorpusShape(8, 3, 15))
     assert resume.lr_decay_count == 0
