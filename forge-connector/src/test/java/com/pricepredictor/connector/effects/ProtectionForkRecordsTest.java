@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
+import static com.pricepredictor.connector.effects.RecordEvents.eventsNaming;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;

@@ -223,10 +223,10 @@ class PatchedCollectorTest {
                 activate(collectors, liveAbility, livePlayer, true));
         assertEquals(1, lines.size(), lines.toString());
         // The tap its cost made, then the mana (FR-042c).
-        assertEquals(List.of("tapped", "mana_produced"), RecordLines.eventTypes(lines.get(0)),
+        assertEquals(List.of("tapped", "mana_produced"), RecordEvents.eventTypes(lines.get(0)),
                 lines.get(0));
         assertEquals(List.of(Refs.of(liveAbility.getHostCard())),
-                RecordLines.events(lines.get(0)).get(0).get("subjects"), lines.get(0));
+                RecordEvents.events(lines.get(0)).get(0).get("subjects"), lines.get(0));
     }
 
     /** A mana ability whose payment failed produces no mana and writes no record. */

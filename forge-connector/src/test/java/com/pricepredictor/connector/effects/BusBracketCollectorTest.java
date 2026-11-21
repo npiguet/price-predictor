@@ -306,8 +306,8 @@ class BusBracketCollectorTest {
         assertEquals(2, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"moment\":\"activation\""), records.get(0));
         String end = records.get(1);
-        assertEquals(List.of("player_lost", "player_won"), RecordLines.eventTypes(end), end);
-        assertEquals(null, RecordLines.payload(end).get("outcome"),
+        assertEquals(List.of("player_lost", "player_won"), RecordEvents.eventTypes(end), end);
+        assertEquals(null, RecordEvents.payload(end).get("outcome"),
                 "no record may claim bolt resolved: " + end);
     }
 
@@ -534,8 +534,8 @@ class BusBracketCollectorTest {
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
         assertTrue(records.get(1).contains("\"outcome\":\"declined\""), records.get(1));
-        assertEquals(List.of(), RecordLines.eventTypes(records.get(1)), records.get(1));
-        assertEquals(RecordLines.linkOf(records.get(0)), RecordLines.linkOf(records.get(1)));
+        assertEquals(List.of(), RecordEvents.eventTypes(records.get(1)), records.get(1));
+        assertEquals(RecordAbilities.linkOf(records.get(0)), RecordAbilities.linkOf(records.get(1)));
     }
 
     // ── another game's confirmation ─────────────────────────────────────

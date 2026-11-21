@@ -17,11 +17,11 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.optionOf;
-import static com.pricepredictor.connector.effects.RecordLines.records;
-import static com.pricepredictor.connector.effects.RecordLines.stateOf;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordAbilities.optionOf;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
+import static com.pricepredictor.connector.effects.RecordText.stateOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -398,7 +398,7 @@ class ModalResolutionTest {
                     assertTrue(ids.contains(ref), ref + " is an entity: " + half);
                 }
             }
-            assertEquals(atCast, RecordLines.targetEnds(half), "its links are its refs: " + half);
+            assertEquals(atCast, RecordAbilities.targetEnds(half), "its links are its refs: " + half);
         }
     }
 
@@ -432,9 +432,9 @@ class ModalResolutionTest {
         assertEquals(2, halves.size(), records.toString());
         for (String half : halves) {
             Object atCast = RecordLines.asMap(stateMap(half).get("refs")).get("targets_at_cast");
-            assertEquals(atCast, RecordLines.targetEnds(half), half);
+            assertEquals(atCast, RecordAbilities.targetEnds(half), half);
         }
-        assertEquals(List.of(Refs.of(bears)), RecordLines.targetEnds(halves.get(1)), halves.get(1));
+        assertEquals(List.of(Refs.of(bears)), RecordAbilities.targetEnds(halves.get(1)), halves.get(1));
     }
 
     /**
@@ -466,11 +466,11 @@ class ModalResolutionTest {
 
         List<String> halves = records(records, "resolution");
         assertEquals(2, halves.size(), records.toString());
-        assertEquals(List.of("L" + thopter.getId()), RecordLines.targetEnds(halves.get(0)), halves.get(0));
-        assertEquals(List.of("L" + bears.getId()), RecordLines.targetEnds(halves.get(1)), halves.get(1));
+        assertEquals(List.of("L" + thopter.getId()), RecordAbilities.targetEnds(halves.get(0)), halves.get(0));
+        assertEquals(List.of("L" + bears.getId()), RecordAbilities.targetEnds(halves.get(1)), halves.get(1));
         for (String half : halves) {
             Object atCast = RecordLines.asMap(stateMap(half).get("refs")).get("targets_at_cast");
-            assertEquals(atCast, RecordLines.targetEnds(half), half);
+            assertEquals(atCast, RecordAbilities.targetEnds(half), half);
         }
     }
 
@@ -534,7 +534,7 @@ class ModalResolutionTest {
         assertEquals(0L, optionOf(records.get(1)), records.get(1));
         assertEquals(List.of(), eventTypes(records.get(1)), records.get(1));
         // An empty half is still the mode's: resolved, under the cast's link.
-        assertEquals("resolved", RecordLines.outcomeOf(records.get(1)), records.get(1));
+        assertEquals("resolved", RecordAbilities.outcomeOf(records.get(1)), records.get(1));
         assertEquals(linkOf(records.get(0)), linkOf(records.get(1)));
     }
 

@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
-import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
-import static com.pricepredictor.connector.effects.RecordLines.only;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
+import static com.pricepredictor.connector.effects.RecordEvents.eventsNaming;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;

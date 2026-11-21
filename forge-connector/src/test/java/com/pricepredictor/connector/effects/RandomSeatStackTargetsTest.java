@@ -18,8 +18,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.only;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

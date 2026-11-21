@@ -109,13 +109,13 @@ class TraitScriptChainTest {
         }
 
         Chain segments(int expected) {
-            assertEquals(expected, RecordLines.count(text, "[SEG]"), text);
+            assertEquals(expected, RecordText.count(text, "[SEG]"), text);
             return this;
         }
 
         Chain counts(List<Occurs> expected) {
             for (Occurs occurs : expected) {
-                assertEquals(occurs.times(), RecordLines.count(text, occurs.fragment()),
+                assertEquals(occurs.times(), RecordText.count(text, occurs.fragment()),
                         occurs.why() + ": " + text);
             }
             return this;
@@ -560,7 +560,7 @@ class TraitScriptChainTest {
 
         assertTrue(root.startsWith("Choices$ SV1,SV2 | SP$ Charm | SubAbility$ SV3 [SEG] SV3: "),
                 root);
-        assertEquals(1, RecordLines.count(root, "[SEG]"), "the modes are not inlined: " + root);
+        assertEquals(1, RecordText.count(root, "[SEG]"), "the modes are not inlined: " + root);
         for (ProvenanceSidecar.Line option : linesOfKind(blood, LineKind.OPTION)) {
             assertTrue(option.script().scriptText().contains(" [SEG] SV2: "),
                     option.script().scriptText());

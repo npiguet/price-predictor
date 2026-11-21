@@ -69,7 +69,7 @@ class DirectedForkPlayedForwardKeptRecordsTest extends DirectedForkPlayedForward
                 continue;
             }
             Object source = RecordLines.asMap(RecordLines.asMap(parsed.get("state")).get("refs")).get("source");
-            if (ref(host).equals(source) && RecordLines.payload(record).get("candidates") instanceof List<?> list) {
+            if (ref(host).equals(source) && RecordEvents.payload(record).get("candidates") instanceof List<?> list) {
                 list.forEach(candidate -> found.add(RecordLines.asMap(candidate)));
             }
         }

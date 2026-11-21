@@ -280,7 +280,7 @@ class RewriteContractTest {
         assertEquals(2, lines.size(), "one record per declining line: " + lines);
         assertEquals(List.of(0L, 1L),
                 lines.stream()
-                        .map(l -> RecordLines.abilityKeys(l).get(0).get("index_within_kind"))
+                        .map(l -> RecordAbilities.abilityKeys(l).get(0).get("index_within_kind"))
                         .toList(),
                 lines.toString());
     }

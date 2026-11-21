@@ -16,8 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordEvents.eventsNaming;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

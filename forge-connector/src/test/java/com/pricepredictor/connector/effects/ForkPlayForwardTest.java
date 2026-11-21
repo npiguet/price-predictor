@@ -349,7 +349,7 @@ class ForkPlayForwardTest {
     private static void assertTheLethalCombatAndTheOutcomeAreRecorded(List<String> forked) {
         assertTrue(forked.stream().anyMatch(record -> "combat".equals(parse(record).get("kind"))),
                 "the lethal damage step wrote its combat record: " + forked);
-        assertEquals(1, RecordLines.withEventOfType(forked, "player_won").size(),
+        assertEquals(1, RecordPicks.withEventOfType(forked, "player_won").size(),
                 "the outcome reached the fork's records: " + forked);
     }
 

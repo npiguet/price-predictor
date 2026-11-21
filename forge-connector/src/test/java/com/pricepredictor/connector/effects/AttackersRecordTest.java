@@ -156,7 +156,7 @@ class AttackersRecordTest {
             assertEquals(Refs.of(board.tapped()),
                     RecordLines.asMap(((List<?>) payload.get("forbidden")).get(0)).get("entity"));
         }
-        String written = RecordLines.payloadOf(lines.stream()
+        String written = RecordText.payloadOf(lines.stream()
                 .filter(l -> l.contains("\"subkind\":\"attackers\"")).findFirst().orElseThrow());
         List<String> order = List.of(
                 "anchor_attacker", "legal_defenders", "must_attack", "legal_attackers", "forbidden");

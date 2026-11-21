@@ -20,11 +20,11 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.records;
-import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
+import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
 import static com.pricepredictor.connector.effects.TestBoard.priority;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -121,7 +121,7 @@ class MidResolutionCastTest {
         String boltHalf = only(all, "resolution", BOLT);
 
         assertEquals(List.of(), records(all, "activation").stream()
-                .filter(r -> TETSUO.equals(RecordLines.scriptOf(r))).toList(),
+                .filter(r -> TETSUO.equals(RecordAbilities.scriptOf(r))).toList(),
                 "a trigger has no cost half");
         assertNull(linkOf(charmHalf), charmHalf);
         assertTrue(charmHalf.contains("\"option\":" + TETSUO_CAST_MODE + "}"),
@@ -410,7 +410,7 @@ class MidResolutionCastTest {
         });
 
         String cascadeHalf = only(all, "resolution", BLOODBRAID);
-        assertEquals("resolved", RecordLines.outcomeOf(cascadeHalf), cascadeHalf);
+        assertEquals("resolved", RecordAbilities.outcomeOf(cascadeHalf), cascadeHalf);
     }
 
     // ── the cast spell's own costs ──────────────────────────────────────

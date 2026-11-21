@@ -15,9 +15,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
-import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
 import static com.pricepredictor.connector.effects.TestBoard.spellOf;

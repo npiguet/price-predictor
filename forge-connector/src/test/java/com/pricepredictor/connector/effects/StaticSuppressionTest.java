@@ -458,7 +458,7 @@ class StaticSuppressionTest {
         List<String> found = new ArrayList<>();
         for (String record : records) {
             if ("continuous".equals(parse(record).get("kind"))
-                    && script.equals(RecordLines.scriptOf(record))) {
+                    && script.equals(RecordAbilities.scriptOf(record))) {
                 found.add(record);
             }
         }
@@ -478,7 +478,7 @@ class StaticSuppressionTest {
     }
 
     private static Map<String, Object> contributionTo(String record, Card card) {
-        for (Object each : (List<?>) RecordLines.payload(record).get("contributions")) {
+        for (Object each : (List<?>) RecordEvents.payload(record).get("contributions")) {
             Map<String, Object> contribution = asMap(each);
             if (Refs.of(card).equals(contribution.get("entity"))) {
                 return contribution;

@@ -54,7 +54,7 @@ class PriorityCandidatesTest {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> candidateOf(String record) {
-        return RecordLines.asMap(((List<Object>) RecordLines.payload(record).get("candidates")).get(0));
+        return RecordLines.asMap(((List<Object>) RecordEvents.payload(record).get("candidates")).get(0));
     }
 
     /** Whether the record's candidate is a line of {@code scriptFile}. */

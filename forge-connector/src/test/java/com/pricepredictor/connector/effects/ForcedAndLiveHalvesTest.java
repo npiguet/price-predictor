@@ -105,7 +105,7 @@ class ForcedAndLiveHalvesTest {
         List<String> halves = records.stream()
                 .filter(line -> "resolution".equals(parse(line).get("kind"))
                         && "resolution".equals(parse(line).get("moment"))
-                        && RecordLines.linkOf(line) != null)
+                        && RecordAbilities.linkOf(line) != null)
                 .toList();
         assertTrue(!halves.isEmpty(), records.toString());
         return halves;
@@ -207,7 +207,7 @@ class ForcedAndLiveHalvesTest {
         }, "Druidic Ritual", spell -> { });
         assertAlike(play, false);
         assertAlike(play, true);
-        assertEquals("declined", RecordLines.payload(liveHalves(play, true).get(0)).get("outcome"));
+        assertEquals("declined", RecordEvents.payload(liveHalves(play, true).get(0)).get("outcome"));
     }
 
     /** Abzan Charm with no creature out: its one legal mode, draw two and lose 2 life. */
@@ -354,7 +354,7 @@ class ForcedAndLiveHalvesTest {
                     .getCreaturesInPlay().get(0));
         });
         assertAlike(play, false, live -> assertTrue(
-                RecordLines.eventTypes(live).contains("unattached"), live));
+                RecordEvents.eventTypes(live).contains("unattached"), live));
     }
 
     /**
@@ -379,7 +379,7 @@ class ForcedAndLiveHalvesTest {
             }
         });
         assertEquals(2, liveHalves(play, false).size(), "one half per chosen mode");
-        assertAlike(play, false, live -> assertEquals("fizzled", RecordLines.outcomeOf(live), live));
+        assertAlike(play, false, live -> assertEquals("fizzled", RecordAbilities.outcomeOf(live), live));
     }
 
     /**
@@ -398,7 +398,7 @@ class ForcedAndLiveHalvesTest {
             }
             return game;
         }, "Sundial of the Infinite", game -> abilityOf(game, ApiType.EndTurn), sundial -> { });
-        assertAlike(play, false, live -> assertTrue(RecordLines.events(live).stream()
+        assertAlike(play, false, live -> assertTrue(RecordEvents.events(live).stream()
                 .noneMatch(event -> "hand".equals(paramsOf(event).get("from_zone"))), live));
     }
 
@@ -427,7 +427,7 @@ class ForcedAndLiveHalvesTest {
             aimed.getTargets().add(aimed.getActivatingPlayer().getOpponents().get(0)
                     .getCreaturesInPlay().get(0));
         });
-        assertAlike(play, false, live -> assertTrue(RecordLines.events(live).stream()
+        assertAlike(play, false, live -> assertTrue(RecordEvents.events(live).stream()
                 .anyMatch(event -> "battlefield".equals(paramsOf(event).get("from_zone"))
                         && "graveyard".equals(paramsOf(event).get("to_zone"))), live));
     }
@@ -454,7 +454,7 @@ class ForcedAndLiveHalvesTest {
             aimed.getTargets().add(aimed.getActivatingPlayer().getCreaturesInPlay().get(0));
         });
         assertAlike(play, false, live -> assertTrue(
-                !RecordLines.eventTypes(live).contains("tapped"), live));
+                !RecordEvents.eventTypes(live).contains("tapped"), live));
     }
 
     /** An event's parameters, none when it has none. */
@@ -465,13 +465,13 @@ class ForcedAndLiveHalvesTest {
 
     /** A check that a record's events are {@code expected}: each one's type and {@code attributed_to}, in order. */
     private static Consumer<String> linksAre(List<List<Object>> expected) {
-        return record -> assertEquals(expected, RecordLines.events(record).stream()
+        return record -> assertEquals(expected, RecordEvents.events(record).stream()
                 .map(event -> List.of(event.get("type"), event.get("attributed_to"))).toList(), record);
     }
 
     /** A check that the record's {@code pt_change} is permanent. */
     private static Consumer<String> ptChangeIsPermanent() {
-        return record -> assertEquals("permanent", RecordLines.events(record).stream()
+        return record -> assertEquals("permanent", RecordEvents.events(record).stream()
                 .filter(event -> "pt_change".equals(event.get("type")))
                 .map(event -> event.get("duration")).findFirst().orElseThrow(), record);
     }

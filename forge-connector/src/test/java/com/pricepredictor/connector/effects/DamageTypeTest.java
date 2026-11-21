@@ -93,7 +93,7 @@ class DamageTypeTest {
             if (!"combat".equals(RecordLines.parse(record).get("kind"))) {
                 continue;
             }
-            for (Map<String, Object> event : RecordLines.events(record)) {
+            for (Map<String, Object> event : RecordEvents.events(record)) {
                 if ("damage_dealt".equals(event.get("type"))) {
                     typeBySubject.put(((List<?>) event.get("subjects")).get(0).toString(),
                             (String) asMap(event.get("params")).get("damage_type"));

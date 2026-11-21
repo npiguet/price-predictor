@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
-import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
+import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -77,7 +77,7 @@ class ActingStackExtrasTest {
             play.run();
             resolveAndMoveOn(game);
         });
-        return RecordLines.only(records, "resolution", script);
+        return RecordPicks.only(records, "resolution", script);
     }
 
     /**
@@ -230,7 +230,7 @@ class ActingStackExtrasTest {
             resolveAndMoveOn(game);
         });
 
-        String half = RecordLines.only(records, "resolution", "cardsfolder/f/forked_bolt.txt");
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/f/forked_bolt.txt");
         assertEquals("partially_fizzled", outcomeOf(half), half);
         Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
         String lost = "L" + bears.getId();
@@ -268,7 +268,7 @@ class ActingStackExtrasTest {
             resolveAndMoveOn(game);
         });
 
-        String half = RecordLines.only(records, "resolution", "cardsfolder/a/arc_lightning.txt");
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/a/arc_lightning.txt");
         assertEquals("partially_fizzled", outcomeOf(half), half);
         Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
         assertEquals(Map.of("L" + bears.getId(), 1L, "L" + wurm.getId(), 1L, Refs.of(giant), 1L),
@@ -293,7 +293,7 @@ class ActingStackExtrasTest {
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, game, caps, 1L, spell, WHY);
 
-        String half = RecordLines.only(fork.records(), "resolution", "cardsfolder/a/arc_lightning.txt");
+        String half = RecordPicks.only(fork.records(), "resolution", "cardsfolder/a/arc_lightning.txt");
         Map<String, Object> extras = extrasOf(half, arcLightning);
         Map<String, Object> amounts = asMap(extras.get("per_target_amounts"));
         assertEquals(3L, amounts.values().stream().mapToLong(each -> (Long) each).sum(), half);
@@ -328,7 +328,7 @@ class ActingStackExtrasTest {
             resolveAndMoveOn(game);
         });
 
-        String half = RecordLines.only(records, "resolution", "cardsfolder/c/counterspell.txt");
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/c/counterspell.txt");
         Map<String, Object> extras = extrasOf(half, counter[0].getHostCard());
         String shockRef = Refs.of(game.getCardState(shock));
         assertEquals(List.of(shockRef), extras.get("targets"), half);

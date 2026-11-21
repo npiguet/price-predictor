@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -137,7 +137,7 @@ class OutcomeHandlerTest {
 
         assertEquals(1L, droppedFlips.get(), "the activation's flip is counted as dropped");
         String half = records.get(records.size() - 1);
-        assertEquals(List.of("coin_flipped"), RecordLines.eventTypes(half), half);
+        assertEquals(List.of("coin_flipped"), RecordEvents.eventTypes(half), half);
         assertEquals(List.of(Refs.of(flipper)), events(half).get(0).get("subjects"), half);
     }
 

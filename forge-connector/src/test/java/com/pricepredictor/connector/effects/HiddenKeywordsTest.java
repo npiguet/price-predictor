@@ -14,10 +14,10 @@ import java.util.List;
 import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,7 +56,7 @@ class HiddenKeywordsTest {
             TestBoard.nextStep(game);
         });
 
-        String half = RecordLines.only(all, "resolution", "cardsfolder/a/abandon_the_post.txt");
+        String half = RecordPicks.only(all, "resolution", "cardsfolder/a/abandon_the_post.txt");
         Map<String, Object> gained = events(half).stream()
                 .filter(e -> "keyword_change".equals(e.get("type"))
                         && Boolean.TRUE.equals(params(e).get("hidden")))
@@ -65,7 +65,7 @@ class HiddenKeywordsTest {
         assertEquals(List.of(CANT_BLOCK), params(gained).get("keywords"), half);
         assertEquals(false, params(gained).get("removed"), half);
 
-        String later = RecordLines.only(all, "activation", "cardsfolder/s/shock.txt");
+        String later = RecordPicks.only(all, "activation", "cardsfolder/s/shock.txt");
         Map<String, Object> state = asMap(parse(later).get("state"));
         Map<String, Object> entity = ((List<?>) state.get("entities")).stream()
                 .map(RecordLines::asMap).filter(e -> Refs.of(bears).equals(e.get("id")))
@@ -101,8 +101,8 @@ class HiddenKeywordsTest {
             TestBoard.nextStep(game);
         });
 
-        String half = RecordLines.only(all, "resolution", "cardsfolder/l/lavaclaw_reaches.txt");
-        assertEquals(1, RecordLines.eventTypes(half).stream()
+        String half = RecordPicks.only(all, "resolution", "cardsfolder/l/lavaclaw_reaches.txt");
+        assertEquals(1, RecordEvents.eventTypes(half).stream()
                 .filter("ability_change"::equals).count(), half);
     }
 }

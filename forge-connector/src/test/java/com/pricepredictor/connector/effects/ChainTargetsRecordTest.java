@@ -21,11 +21,11 @@ import java.util.Map;
 import java.util.Random;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.optionOf;
-import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordAbilities.optionOf;
+import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -138,7 +138,7 @@ class ChainTargetsRecordTest {
 
         String effect = records(records, "resolution").get(0);
         Map<String, String> bySubject = new java.util.HashMap<>();
-        for (Map<String, Object> event : RecordLines.events(effect)) {
+        for (Map<String, Object> event : RecordEvents.events(effect)) {
             if ("damage_dealt".equals(event.get("type"))) {
                 bySubject.put((String) ((List<?>) event.get("subjects")).get(0),
                         String.valueOf(event.get("attributed_to")));
@@ -282,10 +282,10 @@ class ChainTargetsRecordTest {
             TestBoard.nextStep(game);
         });
 
-        String shockCost = RecordLines.only(records, "activation", "cardsfolder/s/shock.txt");
+        String shockCost = RecordPicks.only(records, "activation", "cardsfolder/s/shock.txt");
         assertEquals(List.of(Refs.of(bears)), refsOf(shockCost).get("targets"), shockCost);
         assertEquals(List.of(), refsOf(shockCost).get("targets_on_stack"), shockCost);
-        String counterHalf = RecordLines.only(records, "resolution", "cardsfolder/c/counterspell.txt");
+        String counterHalf = RecordPicks.only(records, "resolution", "cardsfolder/c/counterspell.txt");
         String shockRef = Refs.of(game.getCardState(shock));
         assertEquals(List.of(shockRef), refsOf(counterHalf).get("targets_at_cast"), counterHalf);
         assertEquals(List.of(shockRef), refsOf(counterHalf).get("targets_on_stack"), counterHalf);
@@ -375,6 +375,6 @@ class ChainTargetsRecordTest {
         String cost = only(records, "activation", "cardsfolder/k/kolaghans_command.txt");
         List<?> targets = (List<?>) refsOf(cost).get("targets");
         assertFalse(targets.isEmpty(), cost);
-        assertEquals(targets, RecordLines.targetEnds(cost), cost);
+        assertEquals(targets, RecordAbilities.targetEnds(cost), cost);
     }
 }

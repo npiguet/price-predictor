@@ -68,7 +68,7 @@ class ProbeBranchTest {
     }
 
     private static boolean holds(String record, EventType type, Card subject) {
-        return RecordLines.eventsNaming(record, "E" + subject.getId()).stream()
+        return RecordEvents.eventsNaming(record, "E" + subject.getId()).stream()
                 .anyMatch(event -> type.wireName().equals(event.get("type")));
     }
 
@@ -103,7 +103,7 @@ class ProbeBranchTest {
 
         assertEquals(DamageStep.FIRST_STRIKE.wireName(), combatSubstep(pair.real()), pair.real());
         String knight = "E" + board.attacker().getId();
-        assertTrue(RecordLines.eventsNaming(pair.branch(), "E" + board.blocker().getId()).stream()
+        assertTrue(RecordEvents.eventsNaming(pair.branch(), "E" + board.blocker().getId()).stream()
                         .anyMatch(event -> EventType.DAMAGE_DEALT.wireName().equals(event.get("type"))
                                 && knight.equals(RecordLines.params(event).get("source"))),
                 pair.branch());

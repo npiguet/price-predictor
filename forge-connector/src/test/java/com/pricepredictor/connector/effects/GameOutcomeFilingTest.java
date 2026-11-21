@@ -19,11 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
-import static com.pricepredictor.connector.effects.RecordLines.payload;
-import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.RecordEvents.payload;
+import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -184,7 +184,7 @@ class GameOutcomeFilingTest {
             game.fireEvent(new GameEventGameFinished());
         });
 
-        String half = RecordLines.only(records, "resolution", "cardsfolder/o/one_with_death.txt");
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/o/one_with_death.txt");
         assertEquals(List.of("player_lost", "player_won", "zone_change"), eventTypes(half), half);
         assertEquals("stack", params(events(half).get(2)).get("from_zone"), half);
         assertEquals(2, records.size(), "the cost half and the effect half: " + records);

@@ -216,8 +216,8 @@ class PatchHooksTest {
             TestBoard.nextStep(game);
         });
 
-        String half = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
-        assertEquals(List.of("root"), RecordLines.events(half).stream()
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
+        assertEquals(List.of("root"), RecordEvents.events(half).stream()
                 .filter(event -> "damage_dealt".equals(event.get("type")))
                 .map(event -> event.get("attributed_to")).toList(), half);
         assertNull(PatchHooks.currentSubAbility());

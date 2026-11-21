@@ -143,13 +143,13 @@ class FirstStatChangeTest {
                     TestBoard.nextStep(game);
                 });
 
-        String boltHalf = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
-        String triggerHalf = RecordLines.only(records, "resolution", DAXOS, "trigger");
+        String boltHalf = RecordPicks.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
+        String triggerHalf = RecordPicks.only(records, "resolution", DAXOS, "trigger");
         // The shape: the toughness changed between the two records, and the
         // second one's snapshot already shows it.
         assertEquals(3L, toughnessIn(boltHalf, daxos), boltHalf);
         assertEquals(2L, toughnessIn(triggerHalf, daxos), triggerHalf);
-        assertEquals(List.of("life_change"), RecordLines.eventTypes(triggerHalf), triggerHalf);
+        assertEquals(List.of("life_change"), RecordEvents.eventTypes(triggerHalf), triggerHalf);
     }
 
     /**
@@ -184,7 +184,7 @@ class FirstStatChangeTest {
             bracket.onNextAction();
         });
 
-        String boltHalf = RecordLines.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
+        String boltHalf = RecordPicks.only(records, "resolution", "cardsfolder/l/lightning_bolt.txt");
         assertTrue(boltHalf.contains(pumpOf(bears.get())), "the pump is the Bolt's: " + boltHalf);
     }
 

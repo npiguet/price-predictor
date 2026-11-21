@@ -49,7 +49,7 @@ class ForcedMandatoryChoiceTest {
         assertTrue(fork.wrote(), "the forced Aura is written: " + ForkRefusals.counts());
         List<String> records = ShardRun.readShard(fork.shard());
         assertEquals(1, records.size(), records.toString());
-        assertTrue(RecordLines.eventTypes(records.get(0)).contains(EventType.ATTACHED.wireName()),
+        assertTrue(RecordEvents.eventTypes(records.get(0)).contains(EventType.ATTACHED.wireName()),
                 "the Aura attaches to the Island: " + records.get(0));
     }
 

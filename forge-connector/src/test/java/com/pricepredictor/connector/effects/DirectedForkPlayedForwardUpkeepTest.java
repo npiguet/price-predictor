@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,7 +52,7 @@ class DirectedForkPlayedForwardUpkeepTest extends DirectedForkPlayedForwardSuppo
         List<String> fork = forkOf(all, "702.1c", "no_keywords");
         List<String> resolved = resolutionsOf(fork, effort);
         assertFalse(resolved.isEmpty(), "Concerted Effort's trigger resolves in the fork");
-        assertTrue(resolved.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("keyword_change")),
+        assertTrue(resolved.stream().noneMatch(record -> RecordEvents.eventTypes(record).contains("keyword_change")),
                 "and grants no keyword there");
     }
 
@@ -73,7 +73,7 @@ class DirectedForkPlayedForwardUpkeepTest extends DirectedForkPlayedForwardSuppo
 
         List<String> won = new ArrayList<>();
         for (String record : fork) {
-            if (RecordLines.eventTypes(record).contains("player_won")) {
+            if (RecordEvents.eventTypes(record).contains("player_won")) {
                 won.add(parse(record).get("kind") + "/" + parse(record).get("moment"));
             }
         }

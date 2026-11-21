@@ -147,9 +147,9 @@ class ContinuousChannelTest {
     /** The one record acting through {@code script}'s contribution for {@code entity}. */
     private static java.util.Map<String, Object> contributionOf(
             List<String> records, String script, Card entity) {
-        String record = records.stream().filter(r -> script.equals(RecordLines.scriptOf(r)))
+        String record = records.stream().filter(r -> script.equals(RecordAbilities.scriptOf(r)))
                 .findFirst().orElseThrow(() -> new AssertionError(script + ": " + records));
-        for (Object each : (List<?>) RecordLines.payload(record).get("contributions")) {
+        for (Object each : (List<?>) RecordEvents.payload(record).get("contributions")) {
             java.util.Map<String, Object> contribution = RecordLines.asMap(each);
             if (Refs.of(entity).equals(contribution.get("entity"))) {
                 return contribution;
@@ -214,10 +214,10 @@ class ContinuousChannelTest {
         assertEquals(List.of("CARDNAME can only attack alone."),
                 contribution.get("hidden_keywords"), contribution.toString());
         String record = records.stream()
-                .filter(r -> "cardsfolder/e/errantry.txt".equals(RecordLines.scriptOf(r)))
+                .filter(r -> "cardsfolder/e/errantry.txt".equals(RecordAbilities.scriptOf(r)))
                 .findFirst().orElseThrow();
-        assertTrue(RecordLines.stateOf(record).contains("\"hidden_keywords\":[]"), record);
-        assertTrue(!RecordLines.stateOf(record).contains("can only attack alone"), record);
+        assertTrue(RecordText.stateOf(record).contains("\"hidden_keywords\":[]"), record);
+        assertTrue(!RecordText.stateOf(record).contains("can only attack alone"), record);
     }
 
     /**
@@ -235,8 +235,8 @@ class ContinuousChannelTest {
 
         List<String> records = continuousRecords(board);
         String record = records.stream()
-                .filter(r -> "cardsfolder/a/archetype_of_imagination.txt".equals(RecordLines.scriptOf(r)))
-                .filter(r -> RecordLines.payload(r).toString().contains(Refs.of(angel)))
+                .filter(r -> "cardsfolder/a/archetype_of_imagination.txt".equals(RecordAbilities.scriptOf(r)))
+                .filter(r -> RecordEvents.payload(r).toString().contains(Refs.of(angel)))
                 .findFirst().orElseThrow(() -> new AssertionError(String.valueOf(records)));
         java.util.Map<String, Object> entity = ((List<?>) RecordLines.asMap(
                 RecordLines.parse(record).get("state")).get("entities")).stream()
@@ -268,7 +268,7 @@ class ContinuousChannelTest {
         assertEquals(6, bears.getCMC());
 
         String record = continuousRecords(board).stream()
-                .filter(r -> RecordLines.payload(r).toString().contains("Pigeon"))
+                .filter(r -> RecordEvents.payload(r).toString().contains("Pigeon"))
                 .findFirst().orElseThrow(() -> new AssertionError("no record of the renaming static"));
         java.util.Map<String, Object> entity = ((List<?>) RecordLines.asMap(
                 RecordLines.parse(record).get("state")).get("entities")).stream()

@@ -16,10 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
-import static com.pricepredictor.connector.effects.RecordLines.only;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
 import static com.pricepredictor.connector.effects.RecordLines.params;
-import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.pricepredictor.connector.effects.RecordLines.onlyEvent;
+import static com.pricepredictor.connector.effects.RecordEvents.onlyEvent;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
@@ -135,8 +135,8 @@ class TriggerRecordTest {
         });
 
         List<String> written = lines.stream()
-                .map(line -> RecordLines.abilityKeys(line).get(0).get("index_within_kind")
-                        + "/" + RecordLines.payload(line).get("fired"))
+                .map(line -> RecordAbilities.abilityKeys(line).get(0).get("index_within_kind")
+                        + "/" + RecordEvents.payload(line).get("fired"))
                 .toList();
         assertEquals(List.of("0/false", "1/false", "0/true", "1/true"), written, lines.toString());
     }
@@ -161,9 +161,9 @@ class TriggerRecordTest {
         });
 
         assertEquals(1, lines.size(), lines.toString());
-        assertEquals(1L, ((Number) RecordLines.abilityKeys(lines.get(0)).get(0)
+        assertEquals(1L, ((Number) RecordAbilities.abilityKeys(lines.get(0)).get(0)
                 .get("index_within_kind")).longValue(), "the run one, once");
-        assertEquals(true, RecordLines.payload(lines.get(0)).get("fired"));
+        assertEquals(true, RecordEvents.payload(lines.get(0)).get("fired"));
     }
 
     /**
@@ -233,7 +233,7 @@ class TriggerRecordTest {
 
         List<Long> firings = new ArrayList<>();
         for (String line : lines) {
-            if (Boolean.TRUE.equals(RecordLines.payload(line).get("fired"))) {
+            if (Boolean.TRUE.equals(RecordEvents.payload(line).get("fired"))) {
                 Map<String, Object> state = RecordLines.asMap(RecordLines.parse(line).get("state"));
                 Map<String, Object> player = RecordLines.asMap(((List<?>) state.get("players")).get(0));
                 firings.add(1000 - ((Number) player.get("life")).longValue());

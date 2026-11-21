@@ -33,7 +33,7 @@ class FloatingRowsTest {
 
     /** The floating effects of the board of the one cost half acting through {@code script}. */
     private static List<Map<String, Object>> floatingOf(List<String> all, String script) {
-        String later = RecordLines.only(all, "activation", script);
+        String later = RecordPicks.only(all, "activation", script);
         Map<String, Object> state = asMap(parse(later).get("state"));
         return ((List<?>) asMap(state.get("global")).get("floating_effects")).stream()
                 .map(RecordLines::asMap).toList();

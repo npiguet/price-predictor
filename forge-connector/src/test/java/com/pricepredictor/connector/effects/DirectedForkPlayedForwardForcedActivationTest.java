@@ -48,7 +48,7 @@ class DirectedForkPlayedForwardForcedActivationTest extends DirectedForkPlayedFo
         List<String> fork = forkOf(game, PhaseType.MAIN1, "111.10v", "mana_available");
 
         assertTrue(resolutionsOf(fork, token).stream()
-                .anyMatch(record -> RecordLines.eventTypes(record).contains("counter_change")),
+                .anyMatch(record -> RecordEvents.eventTypes(record).contains("counter_change")),
                 "the token's ability puts its counter in the fork");
     }
 
@@ -68,7 +68,7 @@ class DirectedForkPlayedForwardForcedActivationTest extends DirectedForkPlayedFo
 
         List<String> resolved = resolutionsOf(fork, tree);
         assertFalse(resolved.isEmpty(), "the exchange resolves in the fork");
-        assertTrue(resolved.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("life_change")),
+        assertTrue(resolved.stream().noneMatch(record -> RecordEvents.eventTypes(record).contains("life_change")),
                 "and changes no life");
     }
 
@@ -86,7 +86,7 @@ class DirectedForkPlayedForwardForcedActivationTest extends DirectedForkPlayedFo
         List<String> fork = forkOf(game, PhaseType.MAIN1, "701.12g", "opponent_above");
 
         assertTrue(resolutionsOf(fork, tree).stream()
-                        .anyMatch(record -> RecordLines.eventTypes(record).contains("life_change")),
+                        .anyMatch(record -> RecordEvents.eventTypes(record).contains("life_change")),
                 "the exchange changes the life of B in the fork");
     }
 
@@ -209,9 +209,9 @@ class DirectedForkPlayedForwardForcedActivationTest extends DirectedForkPlayedFo
             List<String> fork = forkOf(game, PhaseType.MAIN1, rule, "aura_in_hand");
 
             List<String> swapped = swaps(game, fork);
-            assertTrue(swapped.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("attached")),
+            assertTrue(swapped.stream().anyMatch(record -> RecordEvents.eventTypes(record).contains("attached")),
                     rule + ": the swap attaches Holy Strength in the fork");
-            assertTrue(swapped.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("zone_change")),
+            assertTrue(swapped.stream().anyMatch(record -> RecordEvents.eventTypes(record).contains("zone_change")),
                     rule + ": and moves it from the hand");
         }
     }
@@ -227,7 +227,7 @@ class DirectedForkPlayedForwardForcedActivationTest extends DirectedForkPlayedFo
 
         List<String> fork = forkOf(game, PhaseType.MAIN1, "702.65b", "can_enchant");
 
-        assertTrue(swaps(game, fork).stream().anyMatch(record -> RecordLines.eventTypes(record).contains("zone_change")),
+        assertTrue(swaps(game, fork).stream().anyMatch(record -> RecordEvents.eventTypes(record).contains("zone_change")),
                 "the swap moves the Auras in the fork");
     }
 }

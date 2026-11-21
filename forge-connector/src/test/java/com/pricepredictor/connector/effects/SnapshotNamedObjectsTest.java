@@ -95,7 +95,7 @@ class SnapshotNamedObjectsTest {
             TestBoard.nextStep(game);
         });
 
-        String half = RecordLines.only(records, "resolution", "tokenscripts/c_a_food_sac.txt");
+        String half = RecordPicks.only(records, "resolution", "tokenscripts/c_a_food_sac.txt");
         Map<String, Object> state = asMap(parse(half).get("state"));
         Map<String, Object> token = entityIn(state, ref);
         assertEquals("last_known", token.get("role"), String.valueOf(state));

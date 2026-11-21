@@ -172,7 +172,7 @@ class ProbeSchedulerTest {
 
         List<String> lines = ShardRun.readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
         assertEquals(1, lines.size(), lines.toString());
-        assertTrue(RecordLines.events(lines.get(0)).stream().noneMatch(event ->
+        assertTrue(RecordEvents.events(lines.get(0)).stream().noneMatch(event ->
                         "damage_dealt".equals(event.get("type"))
                                 && String.valueOf(event.get("subjects")).contains("P1")),
                 "the branch still trampled over: " + lines.get(0));

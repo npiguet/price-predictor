@@ -17,8 +17,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
-import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
+import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -85,8 +85,8 @@ class FizzledSpellTest {
             resolveAndMoveOn(game);
         });
 
-        String half = RecordLines.records(run.records(), "resolution").stream()
-                .filter(record -> "fizzled".equals(RecordLines.payload(record).get("outcome")))
+        String half = RecordPicks.records(run.records(), "resolution").stream()
+                .filter(record -> "fizzled".equals(RecordEvents.payload(record).get("outcome")))
                 .findFirst().orElseThrow(() -> new AssertionError(run.records().toString()));
         assertEquals("fizzled", outcomeOf(half), half);
         List<Map<String, Object>> events = events(half);
@@ -125,7 +125,7 @@ class FizzledSpellTest {
             resolveAndMoveOn(game);
         });
 
-        String half = RecordLines.only(run.records(), "resolution", "cardsfolder/f/firebolt.txt");
+        String half = RecordPicks.only(run.records(), "resolution", "cardsfolder/f/firebolt.txt");
         assertEquals("fizzled", outcomeOf(half), half);
         List<Map<String, Object>> events = events(half);
         assertEquals(1, events.size(), half);
@@ -156,13 +156,13 @@ class FizzledSpellTest {
             resolveAndMoveOn(game);
         });
 
-        List<String> halves = RecordLines.records(run.records(), "resolution");
+        List<String> halves = RecordPicks.records(run.records(), "resolution");
         assertEquals(2, halves.size(), run.records().toString());
-        String copyHalf = halves.stream().filter(half -> RecordLines.linkOf(half) == null)
+        String copyHalf = halves.stream().filter(half -> RecordAbilities.linkOf(half) == null)
                 .findFirst().orElseThrow(() -> new AssertionError(run.records().toString()));
         assertEquals("fizzled", outcomeOf(copyHalf), copyHalf);
         assertEquals(List.of(), events(copyHalf), copyHalf);
-        String originalHalf = halves.stream().filter(half -> RecordLines.linkOf(half) != null)
+        String originalHalf = halves.stream().filter(half -> RecordAbilities.linkOf(half) != null)
                 .findFirst().orElseThrow();
         assertEquals(1, events(originalHalf).size(), originalHalf);
     }
@@ -212,7 +212,7 @@ class FizzledSpellTest {
             resolveAndMoveOn(game);
         });
 
-        String half = RecordLines.records(run.records(), "resolution").get(0);
+        String half = RecordPicks.records(run.records(), "resolution").get(0);
         assertEquals("declined", outcomeOf(half), half);
         List<Map<String, Object>> events = events(half);
         assertEquals(1, events.size(), half);
@@ -238,8 +238,8 @@ class FizzledSpellTest {
             resolveAndMoveOn(game);
         });
 
-        List<String> halves = RecordLines.records(run.records(), "resolution").stream()
-                .filter(record -> "cardsfolder/p/prodigal_sorcerer.txt".equals(RecordLines.scriptOf(record)))
+        List<String> halves = RecordPicks.records(run.records(), "resolution").stream()
+                .filter(record -> "cardsfolder/p/prodigal_sorcerer.txt".equals(RecordAbilities.scriptOf(record)))
                 .toList();
         assertEquals(1, halves.size(), run.records().toString());
         assertEquals("fizzled", outcomeOf(halves.get(0)), halves.get(0));

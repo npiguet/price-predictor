@@ -15,9 +15,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Predicate;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

@@ -16,9 +16,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.payload;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordEvents.payload;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
 import static com.pricepredictor.connector.effects.TestBoard.spellOf;
@@ -146,7 +146,7 @@ class ConditionsMetTest {
         assertTrue(game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
                 .anyMatch(card -> card.getId() == crab.getId() && !card.isTapped()),
                 "the crab entered untapped on its controller's turn");
-        String half = RecordLines.only(records, "resolution", "cardsfolder/e/eddymurk_crab.txt", "spell");
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/e/eddymurk_crab.txt", "spell");
         assertEquals(List.of(), conditionsOf(half), half);
     }
 
@@ -177,8 +177,8 @@ class ConditionsMetTest {
 
         assertTrue(game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
                 .anyMatch(card -> card.getId() == forest.getId()), "the Forest entered");
-        String half = RecordLines.only(records, "resolution", "cardsfolder/a/archdruids_charm.txt");
-        assertEquals(0L, RecordLines.optionOf(half), half);
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/a/archdruids_charm.txt");
+        assertEquals(0L, RecordAbilities.optionOf(half), half);
         assertEquals(List.of(Map.of("segment", "0", "met", true)), conditionsOf(half), half);
     }
 

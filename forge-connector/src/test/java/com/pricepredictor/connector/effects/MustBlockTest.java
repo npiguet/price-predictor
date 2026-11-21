@@ -161,7 +161,7 @@ class MustBlockTest {
         Map<String, Object> payload = RecordLines.asMap(blockers.get(0).get("payload"));
         assertEquals(List.of(Refs.of(giant), Refs.of(tapped), Refs.of(secondBears)),
                 payload.get("must_block"));
-        String written = RecordLines.payloadOf(lines.stream()
+        String written = RecordText.payloadOf(lines.stream()
                 .filter(l -> l.contains("\"subkind\":\"blockers\"")).findFirst().orElseThrow());
         assertEquals(List.of("anchor_attacker", "legal_blockers", "forbidden", "must_block",
                         "min_blockers"), AttackersRecordTest.membersInOrder(written,
@@ -183,7 +183,7 @@ class MustBlockTest {
                         collectors.playability().legalityHandler())
                         .onBlockersDeclarable(defending, bears, List.of(giant), List.of(giant), 1));
 
-        Map<String, Object> payload = RecordLines.payload(lines.stream()
+        Map<String, Object> payload = RecordEvents.payload(lines.stream()
                 .filter(l -> l.contains("\"subkind\":\"blockers\"")).findFirst().orElseThrow());
         assertEquals(List.of(), payload.get("must_block"));
     }

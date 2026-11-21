@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -89,8 +89,8 @@ class DirectedForkPlayedForwardCombatTest extends DirectedForkPlayedForwardSuppo
         List<Object> legal = new ArrayList<>();
         for (String record : fork) {
             if ("blockers".equals(parse(record).get("subkind"))
-                    && ref(homunculus).equals(RecordLines.payload(record).get("anchor_attacker"))) {
-                legal.add(RecordLines.payload(record).get("legal_blockers"));
+                    && ref(homunculus).equals(RecordEvents.payload(record).get("anchor_attacker"))) {
+                legal.add(RecordEvents.payload(record).get("legal_blockers"));
             }
         }
         assertEquals(1, legal.size(), "one blockers record for the Homunculus: " + legal);

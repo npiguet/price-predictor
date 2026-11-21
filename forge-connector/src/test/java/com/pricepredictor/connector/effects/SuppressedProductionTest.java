@@ -280,7 +280,7 @@ class SuppressedProductionTest {
 
     /** Whether the record's first acting key is the static of this index in {@code script}. */
     private static boolean actsThrough(String record, String script, long index) {
-        List<Map<String, Object>> keys = RecordLines.abilityKeys(record);
+        List<Map<String, Object>> keys = RecordAbilities.abilityKeys(record);
         if (keys.isEmpty()) {
             return false;
         }

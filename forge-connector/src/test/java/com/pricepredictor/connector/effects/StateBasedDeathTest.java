@@ -18,16 +18,16 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.RecordLines.count;
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.optionOf;
+import static com.pricepredictor.connector.effects.RecordText.count;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.eventsNaming;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordAbilities.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
-import static com.pricepredictor.connector.effects.RecordLines.records;
-import static com.pricepredictor.connector.effects.RecordLines.scriptOf;
-import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
+import static com.pricepredictor.connector.effects.RecordAbilities.scriptOf;
+import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
 import static com.pricepredictor.connector.effects.TestBoard.spellOf;
@@ -507,8 +507,8 @@ class StateBasedDeathTest {
         // having no cost half.
         String triggerHalf = only(records, "resolution", FESTERING_GOBLIN, "trigger");
         assertEquals(null, linkOf(triggerHalf), triggerHalf);
-        assertTrue(RecordLines.records(records, "activation").stream()
-                .noneMatch(r -> FESTERING_GOBLIN.equals(RecordLines.scriptOf(r))), records.toString());
+        assertTrue(RecordPicks.records(records, "activation").stream()
+                .noneMatch(r -> FESTERING_GOBLIN.equals(RecordAbilities.scriptOf(r))), records.toString());
         for (String record : records) {
             if (FESTERING_GOBLIN.equals(scriptOf(record))) {
                 assertFalse(record.contains(deathOf(goblin)),
@@ -786,7 +786,7 @@ class StateBasedDeathTest {
         List<String> halves = effectHalves(records);
         assertEquals(3, halves.size(), halves.toString());
         // One half a chosen mode, the repeated mode twice, in the order chosen.
-        assertEquals(List.of(0L, 0L, 1L), halves.stream().map(RecordLines::optionOf).toList());
+        assertEquals(List.of(0L, 0L, 1L), halves.stream().map(RecordAbilities::optionOf).toList());
         assertFalse(halves.get(0).contains(deathOf(bears)), halves.get(0));
         assertEquals(1, count(halves.get(1), deathOf(bears)), halves.get(1));
         assertFalse(halves.get(2).contains(deathOf(bears)), halves.get(2));

@@ -14,8 +14,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
 import static com.pricepredictor.connector.effects.TestBoard.spellOf;

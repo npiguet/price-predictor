@@ -76,7 +76,7 @@ class RuntimeLandTraitKeysTest {
         assertNamesNoDeclaredLine(sidecar, ProvenanceResolver.of(red), "the Mountain's mana ability");
 
         String record = manaRecord(board, red, "R");
-        for (Map<String, Object> key : RecordLines.abilityKeys(record)) {
+        for (Map<String, Object> key : RecordAbilities.abilityKeys(record)) {
             assertFalse(sidecar.declares(describe(key)),
                     "the mana record acts through a printed line: " + record);
         }
@@ -104,7 +104,7 @@ class RuntimeLandTraitKeysTest {
 
         String record = manaRecord(board, blue, "U");
         assertEquals(List.of(ProvenanceResolver.of(blue).describe()),
-                RecordLines.abilityKeys(record).stream().map(RuntimeLandTraitKeysTest::describe)
+                RecordAbilities.abilityKeys(record).stream().map(RuntimeLandTraitKeysTest::describe)
                         .toList(), record);
     }
 
@@ -150,7 +150,7 @@ class RuntimeLandTraitKeysTest {
 
         String record = manaRecord(board, green, "G");
         assertEquals(List.of(ProvenanceResolver.of(green).describe()),
-                RecordLines.abilityKeys(record).stream().map(RuntimeLandTraitKeysTest::describe)
+                RecordAbilities.abilityKeys(record).stream().map(RuntimeLandTraitKeysTest::describe)
                         .toList(), record);
     }
 
@@ -179,7 +179,7 @@ class RuntimeLandTraitKeysTest {
                 "the ability Glorious Sunrise gave");
 
         String record = manaRecord(board, threeGreen, "G");
-        for (Map<String, Object> key : RecordLines.abilityKeys(record)) {
+        for (Map<String, Object> key : RecordAbilities.abilityKeys(record)) {
             assertFalse(sidecar.declares(describe(key)),
                     "the mana record acts through a printed line: " + record);
         }

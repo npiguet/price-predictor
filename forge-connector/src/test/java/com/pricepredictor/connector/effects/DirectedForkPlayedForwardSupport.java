@@ -16,7 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.Predicate;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -219,7 +219,7 @@ abstract class DirectedForkPlayedForwardSupport {
 
     /** Keeps a trigger record whose payload's {@code fired} is {@code fired}. */
     private static Predicate<String> firedIs(Boolean fired) {
-        return record -> fired.equals(RecordLines.payload(record).get("fired"));
+        return record -> fired.equals(RecordEvents.payload(record).get("fired"));
     }
 
     /** The kinds of record {@link #sourcedBy} selects by their source: each its wire name, lower-cased. */
@@ -251,7 +251,7 @@ abstract class DirectedForkPlayedForwardSupport {
     static List<String> holding(List<String> records, String type) {
         List<String> found = new ArrayList<>();
         for (String record : records) {
-            if (RecordLines.eventTypes(record).contains(type)) {
+            if (RecordEvents.eventTypes(record).contains(type)) {
                 found.add(parse(record).get("kind") + "/" + parse(record).get("moment"));
             }
         }

@@ -178,7 +178,7 @@ class GrantedTraitScriptTest {
                         + "| Description$ This has a static.",
                 "Oracle:This has a static."));
 
-        assertEquals(1, RecordLines.count(text, "[SEG]"), text);
+        assertEquals(1, RecordText.count(text, "[SEG]"), text);
         assertTrue(text.endsWith("[SEG] SV1: AddStaticAbility$ SV1 | Affected$ Card.Self "
                 + "| Description$ This has a static. | Mode$ Continuous"), text);
         assertTrue(parser.missingSVars().drain().isEmpty(), "nothing is reported missing");

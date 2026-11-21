@@ -59,7 +59,7 @@ class BufferedRewriteTest {
 
     private static Map<String, Object> rewrite(String line) {
         assertEquals("rewrite", RecordLines.parse(line).get("kind"), line);
-        return RecordLines.payload(line);
+        return RecordEvents.payload(line);
     }
 
     @Test
@@ -187,7 +187,7 @@ class BufferedRewriteTest {
                 rewrites.get(0));
         for (String other : records) {
             if (!other.contains("\"kind\":\"rewrite\"")) {
-                assertEquals(false, RecordLines.eventTypes(other).contains("card_drawn"),
+                assertEquals(false, RecordEvents.eventTypes(other).contains("card_drawn"),
                         "the draws are the rewrite's alone: " + other);
             }
         }

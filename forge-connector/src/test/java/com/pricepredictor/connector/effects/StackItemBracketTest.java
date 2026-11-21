@@ -16,14 +16,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
-import static com.pricepredictor.connector.effects.RecordLines.records;
-import static com.pricepredictor.connector.effects.RecordLines.scriptOf;
-import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.eventsNaming;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
+import static com.pricepredictor.connector.effects.RecordAbilities.scriptOf;
+import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static com.pricepredictor.connector.effects.TestBoard.cast;
 import static com.pricepredictor.connector.effects.TestBoard.enterStep;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
@@ -290,7 +290,7 @@ class StackItemBracketTest {
         });
 
         String boltCost = only(all, "activation", BOLT);
-        assertFalse(RecordLines.payload(boltCost).containsKey("outcome"), boltCost);
+        assertFalse(RecordEvents.payload(boltCost).containsKey("outcome"), boltCost);
         assertTrue(halvesThrough(all, BOLT).isEmpty(), all.toString());
         String counterHalf = linkedHalf(all, COUNTERSPELL);
         assertEquals(List.of("zone_change", "zone_change"), eventTypes(counterHalf), counterHalf);

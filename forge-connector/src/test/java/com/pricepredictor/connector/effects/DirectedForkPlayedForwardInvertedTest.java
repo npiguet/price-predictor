@@ -56,7 +56,7 @@ class DirectedForkPlayedForwardInvertedTest extends DirectedForkPlayedForwardSup
             if (Boolean.TRUE.equals(parsed.get("fork")) != fork || !"resolution".equals(parsed.get("moment"))) {
                 continue;
             }
-            List<String> types = RecordLines.eventTypes(record);
+            List<String> types = RecordEvents.eventTypes(record);
             if (types.contains("card_revealed")) {
                 found.add((int) types.stream().filter("card_revealed"::equals).count());
             }

@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -47,7 +47,7 @@ class DirectedForkPlayedForwardForcedCastTest extends DirectedForkPlayedForwardS
         List<String> fork = forkOf(game, PhaseType.MAIN1, "701.39a", "has_creature");
 
         assertTrue(resolutionsOf(fork, defenses).stream()
-                        .anyMatch(record -> RecordLines.eventTypes(record).contains("counter_change")),
+                        .anyMatch(record -> RecordEvents.eventTypes(record).contains("counter_change")),
                 "Cached Defenses puts its counters in the fork");
     }
 
@@ -288,9 +288,9 @@ class DirectedForkPlayedForwardForcedCastTest extends DirectedForkPlayedForwardS
         List<String> fork = forkOf(game, PhaseType.MAIN1, "702.103e", "skulking_ghost");
 
         List<String> resolved = resolutionsOf(fork, eidolon);
-        assertTrue(resolved.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("zone_change")),
+        assertTrue(resolved.stream().anyMatch(record -> RecordEvents.eventTypes(record).contains("zone_change")),
                 "the Eidolon enters in the fork");
-        assertTrue(resolved.stream().noneMatch(record -> RecordLines.eventTypes(record).contains("attached")),
+        assertTrue(resolved.stream().noneMatch(record -> RecordEvents.eventTypes(record).contains("attached")),
                 "attached to nothing");
     }
 

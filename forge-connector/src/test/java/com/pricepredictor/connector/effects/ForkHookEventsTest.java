@@ -1,9 +1,9 @@
 package com.pricepredictor.connector.effects;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
-import static com.pricepredictor.connector.effects.RecordLines.payloadOf;
+import static com.pricepredictor.connector.effects.RecordText.payloadOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -138,7 +138,7 @@ class ForkHookEventsTest {
         assertTrue(fork.wrote(), "the forced bestow wrote nothing");
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
-        Map<String, Object> outcome = RecordLines.payload(records.get(0));
+        Map<String, Object> outcome = RecordEvents.payload(records.get(0));
         assertEquals("resolved", outcome.get("outcome"), payloadOf(records.get(0)));
         assertTrue(events(records.get(0)).stream().anyMatch(event ->
                         EventType.ZONE_CHANGE.wireName().equals(event.get("type"))
@@ -166,7 +166,7 @@ class ForkHookEventsTest {
         assertTrue(fork.wrote(), "the fizzled forced spell wrote nothing");
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
-        assertEquals("fizzled", RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
+        assertEquals("fizzled", RecordEvents.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
         List<Map<String, Object>> held = events(records.get(0));
         assertEquals(1, held.size(), payloadOf(records.get(0)));
         assertEquals(EventType.ZONE_CHANGE.wireName(), held.get(0).get("type"));
@@ -227,7 +227,7 @@ class ForkHookEventsTest {
         assertTrue(fork.wrote(), wroteNothing);
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
-        assertEquals(outcome, RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
+        assertEquals(outcome, RecordEvents.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
         assertEquals(List.of(), events(records.get(0)), payloadOf(records.get(0)));
     }
 

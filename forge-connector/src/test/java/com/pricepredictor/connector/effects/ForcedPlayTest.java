@@ -34,7 +34,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.function.Function;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -150,7 +150,7 @@ class ForcedPlayTest {
     static List<Object> costCards(List<String> records, String part) {
         List<Object> cards = new ArrayList<>();
         for (String record : records) {
-            if (RecordLines.payload(record).get("costs") instanceof Map<?, ?> costs
+            if (RecordEvents.payload(record).get("costs") instanceof Map<?, ?> costs
                     && costs.get(part) instanceof List<?> list) {
                 cards.addAll(list);
             }
@@ -247,7 +247,7 @@ class ForcedPlayTest {
                     live -> Binding.empty().with("sanctuary", sanctuary),
                     ForcedPlay.answer(R_PLAYER, R_SANCTUARY, yes))));
 
-            boolean skipped = fork.stream().anyMatch(record -> RecordLines.eventTypes(record).contains("phase_skipped"));
+            boolean skipped = fork.stream().anyMatch(record -> RecordEvents.eventTypes(record).contains("phase_skipped"));
             assertEquals(yes, skipped, "answered " + yes + ": " + fork.size() + " fork records");
         }
     }

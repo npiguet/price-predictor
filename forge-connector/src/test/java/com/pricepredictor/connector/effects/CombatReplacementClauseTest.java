@@ -60,9 +60,9 @@ class CombatReplacementClauseTest {
         List<String> combats = records.stream()
                 .filter(record -> "combat".equals(RecordLines.parse(record).get("kind"))).toList();
         List<String> shielded = combats.stream()
-                .filter(record -> RecordLines.eventTypes(record).contains("regenerated")).toList();
+                .filter(record -> RecordEvents.eventTypes(record).contains("regenerated")).toList();
         assertEquals(1, shielded.size(), combats.toString());
-        assertTrue(RecordLines.eventTypes(shielded.get(0)).contains("removed_from_combat"),
+        assertTrue(RecordEvents.eventTypes(shielded.get(0)).contains("removed_from_combat"),
                 shielded.get(0));
     }
 }

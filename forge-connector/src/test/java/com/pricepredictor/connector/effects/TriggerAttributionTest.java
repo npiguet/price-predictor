@@ -14,10 +14,10 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
 import static com.pricepredictor.connector.effects.RecordLines.params;
-import static com.pricepredictor.connector.effects.RecordLines.payload;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordEvents.payload;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
 import static com.pricepredictor.connector.effects.TestBoard.priorityWithTriggers;
@@ -71,8 +71,8 @@ class TriggerAttributionTest {
         assertTrue(opponent.getCardsIn(ZoneType.Graveyard).stream()
                 .anyMatch(card -> card.getId() == giant.getId()), "the trigger destroyed the Giant");
         List<String> triggerHalves = records(all, "resolution").stream()
-                .filter(r -> FAITHFUL.equals(RecordLines.scriptOf(r))
-                        && "trigger".equals(RecordLines.abilityKeys(r).get(0).get("trait_kind")))
+                .filter(r -> FAITHFUL.equals(RecordAbilities.scriptOf(r))
+                        && "trigger".equals(RecordAbilities.abilityKeys(r).get(0).get("trait_kind")))
                 .toList();
         assertEquals(1, triggerHalves.size(), all.toString());
         String half = triggerHalves.get(0);

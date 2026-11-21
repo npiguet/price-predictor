@@ -28,11 +28,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
-import static com.pricepredictor.connector.effects.RecordLines.payloadOf;
-import static com.pricepredictor.connector.effects.RecordLines.records;
-import static com.pricepredictor.connector.effects.RecordLines.stateOf;
+import static com.pricepredictor.connector.effects.RecordText.payloadOf;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
+import static com.pricepredictor.connector.effects.RecordText.stateOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;

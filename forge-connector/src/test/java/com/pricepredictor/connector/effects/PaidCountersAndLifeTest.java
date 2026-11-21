@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
-import static com.pricepredictor.connector.effects.RecordLines.payload;
-import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordEvents.payload;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;

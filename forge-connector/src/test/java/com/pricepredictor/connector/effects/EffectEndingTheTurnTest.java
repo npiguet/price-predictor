@@ -15,10 +15,10 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.RecordLines.events;
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordLines.params;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,8 +80,8 @@ class EffectEndingTheTurnTest {
         assertTrue(half.contains("{\"type\":\"zone_change\",\"subjects\":[\"E" + bears.getId()
                         + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""),
                 "the death in the check it ran: " + half);
-        assertEquals(1, RecordLines.records(records, "resolution").stream()
-                .filter(record -> TIME_STOP.equals(RecordLines.scriptOf(record))).count(), records.toString());
+        assertEquals(1, RecordPicks.records(records, "resolution").stream()
+                .filter(record -> TIME_STOP.equals(RecordAbilities.scriptOf(record))).count(), records.toString());
     }
 
     /**

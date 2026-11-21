@@ -144,7 +144,7 @@ class RecordCharacterizationResolutionTest extends RecordCharacterizationSupport
                 .filter(record -> "resolution".equals(RecordLines.parse(record).get("kind")))
                 .toList();
         assertEquals(4, records.size(), records.toString());
-        String bolt = RecordLines.only(records, "activation", "cardsfolder/l/lightning_bolt.txt");
+        String bolt = RecordPicks.only(records, "activation", "cardsfolder/l/lightning_bolt.txt");
         assertTrue(bolt.contains("\"delayed_triggers\":[{"), "the reprieve pending: " + bolt);
         assertTrue(bolt.contains("\"name\":\"Insectile Aberration\"")
                 && bolt.contains("\"face_state\":\"back\""), "the delver's back face: " + bolt);

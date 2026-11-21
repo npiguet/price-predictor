@@ -22,16 +22,16 @@ import java.util.List;
 import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.params;
-import static com.pricepredictor.connector.effects.RecordLines.events;
-import static com.pricepredictor.connector.effects.RecordLines.linkOf;
-import static com.pricepredictor.connector.effects.RecordLines.only;
-import static com.pricepredictor.connector.effects.RecordLines.optionOf;
+import static com.pricepredictor.connector.effects.RecordEvents.events;
+import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
+import static com.pricepredictor.connector.effects.RecordPicks.only;
+import static com.pricepredictor.connector.effects.RecordAbilities.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
-import static com.pricepredictor.connector.effects.RecordLines.payload;
-import static com.pricepredictor.connector.effects.RecordLines.records;
-import static com.pricepredictor.connector.effects.RecordLines.scriptOf;
+import static com.pricepredictor.connector.effects.RecordEvents.payload;
+import static com.pricepredictor.connector.effects.RecordPicks.records;
+import static com.pricepredictor.connector.effects.RecordAbilities.scriptOf;
 import static com.pricepredictor.connector.effects.TestBoard.inHand;
 import static com.pricepredictor.connector.effects.TestBoard.inPlay;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
@@ -491,7 +491,7 @@ class RecordMomentsTest {
         String cost = only(all, "activation", script);
         List<String> halves = through(all, "resolution", script);
         assertEquals(2, halves.size(), all.toString());
-        assertEquals(List.of(2L, 3L), halves.stream().map(RecordLines::optionOf).toList(),
+        assertEquals(List.of(2L, 3L), halves.stream().map(RecordAbilities::optionOf).toList(),
                 "one half per chosen mode, through its option line: " + halves);
         for (String half : halves) {
             assertEquals("fizzled", payload(half).get("outcome"), half);

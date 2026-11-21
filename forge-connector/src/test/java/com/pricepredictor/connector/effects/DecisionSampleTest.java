@@ -427,7 +427,7 @@ class DecisionSampleTest {
                 .filter(r -> r.contains("\"subkind\":\"decision\""))
                 .map(r -> {
                     Map<String, Object> candidate = RecordLines.asMap(((List<Object>)
-                            RecordLines.payload(r).get("candidates")).get(0));
+                            RecordEvents.payload(r).get("candidates")).get(0));
                     return Set.copyOf(((List<Object>) candidate.get("failed_checks")).stream()
                             .map(c -> (String) RecordLines.asMap(c).get("check")).toList());
                 })

@@ -1,6 +1,6 @@
 package com.pricepredictor.connector.effects;
 
-import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -153,7 +153,7 @@ class ScheduledInterventionsTest {
         assertEquals(parse("{\"ability\":"
                         + ProvenanceKey.toJsonArray(ProvenanceResolver.resolve(second).keys()) + "}").get("ability"),
                 parse(records.get(0)).get("ability"), records.get(0));
-        List<Map<String, Object>> damage = RecordLines.events(records.get(0)).stream()
+        List<Map<String, Object>> damage = RecordEvents.events(records.get(0)).stream()
                 .filter(event -> EventType.DAMAGE_DEALT.wireName().equals(event.get("type"))).toList();
         assertEquals(1, damage.size(), records.get(0));
         assertEquals(2, ((Number) ((Map<?, ?>) damage.get(0).get("params")).get("amount")).intValue());
