@@ -9,6 +9,7 @@ from pathlib import Path
 from draft.infrastructure.cli_common import (
     _add_checkpoint_dir,
     _add_embeddings_path,
+    _load_resumed_run,
     _require_trainer_paths,
 )
 
@@ -85,6 +86,15 @@ def _build_train_draft_agent_parser(subparsers) -> None:
     parser.set_defaults(func=run_train_draft_agent)
     # Resumable flags register with default=None so a value resolves as:
     # explicit CLI > resumed checkpoint's train_config > dataclass default.
+    _add_train_path_flags(parser)
+    _add_train_architecture_flags(parser)
+    _add_train_loss_flags(parser)
+    _add_train_schedule_flags(parser)
+    _add_train_start_flags(parser)
+
+
+def _add_train_path_flags(parser: argparse.ArgumentParser) -> None:
+    """The corpus, the card embeddings and the run directory."""
     parser.add_argument(
         "--drafts-path", default=None,
         help="Recorded corpus. Required on a fresh run; Resumable.",
@@ -98,7 +108,10 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         "Directory of latest.pt and <timestamp>.pt, and the run's run.json. "
         "Required on a fresh run; Resumable."
     ))
-    # Architecture flags: default=None so they can be rejected with --resume/--checkpoint.
+
+
+def _add_train_architecture_flags(parser: argparse.ArgumentParser) -> None:
+    """Architecture flags: default=None so they can be rejected with --resume/--checkpoint."""
     parser.add_argument(
         "--d-model", type=int, default=None, dest="d_model",
         help="Internal width (default: derived); a non-default value inserts a Linear.",
@@ -119,6 +132,10 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         "--dropout", type=float, default=None, dest="dropout",
         help="Transformer dropout (default: 0.0).",
     )
+
+
+def _add_train_loss_flags(parser: argparse.ArgumentParser) -> None:
+    """The two heads' loss weights and the seats the policy imitates."""
     parser.add_argument(
         "--imitation-weight", type=float, default=None,
         help="CE coefficient; 0 => critic-only (default: 1.0). Resumable.",
@@ -132,6 +149,10 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         help="Comma-separated whitelist of imitation-target agents (default: "
              "forge-full). Resumable.",
     )
+
+
+def _add_train_schedule_flags(parser: argparse.ArgumentParser) -> None:
+    """Optimiser, batching, validation, early stop and LR annealing."""
     parser.add_argument(
         "--lr", type=float, default=None,
         help="AdamW LR (default: 3e-4). Resumable (also re-applied to a resumed "
@@ -182,6 +203,10 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         "--min-lr", type=float, default=None, dest="min_lr",
         help="Annealing floor; no decay below this (default: lr * 1e-3). Resumable.",
     )
+
+
+def _add_train_start_flags(parser: argparse.ArgumentParser) -> None:
+    """What the run starts from: a run to continue, or weights to bootstrap from."""
     parser.add_argument(
         "--resume", default=None,
         help="Continue a run: restore weights+optimizer+epoch+best-val and "
@@ -194,12 +219,26 @@ def _build_train_draft_agent_parser(subparsers) -> None:
     )
 
 
-def run_train_draft_agent(args: argparse.Namespace) -> int:
-    """Execute the train-draft-agent command."""
-    from draft.application.train_draft_agent import TrainDraftAgentUseCase
-    from draft.domain.draft_agent_model import DraftAgentArchitectureError
-    from draft.infrastructure.draft_agent_store import DraftAgentStore
+def _architecture_flag_conflict(args: argparse.Namespace) -> bool:
+    """Print the error and return True when an architecture flag comes with --resume
+    or --checkpoint."""
+    loading = args.resume is not None or args.checkpoint is not None
+    if not loading:
+        return False
+    for flag in _TRAIN_AGENT_ARCHITECTURE_FLAGS:
+        if getattr(args, flag) is not None:
+            print(
+                f"Error: architecture flag --{flag.replace('_', '-')} "
+                "conflicts with --resume / --checkpoint; architecture is "
+                "inherited from the checkpoint's stored config. Omit the flag.",
+                file=sys.stderr,
+            )
+            return True
+    return False
 
+
+def _train_start_refusal(args: argparse.Namespace) -> bool:
+    """Print the error and return True when the start flags disagree."""
     if args.resume is not None and args.checkpoint is not None:
         print(
             "Error: --resume and --checkpoint are mutually exclusive: --resume "
@@ -207,33 +246,30 @@ def run_train_draft_agent(args: argparse.Namespace) -> int:
             "another agent's weights.",
             file=sys.stderr,
         )
-        return 2
+        return True
+    return _architecture_flag_conflict(args)
 
-    loading = args.resume is not None or args.checkpoint is not None
-    if loading:
-        for flag in _TRAIN_AGENT_ARCHITECTURE_FLAGS:
-            if getattr(args, flag) is not None:
-                print(
-                    f"Error: architecture flag --{flag.replace('_', '-')} "
-                    "conflicts with --resume / --checkpoint; architecture is "
-                    "inherited from the checkpoint's stored config. Omit the flag.",
-                    file=sys.stderr,
-                )
-                return 2
+
+def run_train_draft_agent(args: argparse.Namespace) -> int:
+    """Execute the train-draft-agent command."""
+    if _train_start_refusal(args):
+        return 2
 
     # On --resume, inherit the run's settings from its checkpoint; CLI flags
     # override. (--checkpoint is a fresh run from weights only, so no inherit.)
-    resumed_train_config: dict | None = None
-    if args.resume is not None:
-        try:
-            resumed = DraftAgentStore().load_checkpoint(Path(args.resume))
-        except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        resumed_train_config = resumed.train_config
+    resumed = _load_resumed_run(args)
+    if resumed is None:
+        return 2
 
-    _require_trainer_paths(args, resumed_train_config)
-    config = _resolve_train_agent_config(args, resumed_train_config)
+    _require_trainer_paths(args, resumed.train_config)
+    config = _resolve_train_agent_config(args, resumed.train_config)
+    return _execute_train_draft_agent(config)
+
+
+def _execute_train_draft_agent(config) -> int:
+    """Run the use case; map its refusals to exit codes."""
+    from draft.application.train_draft_agent import TrainDraftAgentUseCase
+    from draft.domain.draft_agent_model import DraftAgentArchitectureError
 
     try:
         TrainDraftAgentUseCase().execute(config)

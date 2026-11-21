@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -33,6 +34,29 @@ def _picker_checkpoint_missing(args: argparse.Namespace) -> bool:
         return False
     print("Error: --picker-checkpoint is required by --build-method picker.", file=sys.stderr)
     return True
+
+
+@dataclass(frozen=True)
+class _ResumedRun:
+    """The training settings an offline trainer inherits: the resumed checkpoint's
+    ``train_config``, or None on a run that does not ``--resume``."""
+
+    train_config: dict | None
+
+
+def _load_resumed_run(args: argparse.Namespace) -> _ResumedRun | None:
+    """The run ``--resume`` names, or None after printing the error when its
+    checkpoint is missing."""
+    if args.resume is None:
+        return _ResumedRun(train_config=None)
+    from draft.infrastructure.draft_agent_store import DraftAgentStore
+
+    try:
+        resumed = DraftAgentStore().load_checkpoint(Path(args.resume))
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return None
+    return _ResumedRun(train_config=resumed.train_config)
 
 
 _TRAINER_REQUIRED_PATHS: tuple[str, ...] = ("drafts_path", "cards_path", "checkpoint_dir")
