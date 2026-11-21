@@ -9,10 +9,12 @@ the scalar/flag fields.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 import pytest
 
-from draft.application.imitation_examples import DraftExample, _Loader
+from draft.application.imitation_examples import DraftExample, SeatLabels, _Loader
 from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Seat
 from draft.domain.draft_state import TYPE_PACK, build_state
 
@@ -40,9 +42,18 @@ def _make_record(pod: int, packs: int, P: int) -> DraftRecord:
     return DraftRecord("d", "r", "t", seats, boosters)
 
 
-def _reference_groups(record, geo, seat, pack, pick):
+@dataclass(frozen=True)
+class _PickAt:
+    """One pick of one seat: its seat, pack number and pick number."""
+
+    seat: int
+    pack: int
+    pick: int
+
+
+def _reference_groups(record, geo, at: _PickAt):
     """(per-type multiset, target position in full token list) from build_state."""
-    state = build_state(record, geo, seat, pack, pick)
+    state = build_state(record, geo, at.seat, at.pack, at.pick)
     groups: dict[int, list[tuple[str, int, int]]] = {0: [], 1: [], 2: [], 3: []}
     for c in state.cards:
         groups[c.token_type].append((c.name, c.packs_ago, c.pick_ago))
@@ -58,6 +69,21 @@ def _fused_groups(ex: DraftExample, rev: dict[int, str]):
     return groups
 
 
+def _assert_matches_reference(ex: DraftExample, reference, rev: dict[int, str], at: _PickAt):
+    ref_groups, ref_target = reference
+    assert (ex.pack_number, ex.pick_number) == (at.pack, at.pick)
+    got_groups = _fused_groups(ex, rev)
+    for ttype in range(4):
+        # Order within a type group is insignificant -> compare multisets.
+        assert sorted(got_groups[ttype]) == sorted(ref_groups[ttype]), (
+            f"type {ttype} mismatch at seat={at.seat} pack={at.pack} pick={at.pick}"
+        )
+    assert ex.target_token == ref_target
+    assert ex.imitation_active is True
+    assert ex.critic_active is True
+    assert ex.critic_target == 1.0
+
+
 @pytest.mark.parametrize(
     ("pod", "packs", "P"),
     [(2, 1, 4), (4, 1, 4), (8, 3, 15), (4, 3, 6), (6, 2, 14), (3, 2, 7)],
@@ -70,29 +96,15 @@ def test_fused_matches_build_state(pod: int, packs: int, P: int) -> None:
 
     for seat in range(pod):
         emitted: list[DraftExample] = []
-        loader._emit_seat(
-            record, geo, draft_index=0, seat=seat,
-            whitelisted=True, critic_active=True, reward=1.0, examples=emitted,
+        labels = SeatLabels(
+            draft_index=0, seat=seat, whitelisted=True, critic_active=True, reward=1.0,
         )
+        loader._emit_seat(record, geo, labels, emitted)
         # One example per (pack, pick), in order.
         assert len(emitted) == packs * P
         rev = {v: k for k, v in loader._name_to_idx.items() if v is not None}
 
-        idx = 0
-        for pack in range(1, packs + 1):
-            for pick in range(1, P + 1):
-                ex = emitted[idx]
-                idx += 1
-                assert (ex.pack_number, ex.pick_number) == (pack, pick)
-
-                ref_groups, ref_target = _reference_groups(record, geo, seat, pack, pick)
-                got_groups = _fused_groups(ex, rev)
-                for ttype in range(4):
-                    # Order within a type group is insignificant -> compare multisets.
-                    assert sorted(got_groups[ttype]) == sorted(ref_groups[ttype]), (
-                        f"type {ttype} mismatch at seat={seat} pack={pack} pick={pick}"
-                    )
-                assert ex.target_token == ref_target
-                assert ex.imitation_active is True
-                assert ex.critic_active is True
-                assert ex.critic_target == 1.0
+        picks = [_PickAt(seat, pack, pick)
+                 for pack in range(1, packs + 1) for pick in range(1, P + 1)]
+        for ex, at in zip(emitted, picks):
+            _assert_matches_reference(ex, _reference_groups(record, geo, at), rev, at)

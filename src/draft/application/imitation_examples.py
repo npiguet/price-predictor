@@ -50,6 +50,48 @@ class DraftExample:
         return int(self.card_idx.shape[0])
 
 
+@dataclass(frozen=True)
+class SeatLabels:
+    """What one seat of one draft teaches: the draft's index and the seat's, whether
+    the policy imitates its picks, whether the critic learns from it, and its
+    pod-relative reward (None for a failed build)."""
+
+    draft_index: int
+    seat: int
+    whitelisted: bool
+    critic_active: bool
+    reward: float | None
+
+
+class _LoadProgress:
+    """The loader's progress lines: about 20 over a big corpus, each with a
+    windowed (since-last-line) rate and an ETA."""
+
+    def __init__(self, total: int) -> None:
+        self._total = total
+        self._log_every = max(200, total // 20)  # ~20 progress lines on a big corpus
+        self._last_ri, self._last_t = 0, time.monotonic()  # windowed-rate anchors
+
+    def after(self, ri: int, n_examples: int) -> None:
+        """Log a line after draft ``ri`` when one is due."""
+        if ri % self._log_every == 0 or ri == self._total:
+            self._log_line(ri, n_examples)
+
+    def _log_line(self, ri: int, n_examples: int) -> None:
+        now = time.monotonic()
+        # Windowed (since-last-log) rate: the cold first chunk reads most
+        # of the ~28k unique card .npz files off disk, so a lifetime
+        # average would understate the (much faster) cached steady state.
+        interval = now - self._last_t
+        rate = (ri - self._last_ri) / interval if interval > 0 else 0.0
+        eta = (self._total - ri) / rate if rate > 0 else 0.0
+        self._last_ri, self._last_t = ri, now
+        _log(
+            f"  loaded {ri}/{self._total} drafts -> {n_examples} examples "
+            f"({rate:.0f} drafts/s, ETA {_fmt_dur(eta)})"
+        )
+
+
 class _Loader:
     """Builds ``DraftExample`` objects from a corpus, dropping missing-``.npz`` picks."""
 
@@ -98,37 +140,11 @@ class _Loader:
     def build(self, records: list[DraftRecord]) -> list[DraftExample]:
         examples: list[DraftExample] = []
         total = len(records)
-        log_every = max(200, total // 20)  # ~20 progress lines on a big corpus
-        start = time.monotonic()
-        last_ri, last_t = 0, start  # windowed-rate anchors
+        progress = _LoadProgress(total)
         _log(f"Building examples from {total} drafts...")
         for ri, record in enumerate(records, start=1):
-            geo = DraftGeometry.from_record(record)
-            self.max_packs = max(self.max_packs, geo.packs)
-            self.max_pack_size = max(self.max_pack_size, geo.pack_size)
-            rewards = leave_one_out_rewards(record)
-            for seat_idx, seat in enumerate(record.seats):
-                whitelisted = seat.agent in self._whitelist
-                critic_active = rewards[seat_idx] is not None
-                if not whitelisted and not critic_active:
-                    continue  # neither head learns from this seat
-                self._emit_seat(
-                    record, geo, ri - 1, seat_idx,
-                    whitelisted, critic_active, rewards[seat_idx], examples,
-                )
-            if ri % log_every == 0 or ri == total:
-                now = time.monotonic()
-                # Windowed (since-last-log) rate: the cold first chunk reads most
-                # of the ~28k unique card .npz files off disk, so a lifetime
-                # average would understate the (much faster) cached steady state.
-                interval = now - last_t
-                rate = (ri - last_ri) / interval if interval > 0 else 0.0
-                eta = (total - ri) / rate if rate > 0 else 0.0
-                last_ri, last_t = ri, now
-                _log(
-                    f"  loaded {ri}/{total} drafts -> {len(examples)} examples "
-                    f"({rate:.0f} drafts/s, ETA {_fmt_dur(eta)})"
-                )
+            self._emit_record(record, ri - 1, examples)
+            progress.after(ri, len(examples))
         if self._missing_total:
             sample = ", ".join(sorted(self._missing))
             _log(
@@ -137,18 +153,32 @@ class _Loader:
             )
         return examples
 
+    def _emit_record(
+        self, record: DraftRecord, draft_index: int, examples: list[DraftExample],
+    ) -> None:
+        """Emit the examples of every seat either head learns from."""
+        geo = DraftGeometry.from_record(record)
+        self.max_packs = max(self.max_packs, geo.packs)
+        self.max_pack_size = max(self.max_pack_size, geo.pack_size)
+        rewards = leave_one_out_rewards(record)
+        for seat_idx, seat in enumerate(record.seats):
+            whitelisted = seat.agent in self._whitelist
+            critic_active = rewards[seat_idx] is not None
+            if not whitelisted and not critic_active:
+                continue  # neither head learns from this seat
+            labels = SeatLabels(
+                draft_index, seat_idx, whitelisted, critic_active, rewards[seat_idx],
+            )
+            self._emit_seat(record, geo, labels, examples)
+
     def _emit_seat(
         self,
         record: DraftRecord,
         geo: DraftGeometry,
-        draft_index: int,
-        seat: int,
-        whitelisted: bool,
-        critic_active: bool,
-        reward: float | None,
+        labels: SeatLabels,
         examples: list[DraftExample],
     ) -> None:
-        """Emit one ``DraftExample`` per pick for ``seat``.
+        """Emit one ``DraftExample`` per pick for ``labels.seat``.
 
         Thin adapter over the shared per-pick state walk
         (:func:`draft.application.draft_pick_states.iter_seat_pick_states`),
@@ -157,21 +187,21 @@ class _Loader:
         shared with the gen-2 RL loader so the two cannot drift (research
         §Overlapping vocabulary).
         """
-        reward_val = float(reward) if reward is not None else 0.0
+        reward_val = float(labels.reward) if labels.reward is not None else 0.0
         for state in iter_seat_pick_states(
-            geo, record.boosters, seat, self._card_index,
+            geo, record.boosters, labels.seat, self._card_index,
         ):
             examples.append(DraftExample(
-                draft_index=draft_index,
+                draft_index=labels.draft_index,
                 card_idx=state.card_idx,
                 type_idx=state.type_idx,
                 packs_ago=state.packs_ago,
                 pick_ago=state.pick_ago,
                 pack_number=state.pack_number,
                 pick_number=state.pick_number,
-                imitation_active=whitelisted and state.action_position >= 0,
+                imitation_active=labels.whitelisted and state.action_position >= 0,
                 target_token=state.action_position,
-                critic_active=critic_active,
+                critic_active=labels.critic_active,
                 critic_target=reward_val,
             ))
 
