@@ -89,10 +89,13 @@ class KillGuard:
         for name, module in list(sys.modules.items()):
             if module is None or name.split(".")[0] not in _OWN_PACKAGES:
                 continue
-            for attr, value in list(vars(module).items()):
-                if value is _REAL_KILL:
-                    self._patch.setattr(module, attr, self.stand_in)
-                    self.sites.append((module, attr))
+            self._patch_module(module)
+
+    def _patch_module(self, module: ModuleType) -> None:
+        for attr, value in list(vars(module).items()):
+            if value is _REAL_KILL:
+                self._patch.setattr(module, attr, self.stand_in)
+                self.sites.append((module, attr))
 
     def undo(self) -> None:
         self._patch.undo()

@@ -14,8 +14,8 @@ from sealed.application.encode_cards import (
 )
 
 
-def _execute(use_case, cards_dir, encoder, store, *, clean=False):
-    return use_case.execute(
+def _execute(cards_dir, encoder, store, *, clean=False):
+    return EncodeCardsUseCase().execute(
         EncodeCardsConfig(cards_path=cards_dir, clean=clean),
         encoder,
         store,
@@ -43,16 +43,27 @@ def _mock_store():
     return store
 
 
+def _encode_over_existing(
+    tmp_path: Path, *, existing_dim: int, embedding: np.ndarray | None = None, clean: bool = False,
+):
+    """Encode one card whose ``.npz`` already holds a zero vector of ``existing_dim``."""
+    cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
+    npz_path = cards_dir / "card_a.npz"
+    np.savez_compressed(npz_path, embedding=np.zeros(existing_dim, dtype=np.float32))
+    encoder = _mock_encoder(embedding)
+    result = _execute(cards_dir, encoder, _mock_store(), clean=clean)
+    return encoder, result
+
+
 class TestEncodeCardsSkipLogic:
     def test_skips_card_with_existing_npz(self, tmp_path):
         cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
         npz_path = cards_dir / "card_a.npz"
         npz_path.touch()  # simulate already-encoded
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        result = _execute(cards_dir, encoder, store)
 
         encoder.encode.assert_not_called()
         store.save.assert_not_called()
@@ -62,10 +73,9 @@ class TestEncodeCardsSkipLogic:
     def test_encodes_card_without_npz(self, tmp_path):
         cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        result = _execute(cards_dir, encoder, store)
 
         encoder.encode.assert_called_once()
         store.save.assert_called_once()
@@ -80,10 +90,9 @@ class TestEncodeCardsSkipLogic:
         })
         (cards_dir / "card_b.npz").touch()  # already encoded
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        result = _execute(cards_dir, encoder, store)
 
         assert result.processed == 2
         assert result.skipped == 1
@@ -96,12 +105,11 @@ class TestEncodeCardsErrorHandling:
             "card_b.txt": "type: Instant",
         })
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         # Make the first call raise, second succeed
         encoder.encode.side_effect = [RuntimeError("bad card"), np.zeros(16, dtype=np.float32)]
         store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        result = _execute(cards_dir, encoder, store)
 
         assert len(result.errors) == 1
         assert result.processed == 1
@@ -112,11 +120,10 @@ class TestEncodeCardsErrorHandling:
             "card_b.txt": "x",
         })
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         encoder.encode.side_effect = RuntimeError("boom")
         store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        result = _execute(cards_dir, encoder, store)
 
         assert len(result.errors) == 2
 
@@ -141,10 +148,9 @@ class TestEncodeCards544DimSkipLogic:
         cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
         embedding_544 = np.zeros(544, dtype=np.float32)
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder(embedding_544)
         store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        result = _execute(cards_dir, encoder, store)
 
         assert result.processed == 1
         saved_embedding = store.save.call_args[0][1]
@@ -152,42 +158,23 @@ class TestEncodeCards544DimSkipLogic:
 
     def test_existing_544_dim_file_skipped(self, tmp_path):
         """Cards with existing .npz (any dimension) are skipped."""
-        cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
-        npz_path = cards_dir / "card_a.npz"
-        np.savez_compressed(npz_path, embedding=np.zeros(544, dtype=np.float32))
-
-        use_case = EncodeCardsUseCase()
-        encoder = _mock_encoder()
-        store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        encoder, result = _encode_over_existing(tmp_path, existing_dim=544)
 
         encoder.encode.assert_not_called()
         assert result.skipped == 1
 
     def test_existing_512_dim_file_skipped_not_upgraded(self, tmp_path):
         """Existing 512-dim files are NOT auto-upgraded; they are skipped."""
-        cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
-        npz_path = cards_dir / "card_a.npz"
-        np.savez_compressed(npz_path, embedding=np.zeros(512, dtype=np.float32))
-
-        use_case = EncodeCardsUseCase()
-        encoder = _mock_encoder()
-        store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store)
+        encoder, result = _encode_over_existing(tmp_path, existing_dim=512)
 
         encoder.encode.assert_not_called()
         assert result.skipped == 1
 
     def test_clean_deletes_and_re_encodes(self, tmp_path):
         """clean=True deletes all .npz files before encoding so cards are re-encoded."""
-        cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
-        npz_path = cards_dir / "card_a.npz"
-        np.savez_compressed(npz_path, embedding=np.zeros(512, dtype=np.float32))
-
-        use_case = EncodeCardsUseCase()
-        encoder = _mock_encoder(np.zeros(544, dtype=np.float32))
-        store = _mock_store()
-        result = _execute(use_case, cards_dir, encoder, store, clean=True)
+        encoder, result = _encode_over_existing(
+            tmp_path, existing_dim=512, embedding=np.zeros(544, dtype=np.float32), clean=True,
+        )
 
         assert result.processed == 1
         assert result.skipped == 0
@@ -197,10 +184,9 @@ class TestEncodeCardsSaveArgs:
     def test_save_called_with_npz_path(self, tmp_path):
         cards_dir = _make_fixture_dir(tmp_path, {"mycard.txt": "type: Creature"})
 
-        use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        _execute(use_case, cards_dir, encoder, store)
+        _execute(cards_dir, encoder, store)
 
         saved_path = store.save.call_args[0][0]
         assert saved_path.suffix == ".npz"

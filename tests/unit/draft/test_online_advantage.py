@@ -19,6 +19,11 @@ def _record(seats: list[Seat], pod: int = 4, pack_size: int = 2) -> DraftRecord:
     return DraftRecord("d", "r", "t", seats, boosters)
 
 
+def _learner_rewards(seats: list[Seat]) -> tuple[list[tuple[int, float]], int]:
+    """The ``gen-3`` learner's per-seat rewards and dropped count for a pod."""
+    return learner_seat_rewards(_record(seats), "gen-3")
+
+
 # --------------------------------------------------------------------------- #
 # Round standardisation
 # --------------------------------------------------------------------------- #
@@ -103,13 +108,12 @@ def test_only_learner_seats_contribute_rewards() -> None:
 
 
 def test_failed_learner_build_is_excluded_and_counted() -> None:
-    record = _record([
+    rewards, dropped = _learner_rewards([
         Seat("gen-3", ["x"] * 40, 10.0),
         Seat("gen-3", [], None),          # failed build
         Seat("gen-1", ["x"] * 40, 6.0),
         Seat("forge-r30", ["x"] * 40, 2.0),
     ])
-    rewards, dropped = learner_seat_rewards(record, "gen-3")
 
     assert [seat for seat, _ in rewards] == [0]
     assert dropped == 1
@@ -131,13 +135,12 @@ def test_learner_seat_with_no_other_scored_seat_is_dropped() -> None:
 
 
 def test_failed_non_learner_seats_do_not_count_as_dropped() -> None:
-    record = _record([
+    rewards, dropped = _learner_rewards([
         Seat("gen-3", ["x"] * 40, 10.0),
         Seat("gen-1", [], None),          # not a learner seat
         Seat("forge-r30", ["x"] * 40, 2.0),
         Seat("forge-r100", ["x"] * 40, 4.0),
     ])
-    rewards, dropped = learner_seat_rewards(record, "gen-3")
 
     assert len(rewards) == 1
     assert dropped == 0

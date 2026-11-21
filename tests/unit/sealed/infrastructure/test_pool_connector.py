@@ -6,9 +6,28 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sealed.infrastructure.match_worker_connector import (
+    MatchWorkerConnector,
+    WorkerDecks,
+    WorkerLaunch,
+)
 from sealed.infrastructure.pool_connector import PoolConnector
 
 _RFW = "sealed.infrastructure.pool_connector.run_forge_worker"
+
+
+def _started_properties(launch: WorkerLaunch) -> dict[str, str]:
+    """The JVM system properties a ``MatchWorkerConnector`` starts ``launch`` with."""
+    with patch(
+        "sealed.infrastructure.match_worker_connector.build_jvm_command",
+        return_value=["java"],
+    ) as build, patch(
+        "sealed.infrastructure.match_worker_connector.build_forge_classpath",
+        return_value="cp",
+    ), patch("subprocess.Popen"):
+        MatchWorkerConnector().start(launch=launch)
+
+    return build.call_args.kwargs["options"].system_properties
 
 
 class TestPoolConnectorErrorPropagation:
@@ -108,43 +127,17 @@ class TestDepletedCollection:
     """
 
     def test_the_exclusion_reaches_the_match_worker(self, tmp_path):
-        from sealed.infrastructure.match_worker_connector import (
-            MatchWorkerConnector,
-            WorkerDecks,
-            WorkerLaunch,
-        )
-
         listed = tmp_path / "holdout-cards.txt"
-        with patch(
-            "sealed.infrastructure.match_worker_connector.build_jvm_command",
-            return_value=["java"],
-        ) as build, patch(
-            "sealed.infrastructure.match_worker_connector.build_forge_classpath",
-            return_value="cp",
-        ), patch("subprocess.Popen"):
-            MatchWorkerConnector().start(launch=WorkerLaunch(
-                run_id="r", best_of=7, output_file=tmp_path / "out.txt",
-                decks=WorkerDecks(exclude_cards=listed),
-            ))
+        props = _started_properties(WorkerLaunch(
+            run_id="r", best_of=7, output_file=tmp_path / "out.txt",
+            decks=WorkerDecks(exclude_cards=listed),
+        ))
 
-        props = build.call_args.kwargs["options"].system_properties
         assert props["sealed.exclude.cards"] == str(listed)
 
     def test_an_ordinary_run_sets_no_exclusion_property(self, tmp_path):
-        from sealed.infrastructure.match_worker_connector import (
-            MatchWorkerConnector,
-            WorkerLaunch,
-        )
+        props = _started_properties(WorkerLaunch(
+            run_id="r", best_of=7, output_file=tmp_path / "out.txt",
+        ))
 
-        with patch(
-            "sealed.infrastructure.match_worker_connector.build_jvm_command",
-            return_value=["java"],
-        ) as build, patch(
-            "sealed.infrastructure.match_worker_connector.build_forge_classpath",
-            return_value="cp",
-        ), patch("subprocess.Popen"):
-            MatchWorkerConnector().start(launch=WorkerLaunch(
-                run_id="r", best_of=7, output_file=tmp_path / "out.txt",
-            ))
-
-        assert "sealed.exclude.cards" not in build.call_args.kwargs["options"].system_properties
+        assert "sealed.exclude.cards" not in props
