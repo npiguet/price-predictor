@@ -10,8 +10,9 @@ from __future__ import annotations
 import pytest
 import torch
 
+from draft.application.online_anchor_window import AnchorWindow
+from draft.application.online_config_validation import resolve_min_lr
 from draft.application.train_draft_agent import _maybe_decay, _PlateauLR
-from draft.application.train_draft_agent_online import AnchorWindow, resolve_min_lr
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
 LEARNER = "gen-3"

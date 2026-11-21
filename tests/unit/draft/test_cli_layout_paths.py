@@ -92,10 +92,11 @@ def _online(*extra: str):
 
 class TestTheOnlineTrainersRunDirectory:
     def _config(self, monkeypatch, *extra):
+        import draft.application.online_config_validation as validation
         import draft.application.train_draft_agent_online as online
 
         seen = []
-        monkeypatch.setattr(online, "validate_config", lambda _config: None)
+        monkeypatch.setattr(validation, "validate_config", lambda _config: None)
         monkeypatch.setattr(online.TrainDraftAgentOnlineUseCase, "execute",
                             lambda _self, config: seen.append(config) or 0)
         args = _online(*extra)
@@ -236,7 +237,7 @@ class TestEmbeddingsPath:
     def test_the_online_width_probe_reads_the_embeddings_tree(self, tmp_path):
         import numpy as np
 
-        from draft.application.train_draft_agent_online import probe_embedding_width
+        from draft.application.online_config_validation import probe_embedding_width
 
         (tmp_path / "cache" / "a").mkdir(parents=True)
         np.savez(tmp_path / "cache" / "a" / "c.npz", embedding=np.zeros(6, dtype=np.float32))

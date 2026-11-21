@@ -197,12 +197,12 @@ def _parse_online_agents(args: argparse.Namespace) -> _OnlineAgents | None:
     """The agent wiring, or None after printing the first parse error."""
     from draft.application.agent_mix import AgentMixError, parse_agent_mix
     from draft.application.agent_registry import AgentRegistryError
-    from draft.application.train_draft_agent_online import (
-        OnlineConfigError,
+    from draft.application.online_agent_specs import (
         parse_agent_temperatures,
         parse_frozen_specs,
         parse_learner_spec,
     )
+    from draft.application.online_config_validation import OnlineConfigError
 
     try:
         learner_label, learner_checkpoint = parse_learner_spec(args.learner)
@@ -277,7 +277,7 @@ def _online_config_refusal(config) -> bool:
     Every rule runs before the Forge worker launches and before any update
     (FR-024, SC-006); execute() re-runs it so the use case is safe standalone.
     """
-    from draft.application.train_draft_agent_online import (
+    from draft.application.online_config_validation import (
         OnlineConfigError,
         validate_config,
     )

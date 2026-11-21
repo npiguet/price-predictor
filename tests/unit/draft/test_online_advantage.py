@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from draft.application.train_draft_agent_online import (
-    learner_seat_rewards,
-    standardize_round_advantages,
-)
+from draft.application.online_advantages import standardize_round_advantages
+from draft.application.online_round_loader import learner_seat_rewards
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
 

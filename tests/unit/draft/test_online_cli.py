@@ -10,10 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from draft.application.train_draft_agent_online import (
-    OnlineConfigError,
-    parse_agent_temperatures,
-)
+from draft.application.online_agent_specs import parse_agent_temperatures
+from draft.application.online_config_validation import OnlineConfigError
 from draft.infrastructure.cli import build_parser
 
 

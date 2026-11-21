@@ -11,11 +11,9 @@ import numpy as np
 import pytest
 import torch
 
-from draft.application.train_draft_agent_online import (
-    AnchorWindow,
-    OnlineExample,
-    diagnostics_sweep,
-)
+from draft.application.online_anchor_window import AnchorWindow
+from draft.application.online_diagnostics import diagnostics_sweep
+from draft.application.online_examples import OnlineExample
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 from draft.domain.draft_state import TYPE_PACK, TYPE_POOL
@@ -114,7 +112,7 @@ def test_off_argmax_rate_counts_picks_that_missed_the_argmax() -> None:
     )
 
     # Recompute the argmax choice per example directly from pi_k.
-    from draft.application.train_draft_agent_online import _collate
+    from draft.application.online_examples import _collate
 
     off = 0
     for ex in examples:
@@ -134,7 +132,7 @@ def test_off_argmax_rate_is_zero_when_every_action_is_the_argmax() -> None:
     prev, new = _models()
     table = _table()
     device = torch.device("cpu")
-    from draft.application.train_draft_agent_online import _collate
+    from draft.application.online_examples import _collate
 
     # Build each example, then relabel its action as pi_k's argmax.
     examples = []
@@ -166,7 +164,7 @@ def test_mean_logp_averages_the_taken_actions_under_the_generating_policy() -> N
         prev, new, examples, table, batch_size=2, temperature=1.0, device=device,
     )
 
-    from draft.application.train_draft_agent_online import _collate
+    from draft.application.online_examples import _collate
     from price_predictor.infrastructure.torch_training import masked_log_softmax
 
     batch = _collate(examples, table, device)

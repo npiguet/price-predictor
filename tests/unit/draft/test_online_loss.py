@@ -8,11 +8,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from draft.application.train_draft_agent_online import (
-    OnlineExample,
-    _collate,
-    _compute_loss,
-)
+from draft.application.online_examples import OnlineExample, _collate
+from draft.application.online_update import _compute_loss
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK, TYPE_POOL
 from price_predictor.infrastructure.torch_training import masked_log_softmax

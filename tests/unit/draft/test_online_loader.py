@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from draft.application.train_draft_agent_online import RoundLoader
+from draft.application.online_round_loader import RoundLoader
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 from draft.domain.draft_state import TYPE_PACK
 
