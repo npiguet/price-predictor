@@ -95,23 +95,34 @@ final class OpenResolution {
      */
     private SpellAbility lastClauseRan;
 
-    OpenResolution(
-            SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
-        this(ability, keys, actor, state, null, null);
+    /**
+     * What a bracket is: the item, its provenance keys, its actor and the
+     * board read when it was cast.
+     */
+    record Item(SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
     }
 
-    OpenResolution(
-            SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state,
-            String linkId, PaidCosts costs) {
-        this.ability = ability;
-        this.keys = keys;
-        this.actor = actor;
-        this.state = state;
-        this.linkId = linkId;
-        this.costs = costs;
+    /**
+     * What an item somebody cast was cast with: the link its cost half
+     * carries and what it paid.
+     */
+    record CastWith(String linkId, PaidCosts costs) {
+    }
+
+    OpenResolution(Item item) {
+        this(item, new CastWith(null, null));
+    }
+
+    OpenResolution(Item item, CastWith cast) {
+        this.ability = item.ability();
+        this.keys = item.keys();
+        this.actor = item.actor();
+        this.state = item.state();
+        this.linkId = cast.linkId();
+        this.costs = cast.costs();
         this.targetsAtCast = targetCount(ability);
         this.allocation = DividedAllocation.of(ability);
-        if (linkId != null) {
+        if (cast.linkId() != null) {
             readX();
         }
     }

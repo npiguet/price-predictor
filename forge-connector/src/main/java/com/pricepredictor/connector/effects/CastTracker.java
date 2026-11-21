@@ -102,14 +102,14 @@ final class CastTracker {
      * @param started its cast's start, or null
      */
     OpenResolution openResolution(SpellAbility ability, PendingCast started) {
-        Snapshot atCast = boardAtPush(ability, started);
+        OpenResolution.Item item = new OpenResolution.Item(
+                ability, ProvenanceResolver.resolve(ability), actorOf(ability),
+                boardAtPush(ability, started));
         if (!hasCostHalf(ability)) {
-            return new OpenResolution(
-                    ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast);
+            return new OpenResolution(item);
         }
-        return new OpenResolution(
-                ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast,
-                linkOf(context.gameId(), ability), PaidCosts.of(ability, payments.take(ability)));
+        return new OpenResolution(item, new OpenResolution.CastWith(
+                linkOf(context.gameId(), ability), PaidCosts.of(ability, payments.take(ability))));
     }
 
     /**
