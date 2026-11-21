@@ -12,6 +12,7 @@ are pinned to the Java sources below.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import os
@@ -114,14 +115,27 @@ def test_the_stand_in_refuses_a_recycle_below_one_second(tmp_path):
 # ── a pool of stand-ins ───────────────────────────────────────────────────
 
 
+@dataclasses.dataclass(frozen=True)
+class PoolShape:
+    """How many workers a pool runs and when it stops or gives up on them."""
+
+    workers: int = 2
+    target: int | None = None
+    status_interval: int | None = None
+    quick_exit_seconds: float | None = None
+    max_failed_starts: int | None = None
+
+    def should_stop(self):
+        """The pool's ``should_stop`` callback: None without a ``target``."""
+        return None if self.target is None else (lambda count: count >= self.target)
+
+
 class _Run:
     """A pool of stand-in workers under ``tmp_path``: every process it
     started, each slot's log, and the progress file its games append to."""
 
-    def __init__(self, tmp_path: Path, *, workers: int = 2, settings: WorkerStopSettings,
-                 target: int | None = None, status_interval: int | None = None,
-                 quick_exit_seconds: float | None = None, max_failed_starts: int | None = None,
-                 **props: object) -> None:
+    def __init__(self, tmp_path: Path, *, settings: WorkerStopSettings,
+                 shape: PoolShape = PoolShape(), **props: object) -> None:
         self.logs = WorkerLogFiles(tmp_path / "logs", "run")
         self.progress = tmp_path / "logs" / "run.progress.txt"
         self.progress.parent.mkdir(parents=True, exist_ok=True)
@@ -130,11 +144,12 @@ class _Run:
         self.props = {f"standin.{key.replace('_', '.')}": value for key, value in props.items()}
         self.started: list[subprocess.Popen] = []
         self.pool = ForgeWorkerPool(
-            worker_count=workers, spawn_worker=self.spawn, output_path=self.progress,
+            worker_count=shape.workers, spawn_worker=self.spawn, output_path=self.progress,
             options=PoolOptions(
-                should_stop=None if target is None else (lambda count: count >= target),
-                graceful=self.graceful, status_interval=status_interval,
-                quick_exit_seconds=quick_exit_seconds, max_failed_starts=max_failed_starts,
+                should_stop=shape.should_stop(),
+                graceful=self.graceful, status_interval=shape.status_interval,
+                quick_exit_seconds=shape.quick_exit_seconds,
+                max_failed_starts=shape.max_failed_starts,
                 restart_backoff=0.01,
             ),
         )
@@ -216,7 +231,7 @@ class TestAGracefulStop:
     ):
         """The round's match budget reached: each worker finishes the game it
         plays and stops, so every game started was finished and none was cut."""
-        run = runs(tmp_path, settings=_settings(), target=4, game_seconds=0.2)
+        run = runs(tmp_path, settings=_settings(), shape=PoolShape(target=4), game_seconds=0.2)
 
         run.run()
 
@@ -243,7 +258,7 @@ class TestAGracefulStop:
         assert run.pool.survivors == []
 
     def test_no_stop_file_is_left_once_the_run_has_ended(self, tmp_path, runs):
-        run = runs(tmp_path, settings=_settings(), target=2, game_seconds=0.1)
+        run = runs(tmp_path, settings=_settings(), shape=PoolShape(target=2), game_seconds=0.1)
 
         run.run()
 
@@ -253,7 +268,8 @@ class TestAGracefulStop:
     def test_each_worker_s_stop_file_is_deleted_before_it_starts(self, tmp_path, runs):
         """A stop file left by the last round's stop would stop the next
         round's worker before its first match."""
-        run = runs(tmp_path, workers=1, settings=_settings(), target=2, game_seconds=0.1)
+        run = runs(tmp_path, settings=_settings(), shape=PoolShape(workers=1, target=2),
+                   game_seconds=0.1)
         stale = run.logs.stop_path_for(0)
         stale.parent.mkdir(parents=True, exist_ok=True)
         stale.touch()
@@ -266,8 +282,7 @@ class TestAGracefulStop:
 class TestTheTimeout:
     @pytest.mark.real_process_kill
     def test_a_worker_that_does_not_stop_is_killed_and_reported(self, tmp_path, runs, capsys):
-        run = runs(tmp_path, settings=_settings(timeout=0.5), behaviour="ignore",
-                   game_seconds=0.1)
+        run = runs(tmp_path, settings=_settings(timeout=0.5), behaviour="ignore", game_seconds=0.1)
 
         elapsed = run.run(after=0.5)
 
@@ -298,7 +313,7 @@ class TestTheTimeout:
         worker first: at the first tick the recycle takes one of the two
         workers, at the second the other is overdue."""
         run = runs(tmp_path, settings=_settings(timeout=0.2, recycle_seconds=1),
-                   behaviour="ignore", status_interval=1)
+                   shape=PoolShape(status_interval=1), behaviour="ignore")
 
         run.run(after=2.5)
 
@@ -319,8 +334,8 @@ class TestTheRecycleOfTheLongestRunningWorker:
         recycle waits for: the pool kills its longest-running worker each
         status interval, cutting the game, and starts a fresh one. Each kill
         is counted once, as ``killed``."""
-        run = runs(tmp_path, settings=_settings(timeout=0.5), game_seconds=30,
-                   status_interval=1)
+        run = runs(tmp_path, settings=_settings(timeout=0.5), shape=PoolShape(status_interval=1),
+                   game_seconds=30)
 
         run.run(after=3.5)
 
@@ -341,8 +356,8 @@ class TestTheRecycleOfTheLongestRunningWorker:
     ):
         """Workers asked to finish their game are allowed to, however many
         status intervals that takes."""
-        run = runs(tmp_path, settings=_settings(timeout=60), game_seconds=2.5,
-                   status_interval=1)
+        run = runs(tmp_path, settings=_settings(timeout=60), shape=PoolShape(status_interval=1),
+                   game_seconds=2.5)
 
         run.run(after=0.5)
 
@@ -370,8 +385,8 @@ class TestRecycling:
     ):
         """A recycle time shorter than Forge's start stops every worker
         before it plays, and a restart on exit 0 would loop for ever."""
-        run = runs(tmp_path, workers=1, settings=_settings(recycle_seconds=1),
-                   init_seconds=1.2, max_failed_starts=2)
+        run = runs(tmp_path, settings=_settings(recycle_seconds=1),
+                   shape=PoolShape(workers=1, max_failed_starts=2), init_seconds=1.2)
 
         with pytest.raises(WorkerStartError, match="--recycle-seconds"):
             run.run()
@@ -382,8 +397,9 @@ class TestRecycling:
         """Best of three: the recycle time comes in the first match, which
         the worker abandons at a game end having finished no match. It
         played games, so it started: no failed start, no WorkerStartError."""
-        run = runs(tmp_path, workers=1, settings=_settings(recycle_seconds=1),
-                   games_per_match=3, game_seconds=0.4, max_failed_starts=2)
+        run = runs(tmp_path, settings=_settings(recycle_seconds=1),
+                   shape=PoolShape(workers=1, max_failed_starts=2), games_per_match=3,
+                   game_seconds=0.4)
 
         run.run(after=3.5)
 
@@ -395,8 +411,8 @@ class TestRecycling:
         """A worker that recycles itself after the round reached its budget,
         before the supervisor polls it, is not replaced: the new one would
         only start Forge to be stopped."""
-        run = runs(tmp_path, workers=1, settings=_settings(recycle_seconds=1), target=1,
-                   game_seconds=0.3)
+        run = runs(tmp_path, settings=_settings(recycle_seconds=1),
+                   shape=PoolShape(workers=1, target=1), game_seconds=0.3)
         run.pool.STOP_POLL_INTERVAL = 30
 
         elapsed = run.run(seconds=20)
@@ -408,8 +424,8 @@ class TestRecycling:
 
 class TestACrash:
     def test_a_worker_that_fails_is_restarted(self, tmp_path, runs):
-        run = runs(tmp_path, workers=1, settings=_settings(), crash_after_games=1,
-                   quick_exit_seconds=0.0)
+        run = runs(tmp_path, settings=_settings(),
+                   shape=PoolShape(workers=1, quick_exit_seconds=0.0), crash_after_games=1)
 
         run.run(after=1.5)
 
@@ -418,8 +434,9 @@ class TestACrash:
         assert run.pool.stops.recycled == 0
 
     def test_exit_0_without_the_stop_line_is_a_crash(self, tmp_path, runs, capsys):
-        run = runs(tmp_path, workers=1, settings=_settings(recycle_seconds=1),
-                   behaviour="exit0-without-line", quick_exit_seconds=0.0)
+        run = runs(tmp_path, settings=_settings(recycle_seconds=1),
+                   shape=PoolShape(workers=1, quick_exit_seconds=0.0),
+                   behaviour="exit0-without-line")
 
         run.run(after=2.5)
 
@@ -451,8 +468,8 @@ class TestCtrlC:
         last game) is told from one the pool killed and one that crashed
         unasked."""
         die = tmp_path / "dies"
-        run = runs(tmp_path, workers=1, settings=_settings(timeout=60), die_file=die,
-                   game_seconds=5)
+        run = runs(tmp_path, settings=_settings(timeout=60), shape=PoolShape(workers=1),
+                   die_file=die, game_seconds=5)
 
         def stop_then_crash():
             run.pool.request_shutdown()
@@ -487,8 +504,8 @@ class TestAStopDuringForgeStart:
         """The worker recycles itself and its slot's new worker is still
         starting Forge when the round ends: the round's end does not wait
         for that start, and no game is cut."""
-        run = runs(tmp_path, workers=1, settings=_settings(timeout=600, recycle_seconds=1),
-                   init_seconds=3.0, game_seconds=0.3)
+        run = runs(tmp_path, settings=_settings(timeout=600, recycle_seconds=1),
+                   shape=PoolShape(workers=1), init_seconds=3.0, game_seconds=0.3)
 
         elapsed = run.run(after=3.9)
 
