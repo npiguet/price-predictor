@@ -107,83 +107,118 @@ def _append_line(path: Path, line: str) -> None:
                 os.unlink(lock)
 
 
+class _Crashed(Exception):
+    """The stand-in's uncaught failure: exit 1."""
+
+
+class _StandIn:
+    """One stand-in worker run: its settings, and one method per protocol step."""
+
+    def __init__(self, started: float, props: dict[str, str], recycle: int | None):
+        self.started = started
+        self.recycle = recycle
+        self.stop_file = Path(props[STOP_FILE]) if STOP_FILE in props else None
+        self.behaviour = props.get("standin.behaviour", "honour")
+        self.game_seconds = float(props.get("standin.game.seconds", "0.1"))
+        self.games_per_match = int(props.get("standin.games.per.match", "1"))
+        self.crash_after = int(props.get("standin.crash.after.games", "-1"))
+        die = props.get("standin.die.file")
+        self.die_file = Path(die) if die is not None else None
+        progress = props.get(PROGRESS_FILE)
+        self.progress = Path(progress) if progress is not None else None
+        self.init_seconds = float(props.get("standin.init.seconds", "0"))
+        self.completed = 0
+        self.games = 0
+
+    def dying(self) -> bool:
+        return self.die_file is not None and self.die_file.exists()
+
+    def pause(self, seconds: float) -> None:
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if self.dying():
+                sys.exit(130)
+            time.sleep(0.01)
+
+    def reason(self) -> str | None:
+        if self.behaviour == "ignore":
+            return None
+        if self.stop_file is not None and self.stop_file.exists():
+            return REASON_STOP_FILE + str(self.stop_file)
+        if self.recycle is not None and time.monotonic() - self.started >= self.recycle:
+            return REASON_RECYCLING + str(self.recycle) + " s"
+        return None
+
+    def announce(self) -> None:
+        self.pause(self.init_seconds)  # Forge initialising
+        _say(status_line(str(os.getpid())), sys.stderr)
+        if self.stop_file is not None or self.recycle is not None:
+            _say(
+                DESCRIBE
+                + ("" if self.stop_file is None else str(self.stop_file) + DESCRIBE_EXISTS
+                   + ("" if self.recycle is None else DESCRIBE_OR))
+                + ("" if self.recycle is None else DESCRIBE_RUN + str(self.recycle) + " s")
+            )
+
+    def finish_match(self) -> str | None:
+        self.completed += 1
+        if self.progress is not None:
+            _append_line(self.progress, f"{os.getpid()}\n")
+        if self.completed == self.crash_after:
+            _say("Exception in thread \"main\" java.lang.IllegalStateException",
+                 sys.stderr)
+            raise _Crashed
+        return self.reason()
+
+    def play_match(self) -> str | None:
+        """Play one match; the reason it stopped, or None when it finished."""
+        why = self.reason()  # before each match
+        for _ in range(self.games_per_match if why is None else 0):
+            self.pause(self.game_seconds)  # one game
+            self.games += 1
+            why = self.reason()  # at the game's end
+            if why is not None:
+                return why
+        return self.finish_match() if why is None else why
+
+    def stop(self, why: str) -> int:
+        if self.behaviour == "exit0-without-line":
+            return 0
+        _say(f"{STOPPED} ({why}); {self.completed} {PROGRESS_NOUN}{IN_THIS_JVM}"
+             f"{self.games}{GAMES_TAIL}")
+        return 0
+
+    def run(self) -> int:
+        self.announce()
+        try:
+            while True:
+                why = self.play_match()
+                if why is not None:
+                    return self.stop(why)
+        except _Crashed:
+            return 1
+
+
+def _recycle_seconds(props: dict[str, str]) -> int | None:
+    if RECYCLE_SECONDS not in props:
+        return None
+    try:
+        return int(props[RECYCLE_SECONDS])
+    except ValueError:
+        return 0
+
+
 def main(argv: list[str]) -> int:
     started = time.monotonic()
     signal.signal(signal.SIGINT, lambda *_: os._exit(130))
     props = _properties(argv)
     if "standin.ready.file" in props:
         Path(props["standin.ready.file"]).write_text("ready", encoding="utf-8")
-    stop_file = Path(props[STOP_FILE]) if STOP_FILE in props else None
-    recycle = None
-    if RECYCLE_SECONDS in props:
-        try:
-            recycle = int(props[RECYCLE_SECONDS])
-        except ValueError:
-            recycle = 0
-        if recycle < 1:
-            _say(f"{RECYCLE_SECONDS}: {RECYCLE_REFUSAL}", sys.stderr)
-            return BAD_CONFIG
-    behaviour = props.get("standin.behaviour", "honour")
-    game_seconds = float(props.get("standin.game.seconds", "0.1"))
-    games_per_match = int(props.get("standin.games.per.match", "1"))
-    crash_after = int(props.get("standin.crash.after.games", "-1"))
-    die_file = Path(props["standin.die.file"]) if "standin.die.file" in props else None
-    progress = Path(props[PROGRESS_FILE]) if PROGRESS_FILE in props else None
-
-    def dying() -> bool:
-        return die_file is not None and die_file.exists()
-
-    def pause(seconds: float) -> None:
-        end = time.monotonic() + seconds
-        while time.monotonic() < end:
-            if dying():
-                sys.exit(130)
-            time.sleep(0.01)
-
-    def reason() -> str | None:
-        if behaviour == "ignore":
-            return None
-        if stop_file is not None and stop_file.exists():
-            return REASON_STOP_FILE + str(stop_file)
-        if recycle is not None and time.monotonic() - started >= recycle:
-            return REASON_RECYCLING + str(recycle) + " s"
-        return None
-
-    pause(float(props.get("standin.init.seconds", "0")))  # Forge initialising
-    _say(status_line(str(os.getpid())), sys.stderr)
-    if stop_file is not None or recycle is not None:
-        _say(
-            DESCRIBE
-            + ("" if stop_file is None else str(stop_file) + DESCRIBE_EXISTS
-               + ("" if recycle is None else DESCRIBE_OR))
-            + ("" if recycle is None else DESCRIBE_RUN + str(recycle) + " s")
-        )
-    completed = 0
-    games = 0
-    while True:
-        why = reason()  # before each match
-        for _ in range(games_per_match if why is None else 0):
-            pause(game_seconds)  # one game
-            games += 1
-            why = reason()  # at the game's end
-            if why is not None:
-                break
-        else:
-            if why is None:  # the match finished
-                completed += 1
-                if progress is not None:
-                    _append_line(progress, f"{os.getpid()}\n")
-                if completed == crash_after:
-                    _say("Exception in thread \"main\" java.lang.IllegalStateException",
-                         sys.stderr)
-                    return 1
-                why = reason()
-        if why is not None:
-            if behaviour == "exit0-without-line":
-                return 0
-            _say(f"{STOPPED} ({why}); {completed} {PROGRESS_NOUN}{IN_THIS_JVM}"
-                 f"{games}{GAMES_TAIL}")
-            return 0
+    recycle = _recycle_seconds(props)
+    if recycle is not None and recycle < 1:
+        _say(f"{RECYCLE_SECONDS}: {RECYCLE_REFUSAL}", sys.stderr)
+        return BAD_CONFIG
+    return _StandIn(started, props, recycle).run()
 
 
 if __name__ == "__main__":
