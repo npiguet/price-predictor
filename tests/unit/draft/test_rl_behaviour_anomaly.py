@@ -8,11 +8,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from draft.application.train_draft_agent_rl import (
-    RLExample,
-    TrainDraftAgentRLConfig,
-    _behaviour_anomaly_summary,
-)
+from draft.application.rl_behaviour_check import _behaviour_anomaly_summary
+from draft.application.rl_examples import RLExample
+from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK, TYPE_POOL
 
@@ -74,7 +72,7 @@ def test_summary_handles_no_learner_picks() -> None:
 def test_summary_subsamples_large_corpora() -> None:
     # Above the floor, the check scans only a capped subset (1% floored at 2000),
     # not the whole corpus — so it stays fast on million-pick corpora.
-    from draft.application.train_draft_agent_rl import _ANOMALY_SAMPLE_FLOOR
+    from draft.application.rl_behaviour_check import _ANOMALY_SAMPLE_FLOOR
 
     torch.manual_seed(0)
     ref = DraftAgentModel(DraftAgentConfig(embedding_dim=DIM, packs=1, P=4))

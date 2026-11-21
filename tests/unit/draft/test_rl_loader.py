@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from draft.application.train_draft_agent_rl import _Loader
+from draft.application.rl_examples import _Loader
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
 

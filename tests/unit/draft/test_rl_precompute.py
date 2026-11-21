@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from draft.application.train_draft_agent_rl import RLExample, _precompute_advantages
+from draft.application.rl_advantage_refresh import _precompute_advantages
+from draft.application.rl_examples import RLExample
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK, TYPE_POOL
 

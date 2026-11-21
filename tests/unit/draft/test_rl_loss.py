@@ -8,12 +8,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from draft.application.train_draft_agent_rl import (
-    RLExample,
-    TrainDraftAgentRLConfig,
-    _collate,
-    _compute_loss,
-)
+from draft.application.rl_batches import _collate, _compute_loss
+from draft.application.rl_examples import RLExample
+from draft.application.train_draft_agent_rl import TrainDraftAgentRLConfig
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK, TYPE_POOL, TYPE_TAKEN
 

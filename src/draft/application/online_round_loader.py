@@ -69,7 +69,7 @@ def learner_seat_rewards(
 class RoundLoader:
     """Turns one round's records into learner examples over a per-round table.
 
-    Mirrors ``train_draft_agent_rl._Loader``'s shared-table memoization (each
+    Mirrors ``rl_examples._Loader``'s shared-table memoization (each
     distinct card resolved once, examples keep int rows) minus the multi-corpus
     split. The table is rebuilt per round (research D14): a round touches only a
     few hundred cards, and a table that accumulated across an hours-long run

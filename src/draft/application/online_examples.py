@@ -20,7 +20,7 @@ from draft.domain.draft_state import TYPE_PACK
 class OnlineExample:
     """One learner ``(draft, seat, pack, pick)`` state.
 
-    Trimmed against ``train_draft_agent_rl.RLExample``: no critic target, no GAE
+    Trimmed against ``rl_examples.RLExample``: no critic target, no GAE
     value cache, and no ``learner_active`` flag — non-learner picks are never
     materialised at all, since nothing but the policy gradient consumes them.
     """
