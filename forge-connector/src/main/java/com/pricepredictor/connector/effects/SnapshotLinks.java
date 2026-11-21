@@ -170,7 +170,10 @@ final class SnapshotLinks {
      * {@code targets} family read again now, its modes and targets chosen
      * and {@code acting} on the stack: each stack object's targets as the
      * cast's refs block reads them. {@code added} are the card entities the
-     * snapshot gained for the targets chosen since.
+     * snapshot gained for the targets chosen since: their own families (a
+     * board card's {@code controls}, {@code owns}, {@code attached_to}, ...)
+     * are read now and joined to the family's links, a link the board read
+     * already staying once.
      */
     static String withTargetsNow(
             String links, Game game, Collection<Card> added, SpellAbility acting) {
@@ -178,6 +181,10 @@ final class SnapshotLinks {
         now.stack(new Acting(acting, true, null));
         Map<LinkFamily, Set<String>> byFamily = byFamily(links);
         byFamily.put(LinkFamily.TARGETS, now.byFamily.getOrDefault(LinkFamily.TARGETS, Set.of()));
+        SnapshotLinks own = new SnapshotLinks(game, added);
+        own.cardLinks(added, StaticSuppression.NONE);
+        own.byFamily.forEach((family, rendered) -> byFamily
+                .computeIfAbsent(family, f -> new LinkedHashSet<>()).addAll(rendered));
         return joined(byFamily);
     }
 

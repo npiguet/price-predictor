@@ -8,11 +8,14 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -120,5 +123,48 @@ class TargetLinksTest {
         Map<String, Object> commandCost = asMap(parse(
                 only(records, "activation", "cardsfolder/k/kolaghans_command.txt")).get("state"));
         assertEquals(List.of(Refs.of(thopter)), asMap(commandCost.get("refs")).get("targets"));
+    }
+
+    /** The links of {@code family} in {@code state} that end at {@code ref}, each once. */
+    private static List<Object> linksTo(Map<String, Object> state, String family, String ref) {
+        return ((List<?>) state.get("links")).stream().map(RecordLines::asMap)
+                .filter(link -> family.equals(link.get("type")) && ref.equals(link.get("to")))
+                .map(link -> link.get("from")).toList();
+    }
+
+    /**
+     * A Lightning Bolt's targets chosen after the board was read: a Grizzly
+     * Bears in exile (a card the board lacked) and a Hill Giant in a
+     * graveyard (one it held). Both get their {@code targets} link, and each
+     * its owner's {@code owns} and {@code controls} link once (finding 9.11).
+     */
+    @Test
+    void aTargetAddedAtTheCastEventGetsItsControlsAndOwnsLinks() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Player opp = game.getPlayers().get(1);
+        Card exiled = game.getAction().moveTo(ZoneType.Exile, TestBoard.card(game, opp, "Grizzly Bears"), null, null);
+        Card graveyard = TestBoard.inGraveyard(game, opp, "Hill Giant");
+        Card bolt = TestBoard.inHand(game, you, "Lightning Bolt");
+        SpellAbility spell = TestBoard.spellOf(bolt, you);
+        SnapshotBuilder builder = new SnapshotBuilder(game);
+        Snapshot before = builder.ofAbility(spell, List.of(bolt));
+        spell.resetTargets();
+        spell.getTargets().add(exiled);
+        spell.getTargets().add(graveyard);
+
+        String state = builder.withTargetsChosen(before, spell).render();
+
+        Map<String, Object> parsed = asMap(parse(state));
+        String owner = (String) linksTo(parsed, "owns", Refs.of(graveyard)).get(0);
+        for (Card target : List.of(exiled, graveyard)) {
+            String ref = Refs.of(target);
+            assertEquals(List.of(owner), linksTo(parsed, "controls", ref), state);
+            assertEquals(List.of(owner), linksTo(parsed, "owns", ref), state);
+            assertEquals(1, linksTo(parsed, "targets", ref).size(), state);
+        }
+        List<String> all = new ArrayList<>();
+        ((List<?>) parsed.get("links")).forEach(link -> all.add(link.toString()));
+        assertEquals(all.size(), new HashSet<>(all).size(), "a link written twice: " + state);
     }
 }

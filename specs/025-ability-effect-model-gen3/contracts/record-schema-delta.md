@@ -620,7 +620,8 @@ loses as a step or phase ends with no `LoseMana` replacement (500.4).
   - a cost half: the chain's targets at its cast event, the refs `refs.targets` lists, after its
     modes and any deferred targets are chosen (Forge chains a charm's modes, and the random seat
     draws a charm's targets, after the card moves to the stack). A target chosen then that the
-    board read before the move does not hold is added to its entities, as read at the cast event;
+    board read before the move does not hold is added to its entities, as read at the cast event,
+    with its own `controls`, `owns` and other card-field links;
   - any other record: the targets the acting chain holds.
 
   Every other stack object links the targets it holds. A targeted ability ends at its line on every
