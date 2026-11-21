@@ -40,26 +40,44 @@ HEADS = ("score_play", "score_draw", "played_rate", "cast_lift",
 BATCH = 96
 
 
+def _unshuffled(lines: list[str], rng: np.random.Generator) -> str:
+    return "\n".join(lines)
+
+
+def _shuffle_words(lines: list[str], rng: np.random.Generator) -> str:
+    words = " ".join(lines).split()
+    order = rng.permutation(len(words))
+    return " ".join(words[i] for i in order)
+
+
+def _shuffle_within_lines(lines: list[str], rng: np.random.Generator) -> str:
+    out = []
+    for line in lines:
+        words = line.split()
+        order = rng.permutation(len(words))
+        out.append(" ".join(words[i] for i in order))
+    return "\n".join(out)
+
+
+def _shuffle_line_order(lines: list[str], rng: np.random.Generator) -> str:
+    order = rng.permutation(len(lines))
+    return "\n".join(lines[i] for i in order)
+
+
+DEGRADERS = {
+    "none": _unshuffled,
+    "full": _shuffle_words,
+    "within_line": _shuffle_within_lines,
+    "line_order": _shuffle_line_order,
+}
+
+
 def degrade(text: str, condition: str, rng: np.random.Generator) -> str:
     """One degraded variant of a name-stripped card text."""
     lines = [ln for ln in text.splitlines() if ln.strip()]
-    if condition == "none":
-        return "\n".join(lines)
-    if condition == "full":
-        words = " ".join(lines).split()
-        order = rng.permutation(len(words))
-        return " ".join(words[i] for i in order)
-    if condition == "within_line":
-        out = []
-        for line in lines:
-            words = line.split()
-            order = rng.permutation(len(words))
-            out.append(" ".join(words[i] for i in order))
-        return "\n".join(out)
-    if condition == "line_order":
-        order = rng.permutation(len(lines))
-        return "\n".join(lines[i] for i in order)
-    raise ValueError(condition)
+    if condition not in DEGRADERS:
+        raise ValueError(condition)
+    return DEGRADERS[condition](lines, rng)
 
 
 def cosine_shift(a: np.ndarray, b: np.ndarray) -> np.ndarray:
