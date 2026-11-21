@@ -51,27 +51,57 @@ class DirectedRulesContractTest {
     /** Every scenario of the catalogue, by id. */
     private static Map<String, Scenario> scenarios() throws IOException {
         Map<String, Scenario> byId = new HashMap<>();
-        try (Stream<Path> files = Files.list(SCENARIOS)) {
-            for (Path file : files.filter(f -> f.toString().endsWith(".json")).sorted().toList()) {
-                Map<?, ?> doc = (Map<?, ?>) JSON.parse(Files.readString(file, StandardCharsets.UTF_8));
-                for (Object entry : list(doc.get("scenarios"))) {
-                    Map<?, ?> scenario = (Map<?, ?>) entry;
-                    List<String> rules = list(scenario.get("rules")).stream().map(String::valueOf).toList();
-                    Map<String, Optional<String>> operations = new HashMap<>();
-                    for (Object v : list(scenario.get("variants"))) {
-                        Map<?, ?> variant = (Map<?, ?>) v;
-                        // An unclassifiable variant's operation is an object, the
-                        // base's absent: neither is an operation a fork can apply.
-                        Object operation = variant.get("operation");
-                        operations.put(String.valueOf(variant.get("label")),
-                                operation instanceof String name ? Optional.of(name) : Optional.empty());
-                    }
-                    List<String> cards = list(scenario.get("cards")).stream().map(String::valueOf).toList();
-                    byId.put(String.valueOf(scenario.get("id")), new Scenario(rules, operations, cards));
-                }
-            }
+        for (Path file : catalogueFiles()) {
+            byId.putAll(scenariosIn(file));
         }
         return byId;
+    }
+
+    private static List<Path> catalogueFiles() throws IOException {
+        try (Stream<Path> files = Files.list(SCENARIOS)) {
+            return files.filter(f -> f.toString().endsWith(".json")).sorted().toList();
+        }
+    }
+
+    /** The scenarios of one catalogue file, by id. */
+    private static Map<String, Scenario> scenariosIn(Path file) throws IOException {
+        Map<?, ?> doc = (Map<?, ?>) JSON.parse(Files.readString(file, StandardCharsets.UTF_8));
+        Map<String, Scenario> byId = new HashMap<>();
+        for (Object entry : list(doc.get("scenarios"))) {
+            addScenario(byId, (Map<?, ?>) entry);
+        }
+        return byId;
+    }
+
+    private static void addScenario(Map<String, Scenario> byId, Map<?, ?> scenario) {
+        byId.put(String.valueOf(scenario.get("id")), scenarioOf(scenario));
+    }
+
+    /** One scenario object of a catalogue file, as the contract reads it. */
+    private static Scenario scenarioOf(Map<?, ?> scenario) {
+        return new Scenario(texts(scenario.get("rules")), operationsOf(scenario), texts(scenario.get("cards")));
+    }
+
+    private static List<String> texts(Object value) {
+        return list(value).stream().map(String::valueOf).toList();
+    }
+
+    /** Each variant's operation, by label. */
+    private static Map<String, Optional<String>> operationsOf(Map<?, ?> scenario) {
+        Map<String, Optional<String>> operations = new HashMap<>();
+        for (Object v : list(scenario.get("variants"))) {
+            Map<?, ?> variant = (Map<?, ?>) v;
+            operations.put(String.valueOf(variant.get("label")), operationOf(variant));
+        }
+        return operations;
+    }
+
+    /**
+     * The variant's operation name. An unclassifiable variant's operation is an
+     * object, the base's absent: neither is an operation a fork can apply.
+     */
+    private static Optional<String> operationOf(Map<?, ?> variant) {
+        return variant.get("operation") instanceof String name ? Optional.of(name) : Optional.empty();
     }
 
     private static List<Object> list(Object value) {
