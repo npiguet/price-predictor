@@ -48,6 +48,7 @@ def _write_corpus(path: Path, n_drafts: int) -> None:
 
 
 def test_rl_training_writes_gen2_checkpoint(tmp_path, monkeypatch) -> None:
+    from draft.application import rl_training_setup
     from draft.application import train_draft_agent_rl as rl
 
     # Tiny gen-1 reference checkpoint.
@@ -64,7 +65,7 @@ def test_rl_training_writes_gen2_checkpoint(tmp_path, monkeypatch) -> None:
     _write_corpus(corpus, n_drafts=6)
 
     # Fake the card-embedding cache and write checkpoints under tmp.
-    monkeypatch.setattr(rl, "ConvertedCardLocator", _FakeLocator)
+    monkeypatch.setattr(rl_training_setup, "ConvertedCardLocator", _FakeLocator)
     monkeypatch.chdir(tmp_path)
 
     config = rl.TrainDraftAgentRLConfig(

@@ -15,6 +15,7 @@ import torch
 from draft.application.imitation_batches import BatchSource
 from draft.application.rl_batches import _collate, _forward_logits_critic
 from draft.application.rl_examples import RANDOM_SEED, RLExample
+from draft.application.rl_log import _log
 from draft.domain.draft_agent_model import DraftAgentModel
 from price_predictor.infrastructure.torch_training import masked_log_softmax
 
@@ -74,3 +75,21 @@ def _behaviour_anomaly_summary(
             below += int((np.exp(logp_action) < _PROB_FLOOR).sum())
     n = len(learner)
     return _AnomalySummary(n, n_total, below / n, logp_sum / n)
+
+
+def report_behaviour_check(anomaly: _AnomalySummary) -> None:
+    """Log the check; a warning when more than ``_ANOMALY_FRACTION`` of the sampled
+    picks fall below ``_PROB_FLOOR``. The run proceeds either way."""
+    msg = (
+        f"Behaviour check: sampled {anomaly.n_learner}/{anomaly.n_total} "
+        f"learner picks, mean log π_ref={anomaly.mean_behaviour_logprob:.3f}, "
+        f"{anomaly.frac_below_floor:.1%} below prob {_PROB_FLOOR:g}"
+    )
+    if anomaly.frac_below_floor > _ANOMALY_FRACTION:
+        _log(
+            f"WARNING: {msg} — the corpus may not be on-policy for this "
+            "--checkpoint / --rollout-temperature. Proceeding anyway "
+            "(on-policy pairing is the operator's responsibility)."
+        )
+    else:
+        _log(msg)

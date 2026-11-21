@@ -24,45 +24,33 @@ safeguard is the behaviour-anomaly warning (research D6); the corpus is unchange
 
 from __future__ import annotations
 
-import math
-import random
-import time
-from dataclasses import asdict, dataclass
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
 
-from draft.application.draft_lr_schedule import (
-    _make_scheduler,
-    _maybe_decay,
-    _PlateauLR,
-    _reapply_resume_lr,
-)
-from draft.application.draft_training_common import length_bucketed_batches
-from draft.application.imitation_batches import BatchSource
 from draft.application.imitation_model_setup import _select_device
-from draft.application.rl_advantage_refresh import (
-    AdvantageRefresh,
-    CriticPass,
-    _precompute_advantages,
-)
-from draft.application.rl_batches import LossSettings, PolicyPair, _collate, _compute_loss
 from draft.application.rl_behaviour_check import (
-    _ANOMALY_FRACTION,
-    _PROB_FLOOR,
     _behaviour_anomaly_summary,
+    report_behaviour_check,
 )
-from draft.application.rl_coef_schedule import _CoefSchedule
-from draft.application.rl_examples import RANDOM_SEED, _Loader, split_draft_disjoint
-from draft.application.rl_log import _STEP_LOG_INTERVAL, _fmt_dur, _log
-from draft.application.rl_model_setup import _resume_or_build
-from draft.application.rl_validation import _validate
-from draft.domain.draft_geometry import DraftRecord
+from draft.application.rl_examples import RANDOM_SEED
+from draft.application.rl_log import _log
+from draft.application.rl_training_loop import (
+    RLCheckpointTargets,
+    RLTrainingData,
+    RLTrainingLoop,
+    RLTrainingProgress,
+)
+from draft.application.rl_training_setup import (
+    build_learner,
+    checkpoint_targets,
+    load_corpus,
+    start_run,
+    steps_per_epoch,
+)
 from draft.infrastructure.draft_agent_store import DraftAgentStore
-from draft.infrastructure.draft_record_io import read_records
-from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 
 @dataclass(kw_only=True)
@@ -123,219 +111,72 @@ class TrainDraftAgentRLUseCase:
         device = _select_device()
         store = DraftAgentStore()
 
-        on_policy = list(read_records(config.drafts_path))
-        if not on_policy:
-            raise ValueError(f"No records in {config.drafts_path}")
-        critic_only: list[DraftRecord] = []
-        for path in config.critic_corpus:
-            critic_only.extend(read_records(path))
+        corpus = load_corpus(config)
+        start = start_run(config, store, corpus, device)
+        report_behaviour_check(_behaviour_anomaly_summary(
+            start.models.reference, corpus.examples, start.source, config,
+        ))
+        n_steps = steps_per_epoch(config, start)
+        learner = build_learner(config, start, n_steps)
+        targets = checkpoint_targets(config, store, start.resume.generation)
+        val = sorted(start.val, key=lambda ex: ex.n_tokens)
+        data = RLTrainingData(start.train, val, corpus.trajectories, start.source, n_steps)
 
-        locator = ConvertedCardLocator(
-            config.cards_path, embeddings_path=config.embeddings_path,
+        resume = start.resume
+        progress = RLTrainingProgress(
+            start_epoch=resume.start_epoch,
+            best_val_loss=resume.best_val_loss,
+            best_at=(resume.start_epoch, 0),
         )
-        loader = _Loader(locator, set(config.learner_agents))
-        examples, trajectories = loader.build(on_policy, critic_only)
-        if not examples:
-            raise ValueError("No usable training examples (all picks missing embeddings?)")
-        if loader.embedding_dim is None:
-            raise ValueError("Could not determine embedding dimension from the cache")
-        if not trajectories:
-            raise ValueError(
-                "No learner trajectories — does --drafts-path contain seats with a "
-                f"--learner-agents label ({', '.join(sorted(config.learner_agents))})?"
-            )
-        table = loader.table()
-
-        resume = _resume_or_build(config, store, loader.embedding_dim)
-        mean, std = resume.critic_mean, resume.critic_std
-        model = resume.model.to(device)
-        reference = resume.reference.to(device)
-        models = PolicyPair(model, reference)
-        source = BatchSource(table, mean, std, device)
-
-        train_ids, val_ids = split_draft_disjoint(examples, config.val_fraction)
-        train = [ex for ex in examples if ex.draft_index in train_ids]
-        val = [ex for ex in examples if ex.draft_index in val_ids]
-        if not train:
-            raise ValueError("Empty training split; need more drafts or a smaller --val-fraction")
-        _log(
-            f"Examples: {len(train)} train + {len(val)} val; "
-            f"{len(trajectories)} learner trajectories "
-            f"(embedding_dim={loader.embedding_dim}, packs={loader.max_packs}, "
-            f"P={loader.max_pack_size}); critic mean={mean:.4f} std={std:.4f}; "
-            f"generation {resume.generation}; device {device}"
-        )
-
-        anomaly = _behaviour_anomaly_summary(
-            reference, examples, source, config,
-        )
-        msg = (
-            f"Behaviour check: sampled {anomaly.n_learner}/{anomaly.n_total} "
-            f"learner picks, mean log π_ref={anomaly.mean_behaviour_logprob:.3f}, "
-            f"{anomaly.frac_below_floor:.1%} below prob {_PROB_FLOOR:g}"
-        )
-        if anomaly.frac_below_floor > _ANOMALY_FRACTION:
-            _log(
-                f"WARNING: {msg} — the corpus may not be on-policy for this "
-                "--checkpoint / --rollout-temperature. Proceeding anyway "
-                "(on-policy pairing is the operator's responsibility)."
-            )
-        else:
-            _log(msg)
-
-        optimizer = torch.optim.AdamW([{"params": list(model.parameters()), "lr": config.lr}])
-        if resume.optimizer_state:
-            optimizer.load_state_dict(resume.optimizer_state)
-            _reapply_resume_lr(optimizer, config.lr)
-        min_lr = config.min_lr if config.min_lr is not None else config.lr * 1e-3
-        plateau = _PlateauLR(
-            base_lr=config.lr, factor=config.lr_decay_factor,
-            min_lr=min_lr, decay_count=resume.lr_decay_count,
-        )
-        n_steps = max(1, math.ceil(len(train) / config.batch_size))
-        scheduler = _make_scheduler(optimizer, n_steps, config.warmup_frac, plateau)
-        entropy_sched = _CoefSchedule(config.entropy_coef, config.entropy_decay_after)
-        kl_sched = _CoefSchedule(config.kl_coef, config.entropy_decay_after)
-
-        out_dir = config.checkpoint_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        latest_path = out_dir / "latest.pt"
-        best_path = out_dir / f"{timestamp}.pt"
-        train_config = {
-            k: (str(v) if isinstance(v, Path) else (list(v) if isinstance(v, tuple) else v))
-            for k, v in asdict(config).items()
-        }
-
-        val = sorted(val, key=lambda ex: ex.n_tokens)
-        rng = random.Random(RANDOM_SEED)
-        best_val_loss = resume.best_val_loss
-        best_at = (resume.start_epoch, 0)
-        evals_since_best = 0
-        evals_per_epoch = max(1, config.evals_per_epoch)
-        eval_interval = max(1, n_steps // evals_per_epoch)
-
-        def save(path: Path, epoch: int) -> None:
-            store.save_checkpoint(
-                model, optimizer, epoch, best_val_loss, model.config, path,
-                critic_mean=mean, critic_std=std, train_config=train_config,
-                lr_decay_count=plateau.decay_count,
-                rl_metadata={
-                    "generation": resume.generation,
-                    "reference_checkpoint": str(config.resume or config.checkpoint),
-                    "algorithm": "reinforce+gae",
-                    "gae_lambda": config.gae_lambda,
-                    "kl_coef": config.kl_coef,
-                    "entropy_coef": config.entropy_coef,
-                    "value_weight": config.value_weight,
-                    "rollout_temperature": float(config.rollout_temperature or 1.0),
-                },
-            )
-
-        def run_eval(epoch: int, step: int) -> bool:
-            nonlocal best_val_loss, best_at, evals_since_best
-            report = _validate(
-                models, val, source,
-                LossSettings(config, entropy_sched.coef, kl_sched.coef),
-            )
-            _log(
-                f"  eval epoch {epoch} step {step}/{n_steps} | "
-                f"val_loss={report.loss:.4f} policy={report.policy:.4f} "
-                f"value={report.value:.4f} entropy={report.entropy:.4f} "
-                f"kl={report.kl:.4f} | ent_coef={entropy_sched.coef:.4g} "
-                f"kl_coef={kl_sched.coef:.4g}"
-            )
-            entropy_sched.update(-report.loss)
-            kl_sched.update(-report.loss)
-            new_best = report.loss < best_val_loss
-            if new_best:
-                best_val_loss = report.loss
-                best_at = (epoch, step)
-                evals_since_best = 0
-            else:
-                evals_since_best += 1
-            new_lr = _maybe_decay(evals_since_best, config.lr_decay_patience, plateau)
-            if new_lr is not None:
-                _log(f"  LR decay #{plateau.decay_count} -> {new_lr:.2e}")
-                evals_since_best = 0
-            save(latest_path, epoch)
-            if new_best:
-                save(best_path, epoch)
-            return evals_since_best >= config.patience
-
-        _log(
-            f"Training: up to {config.epochs} epochs, {n_steps} steps/epoch; "
-            f"eval every {eval_interval} steps (~{evals_per_epoch}/epoch); "
-            f"patience {config.patience}"
-        )
-        stop = False
-        for epoch in range(resume.start_epoch, resume.start_epoch + config.epochs):
-            # Refresh GAE advantages from the current critic (research D3).
-            _precompute_advantages(
-                model, trajectories,
-                AdvantageRefresh(CriticPass(source, config.batch_size), config.gae_lambda),
-                epoch=epoch,
-            )
-            model.train()
-            batches = length_bucketed_batches(train, config.batch_size, rng)
-            nb = len(batches)
-            epoch_start = time.monotonic()
-            last_log = epoch_start
-            for step, chunk in enumerate(batches, start=1):
-                batch = _collate(chunk, source)
-                out = _compute_loss(
-                    models, batch, LossSettings(config, entropy_sched.coef, kl_sched.coef),
-                )
-                optimizer.zero_grad()
-                out.total.backward()
-                for group in optimizer.param_groups:
-                    torch.nn.utils.clip_grad_norm_(group["params"], config.max_grad_norm)
-                optimizer.step()
-                scheduler.step()
-                now = time.monotonic()
-                if now - last_log >= _STEP_LOG_INTERVAL and step < nb:
-                    overall = step / (now - epoch_start)
-                    eta = (nb - step) / overall if overall > 0 else 0.0
-                    _log(
-                        f"  epoch {epoch} step {step}/{nb} "
-                        f"({step / nb * 100:.0f}%) total={float(out.total.detach()):.4f} "
-                        f"ETA {_fmt_dur(eta)}"
-                    )
-                    last_log = now
-                if step % eval_interval == 0 or step == nb:
-                    if run_eval(epoch, step):
-                        _log(
-                            f"Early stop: {evals_since_best} evals without val "
-                            f"improvement (--patience={config.patience})"
-                        )
-                        stop = True
-                        break
-            if stop:
-                break
-
-        best_epoch, best_step = best_at
-        _log(
-            f"Done. Best val_loss={best_val_loss:.4f} at epoch {best_epoch} "
-            f"step {best_step}; best checkpoint: {best_path} (generation "
-            f"{resume.generation})"
-        )
-        return TrainDraftAgentRLResult(
-            best_val_loss, best_epoch, best_path, resume.generation,
-        )
+        RLTrainingLoop(config, learner, data, targets).run(progress)
+        return _finish(progress, targets)
 
     @staticmethod
     def _validate_config(config: TrainDraftAgentRLConfig) -> None:
-        """Startup validation (FR-017, SC-003)."""
-        if (config.checkpoint is None) == (config.resume is None):
-            raise ValueError("exactly one of --checkpoint or --resume is required")
-        if not config.learner_agents:
-            raise ValueError("--learner-agents must be a non-empty whitelist")
-        if config.rollout_temperature is None or config.rollout_temperature <= 0:
-            raise ValueError("--rollout-temperature must be supplied and positive")
-        if config.lr_decay_patience is not None:
-            if config.lr_decay_patience < 1:
-                raise ValueError("--lr-decay-patience must be >= 1")
-            if not 0.0 < config.lr_decay_factor < 1.0:
-                raise ValueError("--lr-decay-factor must be in (0, 1)")
-            if config.lr_decay_patience >= config.patience:
-                raise ValueError("--lr-decay-patience must be < --patience")
+        """Startup validation (FR-017, SC-003): the first rule broken is refused."""
+        _check_one_start(config)
+        _check_learner_agents(config)
+        _check_rollout_temperature(config)
+        _check_lr_decay(config)
+
+
+def _check_one_start(config: TrainDraftAgentRLConfig) -> None:
+    if (config.checkpoint is None) == (config.resume is None):
+        raise ValueError("exactly one of --checkpoint or --resume is required")
+
+
+def _check_learner_agents(config: TrainDraftAgentRLConfig) -> None:
+    if not config.learner_agents:
+        raise ValueError("--learner-agents must be a non-empty whitelist")
+
+
+def _check_rollout_temperature(config: TrainDraftAgentRLConfig) -> None:
+    if config.rollout_temperature is None or config.rollout_temperature <= 0:
+        raise ValueError("--rollout-temperature must be supplied and positive")
+
+
+def _check_lr_decay(config: TrainDraftAgentRLConfig) -> None:
+    """The plateau-decay flags, checked only when ``--lr-decay-patience`` is set."""
+    patience = config.lr_decay_patience
+    if patience is None:
+        return
+    if patience < 1:
+        raise ValueError("--lr-decay-patience must be >= 1")
+    if not 0.0 < config.lr_decay_factor < 1.0:
+        raise ValueError("--lr-decay-factor must be in (0, 1)")
+    if patience >= config.patience:
+        raise ValueError("--lr-decay-patience must be < --patience")
+
+
+def _finish(
+    progress: RLTrainingProgress, targets: RLCheckpointTargets,
+) -> TrainDraftAgentRLResult:
+    best_epoch, best_step = progress.best_at
+    _log(
+        f"Done. Best val_loss={progress.best_val_loss:.4f} at epoch {best_epoch} "
+        f"step {best_step}; best checkpoint: {targets.best_path} (generation "
+        f"{targets.generation})"
+    )
+    return TrainDraftAgentRLResult(
+        progress.best_val_loss, best_epoch, targets.best_path, targets.generation,
+    )
