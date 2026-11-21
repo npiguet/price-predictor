@@ -105,9 +105,19 @@ def _forge_cardsfolder() -> Path:
 
 
 def _triggers(line: dict) -> frozenset[int]:
+    """The keyword-built triggers a line declares: its keys' ``built`` indexes of kind trigger.
+
+    A keyword that prints several lines (a saga's chapters, haunt's two lines)
+    declares on each the keyword's key with the ``built`` trait it renders; the
+    kind-indexed ``trigger n`` keys of those traits are never emitted.
+    """
     return frozenset(
-        key["index_within_kind"] for key in line["provenance"] if key["trait_kind"] == "trigger"
+        key["built"]["index"] for key in line["provenance"] if _builds_a_trigger(key)
     )
+
+
+def _builds_a_trigger(key: dict) -> bool:
+    return key.get("built", {}).get("kind") == "trigger"
 
 
 def _copy_forge_cards(tmp_path: Path) -> None:
