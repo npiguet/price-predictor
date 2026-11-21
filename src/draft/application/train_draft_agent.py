@@ -31,7 +31,7 @@ from draft.application.draft_lr_schedule import (
     _reapply_resume_lr,
 )
 from draft.application.draft_training_common import length_bucketed_batches
-from draft.application.imitation_batches import _collate, _compute_loss
+from draft.application.imitation_batches import BatchSource, _collate, _compute_loss
 from draft.application.imitation_examples import (
     RANDOM_SEED,
     _Loader,
@@ -146,6 +146,7 @@ class TrainDraftAgentUseCase:
         )
         if config.resume is not None or config.checkpoint is not None:
             mean, std = ck_mean, ck_std  # reuse stored standardization on reload
+        source = BatchSource(table, mean, std, device)
         model = resume.model.to(device)
         optimizer = torch.optim.AdamW(
             [{"params": list(model.parameters()), "lr": config.lr}]
@@ -195,7 +196,7 @@ class TrainDraftAgentUseCase:
             train-vs-val gap is visible on one line.
             """
             nonlocal best_val_loss, best_at, evals_since_best
-            report = _validate(model, val, table, mean, std, config, device)
+            report = _validate(model, val, source, config)
             mse_str = ", ".join(
                 f"p{pk}={v:.4f}" for pk, v in sorted(report.per_pack_mse.items())
             )
@@ -267,7 +268,7 @@ class TrainDraftAgentUseCase:
             ev_imit = ev_crit = 0.0  # train loss since the last eval (mini-epoch)
             ev_n = 0
             for step, chunk in enumerate(batches, start=1):
-                batch = _collate(chunk, table, mean, std, device)
+                batch = _collate(chunk, source)
                 losses, _, _ = _compute_loss(
                     model, batch, config.imitation_weight, config.critic_weight,
                 )

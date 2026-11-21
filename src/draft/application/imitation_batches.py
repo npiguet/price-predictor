@@ -32,10 +32,20 @@ class _Batch:
     critic_target: torch.Tensor     # (B,) standardized
 
 
-def _collate(
-    batch: list[DraftExample], table: np.ndarray, mean: float, std: float,
-    device: torch.device,
-) -> _Batch:
+@dataclass(frozen=True)
+class BatchSource:
+    """What every batch of one run is built from: the shared embedding table, the
+    critic targets' standardization (``mean``, ``std``) and the device."""
+
+    table: np.ndarray
+    mean: float
+    std: float
+    device: torch.device
+
+
+def _pad_tokens(batch: list[DraftExample], table: np.ndarray) -> tuple[np.ndarray, ...]:
+    """The batch's token arrays, right-padded to its longest example: card
+    embeddings, type, packs-ago, pick-ago, the card mask and the PACK mask."""
     b = len(batch)
     max_n = max(ex.n_tokens for ex in batch)
     dim = table.shape[1]
@@ -53,6 +63,22 @@ def _collate(
         pick_ago[i, :n] = ex.pick_ago
         card_mask[i, :n] = True
         pack_mask[i, :n] = ex.type_idx == TYPE_PACK
+    return card_emb, type_idx, packs_ago, pick_ago, card_mask, pack_mask
+
+
+def _column(
+    batch: list[DraftExample], field: str, device: torch.device,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """One per-example field of the batch as a ``(B,)`` tensor."""
+    return torch.tensor([getattr(ex, field) for ex in batch], device=device, dtype=dtype)
+
+
+def _collate(batch: list[DraftExample], source: BatchSource) -> _Batch:
+    device = source.device
+    card_emb, type_idx, packs_ago, pick_ago, card_mask, pack_mask = _pad_tokens(
+        batch, source.table,
+    )
     return _Batch(
         card_emb=torch.from_numpy(card_emb).to(device),
         type_idx=torch.from_numpy(type_idx).to(device),
@@ -60,17 +86,13 @@ def _collate(
         pick_ago=torch.from_numpy(pick_ago).to(device),
         card_mask=torch.from_numpy(card_mask).to(device),
         pack_mask=torch.from_numpy(pack_mask).to(device),
-        pack_number=torch.tensor([ex.pack_number for ex in batch], device=device),
-        pick_number=torch.tensor([ex.pick_number for ex in batch], device=device),
-        target_token=torch.tensor([ex.target_token for ex in batch], device=device),
-        imitation_active=torch.tensor(
-            [ex.imitation_active for ex in batch], device=device, dtype=torch.bool,
-        ),
-        critic_active=torch.tensor(
-            [ex.critic_active for ex in batch], device=device, dtype=torch.bool,
-        ),
+        pack_number=_column(batch, "pack_number", device),
+        pick_number=_column(batch, "pick_number", device),
+        target_token=_column(batch, "target_token", device),
+        imitation_active=_column(batch, "imitation_active", device, torch.bool),
+        critic_active=_column(batch, "critic_active", device, torch.bool),
         critic_target=torch.tensor(
-            [(ex.critic_target - mean) / std for ex in batch],
+            [(ex.critic_target - source.mean) / source.std for ex in batch],
             device=device, dtype=torch.float32,
         ),
     )

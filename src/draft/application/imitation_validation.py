@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
-from draft.application.imitation_batches import _collate, _compute_loss
+from draft.application.imitation_batches import BatchSource, _collate, _compute_loss
 from draft.application.imitation_examples import DraftExample
 from draft.domain.draft_agent_model import DraftAgentModel
 from draft.domain.draft_state import TYPE_PACK
@@ -60,11 +60,8 @@ class _ValReport:
 def _validate(
     model: DraftAgentModel,
     val: list[DraftExample],
-    table: np.ndarray,
-    mean: float,
-    std: float,
+    source: BatchSource,
     config: TrainDraftAgentConfig,
-    device: torch.device,
 ) -> _ValReport:
     model.eval()
     if not val:
@@ -77,10 +74,11 @@ def _validate(
     tot_crit = 0.0
     n_imit = 0
     n_crit = 0
+    mean, std = source.mean, source.std
     with torch.no_grad():
         for start in range(0, len(val), config.batch_size):
             chunk = val[start:start + config.batch_size]
-            batch = _collate(chunk, table, mean, std, device)
+            batch = _collate(chunk, source)
             losses, logits, critic_pred = _compute_loss(
                 model, batch, config.imitation_weight, config.critic_weight,
             )
