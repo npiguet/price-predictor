@@ -54,6 +54,16 @@ class DamageTypeTest {
                 DamageType.LoyaltyLoss, "loyalty_loss"), spelled);
     }
 
+    /** Each damage event of the record, under its first subject, with its damage type. */
+    private static void addDamageTypes(Map<String, String> typeBySubject, String record) {
+        for (Map<String, Object> event : RecordEvents.events(record)) {
+            if ("damage_dealt".equals(event.get("type"))) {
+                typeBySubject.put(((List<?>) event.get("subjects")).get(0).toString(),
+                        (String) asMap(event.get("params")).get("damage_type"));
+            }
+        }
+    }
+
     /**
      * Boggart Ram-Gang (wither) and Typhoid Rats (deathtouch) attack, Hill
      * Giant and Grizzly Bears block them: the giant takes -1/-1 counters,
@@ -90,14 +100,8 @@ class DamageTypeTest {
 
         Map<String, String> typeBySubject = new HashMap<>();
         for (String record : records) {
-            if (!"combat".equals(RecordLines.parse(record).get("kind"))) {
-                continue;
-            }
-            for (Map<String, Object> event : RecordEvents.events(record)) {
-                if ("damage_dealt".equals(event.get("type"))) {
-                    typeBySubject.put(((List<?>) event.get("subjects")).get(0).toString(),
-                            (String) asMap(event.get("params")).get("damage_type"));
-                }
+            if ("combat".equals(RecordLines.parse(record).get("kind"))) {
+                addDamageTypes(typeBySubject, record);
             }
         }
         assertEquals(Map.of(

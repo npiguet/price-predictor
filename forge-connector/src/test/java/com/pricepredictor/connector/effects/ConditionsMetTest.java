@@ -52,6 +52,16 @@ class ConditionsMetTest {
         return flare;
     }
 
+    /** The opponent's Hill Giant, and Kami's Flare aimed at it cast and resolved: the shard's records. */
+    private List<String> flareAtAGiant(Game game, Player caster, Player opponent) throws Throwable {
+        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
+        SpellAbility flare = flareAt(game, caster, giant);
+        return ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            castAndResolve(game, flare);
+            nextStep(game);
+        });
+    }
+
     private static List<Object> conditionsOf(String record) {
         Object conditions = payload(record).get("conditions_met");
         assertTrue(conditions instanceof List<?>, "no conditions_met in " + record);
@@ -71,13 +81,8 @@ class ConditionsMetTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
-        SpellAbility flare = flareAt(game, caster, giant);
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            castAndResolve(game, flare);
-            nextStep(game);
-        });
+        List<String> records = flareAtAGiant(game, caster, opponent);
 
         assertEquals(20, opponent.getLife(), "the unmet clause dealt nothing");
         assertEquals(List.of(Map.of("segment", "0", "met", false)),
@@ -92,13 +97,8 @@ class ConditionsMetTest {
         Player opponent = game.getPlayers().get(1);
         Card bears = TestBoard.onBattlefield(game, caster, "Grizzly Bears");
         bears.addCounterInternal(CounterEnumType.P1P1, 1, caster, false, null, Map.of());
-        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
-        SpellAbility flare = flareAt(game, caster, giant);
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            castAndResolve(game, flare);
-            nextStep(game);
-        });
+        List<String> records = flareAtAGiant(game, caster, opponent);
 
         assertEquals(18, opponent.getLife(), "the met clause dealt its damage");
         assertEquals(List.of(Map.of("segment", "0", "met", true)),

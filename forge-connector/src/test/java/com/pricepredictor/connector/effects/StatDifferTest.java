@@ -65,18 +65,25 @@ class StatDifferTest {
                 event.params());
         assertEquals(List.of("colors", "colors_removed"), List.copyOf(event.params().keySet()));
     }
-    @Test
-    void aPumpMovesThePowerButNotTheBase() {
+    /** Grizzly Bears primed, then changed by {@code change}: the one event the diff names, a PT change. */
+    private static EffectEvent theOnePtChangeAfter(java.util.function.Consumer<Card> change) {
         Card bears = TestCards.build("Grizzly Bears");
         StatDiffer differ = new StatDiffer();
         differ.prime(bears);
-        bears.addPTBoost(2, 2, 1L, 0L);
+        change.accept(bears);
 
         List<EffectEvent> events = differ.diff(bears);
 
         assertEquals(1, events.size());
         assertEquals(EventType.PT_CHANGE, events.get(0).type());
-        assertEquals(Map.of("power_delta", 2, "toughness_delta", 2), events.get(0).params());
+        return events.get(0);
+    }
+
+    @Test
+    void aPumpMovesThePowerButNotTheBase() {
+        EffectEvent event = theOnePtChangeAfter(bears -> bears.addPTBoost(2, 2, 1L, 0L));
+
+        assertEquals(Map.of("power_delta", 2, "toughness_delta", 2), event.params());
     }
 
     /**
@@ -85,18 +92,11 @@ class StatDifferTest {
      */
     @Test
     void aSettingEffectNamesTheBaseItSet() {
-        Card bears = TestCards.build("Grizzly Bears");
-        StatDiffer differ = new StatDiffer();
-        differ.prime(bears);
-        bears.addNewPT(5, 5, 1L, 0L);
+        EffectEvent event = theOnePtChangeAfter(bears -> bears.addNewPT(5, 5, 1L, 0L));
 
-        List<EffectEvent> events = differ.diff(bears);
-
-        assertEquals(1, events.size());
-        assertEquals(EventType.PT_CHANGE, events.get(0).type());
         assertEquals(
                 Map.of("power_delta", 3, "toughness_delta", 3, "set_pt", List.of(5, 5)),
-                events.get(0).params());
+                event.params());
     }
 
     /** A new base and a boost that cancel out still moved the base. */

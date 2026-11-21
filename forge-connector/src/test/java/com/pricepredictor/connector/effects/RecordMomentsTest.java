@@ -144,42 +144,85 @@ class RecordMomentsTest {
         });
 
         String cost = only(all, "activation", BOLT);
-        assertFalse(payload(cost).containsKey("outcome"), cost);
-        assertEquals("hand", entity(cost, ref(bolt)).get("zone"), cost);
+        assertBoltCostHalfBoard(new Half(cost), bolt);
         assertEquals(false, entity(cost, ref(mountain)).get("tapped"), cost);
-        List<Map<String, Object>> castEvents = events(cost);
-        assertEquals(1, castEvents.size(), cost);
-        assertTrue(carries(castEvents.get(0), zoneChange(ref(bolt), "hand", "stack")), cost);
-        assertEquals(Map.of("R", 1L),
-                asMap(payload(cost).get("costs")).get("mana_by_color"), cost);
+        assertBoltCostHalfEvents(new Half(cost), bolt);
 
         String effect = only(all, "resolution", BOLT);
-        assertEquals("resolved", payload(effect).get("outcome"), effect);
-        assertEquals(linkOf(cost), linkOf(effect));
-        assertEquals("stack", entity(effect, ref(bolt)).get("zone"), effect);
-        // The Bolt leaves the stack after its own events, and the Giant's
-        // death, the state-based consequence the half holds, comes after:
-        // destroyed, then its move.
-        assertEquals(List.of("damage_dealt", "zone_change", "destroyed", "zone_change"),
-                eventTypes(effect), effect);
-        List<Map<String, Object>> resolved = events(effect);
-        assertTrue(carries(resolved.get(1), zoneChange(ref(bolt), "stack", "graveyard")), effect);
-        assertEquals(List.of(ref(giant)), resolved.get(2).get("subjects"), effect);
-        assertTrue(carries(resolved.get(3), zoneChange(ref(giant), "battlefield", "graveyard")),
-                effect);
+        assertBoltEffectHalfBoard(new Half(cost), new Half(effect), bolt);
+        assertBoltLeavesTheStack(new Half(effect), bolt);
+        assertGiantDies(new Half(effect), giant);
 
         List<String> manaRecords = records(all, "resolution").stream()
                 .filter(r -> linkOf(r) == null && eventTypes(r).contains("mana_produced"))
                 .toList();
         assertEquals(1, manaRecords.size(), all.toString());
         String mana = manaRecords.get(0);
-        assertNull(linkOf(mana), mana);
-        assertEquals(false, entity(mana, ref(mountain)).get("tapped"), mana);
+        assertManaRecordBoard(new Half(mana), mountain);
         assertEquals(0L, asMap(player(mana, "P" + caster.getId()).get("floating_mana")).get("R"),
                 mana);
+        assertManaRecordEvents(new Half(mana), mountain);
+        assertNull(payload(mana).get("outcome"), mana);
+    }
+
+    /** One written record line, a half of a resolution or a mana record. */
+    private record Half(String line) {
+    }
+
+    private static void assertBoltCostHalfBoard(Half half, Card bolt) {
+        String cost = half.line();
+        assertFalse(payload(cost).containsKey("outcome"), cost);
+        assertEquals("hand", entity(cost, ref(bolt)).get("zone"), cost);
+    }
+
+    private static void assertBoltCostHalfEvents(Half half, Card bolt) {
+        String cost = half.line();
+        List<Map<String, Object>> castEvents = events(cost);
+        assertEquals(1, castEvents.size(), cost);
+        assertTrue(carries(castEvents.get(0), zoneChange(ref(bolt), "hand", "stack")), cost);
+        assertEquals(Map.of("R", 1L),
+                asMap(payload(cost).get("costs")).get("mana_by_color"), cost);
+    }
+
+    private static void assertBoltEffectHalfBoard(Half costHalf, Half effectHalf, Card bolt) {
+        String cost = costHalf.line();
+        String effect = effectHalf.line();
+        assertEquals("resolved", payload(effect).get("outcome"), effect);
+        assertEquals(linkOf(cost), linkOf(effect));
+        assertEquals("stack", entity(effect, ref(bolt)).get("zone"), effect);
+    }
+
+    /**
+     * The Bolt leaves the stack after its own events, and the Giant's
+     * death, the state-based consequence the half holds, comes after:
+     * destroyed, then its move.
+     */
+    private static void assertBoltLeavesTheStack(Half half, Card bolt) {
+        String effect = half.line();
+        assertEquals(List.of("damage_dealt", "zone_change", "destroyed", "zone_change"),
+                eventTypes(effect), effect);
+        assertTrue(carries(events(effect).get(1), zoneChange(ref(bolt), "stack", "graveyard")),
+                effect);
+    }
+
+    private static void assertGiantDies(Half half, Card giant) {
+        String effect = half.line();
+        List<Map<String, Object>> resolved = events(effect);
+        assertEquals(List.of(ref(giant)), resolved.get(2).get("subjects"), effect);
+        assertTrue(carries(resolved.get(3), zoneChange(ref(giant), "battlefield", "graveyard")),
+                effect);
+    }
+
+    private static void assertManaRecordBoard(Half half, Card mountain) {
+        String mana = half.line();
+        assertNull(linkOf(mana), mana);
+        assertEquals(false, entity(mana, ref(mountain)).get("tapped"), mana);
+    }
+
+    private static void assertManaRecordEvents(Half half, Card mountain) {
+        String mana = half.line();
         assertEquals(List.of("tapped", "mana_produced"), eventTypes(mana), mana);
         assertEquals(List.of(ref(mountain)), events(mana).get(0).get("subjects"), mana);
-        assertNull(payload(mana).get("outcome"), mana);
     }
 
     /**
@@ -279,11 +322,21 @@ class RecordMomentsTest {
 
         String cost = only(all, "activation", BOLT);
         String effect = only(all, "resolution", BOLT);
+        assertFizzledWithOneEvent(new Half(effect));
+        assertMovedToTheGraveyard(new Half(effect));
+        assertEquals(linkOf(cost), linkOf(effect));
+    }
+
+    private static void assertFizzledWithOneEvent(Half half) {
+        String effect = half.line();
         assertEquals("fizzled", payload(effect).get("outcome"), effect);
         assertEquals(1, events(effect).size(), effect);
+    }
+
+    private static void assertMovedToTheGraveyard(Half half) {
+        String effect = half.line();
         assertEquals("zone_change", events(effect).get(0).get("type"), effect);
         assertEquals("graveyard", params(events(effect).get(0)).get("to_zone"), effect);
-        assertEquals(linkOf(cost), linkOf(effect));
     }
 
     /**
@@ -566,11 +619,16 @@ class RecordMomentsTest {
         });
 
         String trigger = only(all, "resolution", STORMCALLER, "trigger");
-        assertEquals(List.of("delayed_trigger_created"), eventTypes(trigger), trigger);
-        assertEquals("resolved", payload(trigger).get("outcome"), trigger);
+        assertDelayedTriggerRoot(new Half(trigger));
         assertNull(linkOf(trigger), trigger);
         assertEquals(1, through(all, "activation", STORMCALLER).size(),
                 "the creature spell's cost half alone: " + all);
+    }
+
+    private static void assertDelayedTriggerRoot(Half half) {
+        String trigger = half.line();
+        assertEquals(List.of("delayed_trigger_created"), eventTypes(trigger), trigger);
+        assertEquals("resolved", payload(trigger).get("outcome"), trigger);
     }
 
     /** A controller that declines every optional trigger, telling the confirm hook as the AI does. */

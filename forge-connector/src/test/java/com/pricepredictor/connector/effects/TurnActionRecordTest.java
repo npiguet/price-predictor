@@ -67,9 +67,9 @@ class TurnActionRecordTest {
         return matching.get(0);
     }
 
-    private static void giveCards(Game game, Player owner, ZoneType zone, String name, int count) {
+    private static void giveCrawWurms(Game game, Player owner, ZoneType zone, int count) {
         for (int i = 0; i < count; i++) {
-            game.getAction().moveTo(zone, TestBoard.card(game, owner, name), null, null);
+            game.getAction().moveTo(zone, TestBoard.card(game, owner, "Craw Wurm"), null, null);
         }
     }
 
@@ -93,9 +93,9 @@ class TurnActionRecordTest {
         game.getPhaseHandler().devModeSet(PhaseType.END_OF_TURN, ending, 1);
         game.setAge(GameStage.Play);
 
-        giveCards(game, ending, ZoneType.Hand, "Craw Wurm", 8);
-        giveCards(game, ending, ZoneType.Library, "Craw Wurm", 2);
-        giveCards(game, next, ZoneType.Library, "Craw Wurm", 2);
+        giveCrawWurms(game, ending, ZoneType.Hand, 8);
+        giveCrawWurms(game, ending, ZoneType.Library, 2);
+        giveCrawWurms(game, next, ZoneType.Library, 2);
         Card forest = TestBoard.inPlay(game, next, "Forest");
         forest.setTapped(true);
         Card breezekeeper = TestBoard.inPlay(game, next, "Breezekeeper");
@@ -168,7 +168,7 @@ class TurnActionRecordTest {
     void theWindowClosesAtTheNextPriority() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
         Player active = game.getPlayers().get(0);
-        giveCards(game, active, ZoneType.Library, "Craw Wurm", 3);
+        giveCrawWurms(game, active, ZoneType.Library, 3);
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             TestBoard.enterStep(game, PhaseType.DRAW);
@@ -193,7 +193,7 @@ class TurnActionRecordTest {
     void aStepWhoseActionCannotHappenWritesNothing() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.END_OF_TURN);
         Player active = game.getPlayers().get(0);
-        giveCards(game, active, ZoneType.Hand, "Craw Wurm", 7);
+        giveCrawWurms(game, active, ZoneType.Hand, 7);
 
         // Nothing at all is written, so there is no shard to read.
         assertThrows(NoSuchFileException.class, () -> ShardRun.observed(tempDir, game, collector -> {

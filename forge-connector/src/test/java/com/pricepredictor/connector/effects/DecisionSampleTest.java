@@ -35,6 +35,42 @@ class DecisionSampleTest {
     private static final Method ON_PRIORITY_SETTLED =
             HookShapes.method(HookShapes.PrioritySettled.class, "onPrioritySettled");
 
+    private static Game mainPhase() {
+        return TestBoard.twoPlayerGame(PhaseType.MAIN1);
+    }
+
+    private static Player first(Game game) {
+        return game.getPlayers().get(0);
+    }
+
+    private static Player second(Game game) {
+        return game.getPlayers().get(1);
+    }
+
+    /** Two Forests in play and Grizzly Bears in hand, all {@code player}'s. */
+    private static Card twoForestsAndBearsInHand(Game game, Player player) {
+        TestBoard.inPlay(game, player, "Forest");
+        TestBoard.inPlay(game, player, "Forest");
+        return TestBoard.inHand(game, player, "Grizzly Bears");
+    }
+
+    private static void assertChecksAndSample(
+            DecisionCandidate read, List<PlayabilityCheck> expected, DecisionSample sample) {
+        assertEquals(expected, checks(read));
+        assertEquals(sample, read.sample());
+    }
+
+    private static void assertCheckAndSample(
+            DecisionCandidate read, PlayabilityCheck check, DecisionSample sample) {
+        assertTrue(checks(read).contains(check), checks(read).toString());
+        assertEquals(sample, read.sample());
+    }
+
+    private static void assertPlayableAndSample(DecisionCandidate read, DecisionSample sample) {
+        assertTrue(read.verdict().playable());
+        assertEquals(sample, read.sample());
+    }
+
     /** The candidates of {@code player} on {@code card}. */
     private static List<PriorityCandidates.Candidate> on(Game game, Player player, Card card) {
         return PriorityCandidates.candidatesOf(game, player).stream()
@@ -64,71 +100,64 @@ class DecisionSampleTest {
     /** A permanent's own cast, on the battlefield: the bulk of every stop. */
     @Test
     void aPermanentsOwnCastIsAZoneCandidate() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
 
         DecisionCandidate read = onlyRead(game, a, bears);
 
-        assertTrue(checks(read).contains(PlayabilityCheck.ZONE), checks(read).toString());
-        assertEquals(DecisionSample.ZONE, read.sample());
+        assertCheckAndSample(read, PlayabilityCheck.ZONE, DecisionSample.ZONE);
     }
 
     /** A creature in hand without the mana: its usual zone, failing only cost. */
     @Test
     void aSpellInHandFailingOnlyCostIsPlain() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card bears = TestBoard.inHand(game, a, "Grizzly Bears");
 
         DecisionCandidate read = onlyRead(game, a, bears);
 
-        assertEquals(List.of(PlayabilityCheck.COST), checks(read));
-        assertEquals(DecisionSample.PLAIN, read.sample());
+        assertChecksAndSample(read, List.of(PlayabilityCheck.COST), DecisionSample.PLAIN);
     }
 
     /** A sorcery on the other player's turn: timing is bulk. */
     @Test
     void aSorceryOffTurnIsPlain() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player b = second(game);
         Card divination = TestBoard.inHand(game, b, "Divination");
 
         DecisionCandidate read = onlyRead(game, b, divination);
 
-        assertTrue(checks(read).contains(PlayabilityCheck.CASTING_SPEED), checks(read).toString());
-        assertEquals(DecisionSample.PLAIN, read.sample());
+        assertCheckAndSample(read, PlayabilityCheck.CASTING_SPEED, DecisionSample.PLAIN);
     }
 
     /** A playable spell from the hand is plain too. */
     @Test
     void aPlayableSpellInHandIsPlain() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inPlay(game, a, "Forest");
-        Card bears = TestBoard.inHand(game, a, "Grizzly Bears");
+        Game game = mainPhase();
+        Player a = first(game);
+        Card bears = twoForestsAndBearsInHand(game, a);
 
         DecisionCandidate read = onlyRead(game, a, bears);
 
-        assertTrue(read.verdict().playable());
-        assertEquals(DecisionSample.PLAIN, read.sample());
+        assertPlayableAndSample(read, DecisionSample.PLAIN);
     }
 
     /** A static prohibition is special. */
     @Test
     void aSpellAStaticForbidsIsSpecial() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player a = first(game);
+        Player b = second(game);
         TestBoard.inPlay(game, a, "Grand Abolisher");
         TestBoard.inPlay(game, b, "Mountain");
         Card bolt = TestBoard.inHand(game, b, "Lightning Bolt");
 
         DecisionCandidate read = onlyRead(game, b, bolt);
 
-        assertEquals(List.of(PlayabilityCheck.STATIC_PROHIBITION), checks(read));
-        assertEquals(DecisionSample.SPECIAL, read.sample());
+        assertChecksAndSample(read, List.of(PlayabilityCheck.STATIC_PROHIBITION), DecisionSample.SPECIAL);
     }
 
     /**
@@ -137,8 +166,8 @@ class DecisionSampleTest {
      */
     @Test
     void aFlashbackFromTheGraveyardIsSpecialAndItsOrdinaryCastIsAZoneCandidate() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card thinkTwice = TestBoard.inGraveyard(game, a, "Think Twice");
 
         DecisionCandidate flashback =
@@ -158,12 +187,10 @@ class DecisionSampleTest {
      */
     @Test
     void aSpellWithFlashOnlyFromAStaticIsSpecial() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player b = second(game);
         TestBoard.inPlay(game, b, "Leyline of Anticipation");
-        TestBoard.inPlay(game, b, "Forest");
-        TestBoard.inPlay(game, b, "Forest");
-        Card bears = TestBoard.inHand(game, b, "Grizzly Bears");
+        Card bears = twoForestsAndBearsInHand(game, b);
 
         DecisionCandidate read = onlyRead(game, b, bears);
 
@@ -174,11 +201,9 @@ class DecisionSampleTest {
     /** Without the Leyline the same creature is plain: timing fails, which is bulk. */
     @Test
     void theSameSpellWithoutTheStaticIsPlain() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player b = game.getPlayers().get(1);
-        TestBoard.inPlay(game, b, "Forest");
-        TestBoard.inPlay(game, b, "Forest");
-        Card bears = TestBoard.inHand(game, b, "Grizzly Bears");
+        Game game = mainPhase();
+        Player b = second(game);
+        Card bears = twoForestsAndBearsInHand(game, b);
 
         DecisionCandidate read = onlyRead(game, b, bears);
 
@@ -189,8 +214,8 @@ class DecisionSampleTest {
     /** Cycling: an activated ability from the hand, outside its usual zone. */
     @Test
     void anActivatedAbilityFromTheHandIsSpecial() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card angel = TestBoard.inHand(game, a, "Angel of the God-Pharaoh");
 
         DecisionCandidate cycling = read(game, a, angel, sa -> !sa.isSpell());
@@ -203,56 +228,51 @@ class DecisionSampleTest {
 
     @Test
     void aLandInHandOnItsOwnersTurnIsPlain() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card forest = TestBoard.inHand(game, a, "Forest");
 
         DecisionCandidate read = onlyRead(game, a, forest);
 
         assertTrue(read.landPlay());
-        assertTrue(read.verdict().playable());
-        assertEquals(DecisionSample.PLAIN, read.sample());
+        assertPlayableAndSample(read, DecisionSample.PLAIN);
     }
 
     /** Rule 305.3 is a land's timing: off turn it fails whose_turn and casting_speed, and is bulk. */
     @Test
     void aLandOffTurnIsPlain() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player b = second(game);
         Card forest = TestBoard.inHand(game, b, "Forest");
 
         DecisionCandidate read = onlyRead(game, b, forest);
 
-        assertEquals(List.of(PlayabilityCheck.CASTING_SPEED, PlayabilityCheck.WHOSE_TURN),
-                checks(read));
-        assertEquals(DecisionSample.PLAIN, read.sample());
+        assertChecksAndSample(read, List.of(PlayabilityCheck.CASTING_SPEED, PlayabilityCheck.WHOSE_TURN), DecisionSample.PLAIN);
     }
 
     /** A second land in one turn fails the land-play limit, which is special. */
     @Test
     void aLandPastTheLimitIsSpecial() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         a.playLand(TestBoard.inHand(game, a, "Forest"), null);
         Card second = TestBoard.inHand(game, a, "Forest");
 
         DecisionCandidate read = onlyRead(game, a, second);
 
-        assertEquals(List.of(PlayabilityCheck.LAND_PLAY_LIMIT), checks(read));
-        assertEquals(DecisionSample.SPECIAL, read.sample());
+        assertChecksAndSample(read, List.of(PlayabilityCheck.LAND_PLAY_LIMIT), DecisionSample.SPECIAL);
     }
 
     @Test
     void aLandOnTheBattlefieldIsAZoneCandidate() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card forest = TestBoard.inPlay(game, a, "Forest");
 
         DecisionCandidate read = onlyRead(game, a, forest);
 
         assertTrue(read.landPlay());
-        assertEquals(List.of(PlayabilityCheck.ZONE), checks(read));
-        assertEquals(DecisionSample.ZONE, read.sample());
+        assertChecksAndSample(read, List.of(PlayabilityCheck.ZONE), DecisionSample.ZONE);
     }
 
     /**
@@ -261,23 +281,21 @@ class DecisionSampleTest {
      */
     @Test
     void aLandOnTheBattlefieldPastTheLimitIsStillAZoneCandidate() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         Card forest = a.playLand(TestBoard.inHand(game, a, "Forest"), null);
 
         DecisionCandidate read = onlyRead(game, a, forest);
 
-        assertEquals(List.of(PlayabilityCheck.LAND_PLAY_LIMIT, PlayabilityCheck.ZONE),
-                checks(read));
-        assertEquals(DecisionSample.ZONE, read.sample());
+        assertChecksAndSample(read, List.of(PlayabilityCheck.LAND_PLAY_LIMIT, PlayabilityCheck.ZONE), DecisionSample.ZONE);
     }
 
     /** Another player's permanent's ability fails the activator check: a zone candidate. */
     @Test
     void anotherPlayersAbilityIsAZoneCandidate() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player a = first(game);
+        Player b = second(game);
         Card sorcerer = TestBoard.inPlay(game, b, "Prodigal Sorcerer");
 
         DecisionCandidate ping = read(game, a, sorcerer, sa -> !sa.isSpell());
@@ -292,9 +310,9 @@ class DecisionSampleTest {
     /** A static prohibition stays special beside a failed zone. */
     @Test
     void aStaticProhibitionBesideAFailedZoneIsSpecial() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player a = first(game);
+        Player b = second(game);
         TestBoard.inPlay(game, a, "Grand Abolisher");
         Card bears = TestBoard.inPlay(game, b, "Grizzly Bears");
 
@@ -308,8 +326,8 @@ class DecisionSampleTest {
     /** Crucible of Worlds permits a land from the graveyard: a may-play static, special. */
     @Test
     void aLandAStaticLetsBePlayedFromTheGraveyardIsSpecial() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
+        Game game = mainPhase();
+        Player a = first(game);
         TestBoard.inPlay(game, a, "Crucible of Worlds");
         Card forest = TestBoard.inGraveyard(game, a, "Forest");
         game.getAction().checkStaticAbilities();
@@ -326,7 +344,7 @@ class DecisionSampleTest {
 
     /** How many of {@code trials} candidates of {@code bucket} both stages keep. */
     private int written(CollectionCaps caps, DecisionSample bucket, int trials) throws Throwable {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Game game = mainPhase();
         int[] kept = {0};
         ShardRun.shardOf(tempDir.resolve(bucket.name() + caps.hashCode()), game, caps,
                 (bracket, collectors) -> {
@@ -384,13 +402,13 @@ class DecisionSampleTest {
         int trials = 2_000;
         StringBuilder stageOneOnly = new StringBuilder();
         StringBuilder bothStages = new StringBuilder();
-        ShardRun.shardOf(tempDir.resolve("one"), TestBoard.twoPlayerGame(PhaseType.MAIN1), rates,
+        ShardRun.shardOf(tempDir.resolve("one"), mainPhase(), rates,
                 (bracket, collectors) -> {
                     for (int i = 0; i < trials; i++) {
                         stageOneOnly.append(collectors.playability().sampled() ? '1' : '0');
                     }
                 });
-        ShardRun.shardOf(tempDir.resolve("two"), TestBoard.twoPlayerGame(PhaseType.MAIN1), rates,
+        ShardRun.shardOf(tempDir.resolve("two"), mainPhase(), rates,
                 (bracket, collectors) -> {
                     PlayabilityChannel channel = collectors.playability();
                     for (int i = 0; i < trials; i++) {
@@ -419,7 +437,7 @@ class DecisionSampleTest {
     @SuppressWarnings("unchecked")
     private List<Set<String>> writtenChecks(String run, Game game, CollectionCaps caps)
             throws Throwable {
-        Player a = game.getPlayers().get(0);
+        Player a = first(game);
         List<String> records = ShardRun.records(tempDir.resolve(run), game, caps,
                 (bracket, collectors) -> collectors.phase().prioritySettledHandler().invoke(
                         null, ON_PRIORITY_SETTLED, new Object[]{game, a}));
@@ -440,9 +458,9 @@ class DecisionSampleTest {
      * Grand Abolisher forbids.
      */
     private static Game aBoardWithEachBucket() {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Player a = game.getPlayers().get(0);
-        Player b = game.getPlayers().get(1);
+        Game game = mainPhase();
+        Player a = first(game);
+        Player b = second(game);
         TestBoard.inHand(game, a, "Grizzly Bears");
         TestBoard.inPlay(game, a, "Grand Abolisher");
         TestBoard.inHand(game, b, "Lightning Bolt");

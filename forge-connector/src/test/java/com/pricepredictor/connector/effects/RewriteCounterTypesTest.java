@@ -95,10 +95,8 @@ class RewriteCounterTypesTest {
     @Test
     void aReplacementRemovingATypeWritesItsRecordWithNoneLeft() throws Throwable {
         Game game = game();
-        TestBoard.inPlay(game, you(game), "Vizier of Remedies");
-        Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
-        List<String> records = played(game, () -> putCounters(game, bears, you(game),
-                CounterType.getType("P1P1"), CounterType.getType("M1M1")));
+        List<String> records = countersOnBears(
+                game, "Vizier of Remedies", CounterType.getType("P1P1"), CounterType.getType("M1M1"));
 
         List<String> rewrites = rewrites(records, "cardsfolder/v/vizier_of_remedies.txt");
         assertEquals(1, rewrites.size(), rewrites.toString());
@@ -111,10 +109,8 @@ class RewriteCounterTypesTest {
     @Test
     void aSingleTypeMapWritesOneTypedRecord() throws Throwable {
         Game game = game();
-        TestBoard.inPlay(game, you(game), "Hardened Scales");
-        Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
-        List<String> records = played(game, () -> putCounters(game, bears, you(game),
-                CounterType.getType("P1P1"), CounterType.getType("P1P1")));
+        List<String> records = countersOnBears(
+                game, "Hardened Scales", CounterType.getType("P1P1"), CounterType.getType("P1P1"));
 
         List<String> rewrites = rewrites(records, "cardsfolder/h/hardened_scales.txt");
         assertEquals(1, rewrites.size(), rewrites.toString());
@@ -199,6 +195,14 @@ class RewriteCounterTypesTest {
         SpellAbility powerUp = TestBoard.ability(marvel, ApiType.PutCounter);
         powerUp.setActivatingPlayer(you(game));
         TestBoard.castAndResolve(game, powerUp);
+    }
+
+    /** The replacement card and Grizzly Bears in play, then one counter of each type put on the bears. */
+    private List<String> countersOnBears(
+            Game game, String replacement, CounterType first, CounterType second) throws Throwable {
+        TestBoard.inPlay(game, you(game), replacement);
+        Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+        return played(game, () -> putCounters(game, bears, you(game), first, second));
     }
 
     /** One counter of each type (a type twice is two) put at once, with no effect as cause. */
