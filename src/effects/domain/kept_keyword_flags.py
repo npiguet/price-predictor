@@ -19,7 +19,7 @@ KEPT_KEYWORD_FLAGS: tuple[str, ...] = (
     "convoke",  # scripts 3, engine 1
     "cumulative_upkeep",  # scripts 1, engine 0
     "cycling",  # scripts 10, engine 0
-    "deathtouch",  # scripts 18, engine 3
+    "deathtouch",  # scripts 18, engine 4
     "decayed",  # scripts 2, engine 0
     "defender",  # scripts 40, engine 0
     "delve",  # scripts 0, engine 1
