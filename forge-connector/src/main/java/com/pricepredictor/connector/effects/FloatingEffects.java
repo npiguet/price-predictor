@@ -177,8 +177,9 @@ final class FloatingEffects {
     /** The refs of the cards carrying a resolved row, by the row's timestamp, oldest first. */
     private static Map<Long, Set<String>> affectedByTimestamp(Collection<Card> cards) {
         Map<Long, Set<String>> affectedByTimestamp = new TreeMap<>();
+        StaticTimestamps statics = new StaticTimestamps();
         for (Card card : cards) {
-            for (long timestamp : timestampsOfResolvedRows(card)) {
+            for (long timestamp : timestampsOfResolvedRows(card, statics)) {
                 affectedByTimestamp.computeIfAbsent(timestamp, t -> new LinkedHashSet<>())
                         .add(Refs.of(card));
             }
@@ -264,8 +265,11 @@ final class FloatingEffects {
      * The timestamps of the rows a resolving ability wrote on a card — static
      * id 0 — in every layer table that keys by timestamp: P/T set and boost,
      * keywords, granted traits, types, colours and names.
+     *
+     * @param statics the timestamps of the game's static effects, read once
+     *                for every card of one snapshot
      */
-    static Set<Long> timestampsOfResolvedRows(Card card) {
+    static Set<Long> timestampsOfResolvedRows(Card card, StaticTimestamps statics) {
         Set<Long> timestamps = new LinkedHashSet<>();
         addResolvedRows(timestamps, card.getSetPTTable());
         addResolvedRows(timestamps, card.getPTBoostTable());
@@ -281,7 +285,7 @@ final class FloatingEffects {
         // one too.
         addResolvedRows(timestamps, ForgeFields.hiddenExtrinsicKeywords(card));
         addResolvedRows(timestamps, ForgeFields.cantHaveKeywords(card));
-        addResolvedControl(timestamps, card);
+        addResolvedControl(timestamps, card, statics);
         return timestamps;
     }
 
@@ -290,16 +294,35 @@ final class FloatingEffects {
      * change under its timestamp alone, with no static id: a static's is
      * filed under the static's timestamp, which no clause note covers.
      */
-    private static void addResolvedControl(Set<Long> into, Card card) {
+    private static void addResolvedControl(Set<Long> into, Card card, StaticTimestamps statics) {
         Map<?, ?> controllers = ForgeFields.tempControllers(card);
         if (controllers == null) {
             return;
         }
-        Set<Long> statics = ForgeFields.staticEffectTimestamps(card.getGame());
+        Set<Long> ofStatics = statics.of(card.getGame());
         for (Object timestamp : controllers.keySet()) {
-            if (timestamp instanceof Long resolved && !statics.contains(resolved)) {
+            if (timestamp instanceof Long resolved && !ofStatics.contains(resolved)) {
                 into.add(resolved);
             }
+        }
+    }
+
+    /**
+     * The timestamps of the static effects a game applies, read when a card
+     * first needs them and kept for the snapshot's other cards: a snapshot
+     * changes no static effect between two of its cards. A card of another
+     * game reads its own.
+     */
+    static final class StaticTimestamps {
+        private Game game;
+        private Set<Long> timestamps;
+
+        Set<Long> of(Game of) {
+            if (timestamps == null || game != of) {
+                game = of;
+                timestamps = ForgeFields.staticEffectTimestamps(of);
+            }
+            return timestamps;
         }
     }
 
