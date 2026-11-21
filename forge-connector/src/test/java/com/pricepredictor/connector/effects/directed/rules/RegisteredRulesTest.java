@@ -37,7 +37,7 @@ class RegisteredRulesTest {
      * Every operation but {@code keyword} and {@code colour_type} is a
      * registered rule's: their rules (702.63c, 702.13b) were registered for
      * no listed run and left the registry. The protection forks edit through
-     * {@code keyword}, and {@code ForkOperationsTest} checks each operation's
+     * {@code keyword}, and the {@code ForkOperation*Test} classes check each operation's
      * one fact.
      */
     @Test
