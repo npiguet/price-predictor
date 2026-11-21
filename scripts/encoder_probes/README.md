@@ -21,7 +21,13 @@ and `resources/AllPrintings.json`.
 
 | script(s) | document section it feeds | output |
 |---|---|---|
-| `probe_lib.py` | shared harness: checkpoint load + bit-exact re-encode, label↔text↔embedding join and the card-table-merged frame every probe analyses, seed-42 split reconstruction, fidelity/honest ridge probes, placebo edits, manifold gate, equivalence classes, read-off of edited texts in label-SD units | — |
+| `probe_lib.py` | shared harness every probe imports: the card-table-merged frame every probe analyses, probe save/load and prediction, fidelity/honest ridge probes, read-off of edited texts in label-SD units and its paired contrasts, result writers; imports back every name of the `probe_*` modules below, so a probe reaches them all as `probe_lib.<name>` | — |
+| `probe_paths.py` | the harness's input and output locations (checkpoint, vocabulary, converted cards, AllPrintings, Forge hints, labels, `output/encoder-probes/`) | — |
+| `probe_join.py` | label↔text↔printings join: name → converted-file resolution, seed-42 split reconstruction, Forge hints, earliest printings, the cached join table | — |
+| `probe_encoder.py` | checkpoint load + bit-exact re-encode (`EncoderRunner`), the converted-text reader | — |
+| `probe_embeddings.py` | the cached `.npz` text vectors: per-card matrix, corpus cloud, manifold gate | — |
+| `probe_classes.py` | functional-reprint equivalence classes and their label variance decomposition | — |
+| `probe_placebo.py` | placebo edits and the corpus subtype frequencies they draw on | — |
 | `c_common.py` | converted-card text surgery and the keyword/tribe vocabularies the C battery edits | — |
 | `s_common.py` | CPU-only helpers of the `s_*` scripts: the `ProbeFrame` (frame, embeddings, both probe sets and their predictions), the AI-hostile classes and their matched deficit, neighbour search, the nameable feature table | — |
 | `p0_build.py` | builds/caches everything the harness serves; validation tables | `p0_report.md`, `join_table.pkl`, `probes_*.pkl`, `equivalence_classes.json` |
