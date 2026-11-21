@@ -139,42 +139,48 @@ class UnpaidCostRefusalTest {
         assertTrue(fork.wrote(), "the forced line resolved and was written: " + ForkRefusals.counts());
     }
 
+    /** A started game whose first player holds a vehicle or mount and a Hill Giant to pay for it. */
+    private record MountBoard(Game game, Player holder, Card mount, Card giant) {
+        static MountBoard with(String mountName) {
+            Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+            Player holder = game.getPlayers().get(0);
+            Card mount = TestBoard.inPlay(game, holder, mountName);
+            Card giant = TestBoard.inPlay(game, holder, "Hill Giant");
+            return new MountBoard(game, holder, mount, giant);
+        }
+    }
+
+    /** Assert {@code line} reads no unpaid cost ({@code why}), then force it without refusal. */
+    private void forcedAsNoUnpaidCostRead(Game game, SpellAbility line, String why) {
+        assertFalse(InterventionFork.readsAnUnpaidCost(line), why);
+        forcedWithoutRefusal(game, line);
+    }
+
     @Test
     void aNeverCrewedVehiclesCrewIsForced() {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player holder = game.getPlayers().get(0);
-        Card copter = TestBoard.inPlay(game, holder, "Smuggler's Copter");
-        TestBoard.inPlay(game, holder, "Hill Giant");
-        SpellAbility crew = lineOf(copter, holder, SpellAbility::isCrew);
+        MountBoard board = MountBoard.with("Smuggler's Copter");
+        SpellAbility crew = lineOf(board.mount(), board.holder(), SpellAbility::isCrew);
 
-        assertFalse(InterventionFork.readsAnUnpaidCost(crew), "a vehicle not crewed this turn holds no crew list");
-        forcedWithoutRefusal(game, crew);
+        forcedAsNoUnpaidCostRead(board.game(), crew, "a vehicle not crewed this turn holds no crew list");
     }
 
     @Test
     void aVehicleCrewedThisTurnIsCrewedAgain() {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player holder = game.getPlayers().get(0);
-        Card copter = TestBoard.inPlay(game, holder, "Smuggler's Copter");
-        Card giant = TestBoard.inPlay(game, holder, "Hill Giant");
-        copter.addCrewedByThisTurn(new forge.game.card.CardCollection(giant));
-        SpellAbility crew = lineOf(copter, holder, SpellAbility::isCrew);
+        MountBoard board = MountBoard.with("Smuggler's Copter");
+        board.mount().addCrewedByThisTurn(new forge.game.card.CardCollection(board.giant()));
+        SpellAbility crew = lineOf(board.mount(), board.holder(), SpellAbility::isCrew);
 
-        assertFalse(InterventionFork.readsAnUnpaidCost(crew), "a second crew adds a null paid list as nothing");
-        forcedWithoutRefusal(game, crew);
+        forcedAsNoUnpaidCostRead(board.game(), crew, "a second crew adds a null paid list as nothing");
     }
 
     @Test
     void aMountSaddledThisTurnIsSaddledAgain() {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player holder = game.getPlayers().get(0);
-        Card jaguar = TestBoard.inPlay(game, holder, "Alacrian Jaguar");
-        Card giant = TestBoard.inPlay(game, holder, "Hill Giant");
-        jaguar.setSaddled(true);
-        jaguar.addSaddledByThisTurn(new forge.game.card.CardCollection(giant));
-        SpellAbility saddle = lineOf(jaguar, holder, line -> line.isKeyword(forge.game.keyword.Keyword.SADDLE));
+        MountBoard board = MountBoard.with("Alacrian Jaguar");
+        board.mount().setSaddled(true);
+        board.mount().addSaddledByThisTurn(new forge.game.card.CardCollection(board.giant()));
+        SpellAbility saddle = lineOf(board.mount(), board.holder(),
+                line -> line.isKeyword(forge.game.keyword.Keyword.SADDLE));
 
-        assertFalse(InterventionFork.readsAnUnpaidCost(saddle), "a second saddle adds a null paid list as nothing");
-        forcedWithoutRefusal(game, saddle);
+        forcedAsNoUnpaidCostRead(board.game(), saddle, "a second saddle adds a null paid list as nothing");
     }
 }
