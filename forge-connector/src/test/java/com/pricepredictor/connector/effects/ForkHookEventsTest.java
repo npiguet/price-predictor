@@ -197,11 +197,7 @@ class ForkHookEventsTest {
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
                 tempDir, game, caps, 1L, destroy, "to read the resolution hook's fizzle");
 
-        assertTrue(fork.wrote(), "the fizzled forced ability wrote nothing");
-        List<String> records = fork.records();
-        assertEquals(1, records.size(), records.toString());
-        assertEquals("fizzled", RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
-        assertEquals(List.of(), events(records.get(0)), payloadOf(records.get(0)));
+        assertEmptyHalfWritten(fork, "fizzled", "the fizzled forced ability wrote nothing");
     }
 
     /**
@@ -222,10 +218,16 @@ class ForkHookEventsTest {
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
                 tempDir, game, caps, 1L, exile, "to read the resolution hook");
 
-        assertTrue(fork.wrote(), "the forced ability that did nothing wrote nothing");
+        assertEmptyHalfWritten(fork, "resolved", "the forced ability that did nothing wrote nothing");
+    }
+
+    /** The fork wrote ({@code wroteNothing} otherwise) one record, of {@code outcome}, holding no event. */
+    private static void assertEmptyHalfWritten(ShardRun.Fork fork, String outcome, String wroteNothing)
+            throws java.io.IOException {
+        assertTrue(fork.wrote(), wroteNothing);
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
-        assertEquals("resolved", RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
+        assertEquals(outcome, RecordLines.payload(records.get(0)).get("outcome"), payloadOf(records.get(0)));
         assertEquals(List.of(), events(records.get(0)), payloadOf(records.get(0)));
     }
 

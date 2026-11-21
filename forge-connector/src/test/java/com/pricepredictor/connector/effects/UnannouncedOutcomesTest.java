@@ -177,6 +177,52 @@ class UnannouncedOutcomesTest {
         return sa;
     }
 
+    /** The event exists, is of {@code type} and names {@code subjects}. */
+    private static void assertEventNaming(EffectEvent event, EventType type, List<?> subjects) {
+        assertNotNull(event);
+        assertEquals(type, event.type());
+        assertEquals(subjects, event.subjects());
+    }
+
+    /** The event exists and flags a Class level, with {@code level}. */
+    private static void assertClassLevelFlagged(EffectEvent event, int level) {
+        assertNotNull(event);
+        assertEquals("class_level", event.param(EventParam.FLAG));
+        assertEquals(level, event.param(EventParam.VALUE));
+    }
+
+    /** The animation's {@code ability_change} names {@code den} and the trigger it grants, granted not removed. */
+    private static void assertAnimationGrantingItsAttackTrigger(EffectEvent event, Card den) {
+        assertEventNaming(event, EventType.ABILITY_CHANGE, List.of(Refs.of(den)));
+        assertEquals("TrigAttack", event.param(EventParam.ABILITIES));
+        assertEquals(false, event.param(EventParam.REMOVED));
+    }
+
+    /** The event is {@code player}'s look at the library named for the search. */
+    private static void assertLibrarySearchedBy(EffectEvent event, Player player) {
+        assertEventNaming(event, EventType.CARD_LOOKED_AT, List.of(Refs.of(player)));
+        assertEquals("SearchedLibrary", event.param(EventParam.MODE));
+        assertEquals("library", event.param(EventParam.FROM_ZONE));
+    }
+
+    /** The event flags {@code made} as having entered combat attacking. */
+    private static void assertEnteredCombatAttacking(EffectEvent event, Card made) {
+        assertEventNaming(event, EventType.STATE_FLAG_CHANGE, List.of(Refs.of(made)));
+        assertEquals("entered_attacking", event.param(EventParam.FLAG));
+    }
+
+    /** The event says {@code attacker} became blocked, by exactly {@code blockers}. */
+    private static void assertBecameBlocked(EffectEvent event, Card attacker, List<?> blockers) {
+        assertEventNaming(event, EventType.BECAME_BLOCKED, List.of(Refs.of(attacker)));
+        assertEquals(blockers, event.param(EventParam.BLOCKERS));
+    }
+
+    /** The event flags {@code sorcerer}'s Class level, with the level it now holds. */
+    private static void assertClassLevelReached(EffectEvent event, Card sorcerer) {
+        assertClassLevelFlagged(event, sorcerer.getClassLevel());
+        assertEquals(List.of(Refs.of(sorcerer)), event.subjects());
+    }
+
     /**
      * Den of the Bugbear animates itself and grants a trigger: the event names
      * the card and the trigger, which {@code Triggers$} grants rather than
@@ -192,11 +238,7 @@ class UnannouncedOutcomesTest {
 
         EffectEvent event = TestCards.onlyEvent(observe(animate));
 
-        assertNotNull(event);
-        assertEquals(EventType.ABILITY_CHANGE, event.type());
-        assertEquals(List.of(Refs.of(den)), event.subjects());
-        assertEquals("TrigAttack", event.param(EventParam.ABILITIES));
-        assertEquals(false, event.param(EventParam.REMOVED));
+        assertAnimationGrantingItsAttackTrigger(event, den);
     }
 
     /** A search of one's own library is a look at it named for the search. */
@@ -212,11 +254,7 @@ class UnannouncedOutcomesTest {
         a.incLibrarySearched();
         EffectEvent event = TestCards.onlyEvent(observed);
 
-        assertNotNull(event);
-        assertEquals(EventType.CARD_LOOKED_AT, event.type());
-        assertEquals(List.of(Refs.of(a)), event.subjects());
-        assertEquals("SearchedLibrary", event.param(EventParam.MODE));
-        assertEquals("library", event.param(EventParam.FROM_ZONE));
+        assertLibrarySearchedBy(event, a);
     }
 
     /** A zone change that searched nothing and put nobody into combat says nothing. */
@@ -257,10 +295,7 @@ class UnannouncedOutcomesTest {
         combat.addAttacker(made, b);
         EffectEvent event = TestCards.onlyEvent(observed);
 
-        assertNotNull(event);
-        assertEquals(EventType.STATE_FLAG_CHANGE, event.type());
-        assertEquals("entered_attacking", event.param(EventParam.FLAG));
-        assertEquals(List.of(Refs.of(made)), event.subjects());
+        assertEnteredCombatAttacking(event, made);
     }
 
     /** An attacker a clause made blocked became blocked, by no blocker. */
@@ -282,10 +317,7 @@ class UnannouncedOutcomesTest {
         combat.setBlocked(attacker, true);
         EffectEvent event = TestCards.onlyEvent(observed);
 
-        assertNotNull(event);
-        assertEquals(EventType.BECAME_BLOCKED, event.type());
-        assertEquals(List.of(Refs.of(attacker)), event.subjects());
-        assertEquals(List.of(), event.param(EventParam.BLOCKERS));
+        assertBecameBlocked(event, attacker, List.of());
     }
 
     /** A clause making a creature block an attacker: the attacker became blocked, by it. */
@@ -309,10 +341,7 @@ class UnannouncedOutcomesTest {
         combat.setBlocked(attacker, true);
         EffectEvent event = TestCards.onlyEvent(observed);
 
-        assertNotNull(event);
-        assertEquals(EventType.BECAME_BLOCKED, event.type());
-        assertEquals(List.of(Refs.of(attacker)), event.subjects());
-        assertEquals(List.of(Refs.of(blocker)), event.param(EventParam.BLOCKERS));
+        assertBecameBlocked(event, attacker, List.of(Refs.of(blocker)));
     }
 
     @Test
@@ -327,10 +356,7 @@ class UnannouncedOutcomesTest {
         sorcerer.setClassLevel(sorcerer.getClassLevel() + 1);
         EffectEvent event = TestCards.onlyEvent(observed);
 
-        assertNotNull(event);
-        assertEquals("class_level", event.param(EventParam.FLAG));
-        assertEquals(sorcerer.getClassLevel(), event.param(EventParam.VALUE));
-        assertEquals(List.of(Refs.of(sorcerer)), event.subjects());
+        assertClassLevelReached(event, sorcerer);
     }
 
     @Test

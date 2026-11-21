@@ -41,20 +41,8 @@ class BusOutcomeEventsTest {
     /** Murder destroys Grizzly Bears: {@code destroyed}, then the bears' move. */
     @Test
     void aDestroySpellsHalfSaysThePermanentWasDestroyed() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
-        Card murder = TestBoard.inHand(game, caster, "Murder");
-
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            TestBoard.cast(game, murder, caster, bears);
-            game.getStack().resolveStack();
-            game.getAction().checkStateEffects(false);
-            TestBoard.nextStep(game);
-        });
-
-        String half = only(records, "resolution", "cardsfolder/m/murder.txt");
-        assertEquals(List.of("destroyed", "zone_change"), typesNaming(half, Refs.of(bears)), half);
+        assertBearsEventsOfSpell(List.of("destroyed", "zone_change"),
+                new BearsSpell("Murder", "cardsfolder/m/murder.txt", Target.BEARS));
     }
 
     /**
@@ -87,21 +75,8 @@ class BusOutcomeEventsTest {
     /** Cruel Edict: the opponent sacrifices its creature, {@code sacrificed} then the move. */
     @Test
     void aSacrificeSpellsHalfSaysThePermanentWasSacrificed() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
-        Card edict = TestBoard.inHand(game, caster, "Cruel Edict");
-
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            TestBoard.cast(game, edict, caster, opponent);
-            game.getStack().resolveStack();
-            game.getAction().checkStateEffects(false);
-            TestBoard.nextStep(game);
-        });
-
-        String half = only(records, "resolution", "cardsfolder/c/cruel_edict.txt");
-        assertEquals(List.of("sacrificed", "zone_change"), typesNaming(half, Refs.of(bears)), half);
+        assertBearsEventsOfSpell(List.of("sacrificed", "zone_change"),
+                new BearsSpell("Cruel Edict", "cardsfolder/c/cruel_edict.txt", Target.OPPONENT));
     }
 
     /**
@@ -177,21 +152,13 @@ class BusOutcomeEventsTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card door = TestBoard.inPlay(game, caster, "Door to Nothingness");
-        SpellAbility loses = TestBoard.ability(door, forge.game.ability.ApiType.LosesGame);
-        loses.setActivatingPlayer(caster);
+        SpellAbility loses = abilityOfPermanent(game, "Door to Nothingness",
+                forge.game.ability.ApiType.LosesGame);
         loses.resetTargets();
         loses.getTargets().add(opponent);
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            game.getStack().add(loses);
-            game.getStack().resolveStack();
-            assertTrue(game.isGameOver(), "the opponent lost");
-            game.fireEvent(new GameEventGameFinished());
-        });
-
-        String half = only(records, "resolution", "cardsfolder/d/door_to_nothingness.txt");
-        assertGameEndWrittenOnceIn(records, half, opponent, "SpellEffect", caster);
+        assertGameEndInResolutionHalf(resolveToTheGamesEnd(game, loses, "the opponent lost"),
+                "cardsfolder/d/door_to_nothingness.txt", new GameEnd(opponent, "SpellEffect", caster));
     }
 
     /**
@@ -203,19 +170,13 @@ class BusOutcomeEventsTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card fountain = TestBoard.inPlay(game, caster, "Halo Fountain");
-        SpellAbility wins = TestBoard.ability(fountain, forge.game.ability.ApiType.WinsGame);
-        wins.setActivatingPlayer(caster);
+        SpellAbility wins = abilityOfPermanent(game, "Halo Fountain",
+                forge.game.ability.ApiType.WinsGame);
 
-        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
-            game.getStack().add(wins);
-            game.getStack().resolveStack();
-            assertTrue(game.isGameOver(), "the caster won");
-            game.fireEvent(new GameEventGameFinished());
-        });
+        List<String> resolved = resolveToTheGamesEnd(game, wins, "the caster won");
 
-        String half = only(records, "resolution", "cardsfolder/h/halo_fountain.txt");
-        assertGameEndWrittenOnceIn(records, half, opponent, "OpponentWon", caster);
+        GameEnd end = new GameEnd(opponent, "OpponentWon", caster);
+        assertGameEndInResolutionHalf(resolved, "cardsfolder/h/halo_fountain.txt", end);
     }
 
     /**
@@ -256,17 +217,69 @@ class BusOutcomeEventsTest {
      * loser with {@code reason}, then one {@code player_won} naming the
      * winner, and no other record of the game writes either.
      */
-    private static void assertGameEndWrittenOnceIn(
-            List<String> records, String half, Player loser, String reason, Player winner) {
+    private static void assertGameEndWrittenOnceIn(List<String> records, String half, GameEnd end) {
         List<Map<String, Object>> told = events(half).stream()
                 .filter(event -> event.get("type").toString().startsWith("player_")).toList();
         assertEquals(List.of("player_lost", "player_won"),
                 told.stream().map(event -> event.get("type")).toList(), half);
-        assertEquals(List.of(Refs.of(loser)), told.get(0).get("subjects"), half);
-        assertEquals(reason, params(told.get(0)).get("reason"), half);
-        assertEquals(List.of(Refs.of(winner)), told.get(1).get("subjects"), half);
+        assertEquals(List.of(Refs.of(end.loser())), told.get(0).get("subjects"), half);
+        assertEquals(end.reason(), params(told.get(0)).get("reason"), half);
+        assertEquals(List.of(Refs.of(end.winner())), told.get(1).get("subjects"), half);
         assertEquals(List.of(half), withEventOfType(records, "player_lost"), records.toString());
         assertEquals(List.of(half), withEventOfType(records, "player_won"), records.toString());
+    }
+
+    /** What a spell at the opponent's Grizzly Bears aims at. */
+    private enum Target { BEARS, OPPONENT }
+
+    /** A spell cast at the opponent's Grizzly Bears or at the opponent, and the script of its resolution record. */
+    private record BearsSpell(String name, String script, Target target) {
+    }
+
+    /** Who lost, Forge's reason, and who won. */
+    private record GameEnd(Player loser, String reason, Player winner) {
+    }
+
+    /** The events of the spell's resolution record naming the bears are of {@code types}, in order. */
+    private void assertBearsEventsOfSpell(List<String> types, BearsSpell spell) throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        Card card = TestBoard.inHand(game, caster, spell.name());
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            TestBoard.cast(game, card, caster, spell.target() == Target.BEARS ? bears : opponent);
+            game.getStack().resolveStack();
+            game.getAction().checkStateEffects(false);
+            TestBoard.nextStep(game);
+        });
+
+        String half = only(records, "resolution", spell.script());
+        assertEquals(types, typesNaming(half, Refs.of(bears)), half);
+    }
+
+    /** The {@code api} ability of the named permanent the first player controls, that player activating it. */
+    private static SpellAbility abilityOfPermanent(Game game, String name, forge.game.ability.ApiType api) {
+        Player controller = game.getPlayers().get(0);
+        SpellAbility ability = TestBoard.ability(TestBoard.inPlay(game, controller, name), api);
+        ability.setActivatingPlayer(controller);
+        return ability;
+    }
+
+    /** The game's end is written once, in the resolution record of {@code script}. */
+    private static void assertGameEndInResolutionHalf(List<String> records, String script, GameEnd end) {
+        assertGameEndWrittenOnceIn(records, only(records, "resolution", script), end);
+    }
+
+    /** Resolves {@code ability} on the stack, asserts the game is over ({@code why}) and publishes its end. */
+    private List<String> resolveToTheGamesEnd(Game game, SpellAbility ability, String why) throws Throwable {
+        return ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().add(ability);
+            game.getStack().resolveStack();
+            assertTrue(game.isGameOver(), why);
+            game.fireEvent(new GameEventGameFinished());
+        });
     }
 
     /** The types of the record's events naming {@code ref}, in order. */

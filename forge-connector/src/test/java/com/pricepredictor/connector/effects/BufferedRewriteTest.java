@@ -113,15 +113,22 @@ class BufferedRewriteTest {
         lines.forEach(line -> assertEquals(true, rewrite(line).get("buffered_ran"), line));
     }
 
-    @Test
-    void aBufferedAbilityThatNeverRanSaysSo() throws Throwable {
+    /** A damage replacement naming a buffered draw that never runs, then the given bracket events. */
+    private List<String> unrunBufferedReplacementThen(List<EffectEvent> events) throws Throwable {
         ReplacementEffect prevention = replacementOfMode("DamageDone");
         Card target = TestCards.build("Grizzly Bears");
 
-        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.rewrites().handler().invoke(null, ON_REPLACEMENT, new Object[]{
-                        prevention, damage(target), damage(target), ReplacementResult.Prevented,
-                        null, draw()}));
+        return ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            collectors.rewrites().handler().invoke(null, ON_REPLACEMENT, new Object[]{
+                    prevention, damage(target), damage(target), ReplacementResult.Prevented,
+                    null, draw()});
+            events.forEach(bracket::recordClauseEvent);
+        });
+    }
+
+    @Test
+    void aBufferedAbilityThatNeverRanSaysSo() throws Throwable {
+        List<String> lines = unrunBufferedReplacementThen(List.of());
 
         assertEquals(1, lines.size(), "written at the game's end: " + lines);
         assertEquals(false, rewrite(lines.get(0)).get("buffered_ran"));
@@ -130,15 +137,7 @@ class BufferedRewriteTest {
 
     @Test
     void anEventOutsideARunStaysWithTheBracket() throws Throwable {
-        ReplacementEffect prevention = replacementOfMode("DamageDone");
-        Card target = TestCards.build("Grizzly Bears");
-
-        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            collectors.rewrites().handler().invoke(null, ON_REPLACEMENT, new Object[]{
-                    prevention, damage(target), damage(target), ReplacementResult.Prevented,
-                    null, draw()});
-            bracket.recordClauseEvent(drawn());
-        });
+        List<String> lines = unrunBufferedReplacementThen(List.of(drawn()));
 
         lines.stream().filter(line -> line.contains("\"kind\":\"rewrite\"")).forEach(line ->
                 assertEquals(List.of(), rewrite(line).get("buffered_events"), line));
