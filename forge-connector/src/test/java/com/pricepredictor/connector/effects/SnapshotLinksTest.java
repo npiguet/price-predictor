@@ -52,10 +52,10 @@ class SnapshotLinksTest {
         Card curse = board.battlefield("Curse of Death's Hold", board.you);
         curse.attachToEntity(board.opponent, null);
 
-        List<Map<String, Object>> links = links(board, "attached_to");
+        List<Map<String, Object>> links = links(board, LinkFamily.ATTACHED_TO);
 
-        assertTrue(has(links, Refs.of(pacifism), Refs.of(bears)), links.toString());
-        assertTrue(has(links, Refs.of(curse), Refs.of(board.opponent)), links.toString());
+        assertTrue(has(links, new Ends(Refs.of(pacifism), Refs.of(bears))), links.toString());
+        assertTrue(has(links, new Ends(Refs.of(curse), Refs.of(board.opponent))), links.toString());
         assertEquals(2, links.size(), links.toString());
     }
 
@@ -66,8 +66,8 @@ class SnapshotLinksTest {
         Card giant = TestBoard.inPlay(board.game, board.opponent, "Hill Giant");
         TestBoard.blockedCombat(board.game, board.you, board.opponent, bears, giant);
 
-        assertEquals(List.of(link(bears, board.opponent, "attacks")), links(board, "attacks"));
-        assertEquals(List.of(link(giant, bears, "blocks")), links(board, "blocks"));
+        assertEquals(List.of(link(bears, board.opponent, LinkFamily.ATTACKS)), links(board, LinkFamily.ATTACKS));
+        assertEquals(List.of(link(giant, bears, LinkFamily.BLOCKS)), links(board, LinkFamily.BLOCKS));
     }
 
     /** A band is one link per pair of its attackers, from the lower id. */
@@ -83,7 +83,7 @@ class SnapshotLinksTest {
         combat.addAttacker(alone, board.opponent);
         board.game.getPhaseHandler().setCombat(combat);
 
-        assertEquals(List.of(link(first, second, "in_band_with")), links(board, "in_band_with"));
+        assertEquals(List.of(link(first, second, LinkFamily.IN_BAND_WITH)), links(board, LinkFamily.IN_BAND_WITH));
     }
 
     @Test
@@ -95,8 +95,8 @@ class SnapshotLinksTest {
         Card goaded = board.battlefield("Serra Angel", board.opponent);
         goaded.addGoad(board.game.getNextTimestamp(), board.you);
 
-        assertEquals(List.of(link(blocker, lure, "must_block")), links(board, "must_block"));
-        assertEquals(List.of(link(goaded, board.you, "goaded_by")), links(board, "goaded_by"));
+        assertEquals(List.of(link(blocker, lure, LinkFamily.MUST_BLOCK)), links(board, LinkFamily.MUST_BLOCK));
+        assertEquals(List.of(link(goaded, board.you, LinkFamily.GOADED_BY)), links(board, LinkFamily.GOADED_BY));
     }
 
     // ── the stack ───────────────────────────────────────────────────────
@@ -114,14 +114,14 @@ class SnapshotLinksTest {
         spell.getTargets().add(board.opponent);
         board.game.getStack().add(spell);
 
-        List<Map<String, Object>> targets = links(board, "targets");
+        List<Map<String, Object>> targets = links(board, LinkFamily.TARGETS);
 
         Object line = end(SnapshotLinks.line(onStack, spell));
         assertEquals("spell", traitKindOf(line));
         assertEquals(List.of(
-                withIndex(link(line, Refs.of(bears), "targets"), 0),
-                withIndex(link(line, Refs.of(board.opponent), "targets"), 1)), targets);
-        assertEquals(List.of(link(Refs.of(onStack), line, "source_of")), links(board, "source_of"));
+                withIndex(link(line, Refs.of(bears), LinkFamily.TARGETS), 0),
+                withIndex(link(line, Refs.of(board.opponent), LinkFamily.TARGETS), 1)), targets);
+        assertEquals(List.of(link(Refs.of(onStack), line, LinkFamily.SOURCE_OF)), links(board, LinkFamily.SOURCE_OF));
     }
 
     /** A dies trigger on the stack is triggered by the creature that died. */
@@ -135,7 +135,7 @@ class SnapshotLinksTest {
         board.game.getAction().checkStateEffects(false);
         assertTrue(board.game.getStack().addAllTriggeredAbilitiesToStack(), "the dies trigger");
 
-        List<Map<String, Object>> triggered = links(board, "triggered_by");
+        List<Map<String, Object>> triggered = links(board, LinkFamily.TRIGGERED_BY);
 
         assertTrue(triggered.stream().anyMatch(l -> Refs.of(dissenter).equals(l.get("to"))
                 && "trigger".equals(traitKindOf(l.get("from")))), triggered.toString());
@@ -153,11 +153,11 @@ class SnapshotLinksTest {
         board.game.getAction().checkStaticAbilities();
         StaticAbility stat = anthem.getStaticAbilities().get(0);
 
-        assertEquals(List.of(link(end(SnapshotLinks.line(anthem, stat)), Refs.of(bears), "affects")),
-                links(board, "affects"));
+        assertEquals(List.of(link(end(SnapshotLinks.line(anthem, stat)), Refs.of(bears), LinkFamily.AFFECTS)),
+                links(board, LinkFamily.AFFECTS));
         assertEquals(List.of(), linksIn(
                 new SnapshotBuilder(board.game).ofBoardWithout(stat).render(),
-                "affects"), "the continuous record's answer");
+                LinkFamily.AFFECTS), "the continuous record's answer");
     }
 
     /** Exploration's static affects the player whose land plays it raises, and no card. */
@@ -170,7 +170,7 @@ class SnapshotLinksTest {
         StaticAbility stat = exploration.getStaticAbilities().get(0);
 
         assertEquals(List.of(link(end(SnapshotLinks.line(exploration, stat)), board.you,
-                "affects")), links(board, "affects"));
+                LinkFamily.AFFECTS)), links(board, LinkFamily.AFFECTS));
     }
 
     /** Explore's effect card affects its caster, whose land plays it raises. */
@@ -183,7 +183,7 @@ class SnapshotLinksTest {
         board.game.getAction().checkStaticAbilities();
         Card effect = commandCard(board, card -> FloatingEffects.isEffectCard(card));
 
-        List<Map<String, Object>> affects = links(board, "affects");
+        List<Map<String, Object>> affects = links(board, LinkFamily.AFFECTS);
         assertEquals(1, affects.size(), affects.toString());
         assertEquals(Refs.of(effect), entityOf(affects.get(0).get("from")));
         assertEquals(Refs.of(board.you), affects.get(0).get("to"));
@@ -204,9 +204,9 @@ class SnapshotLinksTest {
         Card effect = commandCard(board, card -> FloatingEffects.isEffectCard(card));
 
         assertEquals(List.of(link(Refs.of(effect), end(SnapshotLinks.line(falter, spell)),
-                "created_by")), links(board, "created_by"));
-        assertTrue(links(board, "affects").stream().anyMatch(l -> Refs.of(bears).equals(l.get("to"))
-                && Refs.of(effect).equals(entityOf(l.get("from")))), links(board, "affects").toString());
+                LinkFamily.CREATED_BY)), links(board, LinkFamily.CREATED_BY));
+        assertTrue(links(board, LinkFamily.AFFECTS).stream().anyMatch(l -> Refs.of(bears).equals(l.get("to"))
+                && Refs.of(effect).equals(entityOf(l.get("from")))), links(board, LinkFamily.AFFECTS).toString());
     }
 
     /**
@@ -222,16 +222,16 @@ class SnapshotLinksTest {
 
         resolveWithHook(board, kick, bears);
 
-        List<Map<String, Object>> affects = links(board, "affects");
+        List<Map<String, Object>> affects = links(board, LinkFamily.AFFECTS);
         Map<String, Object> haste = affects.stream()
                 .filter(l -> l.get("from") instanceof String id && id.startsWith("F"))
                 .findFirst().orElseThrow(() -> new AssertionError(affects.toString()));
         assertEquals(Refs.of(bears), haste.get("to"));
-        Map<String, Object> made = links(board, "created_by").stream()
+        Map<String, Object> made = links(board, LinkFamily.CREATED_BY).stream()
                 .filter(l -> haste.get("from").equals(l.get("from"))).findFirst().orElseThrow();
         assertEquals("cardsfolder/k/kick_in_the_door.txt", keyOf(made.get("to")).get("script_file"));
         Card dungeon = commandCard(board, card -> card.getType().isDungeon());
-        assertEquals(List.of(link(dungeon, board.you, "in_dungeon")), links(board, "in_dungeon"));
+        assertEquals(List.of(link(dungeon, board.you, LinkFamily.IN_DUNGEON)), links(board, LinkFamily.IN_DUNGEON));
     }
 
     /** Feral Lightning's delayed exile is pending on its tokens and created by the spell's line. */
@@ -243,7 +243,7 @@ class SnapshotLinksTest {
         Card feral = board.hand("Feral Lightning", board.you);
         board.resolve(board.spell(feral, board.you), board.you);
 
-        List<Map<String, Object>> pending = links(board, "pending_on");
+        List<Map<String, Object>> pending = links(board, LinkFamily.PENDING_ON);
 
         assertEquals(3, pending.size(), pending.toString());
         for (Card token : board.game.getCardsIn(ZoneType.Battlefield)) {
@@ -252,7 +252,7 @@ class SnapshotLinksTest {
         }
         Object delayed = pending.get(0).get("from");
         assertTrue(((String) delayed).startsWith("D"), pending.toString());
-        Map<String, Object> made = links(board, "created_by").stream()
+        Map<String, Object> made = links(board, LinkFamily.CREATED_BY).stream()
                 .filter(l -> delayed.equals(l.get("from"))).findFirst().orElseThrow();
         assertEquals("cardsfolder/f/feral_lightning.txt", keyOf(made.get("to")).get("script_file"));
     }
@@ -273,8 +273,8 @@ class SnapshotLinksTest {
 
         Object line = end(SnapshotLinks.line(ring, exiling));
         assertEquals("trigger", traitKindOf(line));
-        assertEquals(List.of(link(line, Refs.of(exiled), "linked_by_text")),
-                links(board, "linked_by_text"));
+        assertEquals(List.of(link(line, Refs.of(exiled), LinkFamily.LINKED_BY_TEXT)),
+                links(board, LinkFamily.LINKED_BY_TEXT));
     }
 
     @Test
@@ -285,8 +285,8 @@ class SnapshotLinksTest {
                 null, null);
         chrome.addImprintedCard(imprinted);
 
-        assertEquals(List.of(link(chrome, imprinted, "linked_by_text")),
-                links(board, "linked_by_text"));
+        assertEquals(List.of(link(chrome, imprinted, LinkFamily.LINKED_BY_TEXT)),
+                links(board, LinkFamily.LINKED_BY_TEXT));
     }
 
     /** C8: a lasting remembered card is a link; while the card's ability is on the stack it is not. */
@@ -299,8 +299,8 @@ class SnapshotLinksTest {
         sorcerer.addRemembered(giant);
         sorcerer.addRemembered("a chosen word");
 
-        assertEquals(List.of(link(sorcerer, giant, "linked_by_text")),
-                links(board, "linked_by_text"));
+        assertEquals(List.of(link(sorcerer, giant, LinkFamily.LINKED_BY_TEXT)),
+                links(board, LinkFamily.LINKED_BY_TEXT));
 
         SpellAbility ping = board.ability(sorcerer, ApiType.DealDamage);
         ping.setActivatingPlayer(board.you);
@@ -308,7 +308,7 @@ class SnapshotLinksTest {
         ping.getTargets().add(board.opponent);
         board.game.getStack().add(ping);
 
-        assertEquals(List.of(), links(board, "linked_by_text"), "a transient entry");
+        assertEquals(List.of(), links(board, LinkFamily.LINKED_BY_TEXT), "a transient entry");
     }
 
     @Test
@@ -320,7 +320,7 @@ class SnapshotLinksTest {
         creature.addEncodedCard(encoded);
         encoded.setEncodingCard(creature);
 
-        assertEquals(List.of(link(encoded, creature, "bound_to")), links(board, "bound_to"));
+        assertEquals(List.of(link(encoded, creature, LinkFamily.BOUND_TO)), links(board, LinkFamily.BOUND_TO));
     }
 
     /** Control Magic: attached, its static affects, its controller controls, the owner still owns. */
@@ -332,14 +332,14 @@ class SnapshotLinksTest {
         magic.attachToEntity(giant, null);
         board.game.getAction().checkStaticAbilities();
 
-        assertTrue(links(board, "controls").contains(link(board.you, giant, "controls")),
-                links(board, "controls").toString());
-        assertTrue(links(board, "owns").contains(link(board.opponent, giant, "owns")));
-        assertTrue(links(board, "attached_to").contains(link(magic, giant, "attached_to")));
+        assertTrue(links(board, LinkFamily.CONTROLS).contains(link(board.you, giant, LinkFamily.CONTROLS)),
+                links(board, LinkFamily.CONTROLS).toString());
+        assertTrue(links(board, LinkFamily.OWNS).contains(link(board.opponent, giant, LinkFamily.OWNS)));
+        assertTrue(links(board, LinkFamily.ATTACHED_TO).contains(link(magic, giant, LinkFamily.ATTACHED_TO)));
         StaticAbility gainControl = magic.getStaticAbilities().stream()
                 .filter(stat -> stat.hasParam("GainControl")).findFirst().orElseThrow();
         assertEquals(List.of(link(end(SnapshotLinks.line(magic, gainControl)),
-                Refs.of(giant), "affects")), links(board, "affects"));
+                Refs.of(giant), LinkFamily.AFFECTS)), links(board, LinkFamily.AFFECTS));
     }
 
     /** A "for as long as" control effect's card is what granted control. */
@@ -350,8 +350,8 @@ class SnapshotLinksTest {
         Card giant = board.battlefield("Hill Giant", board.opponent);
         old.addGainControlTarget(giant);
 
-        assertEquals(List.of(link(giant, old, "control_granted_by")),
-                links(board, "control_granted_by"));
+        assertEquals(List.of(link(giant, old, LinkFamily.CONTROL_GRANTED_BY)),
+                links(board, LinkFamily.CONTROL_GRANTED_BY));
     }
 
     /**
@@ -372,9 +372,9 @@ class SnapshotLinksTest {
         old.getDamageHistory().registerDamage(2, false, old, soldier, new HashMap<>());
         soldier.getZone().remove(soldier);
 
-        assertEquals(List.of(link(giant, old, "control_granted_by")),
-                links(board, "control_granted_by"));
-        assertEquals(List.of(), links(board, "damaged_this_turn"));
+        assertEquals(List.of(link(giant, old, LinkFamily.CONTROL_GRANTED_BY)),
+                links(board, LinkFamily.CONTROL_GRANTED_BY));
+        assertEquals(List.of(), links(board, LinkFamily.DAMAGED_THIS_TURN));
     }
 
     @Test
@@ -387,7 +387,7 @@ class SnapshotLinksTest {
         clone.updateStateForView();
 
         assertEquals("Serra Angel", clone.getName());
-        assertEquals(List.of(link(clone, angel, "copy_of")), links(board, "copy_of"));
+        assertEquals(List.of(link(clone, angel, LinkFamily.COPY_OF)), links(board, LinkFamily.COPY_OF));
     }
 
     // ── pairs, choices, this turn's history ─────────────────────────────
@@ -400,7 +400,7 @@ class SnapshotLinksTest {
         paladin.setPairedWith(bears);
         bears.setPairedWith(paladin);
 
-        assertEquals(List.of(link(bears, paladin, "paired_with")), links(board, "paired_with"));
+        assertEquals(List.of(link(bears, paladin, LinkFamily.PAIRED_WITH)), links(board, LinkFamily.PAIRED_WITH));
     }
 
     @Test
@@ -412,10 +412,10 @@ class SnapshotLinksTest {
         Card choosing = board.battlefield("Hill Giant", board.you);
         choosing.setChosenCards(new CardCollection(bears));
 
-        List<Map<String, Object>> chose = links(board, "chose");
+        List<Map<String, Object>> chose = links(board, LinkFamily.CHOSE);
 
-        assertTrue(chose.contains(link(doll, board.opponent, "chose")), chose.toString());
-        assertTrue(chose.contains(link(choosing, bears, "chose")), chose.toString());
+        assertTrue(chose.contains(link(doll, board.opponent, LinkFamily.CHOSE)), chose.toString());
+        assertTrue(chose.contains(link(choosing, bears, LinkFamily.CHOSE)), chose.toString());
         assertEquals(2, chose.size(), chose.toString());
     }
 
@@ -432,11 +432,11 @@ class SnapshotLinksTest {
         Card crew = board.battlefield("Hill Giant", board.you);
         vehicle.addCrewedByThisTurn(new CardCollection(crew));
 
-        assertEquals(List.of(link(sengir, bears, "damaged_this_turn")),
-                links(board, "damaged_this_turn"));
-        assertEquals(List.of(link(bears, sengir, "fought_this_turn")),
-                links(board, "fought_this_turn"));
-        assertEquals(List.of(link(vehicle, crew, "crewed_by")), links(board, "crewed_by"));
+        assertEquals(List.of(link(sengir, bears, LinkFamily.DAMAGED_THIS_TURN)),
+                links(board, LinkFamily.DAMAGED_THIS_TURN));
+        assertEquals(List.of(link(bears, sengir, LinkFamily.FOUGHT_THIS_TURN)),
+                links(board, LinkFamily.FOUGHT_THIS_TURN));
+        assertEquals(List.of(link(vehicle, crew, LinkFamily.CREWED_BY)), links(board, LinkFamily.CREWED_BY));
     }
 
     // ── control, ownership, the pending event ───────────────────────────
@@ -447,10 +447,10 @@ class SnapshotLinksTest {
         Card bears = board.battlefield("Grizzly Bears", board.you);
         Card bolt = board.hand("Lightning Bolt", board.opponent);
 
-        assertEquals(List.of(link(board.you, bears, "controls"), link(board.opponent, bolt, "controls")),
-                links(board, "controls"));
-        assertEquals(List.of(link(board.you, bears, "owns"), link(board.opponent, bolt, "owns")),
-                links(board, "owns"));
+        assertEquals(List.of(link(board.you, bears, LinkFamily.CONTROLS), link(board.opponent, bolt, LinkFamily.CONTROLS)),
+                links(board, LinkFamily.CONTROLS));
+        assertEquals(List.of(link(board.you, bears, LinkFamily.OWNS), link(board.opponent, bolt, LinkFamily.OWNS)),
+                links(board, LinkFamily.OWNS));
     }
 
     @Test
@@ -462,9 +462,9 @@ class SnapshotLinksTest {
         EffectEvent died = new EffectEvent(EventType.ZONE_CHANGE)
                 .subject(Refs.of(dead)).lastKnown(lastKnown);
 
-        assertEquals(List.of(link("L" + bears.getId(), Refs.of(dead), "last_known_state_of")),
+        assertEquals(List.of(link("L" + bears.getId(), Refs.of(dead), LinkFamily.LAST_KNOWN_STATE_OF)),
                 linksIn(new SnapshotBuilder(board.game).ofTrait(null, died).render(),
-                        "last_known_state_of"));
+                        LinkFamily.LAST_KNOWN_STATE_OF));
     }
 
     /** Families the reader builds from its own layout are never written. */
@@ -485,19 +485,19 @@ class SnapshotLinksTest {
 
     // ── helpers ─────────────────────────────────────────────────────────
 
-    private static List<Map<String, Object>> links(CharacterizationBoard board, String type) {
+    private static List<Map<String, Object>> links(CharacterizationBoard board, LinkFamily type) {
         return linksIn(new SnapshotBuilder(board.game).ofBoard().render(), type);
     }
 
     /** The state's links of one type, in order; every link for a null type. */
     @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> linksIn(String state, String type) {
+    private static List<Map<String, Object>> linksIn(String state, LinkFamily type) {
         List<Map<String, Object>> all = (List<Map<String, Object>>) RecordLines.parse(state).get("links");
-        return all.stream().filter(l -> type == null || type.equals(l.get("type"))).toList();
+        return all.stream().filter(l -> type == null || type.wireName().equals(l.get("type"))).toList();
     }
 
-    private static Map<String, Object> link(Object from, Object to, String type) {
-        return Map.of("from", ref(from), "to", ref(to), "type", type);
+    private static Map<String, Object> link(Object from, Object to, LinkFamily type) {
+        return Map.of("from", ref(from), "to", ref(to), "type", type.wireName());
     }
 
     private static Map<String, Object> withIndex(Map<String, Object> link, long index) {
@@ -516,8 +516,13 @@ class SnapshotLinksTest {
         return end;
     }
 
-    private static boolean has(List<Map<String, Object>> links, String from, String to) {
-        return links.stream().anyMatch(l -> from.equals(l.get("from")) && to.equals(l.get("to")));
+    /** The refs a link runs from and to. */
+    private record Ends(String from, String to) {
+    }
+
+    private static boolean has(List<Map<String, Object>> links, Ends ends) {
+        return links.stream()
+                .anyMatch(l -> ends.from().equals(l.get("from")) && ends.to().equals(l.get("to")));
     }
 
     /** One end as the parsed state holds it: a ref string, or a line's map. */

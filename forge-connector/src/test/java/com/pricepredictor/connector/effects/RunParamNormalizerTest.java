@@ -16,8 +16,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.params;
@@ -49,29 +52,47 @@ class RunParamNormalizerTest {
     /** Every trigger row is a mode Forge's {@code TriggerType} declares. */
     @Test
     void everyTriggerRowIsAForgeTriggerMode() {
-        List<String> unknown = new ArrayList<>();
-        for (String mode : RunParamRows.TRIGGER_MODES.keySet()) {
-            try {
-                TriggerType.valueOf(mode);
-            } catch (IllegalArgumentException e) {
-                unknown.add(mode);
-            }
-        }
-        assertEquals(List.of(), unknown, "rows no Forge trigger mode answers to");
+        assertRowsAreForgeModes(triggerModes());
     }
 
     /** Every replacement row is a mode Forge's {@code ReplacementType} declares. */
     @Test
     void everyReplacementRowIsAForgeReplacementMode() {
+        assertRowsAreForgeModes(replacementModes());
+    }
+
+    /**
+     * One family of Forge modes beside its table: {@code kind} names it in the
+     * messages, {@code forgeValueOf} is the enum's lookup and {@code forgeNames}
+     * the names the enum declares.
+     */
+    private record ModeFamily(String kind, Set<String> rows, Set<String> unread,
+                              Function<String, ?> forgeValueOf, List<String> forgeNames) {
+    }
+
+    private static ModeFamily triggerModes() {
+        return new ModeFamily("trigger", RunParamRows.TRIGGER_MODES.keySet(),
+                RunParamRows.TRIGGER_MODES_UNREAD, TriggerType::valueOf,
+                Arrays.stream(TriggerType.values()).map(Enum::name).toList());
+    }
+
+    private static ModeFamily replacementModes() {
+        return new ModeFamily("replacement", RunParamRows.REPLACEMENT_MODES.keySet(),
+                RunParamRows.REPLACEMENT_MODES_UNREAD, ReplacementType::valueOf,
+                Arrays.stream(ReplacementType.values()).map(Enum::name).toList());
+    }
+
+    /** Fails unless Forge's {@code valueOf} answers to every row name of the family. */
+    private static void assertRowsAreForgeModes(ModeFamily family) {
         List<String> unknown = new ArrayList<>();
-        for (String mode : RunParamRows.REPLACEMENT_MODES.keySet()) {
+        for (String mode : family.rows()) {
             try {
-                ReplacementType.valueOf(mode);
+                family.forgeValueOf().apply(mode);
             } catch (IllegalArgumentException e) {
                 unknown.add(mode);
             }
         }
-        assertEquals(List.of(), unknown, "rows no Forge replacement mode answers to");
+        assertEquals(List.of(), unknown, "rows no Forge " + family.kind() + " mode answers to");
     }
 
     // ── reading the played records ──────────────────────────────────────
@@ -80,13 +101,22 @@ class RunParamNormalizerTest {
     private static List<Map<String, Object>> fired(List<String> records, String script) {
         List<Map<String, Object>> events = new ArrayList<>();
         for (String record : records) {
-            if ("trigger".equals(parse(record).get("kind")) && script.equals(scriptOf(record))
-                    && Boolean.TRUE.equals(payload(record).get("fired"))) {
+            if (isFiredTriggerThrough(record, script)) {
                 events.add(asMap(payload(record).get("event")));
             }
         }
         assertFalse(events.isEmpty(), "no fired trigger through " + script + ": " + records);
         return events;
+    }
+
+    private static boolean isFiredTriggerThrough(String record, String script) {
+        if (!"trigger".equals(parse(record).get("kind"))) {
+            return false;
+        }
+        if (!script.equals(scriptOf(record))) {
+            return false;
+        }
+        return Boolean.TRUE.equals(payload(record).get("fired"));
     }
 
     /** The one rewrite record acting through {@code script}'s payload. */
@@ -115,6 +145,27 @@ class RunParamNormalizerTest {
         return ShardRun.recordsWithClauseHook(tempDir, game, WHY, body);
     }
 
+    /** Put {@code cardName} in play, play {@code body}, and the first event of the trigger of {@code script}. */
+    private Map<String, Object> firstFired(
+            Game game, String cardName, ShardRun.Played body, String script) throws Throwable {
+        TestBoard.inPlay(game, you(game), cardName);
+        List<String> records = played(game, body);
+        return fired(records, script).get(0);
+    }
+
+    /** Put {@code cardName} in play, play {@code body}, and the rewrite record of {@code script}. */
+    private Map<String, Object> rewriteOf(
+            Game game, String cardName, ShardRun.Played body, String script) throws Throwable {
+        TestBoard.inPlay(game, you(game), cardName);
+        List<String> records = played(game, body);
+        return rewrite(records, script);
+    }
+
+    private static void assertDeltas(Map<String, Object> rewrite, long incoming, long outgoing) {
+        assertEquals(incoming, delta(asMap(rewrite.get("incoming"))), rewrite.toString());
+        assertEquals(outgoing, delta(asMap(rewrite.get("outgoing"))), rewrite.toString());
+    }
+
     private static Game game() {
         return TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
     }
@@ -132,11 +183,8 @@ class RunParamNormalizerTest {
     @Test
     void lifeGainedIsAPositiveDelta() throws Throwable {
         Game game = game();
-        TestBoard.inPlay(game, you(game), "Ajani's Pridemate");
-        List<String> records = played(game,
-                () -> you(game).gainLife(2, null, null));
-
-        Map<String, Object> event = fired(records, "cardsfolder/a/ajanis_pridemate.txt").get(0);
+        Map<String, Object> event = firstFired(game, "Ajani's Pridemate",
+                () -> you(game).gainLife(2, null, null), "cardsfolder/a/ajanis_pridemate.txt");
         assertEquals("life_change", event.get("type"), event.toString());
         assertEquals(2L, delta(event), event.toString());
     }
@@ -144,11 +192,9 @@ class RunParamNormalizerTest {
     @Test
     void lifeLostIsANegativeDelta() throws Throwable {
         Game game = game();
-        TestBoard.inPlay(game, you(game), "Exquisite Blood");
-        List<String> records = played(game,
-                () -> opponent(game).loseLife(3, false, false, null));
-
-        Map<String, Object> event = fired(records, "cardsfolder/e/exquisite_blood.txt").get(0);
+        Map<String, Object> event = firstFired(game, "Exquisite Blood",
+                () -> opponent(game).loseLife(3, false, false, null),
+                "cardsfolder/e/exquisite_blood.txt");
         assertEquals("LifeLost", params(event).get("mode"), event.toString());
         assertEquals(-3L, delta(event), event.toString());
     }
@@ -169,26 +215,19 @@ class RunParamNormalizerTest {
     @Test
     void aLifeGainReplacementWritesPositiveDeltas() throws Throwable {
         Game game = game();
-        TestBoard.inPlay(game, you(game), "Boon Reflection");
-        List<String> records = played(game,
-                () -> you(game).gainLife(3, null, null));
-
-        Map<String, Object> rewrite = rewrite(records, "cardsfolder/b/boon_reflection.txt");
-        assertEquals(3L, delta(asMap(rewrite.get("incoming"))), rewrite.toString());
-        assertEquals(6L, delta(asMap(rewrite.get("outgoing"))), rewrite.toString());
+        Map<String, Object> rewrite = rewriteOf(game, "Boon Reflection",
+                () -> you(game).gainLife(3, null, null), "cardsfolder/b/boon_reflection.txt");
+        assertDeltas(rewrite, 3L, 6L);
     }
 
     /** The case V2 #1 observed reading as a gain: an edited LifeReduced amount. */
     @Test
     void aLifeLossReplacementWritesNegativeDeltas() throws Throwable {
         Game game = game();
-        TestBoard.inPlay(game, you(game), "Bloodletter of Aclazotz");
-        List<String> records = played(game,
-                () -> opponent(game).loseLife(2, false, false, null));
-
-        Map<String, Object> rewrite = rewrite(records, "cardsfolder/b/bloodletter_of_aclazotz.txt");
-        assertEquals(-2L, delta(asMap(rewrite.get("incoming"))), rewrite.toString());
-        assertEquals(-4L, delta(asMap(rewrite.get("outgoing"))), rewrite.toString());
+        Map<String, Object> rewrite = rewriteOf(game, "Bloodletter of Aclazotz",
+                () -> opponent(game).loseLife(2, false, false, null),
+                "cardsfolder/b/bloodletter_of_aclazotz.txt");
+        assertDeltas(rewrite, -2L, -4L);
     }
 
     @Test
@@ -209,10 +248,10 @@ class RunParamNormalizerTest {
 
     // ── counters ────────────────────────────────────────────────────────
 
-    private static void putCounters(Game game, Card card, CounterType type, int n, Player by) {
+    private static void putCounters(Card card, CounterType type, int n, Player by) {
         GameEntityCounterTable table = new GameEntityCounterTable();
         card.addCounter(type, n, by, table);
-        table.replaceCounterEffect(game, null);
+        table.replaceCounterEffect(card.getGame(), null);
     }
 
     /** CounterAdded fires once per counter: each is +1, never the running total. */
@@ -221,7 +260,7 @@ class RunParamNormalizerTest {
         Game game = game();
         Card hoplite = TestBoard.inPlay(game, you(game), "Bloodcrazed Hoplite");
         List<String> records = played(game,
-                () -> putCounters(game, hoplite, CounterType.getType("P1P1"), 2, you(game)));
+                () -> putCounters(hoplite, CounterType.getType("P1P1"), 2, you(game)));
 
         List<Map<String, Object>> events = fired(records, "cardsfolder/b/bloodcrazed_hoplite.txt");
         // Two firings, each one counter; two identical records are written once.
@@ -238,7 +277,7 @@ class RunParamNormalizerTest {
         Game game = game();
         Card biomancer = TestBoard.inPlay(game, you(game), "Benthic Biomancer");
         List<String> records = played(game,
-                () -> putCounters(game, biomancer, CounterType.getType("P1P1"), 3, you(game)));
+                () -> putCounters(biomancer, CounterType.getType("P1P1"), 3, you(game)));
 
         Map<String, Object> event = fired(records, "cardsfolder/b/benthic_biomancer.txt").get(0);
         assertEquals(3L, delta(event), event.toString());
@@ -284,11 +323,9 @@ class RunParamNormalizerTest {
         TestBoard.inPlay(game, you(game), "Hardened Scales");
         Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
         List<String> records = played(game,
-                () -> putCounters(game, bears, CounterType.getType("P1P1"), 1, you(game)));
+                () -> putCounters(bears, CounterType.getType("P1P1"), 1, you(game)));
 
-        Map<String, Object> rewrite = rewrite(records, "cardsfolder/h/hardened_scales.txt");
-        assertEquals(1L, delta(asMap(rewrite.get("incoming"))), rewrite.toString());
-        assertEquals(2L, delta(asMap(rewrite.get("outgoing"))), rewrite.toString());
+        assertDeltas(rewrite(records, "cardsfolder/h/hardened_scales.txt"), 1L, 2L);
     }
 
     /**
@@ -310,9 +347,7 @@ class RunParamNormalizerTest {
                 () -> chandra.subtractCounter(loyalty, 5, opponent(game), true));
 
         assertEquals(1, chandra.getCounters(loyalty), "Deification kept one");
-        Map<String, Object> rewrite = rewrite(records, "cardsfolder/d/deification.txt");
-        assertEquals(-4L, delta(asMap(rewrite.get("incoming"))), rewrite.toString());
-        assertEquals(-3L, delta(asMap(rewrite.get("outgoing"))), rewrite.toString());
+        assertDeltas(rewrite(records, "cardsfolder/d/deification.txt"), -4L, -3L);
     }
 
     // ── faces, attachments, prevention ──────────────────────────────────
@@ -388,29 +423,27 @@ class RunParamNormalizerTest {
     /** Every TriggerType is a row of the table or listed as read for no magnitude, never both. */
     @Test
     void everyForgeTriggerModeIsReadOrListed() {
-        List<String> missing = new ArrayList<>();
-        for (TriggerType mode : TriggerType.values()) {
-            boolean read = RunParamRows.TRIGGER_MODES.containsKey(mode.name());
-            boolean listed = RunParamRows.TRIGGER_MODES_UNREAD.contains(mode.name());
-            if (read == listed) {
-                missing.add(mode.name());
-            }
-        }
-        assertEquals(List.of(), missing, "trigger modes neither read nor listed, or both");
+        assertReadXorListed(triggerModes());
     }
 
     /** Every ReplacementType is a row of the table or listed as read for no magnitude, never both. */
     @Test
     void everyForgeReplacementModeIsReadOrListed() {
+        assertReadXorListed(replacementModes());
+    }
+
+    /** Fails for each Forge mode name in both or neither of the family's rows and unread list. */
+    private static void assertReadXorListed(ModeFamily family) {
         List<String> missing = new ArrayList<>();
-        for (ReplacementType mode : ReplacementType.values()) {
-            boolean read = RunParamRows.REPLACEMENT_MODES.containsKey(mode.name());
-            boolean listed = RunParamRows.REPLACEMENT_MODES_UNREAD.contains(mode.name());
+        for (String mode : family.forgeNames()) {
+            boolean read = family.rows().contains(mode);
+            boolean listed = family.unread().contains(mode);
             if (read == listed) {
-                missing.add(mode.name());
+                missing.add(mode);
             }
         }
-        assertEquals(List.of(), missing, "replacement modes neither read nor listed, or both");
+        assertEquals(List.of(), missing,
+                family.kind() + " modes neither read nor listed, or both");
     }
 
     // ── the modes that carry a magnitude ────────────────────────────────
@@ -523,7 +556,7 @@ class RunParamNormalizerTest {
         TestBoard.inPlay(game, you(game), "All Will Be One");
         Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
         List<String> records = played(game,
-                () -> putCounters(game, bears, CounterType.getType("P1P1"), 3, you(game)));
+                () -> putCounters(bears, CounterType.getType("P1P1"), 3, you(game)));
 
         Map<String, Object> event = fired(records, "cardsfolder/a/all_will_be_one.txt").get(0);
         assertEquals("counter_change", event.get("type"), event.toString());
