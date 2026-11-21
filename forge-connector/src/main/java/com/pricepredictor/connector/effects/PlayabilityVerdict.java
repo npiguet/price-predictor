@@ -121,8 +121,8 @@ public record PlayabilityVerdict(
         boolean timing = candidate.canCastTiming(activator);
         boolean affordable = affordable(candidate, activator, charged);
         StaticAbility prohibiting = PlayabilityChecks.prohibitingStatic(candidate, activator);
-        List<FailedCheck> failed = PlayabilityChecks.failed(
-                candidate, activator, forgeCanPlay, timing, affordable, prohibiting);
+        List<FailedCheck> failed = PlayabilityChecks.failed(candidate, activator,
+                new PlayabilityChecks.ForgeAnswers(forgeCanPlay, timing, prohibiting), affordable);
         return new PlayabilityVerdict(
                 forgeCanPlay && timing && prohibiting == null, affordable,
                 TargetingClauses.reachMinimum(candidate), timing, failed);
@@ -138,7 +138,8 @@ public record PlayabilityVerdict(
         boolean timing = PlayabilityChecks.landTiming(play, activator);
         StaticAbility prohibiting = PlayabilityChecks.prohibitingLandStatic(play, activator);
         return new PlayabilityVerdict(canPlay, true, true, timing,
-                PlayabilityChecks.failedLand(play, activator, canPlay, timing, prohibiting));
+                PlayabilityChecks.failedLand(play, activator,
+                        new PlayabilityChecks.ForgeAnswers(canPlay, timing, prohibiting)));
     }
 
     /** Whether the candidate failed {@code check}. */
