@@ -4,7 +4,7 @@ self-describing ``rl_metadata`` (data-model §8, FR-027/FR-028).
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -66,33 +66,46 @@ def build_rl_metadata(
     }
 
 
-def _write_checkpoint(
-    store: DraftAgentStore,
-    model: DraftAgentModel,
-    optimizer: torch.optim.Optimizer,
-    config: TrainDraftAgentOnlineConfig,
-    base: Any,
-    generation: int,
-    round_index: int,
-    path: Path,
-    lr_decay_count: int = 0,
-) -> None:
+@dataclass(frozen=True)
+class CheckpointSource:
+    """What every checkpoint of one run is written from: the store, the live model
+    and its optimizer, the run's config, the base checkpoint and its lineage counter."""
+
+    store: DraftAgentStore
+    model: DraftAgentModel
+    optimizer: torch.optim.Optimizer
+    config: TrainDraftAgentOnlineConfig
+    base: Any
+    generation: int
+
+
+@dataclass(frozen=True)
+class CheckpointStamp:
+    """How far the run had got when a checkpoint is written: the rounds completed
+    and the LR decays taken."""
+
+    rounds: int
+    lr_decay_count: int = 0
+
+
+def _write_checkpoint(source: CheckpointSource, stamp: CheckpointStamp, path: Path) -> None:
     """Write one gen-1-format checkpoint carrying the critic head unchanged.
 
     ``best_val_loss`` is ``inf`` because no held-out metric exists (FR-026), and
     ``critic_mean``/``critic_std`` are copied verbatim from the base so the
     (untrained) critic still de-standardizes to raw scorer-score space.
     """
-    store.save_checkpoint(
-        model,
-        optimizer,
-        round_index,
+    base, config = source.base, source.config
+    source.store.save_checkpoint(
+        source.model,
+        source.optimizer,
+        stamp.rounds,
         float("inf"),
         base.config,
         path,
         critic_mean=base.critic_mean,
         critic_std=base.critic_std,
         train_config=_stringify(asdict(config)),
-        lr_decay_count=lr_decay_count,
-        rl_metadata=build_rl_metadata(config, generation, lr_decay_count),
+        lr_decay_count=stamp.lr_decay_count,
+        rl_metadata=build_rl_metadata(config, source.generation, stamp.lr_decay_count),
     )

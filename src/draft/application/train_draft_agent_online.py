@@ -23,7 +23,6 @@ the masked-distribution math is
 
 from __future__ import annotations
 
-import random
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -31,28 +30,34 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import torch
-
 from draft.application.online_advantages import assign_advantages
 from draft.application.online_anchor_window import AnchorWindow
-from draft.application.online_checkpoints import _write_checkpoint, base_generation
-from draft.application.online_config_validation import (
-    check_embedding_width,
-    resolve_min_lr,
-    validate_config,
+from draft.application.online_checkpoints import (
+    CheckpointSource,
+    CheckpointStamp,
+    _write_checkpoint,
+    base_generation,
 )
-from draft.application.online_diagnostics import diagnostics_sweep
+from draft.application.online_diagnostics import SweepPolicies, SweepSettings, diagnostics_sweep
 from draft.application.online_log import _log
-from draft.application.online_round_loader import RoundLoader
+from draft.application.online_round_loader import RoundBatch, RoundLoader
 from draft.application.online_round_report import RoundDiagnostics, _fmt_margin, format_round_lines
-from draft.application.online_run_report import format_final_summary, format_startup_echo
-from draft.application.online_update import run_update_pass
-from draft.domain.draft_agent_model import DraftAgentModel
+from draft.application.online_run_report import (
+    ResolvedStartup,
+    RunOutcome,
+    format_final_summary,
+    format_startup_echo,
+)
+from draft.application.online_startup import (
+    LoadedLearner,
+    SeededRun,
+    build_optimisation,
+    build_pick_services,
+    load_learner,
+    seed_run,
+)
+from draft.application.online_update import Learner, UpdateSettings, run_update_pass
 from draft.domain.draft_geometry import DraftRecord
-from draft.infrastructure.draft_agent_store import DraftAgentStore
-
-_DEFAULT_MIX = "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1"
 
 
 @dataclass(kw_only=True)
@@ -61,8 +66,9 @@ class TrainDraftAgentOnlineConfig:
 
     ``learner_label``/``learner_checkpoint`` and ``agent_temperatures`` are
     required; the dataclass defaults exist only so the CLI can construct and then
-    validate (:func:`_validate_config`, data-model §1.1). Architecture is
-    inherited from the learner checkpoint — there are no architecture flags.
+    validate (:func:`~draft.application.online_config_validation.validate_config`,
+    data-model §1.1). Architecture is inherited from the learner checkpoint —
+    there are no architecture flags.
 
     **Absent by design** (spec FR-006, Out of Scope) — gen-2 knobs that do not
     exist here and must not be added: ``value_weight``, ``gae_lambda``,
@@ -140,6 +146,46 @@ class TrainDraftAgentOnlineConfig:
 # The loop (FR-005, FR-029, FR-031)
 # --------------------------------------------------------------------------- #
 
+@dataclass(frozen=True)
+class _DraftField:
+    """The supervisor that drafts every round, with the registry and labeler it was built from."""
+
+    supervisor: Any
+    registry: Any
+    labeler: Any
+
+
+@dataclass(frozen=True)
+class _OnlineRun:
+    """Everything startup builds that the rounds read."""
+
+    config: TrainDraftAgentOnlineConfig
+    seeded: SeededRun
+    policies: SweepPolicies
+    learner: Learner
+    plateau: Any
+    loader: RoundLoader
+    checkpoints: CheckpointSource
+    field: _DraftField
+    window: AnchorWindow
+    latest_path: Path
+    records: Iterator[DraftRecord]
+    update_settings: UpdateSettings
+    sweep_settings: SweepSettings
+    start_time: float
+
+
+@dataclass
+class _RunTally:
+    """The loop's running counts and the checkpoints it has written so far."""
+
+    rounds: int = 0
+    total_drafts: int = 0
+    total_picks: int = 0
+    snapshot_path: Path | None = None
+    best_path: Path | None = None
+
+
 class TrainDraftAgentOnlineUseCase:
     """Owns the whole online loop in one process (FR-029).
 
@@ -156,277 +202,101 @@ class TrainDraftAgentOnlineUseCase:
 
         Returns the number of completed rounds.
         """
-        from draft.application.agent_pick_service import AgentPickService
-        from draft.application.agent_registry import AgentRegistry
-        from draft.application.generate_draft_data import (
-            GenerateDraftDataSupervisor,
-            build_labeler,
-        )
-        from draft.application.train_draft_agent import (
-            _make_scheduler,
-            _maybe_decay,
-            _PlateauLR,
-            _select_device,
-        )
-        from draft.infrastructure.draft_record_io import append_record
+        run = self._start(config)
+        tally = _RunTally()
+        # Append-only, never "w": output/draft/drafts.jsonl is the canonical
+        # shared corpus and truncating it would destroy the gen-1 / live-play
+        # data (FR-020).
+        with open(config.output_path, "a", buffering=1, encoding="utf-8") as out:
+            try:
+                self._run_rounds(run, tally, out)
+            finally:
+                run.records.close()
+        self._close(run, tally)
+        return tally.rounds
+
+    # --- startup ---
+
+    def _start(self, config: TrainDraftAgentOnlineConfig) -> _OnlineRun:
+        """Validate, load the learner, build the field, echo the run, and launch the worker."""
         from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-        anchor = validate_config(config)
-        temperature = float(config.rollout_temperature)
-
-        torch.manual_seed(config.seed)
-        np.random.seed(config.seed)
-        rng = random.Random(config.seed)
-
-        # --- learner: the model the loop optimises AND the model that drafts ---
-        store = DraftAgentStore()
-        base = store.load_checkpoint(config.learner_checkpoint)
-        embedding_dim = check_embedding_width(base.config, config)
-        device = _select_device()
-        model = DraftAgentModel(base.config)
-        model.load_state_dict(base.model_state_dict)
-        model.to(device)
-        model.eval()
-        # πₖ for the movement diagnostics: resident, never in train mode.
-        prev_model = DraftAgentModel(base.config)
-        prev_model.to(device)
-        prev_model.eval()
-        for parameter in prev_model.parameters():
-            parameter.requires_grad_(False)
-        # π₀ for the cumulative-KL diagnostic: the learner's own warm start,
-        # frozen for the whole run. Not the anchor — that is a different
-        # checkpoint whenever --learner and --frozen differ (research D17).
-        init_model = DraftAgentModel(base.config)
-        init_model.load_state_dict(base.model_state_dict)
-        init_model.to(device)
-        init_model.eval()
-        for parameter in init_model.parameters():
-            parameter.requires_grad_(False)
-
+        seeded = seed_run(config)
+        loaded = load_learner(config)
         # One memoizing locator for the labeler, every pick service, and the
         # trainer, so each card's .npz is decompressed once for the whole run.
         locator = ConvertedCardLocator(
             config.cards_path, embeddings_path=config.embeddings_path,
         )
         loader = RoundLoader(locator)
-
-        generation = base_generation(base.rl_metadata)
-
-        optimizer = torch.optim.AdamW(
-            [{"params": list(model.parameters()), "lr": config.lr, "name": "agent"}],
+        generation = base_generation(loaded.base.rl_metadata)
+        learner, plateau = build_optimisation(config, loaded.policies.model)
+        field = self._build_field(config, loaded, locator, seeded.temperature)
+        startup = ResolvedStartup(
+            run_id=field.supervisor.run_id, anchor=seeded.anchor, generation=generation,
+            device=loaded.device, embedding_dim=loaded.embedding_dim,
         )
-        # One warmup at the start of the run, then constant — never rebuilt per
-        # round, so the LR schedule and optimizer moments are continuous across
-        # rounds (FR-025). An online run has no total step count, so the ramp is
-        # expressed in optimizer steps rather than a fraction of a horizon (D15).
-        # The plateau controller folds its multiplier into the same warmup
-        # lambda, so a decay scales the post-warmup constant without re-running
-        # the ramp (FR-035). Constructed even when annealing is disabled — with
-        # no decay ever taken its multiplier stays 1.0.
-        plateau = _PlateauLR(
-            base_lr=config.lr,
-            factor=config.lr_decay_factor,
-            min_lr=resolve_min_lr(config.lr, config.min_lr),
+        for line in format_startup_echo(config, startup=startup):
+            _log(line)
+
+        window = AnchorWindow(config.anchor_window, config.learner_label, seeded.anchor)
+        config.output_path.parent.mkdir(parents=True, exist_ok=True)
+        config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        return _OnlineRun(
+            config=config, seeded=seeded, policies=loaded.policies, learner=learner,
+            plateau=plateau, loader=loader,
+            checkpoints=CheckpointSource(
+                store=loaded.store, model=learner.model, optimizer=learner.optimizer,
+                config=config, base=loaded.base, generation=generation,
+            ),
+            field=field, window=window, latest_path=config.checkpoint_dir / "latest.pt",
+            records=self._launch(field),
+            update_settings=UpdateSettings(
+                temperature=seeded.temperature, batch_size=config.batch_size,
+                max_grad_norm=config.max_grad_norm, device=loaded.device,
+            ),
+            sweep_settings=SweepSettings(
+                batch_size=config.batch_size, temperature=seeded.temperature,
+                device=loaded.device,
+            ),
+            start_time=time.monotonic(),
         )
-        scheduler = _make_scheduler(
-            optimizer, total_steps=config.warmup_steps, warmup_frac=1.0,
-            controller=plateau,
+
+    def _build_field(
+        self, config: TrainDraftAgentOnlineConfig, loaded: LoadedLearner, locator: Any,
+        temperature: float,
+    ) -> _DraftField:
+        """The labeler, the pick registry over every preloaded service, and the supervisor."""
+        from draft.application.agent_registry import AgentRegistry
+        from draft.application.generate_draft_data import (
+            GenerateDraftDataSupervisor,
+            build_labeler,
         )
 
         gen_config = self._generation_config(config, temperature)
         labeler = build_labeler(gen_config, locator=locator)
-        # Per-label pick modes (research D5), read straight off --agent-temp: a
-        # label it names samples at that T, a label it omits plays argmax, its
-        # best. Argmax is the default because a draft allocates one fixed pool of
-        # cards, so a card a frozen agent wrongly declines does not vanish — it
-        # flows downstream to its podmates. A sampled field hands the learner
-        # cards a properly-playing agent would have kept, making the training
-        # field weak in exactly the dimension drafting is about, and unlike the
-        # evaluation field, where every agent plays argmax. Naming a frozen label
-        # anyway buys pod diversity at that price; the operator decides.
-        services = {}
-        for index, (label, path) in enumerate(sorted(config.frozen.items())):
-            frozen_temperature = config.temperature_for(label)
-            services[label] = AgentPickService(
-                path, locator, device=device,
-                pick_mode="sample" if frozen_temperature > 0 else "argmax",
-                temperature=frozen_temperature or 1.0,
-                # A distinct stream per sampled agent: sharing the learner's seed
-                # would couple the field's exploration to the learner's.
-                seed=config.seed + 1 + index if frozen_temperature > 0 else None,
-            )
-        services[config.learner_label] = AgentPickService.from_model(
-            model, base.config, locator, device=device,
-            pick_mode="sample", temperature=temperature, seed=config.seed,
-        )
+        services = build_pick_services(config, loaded, locator, temperature)
         # Every service is preloaded, so `build`'s single pick_mode never applies;
         # it still validates the labels and geometry-checks all of them (D4).
         registry = AgentRegistry.build(
             {},
             {label for label, _ in config.mix},
             locator=locator,
-            device=device,
+            device=loaded.device,
             preloaded=services,
         )
         supervisor = GenerateDraftDataSupervisor(
             gen_config, labeler=labeler, registry=registry,
         )
+        return _DraftField(supervisor=supervisor, registry=registry, labeler=labeler)
 
-        for line in format_startup_echo(
-            config, run_id=supervisor.run_id, anchor=anchor, generation=generation,
-            device=device, embedding_dim=embedding_dim,
-        ):
-            _log(line)
-
-        window = AnchorWindow(
-            config.anchor_window, config.learner_label, anchor,
-        )
-        config.output_path.parent.mkdir(parents=True, exist_ok=True)
-        config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        latest_path = config.checkpoint_dir / "latest.pt"
-
+    @staticmethod
+    def _launch(field: _DraftField) -> Iterator[DraftRecord]:
+        """Install the signal handlers, launch the resident worker, open its record stream."""
+        supervisor = field.supervisor
         supervisor._install_signal_handlers()
-        launch = supervisor._default_launch_worker(registry.external_labels)
-        records = supervisor.iter_records(launch, labeler)
-
-        rounds = 0
-        total_drafts = 0
-        total_picks = 0
-        snapshot_path: Path | None = None
-        best_path: Path | None = None
-        stop_reason: str | None = None
-        start_time = time.monotonic()
-        # Append-only, never "w": output/draft/drafts.jsonl is the canonical
-        # shared corpus and truncating it would destroy the gen-1 / live-play
-        # data (FR-020).
-        with open(config.output_path, "a", buffering=1, encoding="utf-8") as out:
-            try:
-                while config.max_rounds is None or rounds < config.max_rounds:
-                    gen_start = time.monotonic()
-                    model.eval()  # generation: the live policy drafts
-                    fresh = self._pull_round(
-                        records, config.drafts_per_round, out, window, append_record,
-                    )
-                    if not fresh:
-                        break  # the stream ended (shutdown requested)
-                    gen_seconds = time.monotonic() - gen_start
-                    total_drafts += len(fresh)
-
-                    train_start = time.monotonic()
-                    batch = loader.build(fresh, config.learner_label)
-                    batch.index = rounds
-                    batch.gen_seconds = gen_seconds
-                    stats = assign_advantages(batch)
-
-                    diag = RoundDiagnostics(
-                        learner_label=config.learner_label,
-                        anchor_label=anchor,
-                        index=rounds,
-                        drafts=len(fresh),
-                        total_drafts=total_drafts,
-                        learner_seats=len(batch.learner_rewards),
-                        dropped_seats=batch.dropped_seats,
-                        learner_picks=len(batch.examples),
-                        gen_seconds=gen_seconds,
-                        reward=stats,
-                    )
-                    if stats.degenerate:
-                        diag.skipped = True
-                        diag.skip_reason = stats.reason
-                    else:
-                        total_picks += len(batch.examples)
-                        prev_model.load_state_dict(model.state_dict())
-                        update = run_update_pass(
-                            model, optimizer, scheduler, batch,
-                            temperature=temperature,
-                            batch_size=config.batch_size,
-                            max_grad_norm=config.max_grad_norm,
-                            device=device,
-                            rng=rng,
-                        )
-                        # Back to eval before the sweep: with dropout active the
-                        # entropy/off-argmax/KL figures would measure noise.
-                        model.eval()
-                        diag.policy_loss = update.policy_loss
-                        diag.grad_norm = update.grad_norm
-                        diag.sweep = diagnostics_sweep(
-                            prev_model, model, batch.examples, batch.table,
-                            batch_size=config.batch_size,
-                            temperature=temperature,
-                            device=device,
-                            init_model=init_model,
-                        )
-                    diag.train_seconds = time.monotonic() - train_start
-                    diag.lr = plateau.current_lr()
-
-                    is_best = window.observe_round(rounds)
-                    diag.anchor_margin = window.margin
-                    diag.label_means = window.label_means()
-                    diag.window_drafts = window.window_drafts
-                    for line in format_round_lines(diag):
-                        _log(line)
-
-                    rounds += 1
-                    _write_checkpoint(
-                        store, model, optimizer, config, base, generation,
-                        rounds, latest_path, plateau.decay_count,
-                    )
-                    _log(f"saved {latest_path} (round {rounds - 1})")
-                    if is_best:
-                        best_path = self._write_best(
-                            store, model, optimizer, config, base, generation,
-                            rounds, plateau.decay_count,
-                            round_index=rounds - 1, margin=window.best_margin,
-                        )
-                    if rounds % config.snapshot_every == 0:
-                        snapshot_path = self._snapshot(
-                            store, model, optimizer, config, base, generation,
-                            rounds, plateau.decay_count,
-                        )
-
-                    # A stalled margin anneals before it stops: the decay resets
-                    # the shared counter, so patience can only fire at the floor
-                    # (FR-035). Both knobs are None unless the operator armed them.
-                    new_lr = _maybe_decay(
-                        window.rounds_since_best, config.lr_decay_patience, plateau,
-                    )
-                    if new_lr is not None:
-                        _log(
-                            f"LR decay #{plateau.decay_count} -> {new_lr:.2e} after "
-                            f"{config.lr_decay_patience} rounds without a new best "
-                            "margin"
-                        )
-                        window.note_lr_decay()
-                    elif (
-                        config.patience is not None
-                        and window.rounds_since_best >= config.patience
-                    ):
-                        stop_reason = (
-                            f"no new best anchor margin for {config.patience} rounds"
-                            + (
-                                f" at the LR floor ({plateau.current_lr():.2e})"
-                                if config.lr_decay_patience is not None else ""
-                            )
-                        )
-                        _log(f"Stopping: {stop_reason}")
-                        break
-
-                    if supervisor._shutdown.is_set():
-                        break
-            finally:
-                records.close()
-
-        snapshot_path = self._snapshot(
-            store, model, optimizer, config, base, generation, rounds,
-            plateau.decay_count,
-        )
-        for line in format_final_summary(
-            rounds=rounds, total_drafts=total_drafts, learner_picks=total_picks,
-            elapsed=time.monotonic() - start_time, latest_path=latest_path,
-            snapshot_path=snapshot_path, best_path=best_path, window=window,
-        ):
-            _log(line)
-        return rounds
+        launch = supervisor._default_launch_worker(field.registry.external_labels)
+        return supervisor.iter_records(launch, field.labeler)
 
     @staticmethod
     def _generation_config(
@@ -463,13 +333,36 @@ class TrainDraftAgentOnlineUseCase:
             worker_log_dir=config.worker_log_dir,
         )
 
+    # --- the rounds ---
+
+    def _run_rounds(self, run: _OnlineRun, tally: _RunTally, out: Any) -> None:
+        """Play rounds until ``--max-rounds``, the stream's end, a stop, or a shutdown."""
+        max_rounds = run.config.max_rounds
+        while max_rounds is None or tally.rounds < max_rounds:
+            if not self._play_round(run, tally, out):
+                break
+
+    def _play_round(self, run: _OnlineRun, tally: _RunTally, out: Any) -> bool:
+        """Pull, train, report, save and apply run control; ``False`` when the run ends."""
+        gen_start = time.monotonic()
+        run.learner.model.eval()  # generation: the live policy drafts
+        fresh = self._pull_round(run.records, run.config.drafts_per_round, out, run.window)
+        if not fresh:
+            return False  # the stream ended (shutdown requested)
+        gen_seconds = time.monotonic() - gen_start
+        tally.total_drafts += len(fresh)
+
+        diag = self._train_round(run, tally, fresh, gen_seconds)
+        is_best = self._report_round(run, diag, tally.rounds)
+        tally.rounds += 1
+        self._save_round(run, tally, is_best)
+        if self._run_control_stops(run):
+            return False
+        return not run.field.supervisor._shutdown.is_set()
+
     @staticmethod
     def _pull_round(
-        records: Iterator[DraftRecord],
-        n: int,
-        out: Any,
-        window: AnchorWindow,
-        append_record,
+        records: Iterator[DraftRecord], n: int, out: Any, window: AnchorWindow,
     ) -> list[DraftRecord]:
         """Pull ``n`` fresh records, persisting and windowing each as it arrives.
 
@@ -477,6 +370,8 @@ class TrainDraftAgentOnlineUseCase:
         resident. Each record is appended the moment it arrives, so a round that
         later no-ops still leaves its drafts on disk.
         """
+        from draft.infrastructure.draft_record_io import append_record
+
         fresh: list[DraftRecord] = []
         for record in records:
             append_record(out, record)
@@ -486,37 +381,134 @@ class TrainDraftAgentOnlineUseCase:
                 break
         return fresh
 
-    @staticmethod
-    def _snapshot(
-        store: DraftAgentStore,
-        model: DraftAgentModel,
-        optimizer: torch.optim.Optimizer,
-        config: TrainDraftAgentOnlineConfig,
-        base: Any,
-        generation: int,
-        rounds: int,
-        lr_decay_count: int = 0,
-    ) -> Path:
-        path = config.checkpoint_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
-        _write_checkpoint(
-            store, model, optimizer, config, base, generation, rounds, path,
-            lr_decay_count,
+    def _train_round(
+        self, run: _OnlineRun, tally: _RunTally, fresh: list[DraftRecord], gen_seconds: float,
+    ) -> RoundDiagnostics:
+        """Build the round's batch and advantages, and update unless the round is degenerate."""
+        learner_label = run.config.learner_label
+        train_start = time.monotonic()
+        batch = run.loader.build(fresh, learner_label)
+        batch.index = tally.rounds
+        batch.gen_seconds = gen_seconds
+        stats = assign_advantages(batch)
+
+        diag = RoundDiagnostics(
+            learner_label=learner_label,
+            anchor_label=run.seeded.anchor,
+            index=tally.rounds,
+            drafts=len(fresh),
+            total_drafts=tally.total_drafts,
+            learner_seats=len(batch.learner_rewards),
+            dropped_seats=batch.dropped_seats,
+            learner_picks=len(batch.examples),
+            gen_seconds=gen_seconds,
+            reward=stats,
         )
-        _log(f"snapshot {path} (round {rounds})")
+        if stats.degenerate:
+            diag.skipped = True
+            diag.skip_reason = stats.reason
+        else:
+            tally.total_picks += len(batch.examples)
+            self._update(run, batch, diag)
+        diag.train_seconds = time.monotonic() - train_start
+        diag.lr = run.plateau.current_lr()
+        return diag
+
+    @staticmethod
+    def _update(run: _OnlineRun, batch: RoundBatch, diag: RoundDiagnostics) -> None:
+        """The one-pass update from πₖ to πₖ₊₁, then the sweep that measures it."""
+        policies = run.policies
+        policies.prev_model.load_state_dict(policies.model.state_dict())
+        update = run_update_pass(
+            run.learner, batch, settings=run.update_settings, rng=run.seeded.rng,
+        )
+        # Back to eval before the sweep: with dropout active the
+        # entropy/off-argmax/KL figures would measure noise.
+        policies.model.eval()
+        diag.policy_loss = update.policy_loss
+        diag.grad_norm = update.grad_norm
+        diag.sweep = diagnostics_sweep(
+            policies, batch.examples, batch.table, settings=run.sweep_settings,
+        )
+
+    @staticmethod
+    def _report_round(run: _OnlineRun, diag: RoundDiagnostics, round_index: int) -> bool:
+        """Close the round in the anchor window and log it; ``True`` on a new best margin."""
+        window = run.window
+        is_best = window.observe_round(round_index)
+        diag.anchor_margin = window.margin
+        diag.label_means = window.label_means()
+        diag.window_drafts = window.window_drafts
+        for line in format_round_lines(diag):
+            _log(line)
+        return is_best
+
+    def _save_round(self, run: _OnlineRun, tally: _RunTally, is_best: bool) -> None:
+        """``latest.pt`` every round, a best on a new best margin, a snapshot every N rounds."""
+        stamp = CheckpointStamp(rounds=tally.rounds, lr_decay_count=run.plateau.decay_count)
+        _write_checkpoint(run.checkpoints, stamp, run.latest_path)
+        _log(f"saved {run.latest_path} (round {tally.rounds - 1})")
+        if is_best:
+            tally.best_path = self._write_best(
+                run.checkpoints, stamp,
+                round_index=tally.rounds - 1, margin=run.window.best_margin,
+            )
+        if tally.rounds % run.config.snapshot_every == 0:
+            tally.snapshot_path = self._snapshot(run.checkpoints, stamp)
+
+    @staticmethod
+    def _run_control_stops(run: _OnlineRun) -> bool:
+        """Anneal on a stalled margin, or stop when patience runs out; ``True`` to stop.
+
+        A stalled margin anneals before it stops: the decay resets the shared
+        counter, so patience can only fire at the floor (FR-035). Both knobs are
+        None unless the operator armed them.
+        """
+        from draft.application.train_draft_agent import _maybe_decay
+
+        config, window, plateau = run.config, run.window, run.plateau
+        new_lr = _maybe_decay(window.rounds_since_best, config.lr_decay_patience, plateau)
+        if new_lr is not None:
+            _log(
+                f"LR decay #{plateau.decay_count} -> {new_lr:.2e} after "
+                f"{config.lr_decay_patience} rounds without a new best "
+                "margin"
+            )
+            window.note_lr_decay()
+            return False
+        if config.patience is not None and window.rounds_since_best >= config.patience:
+            _log(f"Stopping: {_stop_reason(config, plateau)}")
+            return True
+        return False
+
+    # --- closing ---
+
+    def _close(self, run: _OnlineRun, tally: _RunTally) -> None:
+        """The final snapshot and the closing summary, on every termination path."""
+        tally.snapshot_path = self._snapshot(
+            run.checkpoints,
+            CheckpointStamp(rounds=tally.rounds, lr_decay_count=run.plateau.decay_count),
+        )
+        outcome = RunOutcome(
+            rounds=tally.rounds, total_drafts=tally.total_drafts,
+            learner_picks=tally.total_picks, latest_path=run.latest_path,
+            snapshot_path=tally.snapshot_path, best_path=tally.best_path,
+        )
+        for line in format_final_summary(
+            outcome, elapsed=time.monotonic() - run.start_time, window=run.window,
+        ):
+            _log(line)
+
+    @staticmethod
+    def _snapshot(source: CheckpointSource, stamp: CheckpointStamp) -> Path:
+        path = source.config.checkpoint_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+        _write_checkpoint(source, stamp, path)
+        _log(f"snapshot {path} (round {stamp.rounds})")
         return path
 
     @staticmethod
     def _write_best(
-        store: DraftAgentStore,
-        model: DraftAgentModel,
-        optimizer: torch.optim.Optimizer,
-        config: TrainDraftAgentOnlineConfig,
-        base: Any,
-        generation: int,
-        rounds: int,
-        lr_decay_count: int,
-        *,
-        round_index: int,
+        source: CheckpointSource, stamp: CheckpointStamp, *, round_index: int,
         margin: float | None,
     ) -> Path:
         """Write ``best_{timestamp}.pt`` for a new best anchor margin (FR-033).
@@ -525,10 +517,15 @@ class TrainDraftAgentOnlineUseCase:
         lags the policy by about half the window, so the genuinely best weights
         may be a few rounds earlier and the history is worth keeping.
         """
-        path = config.checkpoint_dir / f"best_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
-        _write_checkpoint(
-            store, model, optimizer, config, base, generation, rounds, path,
-            lr_decay_count,
-        )
+        path = source.config.checkpoint_dir / f"best_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+        _write_checkpoint(source, stamp, path)
         _log(f"best {path} (round {round_index}, margin {_fmt_margin(margin)})")
         return path
+
+
+def _stop_reason(config: TrainDraftAgentOnlineConfig, plateau: Any) -> str:
+    """Why patience stopped the run, naming the LR floor when annealing was armed."""
+    reason = f"no new best anchor margin for {config.patience} rounds"
+    if config.lr_decay_patience is not None:
+        reason += f" at the LR floor ({plateau.current_lr():.2e})"
+    return reason

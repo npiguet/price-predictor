@@ -34,16 +34,31 @@ class SweepDiagnostics:
     kl_init_new: float = 0.0
 
 
+@dataclass(frozen=True)
+class SweepPolicies:
+    """The policies a sweep forwards: πₖ (``prev_model``), πₖ₊₁ (``model``) and,
+    optionally, π₀ (``init_model``)."""
+
+    prev_model: DraftAgentModel
+    model: DraftAgentModel
+    init_model: DraftAgentModel | None = None
+
+
+@dataclass(frozen=True)
+class SweepSettings:
+    """How the sweep is batched and the temperature its distributions are taken at."""
+
+    batch_size: int
+    temperature: float
+    device: torch.device
+
+
 def diagnostics_sweep(
-    prev_model: DraftAgentModel,
-    model: DraftAgentModel,
+    policies: SweepPolicies,
     examples: list[OnlineExample],
     table: np.ndarray,
     *,
-    batch_size: int,
-    temperature: float,
-    device: torch.device,
-    init_model: DraftAgentModel | None = None,
+    settings: SweepSettings,
 ) -> SweepDiagnostics:
     """One batched ``no_grad`` sweep over the round's picks forwarding each model.
 
@@ -66,6 +81,8 @@ def diagnostics_sweep(
     n = len(examples)
     if n == 0:
         return SweepDiagnostics()
+    prev_model, model, init_model = policies.prev_model, policies.model, policies.init_model
+    batch_size, temperature, device = settings.batch_size, settings.temperature, settings.device
 
     entropy_sum = 0.0
     logp_sum = 0.0

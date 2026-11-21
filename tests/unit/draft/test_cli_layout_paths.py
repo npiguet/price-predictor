@@ -130,6 +130,7 @@ class TestTheOnlineTrainersRunDirectory:
     def test_its_checkpoints_are_written_in_the_config_s_directory(self, tmp_path):
         """``_snapshot`` and ``_write_best`` name files in ``checkpoint_dir``."""
         import draft.application.train_draft_agent_online as online
+        from draft.application.online_checkpoints import CheckpointSource, CheckpointStamp
 
         written = []
         config = online.TrainDraftAgentOnlineConfig(
@@ -137,12 +138,16 @@ class TestTheOnlineTrainersRunDirectory:
             output_path=Path("d.jsonl"), checkpoint_dir=tmp_path / "run",
             worker_log_dir=tmp_path / "run" / "logs",
         )
+        source = CheckpointSource(
+            store=None, model=None, optimizer=None, config=config, base=None, generation=0,
+        )
+        stamp = CheckpointStamp(rounds=1)
         original = online._write_checkpoint
         try:
-            online._write_checkpoint = lambda *args: written.append(args[7])
-            online.TrainDraftAgentOnlineUseCase._snapshot(None, None, None, config, None, 0, 1)
+            online._write_checkpoint = lambda _source, _stamp, path: written.append(path)
+            online.TrainDraftAgentOnlineUseCase._snapshot(source, stamp)
             online.TrainDraftAgentOnlineUseCase._write_best(
-                None, None, None, config, None, 0, 1, 0, round_index=1, margin=None)
+                source, stamp, round_index=0, margin=None)
         finally:
             online._write_checkpoint = original
         assert [path.parent for path in written] == [tmp_path / "run"] * 2

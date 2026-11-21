@@ -49,16 +49,30 @@ class UpdateResult:
     steps: int = 0
 
 
+@dataclass(frozen=True)
+class Learner:
+    """The live model with the optimizer and LR schedule that step it, once per minibatch."""
+
+    model: DraftAgentModel
+    optimizer: torch.optim.Optimizer
+    scheduler: torch.optim.lr_scheduler.LambdaLR
+
+
+@dataclass(frozen=True)
+class UpdateSettings:
+    """How a round's pass is taken: the policy temperature, minibatch size, clip and device."""
+
+    temperature: float
+    batch_size: int
+    max_grad_norm: float
+    device: torch.device
+
+
 def run_update_pass(
-    model: DraftAgentModel,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.LambdaLR,
+    learner: Learner,
     batch: RoundBatch,
     *,
-    temperature: float,
-    batch_size: int,
-    max_grad_norm: float,
-    device: torch.device,
+    settings: UpdateSettings,
     rng: random.Random,
 ) -> UpdateResult:
     """One shuffled, length-bucketed pass over the round's learner picks.
@@ -73,20 +87,21 @@ def run_update_pass(
     if not batch.examples:
         return result
 
+    model, optimizer = learner.model, learner.optimizer
     model.train()
-    minibatches = length_bucketed_batches(batch.examples, batch_size, rng)
+    minibatches = length_bucketed_batches(batch.examples, settings.batch_size, rng)
     loss_sum = 0.0
     norm_sum = 0.0
     for chunk in minibatches:
-        collated = _collate(chunk, batch.table, device)
-        loss, _ = _compute_loss(model, collated, temperature)
+        collated = _collate(chunk, batch.table, settings.device)
+        loss, _ = _compute_loss(model, collated, settings.temperature)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         # Pre-clip norms are the movement signal; post-clip ones are bounded by
         # max_grad_norm and carry no shape information.
-        norms = clip_per_group(optimizer, max_norm=max_grad_norm)
+        norms = clip_per_group(optimizer, max_norm=settings.max_grad_norm)
         optimizer.step()
-        scheduler.step()
+        learner.scheduler.step()
         loss_sum += float(loss.detach())
         norm_sum += max(norms.values()) if norms else 0.0
         result.steps += 1

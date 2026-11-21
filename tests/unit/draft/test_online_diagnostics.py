@@ -12,7 +12,7 @@ import pytest
 import torch
 
 from draft.application.online_anchor_window import AnchorWindow
-from draft.application.online_diagnostics import diagnostics_sweep
+from draft.application.online_diagnostics import SweepPolicies, SweepSettings, diagnostics_sweep
 from draft.application.online_examples import OnlineExample
 from draft.domain.draft_agent_model import DraftAgentConfig, DraftAgentModel
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
@@ -65,8 +65,8 @@ def test_perplexity_is_the_exponential_of_entropy() -> None:
     examples = [_example(), _example(action_offset=1), _example(action_offset=2)]
 
     diag = diagnostics_sweep(
-        prev, new, examples, _table(), batch_size=2, temperature=1.0,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), examples, _table(),
+        settings=SweepSettings(batch_size=2, temperature=1.0, device=torch.device("cpu")),
     )
 
     assert diag.perplexity == math.exp(diag.entropy)
@@ -78,8 +78,8 @@ def test_kl_is_zero_when_the_weights_did_not_move() -> None:
     examples = [_example(), _example(action_offset=2)]
 
     diag = diagnostics_sweep(
-        prev, new, examples, _table(), batch_size=8, temperature=1.0,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), examples, _table(),
+        settings=SweepSettings(batch_size=8, temperature=1.0, device=torch.device("cpu")),
     )
 
     assert abs(diag.kl_prev_new) < 1e-6
@@ -93,8 +93,8 @@ def test_kl_is_positive_after_a_step() -> None:
     examples = [_example(), _example(action_offset=1)]
 
     diag = diagnostics_sweep(
-        prev, new, examples, _table(), batch_size=8, temperature=1.0,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), examples, _table(),
+        settings=SweepSettings(batch_size=8, temperature=1.0, device=torch.device("cpu")),
     )
 
     assert diag.kl_prev_new > 0.0
@@ -108,7 +108,8 @@ def test_off_argmax_rate_counts_picks_that_missed_the_argmax() -> None:
     device = torch.device("cpu")
 
     diag = diagnostics_sweep(
-        prev, new, examples, table, batch_size=8, temperature=1.0, device=device,
+        SweepPolicies(prev, new), examples, table,
+        settings=SweepSettings(batch_size=8, temperature=1.0, device=device),
     )
 
     # Recompute the argmax choice per example directly from pi_k.
@@ -149,7 +150,8 @@ def test_off_argmax_rate_is_zero_when_every_action_is_the_argmax() -> None:
         examples.append(ex)
 
     diag = diagnostics_sweep(
-        prev, new, examples, table, batch_size=8, temperature=1.0, device=device,
+        SweepPolicies(prev, new), examples, table,
+        settings=SweepSettings(batch_size=8, temperature=1.0, device=device),
     )
     assert diag.off_argmax_rate == 0.0
 
@@ -161,7 +163,8 @@ def test_mean_logp_averages_the_taken_actions_under_the_generating_policy() -> N
     device = torch.device("cpu")
 
     diag = diagnostics_sweep(
-        prev, new, examples, table, batch_size=2, temperature=1.0, device=device,
+        SweepPolicies(prev, new), examples, table,
+        settings=SweepSettings(batch_size=2, temperature=1.0, device=device),
     )
 
     from draft.application.online_examples import _collate
@@ -187,12 +190,12 @@ def test_sweep_is_batch_size_invariant() -> None:
     table = _table()
 
     a = diagnostics_sweep(
-        prev, new, examples, table, batch_size=2, temperature=1.3,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), examples, table,
+        settings=SweepSettings(batch_size=2, temperature=1.3, device=torch.device("cpu")),
     )
     b = diagnostics_sweep(
-        prev, new, examples, table, batch_size=16, temperature=1.3,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), examples, table,
+        settings=SweepSettings(batch_size=16, temperature=1.3, device=torch.device("cpu")),
     )
 
     assert abs(a.entropy - b.entropy) < 1e-5
@@ -203,8 +206,8 @@ def test_sweep_is_batch_size_invariant() -> None:
 def test_empty_example_list_is_a_safe_zero_sweep() -> None:
     prev, new = _models()
     diag = diagnostics_sweep(
-        prev, new, [], _table(), batch_size=8, temperature=1.0,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), [], _table(),
+        settings=SweepSettings(batch_size=8, temperature=1.0, device=torch.device("cpu")),
     )
     assert diag.entropy == 0.0
     assert diag.off_argmax_rate == 0.0
@@ -232,22 +235,24 @@ def _nudge(model: DraftAgentModel, scale: float = 0.5) -> None:
             p.add_(torch.randn_like(p) * scale)
 
 
-def _sweep(init, prev, new, examples, **kw):
-    defaults = {"batch_size": 8, "temperature": 1.0, "device": torch.device("cpu")}
-    defaults.update(kw)
-    return diagnostics_sweep(prev, new, examples, _table(), init_model=init, **defaults)
+def _sweep(models, examples, *, batch_size=8, temperature=1.0):
+    init, prev, new = models
+    settings = SweepSettings(
+        batch_size=batch_size, temperature=temperature, device=torch.device("cpu"),
+    )
+    return diagnostics_sweep(SweepPolicies(prev, new, init), examples, _table(), settings=settings)
 
 
 def test_cumulative_kl_is_zero_when_nothing_has_moved() -> None:
     init, prev, new = _three_models()
-    diag = _sweep(init, prev, new, [_example(), _example(action_offset=1)])
+    diag = _sweep((init, prev, new), [_example(), _example(action_offset=1)])
     assert abs(diag.kl_init_new) < 1e-6
 
 
 def test_cumulative_kl_is_positive_once_the_learner_has_moved() -> None:
     init, prev, new = _three_models()
     _nudge(new)
-    diag = _sweep(init, prev, new, [_example(), _example(action_offset=2)])
+    diag = _sweep((init, prev, new), [_example(), _example(action_offset=2)])
     assert diag.kl_init_new > 0.0
 
 
@@ -255,10 +260,10 @@ def test_cumulative_kl_ignores_prev_model() -> None:
     """It measures distance from pi_0, not from last round (that is kl_prev_new)."""
     init, prev, new = _three_models()
     examples = [_example(), _example(action_offset=1)]
-    before = _sweep(init, prev, new, examples).kl_init_new
+    before = _sweep((init, prev, new), examples).kl_init_new
 
     _nudge(prev)  # only the previous-round reference moves
-    after = _sweep(init, prev, new, examples)
+    after = _sweep((init, prev, new), examples)
 
     assert after.kl_init_new == pytest.approx(before, abs=1e-6)
     assert after.kl_prev_new > 0.0  # …while the per-round KL does react
@@ -268,7 +273,7 @@ def test_cumulative_kl_equals_per_round_kl_when_init_and_prev_coincide() -> None
     """One round after the warm start, the two questions have the same answer."""
     init, prev, new = _three_models()
     _nudge(new)
-    diag = _sweep(init, prev, new, [_example(action_offset=o) for o in (0, 1, 2)])
+    diag = _sweep((init, prev, new), [_example(action_offset=o) for o in (0, 1, 2)])
     assert diag.kl_init_new == pytest.approx(diag.kl_prev_new, abs=1e-6)
 
 
@@ -281,7 +286,7 @@ def test_cumulative_kl_can_grow_while_per_round_kl_stays_tiny() -> None:
     for _ in range(12):
         prev.load_state_dict(new.state_dict())
         _nudge(new, scale=0.02)  # a small step, always in a fresh direction
-        diag = _sweep(init, prev, new, examples)
+        diag = _sweep((init, prev, new), examples)
         per_round.append(diag.kl_prev_new)
 
     assert max(per_round) < 10 * diag.kl_init_new  # each step is small…
@@ -293,8 +298,8 @@ def test_cumulative_kl_is_batch_size_invariant() -> None:
     _nudge(new)
     examples = [_example(action_offset=o % 3) for o in range(7)]
 
-    a = _sweep(init, prev, new, examples, batch_size=2, temperature=1.3)
-    b = _sweep(init, prev, new, examples, batch_size=16, temperature=1.3)
+    a = _sweep((init, prev, new), examples, batch_size=2, temperature=1.3)
+    b = _sweep((init, prev, new), examples, batch_size=16, temperature=1.3)
     assert a.kl_init_new == pytest.approx(b.kl_init_new, abs=1e-5)
 
 
@@ -302,8 +307,8 @@ def test_sweep_without_an_init_model_reports_zero_cumulative_kl() -> None:
     """The parameter is optional so existing call sites keep working."""
     prev, new = _models()
     diag = diagnostics_sweep(
-        prev, new, [_example()], _table(), batch_size=8, temperature=1.0,
-        device=torch.device("cpu"),
+        SweepPolicies(prev, new), [_example()], _table(),
+        settings=SweepSettings(batch_size=8, temperature=1.0, device=torch.device("cpu")),
     )
     assert diag.kl_init_new == 0.0
 

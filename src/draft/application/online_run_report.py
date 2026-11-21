@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -45,14 +46,20 @@ def _format_agent_temperatures(config: TrainDraftAgentOnlineConfig) -> str:
     return " ".join(parts)
 
 
+@dataclass(frozen=True)
+class ResolvedStartup:
+    """What startup resolved beyond the config: the supervisor's run id, the anchor,
+    the base checkpoint's lineage counter, the device and the embedding width."""
+
+    run_id: str
+    anchor: str
+    generation: int
+    device: torch.device
+    embedding_dim: int
+
+
 def format_startup_echo(
-    config: TrainDraftAgentOnlineConfig,
-    *,
-    run_id: str,
-    anchor: str,
-    generation: int,
-    device: torch.device,
-    embedding_dim: int,
+    config: TrainDraftAgentOnlineConfig, *, startup: ResolvedStartup,
 ) -> list[str]:
     """The resolved run configuration, echoed once before the worker launches.
 
@@ -63,6 +70,7 @@ def format_startup_echo(
     """
     from draft.application.agent_mix import format_agent_mix
 
+    run_id, anchor, generation = startup.run_id, startup.anchor, startup.generation
     rounds = window_rounds(config)
     lines = [
         f"Online GRPO run {run_id}: generation {generation} -> {generation + 1}",
@@ -89,7 +97,7 @@ def format_startup_echo(
         ),
         f"  run ctrl  : {_format_run_control(config)}",
         (
-            f"  runtime   : device {device} | embedding width {embedding_dim} | "
+            f"  runtime   : device {startup.device} | embedding width {startup.embedding_dim} | "
             f"anchor window {config.anchor_window} drafts "
             f"({rounds} rounds, ~{rounds / 2:.0f}-round lag)"
         ),
@@ -102,26 +110,30 @@ def format_startup_echo(
     return lines
 
 
+@dataclass(frozen=True)
+class RunOutcome:
+    """How a run ended: its rounds, drafts and learner picks, and the checkpoints it left."""
+
+    rounds: int
+    total_drafts: int
+    learner_picks: int
+    latest_path: Path
+    snapshot_path: Path | None
+    best_path: Path | None
+
+
 def format_final_summary(
-    *,
-    rounds: int,
-    total_drafts: int,
-    learner_picks: int,
-    elapsed: float,
-    latest_path: Path,
-    snapshot_path: Path | None,
-    best_path: Path | None,
-    window: AnchorWindow,
+    outcome: RunOutcome, *, elapsed: float, window: AnchorWindow,
 ) -> list[str]:
     """The FR-019 closing block, printed on every termination path."""
     lines = [
-        f"Done after {rounds} rounds | {total_drafts} drafts | "
-        f"{learner_picks} learner picks | {_fmt_dur(elapsed)}",
-        f"  latest checkpoint : {latest_path}",
+        f"Done after {outcome.rounds} rounds | {outcome.total_drafts} drafts | "
+        f"{outcome.learner_picks} learner picks | {_fmt_dur(elapsed)}",
+        f"  latest checkpoint : {outcome.latest_path}",
     ]
-    if snapshot_path is not None:
-        lines.append(f"  final snapshot    : {snapshot_path}")
-    if best_path is None:
+    if outcome.snapshot_path is not None:
+        lines.append(f"  final snapshot    : {outcome.snapshot_path}")
+    if outcome.best_path is None:
         # Either the window never filled, or the margin was never defined. Say
         # so rather than naming a checkpoint chosen on partial evidence (FR-033).
         lines.append(
@@ -132,7 +144,7 @@ def format_final_summary(
         )
         lines.append("  best anchor margin: n/a")
     else:
-        lines.append(f"  best checkpoint   : {best_path}")
+        lines.append(f"  best checkpoint   : {outcome.best_path}")
         lines.append(
             f"  best anchor margin: {window.best_margin:+.3f} at round "
             f"{window.best_round} (current {_fmt_margin(window.margin)})"
