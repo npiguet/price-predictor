@@ -38,6 +38,8 @@ GENERAL = {
     "510.1a-1",
     # combat damage to a player is life lost, unless the source has infect
     "119.2-1", "120.3a-1",
+    # combat damage to a creature is marked on it, unless wither or infect
+    "120.3e-1",
     # a player losing life to combat damage is what 704.5a's check reads: its
     # near miss is every combat damage step to a player that leaves them alive
     "704.5a-2",
@@ -61,6 +63,9 @@ BROAD_NEAR_MISS = {
     "306.6-1", "506.3-1", "506.3-3", "508.1a-1", "508.1c-2", "508.1d-1",
     # An attacker with or without vigilance: every attack is one or the other.
     "508.1f-1", "702.20b-1",
+    # Combat damage to what an unblocked attacker attacks, or to a blocked
+    # one's blockers: each one's near miss is the other's fires side.
+    "510.1b-1", "510.1c-1",
     # A non-land-play candidate that does not fail the named check
     # (``verdict_bit``): most candidates pass the split-second check.
     "702.61a-1",

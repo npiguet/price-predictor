@@ -1,6 +1,7 @@
 """Effect halves the state-based check acts on: a creature dying at
 toughness 0 or less (704.5f), one left at toughness 1, a creature dying of
-damage (704.5g), and the deaths the ``sba_zone_move`` detector sees."""
+damage (704.5g), the deaths the ``sba_zone_move`` detector sees, and an Aura
+whose host stays (704.5m's near miss)."""
 
 from __future__ import annotations
 
@@ -133,3 +134,18 @@ def sba_fires(check: str) -> Callable[[dict], bool]:
         found = SBA_ZONE_MOVE.match(record_from_dict(record), None, {"check": check})
         return found is not None and found.polarity is Polarity.FIRES and found.observed
     return test
+
+
+def _touches_an_enchanted_host(record: dict) -> bool:
+    hosts = {entity.get("attached_to") for entity in entities_by_id(record).values()} - {None}
+    return any(set(subjects(event)) & hosts for event in events(record))
+
+
+def aura_host_stays(record: dict) -> bool:
+    """704.5m's near miss as the ``sba_zone_move`` detector reads it: an effect
+    half touching an enchanted permanent that stays, so its Aura stays legal.
+    Only effect halves naming a host in an event are parsed."""
+    if not is_effect_resolution(record) or not _touches_an_enchanted_host(record):
+        return False
+    found = SBA_ZONE_MOVE.match(record_from_dict(record), None, {"check": "aura_illegal"})
+    return found is not None and found.polarity is Polarity.DOES_NOT_FIRE

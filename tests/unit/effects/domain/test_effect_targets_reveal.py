@@ -2,8 +2,8 @@
 only a library's reveal sets ``library_events``' ``reveal`` bit.
 
 Each test edits the gen-3 fixture's Elfhame Sanctuary resolution, whose one
-``card_revealed`` (from the hand, naming nobody) is the shape the collector
-wrote before the event named its revealer.
+``card_revealed`` names its revealer and the library the basic land came
+from, as the collector writes it.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import EventType
 from effects.domain.records import EffectRecord
 
-_ELFHAME = "9442f17f-cb56-4893-8d4a-66b5538de180.0-mwhr12znmj0t.1"
+_ELFHAME = "3550376f-3c30-4231-90cd-cc0f1b308e87.0-mwqvqdyrb9c0.1"
 #: Elfhame Sanctuary's controller, who revealed the basic land it searched for.
 _REVEALER = "P1"
 _REVEAL = LIBRARY_EVENTS.index("reveal")
@@ -46,9 +46,9 @@ def _reveal_bit(record: EffectRecord, player: str) -> float | None:
     return None if library_events is None else library_events[_REVEAL]
 
 
-def test_the_fixture_reveal_names_nobody_from_the_hand():
+def test_the_fixture_reveal_names_its_revealer_from_the_library():
     reveals = [e for e in _elfhame().payload.events if e.type is EventType.CARD_REVEALED]
-    assert [(e.subjects, e.params["from_zone"]) for e in reveals] == [((), "hand")]
+    assert [(e.subjects, e.params["from_zone"]) for e in reveals] == [((_REVEALER,), "library")]
 
 
 def test_a_library_reveal_sets_the_reveal_bit_on_the_revealer():

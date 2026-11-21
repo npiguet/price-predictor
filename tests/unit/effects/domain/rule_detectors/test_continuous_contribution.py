@@ -98,17 +98,36 @@ def test_a_roles_kind_is_its_name(by_kind):
     assert FAMILY.match(role, None, {"field": "pt", "source_token_kind": "Nonesuch"}) is None
 
 
+class _LevelConditioned:
+    """The real sidecars, each line read with a level up's counter condition
+    after its script: the fixture's pilot holds no counter-conditioned static."""
+
+    _CONDITION = " | IsPresent$ Card.Self+counters_GE2_LEVEL"
+
+    def __init__(self, lines) -> None:
+        self.lines = lines
+
+    def first_line(self, keys):
+        line = self.lines.first_line(keys)
+        return replace(line, script_text=line.script_text + self._CONDITION) if line else None
+
+    def __getattr__(self, name):
+        return getattr(self.lines, name)
+
+
 def test_a_counter_conditioned_static_shows_by_its_counter_type(by_kind, gen3_sidecars):
-    def counter_type(record):
-        line = acting_line(record, gen3_sidecars)
-        return next(iter(sorted(condition_counter_types(line.script_text if line else None))),
-                    None)
-    record = next(r for r in by_kind("continuous") if counter_type(r))
-    declared = {"field": "pt", "counter_condition": counter_type(record)}
-    assert FAMILY.match(record, gen3_sidecars, declared) is not None
+    """A real P/T static, its line edited to apply while its card has two
+    level counters."""
+    lines = _LevelConditioned(gen3_sidecars)
+    record = next(r for r in by_kind("continuous")
+                  if any(c.pt_boost != (0, 0) for c in r.payload.contributions)
+                  and acting_line(r, gen3_sidecars) is not None)
+    assert sorted(condition_counter_types(acting_line(record, lines).script_text)) == ["LEVEL"]
+    declared = {"field": "pt", "counter_condition": "LEVEL"}
+    assert FAMILY.match(record, lines, declared) is not None
+    assert FAMILY.match(record, gen3_sidecars, declared) is None
     assert FAMILY.match(record, None, declared) is None
-    assert FAMILY.match(record, gen3_sidecars,
-                        {"field": "pt", "counter_condition": "NONESUCH"}) is None
+    assert FAMILY.match(record, lines, {"field": "pt", "counter_condition": "NONESUCH"}) is None
 
 
 def test_a_counter_condition_compares_in_one_spelling():

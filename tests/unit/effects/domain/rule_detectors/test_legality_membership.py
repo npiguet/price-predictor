@@ -58,11 +58,20 @@ def test_inside_reads_the_legal_list(by_kind):
     assert found.condition == found.outcome == record.payload.legal_attackers
 
 
+def _lists_no_attacker_beside_a_noncreature(record) -> bool:
+    """A record listing no legal attacker, its anchor forbidden and judged
+    outside with the universe's unlisted permanents, on a board where the
+    active player controls a noncreature permanent."""
+    active = record.state.global_.active
+    return not record.payload.legal_attackers and any(
+        e.on_battlefield and not e.is_creature and e.controller == active
+        for e in record.state.entities)
+
+
 class TestUniverse:
     def test_a_noncreature_the_attackers_record_never_lists_is_outside(self, by_kind):
-        record = next(r for r in by_kind("playability", "attackers") if any(
-            e.on_battlefield and not e.is_creature and e.controller == r.state.global_.active
-            for e in r.state.entities))
+        record = next(r for r in by_kind("playability", "attackers")
+                      if _lists_no_attacker_beside_a_noncreature(r))
         found = FAMILY.match(record, None, {"list": "legal_attackers",
                                             "universe": "battlefield"})
         assert found.polarity is Polarity.FIRES

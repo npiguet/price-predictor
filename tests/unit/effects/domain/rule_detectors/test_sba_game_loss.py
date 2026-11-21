@@ -57,7 +57,7 @@ def test_an_unknown_check_is_refused(by_kind):
         FAMILY.validate({"check": "commander_damage"})
 
 
-_BURN = "9442f17f-cb56-4893-8d4a-66b5538de180.3-mwhr1318yo3f.11670"
+_BURN = "3550376f-3c30-4231-90cd-cc0f1b308e87.0-mwqvze8h7jrz.725"
 
 
 def _burn_kill(gen3_records):

@@ -17,9 +17,9 @@ from effects.domain.rule_detectors import DetectorIndex, tag_record
 from effects.domain.rule_detectors.sba_zone_move import FAMILY
 from tests.unit.effects.domain.rule_detectors.builders import catalogue, declaration, scenario
 
-_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
-_FATIGUE = f"{_RUN}.0-mwhr12znmj0t.27"  # -2/-2 kills a 1/1
-_FATIGUE_SURVIVED = f"{_RUN}.0-mwhr12znmj0t.130"  # -2/-2 on a 3/3
+_RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
+_QUICKSAND = f"{_RUN}.0-mwqvqdyrb9c0.315"  # -1/-2 kills a 2/1
+_MIASMA_SURVIVED = f"{_RUN}.4-mwqw395jccfe.1855"  # -2/-2 on a 3/3
 
 
 def _by_id(records, record_id):
@@ -31,47 +31,47 @@ def _toughness_zero(record):
 
 
 def test_a_creature_at_toughness_below_zero_that_dies_fires_and_is_observed(gen3_records):
-    found = _toughness_zero(_by_id(gen3_records, _FATIGUE))
+    found = _toughness_zero(_by_id(gen3_records, _QUICKSAND))
     assert found.polarity is Polarity.FIRES and found.observed
-    assert found.entities == ("E60",)  # Cabal Torturer, a 1/1
+    assert found.entities == ("E80",)  # Slavering Nulls, a 2/1
 
 
 def test_a_creature_already_at_toughness_zero_that_dies_fires(gen3_records):
     """The fixture holds no 0/0 creature dying, so the real record is edited:
-    the Torturer is printed 0/0 on the board and no P/T change lowers it."""
-    record = _by_id(gen3_records, _FATIGUE)
-    lookout = record.state.entity("E60")
+    the Nulls is printed 0/0 on the board and no P/T change lowers it."""
+    record = _by_id(gen3_records, _QUICKSAND)
+    nulls = record.state.entity("E80")
     state = replace(record.state, entities=tuple(
-        replace(lookout, pt=replace(lookout.pt, base=(0, 0))) if e.id == "E60" else e
+        replace(nulls, pt=replace(nulls.pt, base=(0, 0))) if e.id == "E80" else e
         for e in record.state.entities))
     events = tuple(e for e in record.payload.events if e.type is not EventType.PT_CHANGE)
     found = _toughness_zero(replace(record, state=state, payload=ResolutionPayload(events=events)))
     assert found.polarity is Polarity.FIRES and found.observed
-    assert found.entities == ("E60",)
+    assert found.entities == ("E80",)
 
 
 def test_a_creature_left_at_toughness_one_is_the_near_miss(gen3_records):
-    found = _toughness_zero(_by_id(gen3_records, _FATIGUE_SURVIVED))
+    found = _toughness_zero(_by_id(gen3_records, _MIASMA_SURVIVED))
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
 
 
 def test_a_fires_record_edited_to_a_tougher_creature_is_rejected(gen3_records):
     """The near miss edited from a real record, the 704.5f scenario's one fact:
-    Crippling Fatigue's -2/-2 meets a 1/3 instead of a 1/1, which keeps toughness 1."""
-    record = _by_id(gen3_records, _FATIGUE)
-    torturer = record.state.entity("E60")
-    tougher = replace(torturer, pt=replace(torturer.pt, base=(1, 3)))
+    Quicksand's -1/-2 meets a 1/3 instead of a 2/1, which keeps toughness 1."""
+    record = _by_id(gen3_records, _QUICKSAND)
+    nulls = record.state.entity("E80")
+    tougher = replace(nulls, pt=replace(nulls.pt, base=(1, 3)))
     state = replace(record.state, entities=tuple(
-        tougher if e.id == "E60" else e for e in record.state.entities))
+        tougher if e.id == "E80" else e for e in record.state.entities))
     events = tuple(e for e in record.payload.events
-                   if not (e.type is EventType.ZONE_CHANGE and "E60" in e.subjects))
+                   if not (e.type is EventType.ZONE_CHANGE and "E80" in e.subjects))
     edited = replace(record, state=state, payload=ResolutionPayload(events=events))
     found = _toughness_zero(edited)
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
 
 
 def test_a_death_the_rule_says_should_not_happen_goes_on_the_review_list(gen3_records):
-    record = _by_id(gen3_records, _FATIGUE_SURVIVED)
+    record = _by_id(gen3_records, _MIASMA_SURVIVED)
     index = DetectorIndex.of(catalogue(scenario(
         "704.5f-1", ("704.5f",), "resolution",
         declaration("sba_zone_move", "resolution", check="toughness_zero"))))
@@ -165,26 +165,32 @@ def test_a_planeswalker_losing_its_last_loyalty_fires(gen3_records):
 
 
 def test_a_planeswalker_left_with_loyalty_is_the_near_miss(gen3_records):
-    """Sivitri loses 3 of her 4 loyalty instead of all of it, and stays."""
+    """Chandra, Flamecaller, given a loyalty counter more, loses one of her
+    two instead of her last, and stays."""
     record = next(r for r in gen3_records if any(
         e.type is EventType.COUNTER_CHANGE and e.params.get("counter_type") == "LOYALTY"
         for e in r.payload.listed_events()))
-    events = []
-    for e in record.payload.events:
-        if e.type is EventType.COUNTER_CHANGE and e.params.get("counter_type") == "LOYALTY":
-            e = replace(e, params={**e.params, "delta": e.params["delta"] + 1})
-        elif e.type is EventType.ZONE_CHANGE and e.attributed_to == "unresolved":
-            continue
-        events.append(e)
-    found = FAMILY.match(replace(record, payload=ResolutionPayload(events=tuple(events))), None,
-                         {"check": "loyalty_zero"})
+    walker_id = next(e.subjects[0] for e in record.payload.events
+                     if e.type is EventType.COUNTER_CHANGE
+                     and e.params.get("counter_type") == "LOYALTY")
+    walker = record.state.entity(walker_id)
+    stronger = replace(walker, counters={**walker.counters,
+                                         "LOYALTY": walker.counters["LOYALTY"] + 1})
+    state = replace(record.state, entities=tuple(
+        stronger if e.id == walker_id else e for e in record.state.entities))
+    events = tuple(e for e in record.payload.events
+                   if not (e.type is EventType.ZONE_CHANGE and e.attributed_to == "unresolved"))
+    found = FAMILY.match(replace(record, state=state, payload=ResolutionPayload(events=events)),
+                         None, {"check": "loyalty_zero"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
 
 
 def _small_hit(gen3_records):
     """A real 704.5g kill edited to a 1-damage hit: non-lethal, its source named."""
     record = _fires(gen3_records, "lethal_damage")
+    killed = set(FAMILY.match(record, None, {"check": "lethal_damage"}).outcome)
     hit = next(e for e in record.payload.events if e.type is EventType.DAMAGE_DEALT
+               and set(e.subjects) & killed
                and (e.params.get("source") or e.params.get("cause")))
     events = tuple(
         replace(e, params={**e.params, "amount": 1}) if e is hit else e
@@ -251,23 +257,26 @@ def test_two_legends_the_record_touches_neither_of_show_no_legend_rule(gen3_reco
 #: ``(check, expected)``, the expected ``(polarity, observed)`` or None for a
 #: record the check cannot read.
 _REVIEWED = [
-    # Mugging's 2 damage kills a 2/2: 704.5g's move, observed.
-    ("0-mwhr12znmj0t.210", "lethal_damage", (Polarity.FIRES, True)),
-    # A combat of two 2/2s, neither with deathtouch: the survivor's 1 damage
-    # is non-lethal and no deathtouch source dealt it.
-    ("0-mwhr12znmj0t.395", "deathtouch_damage", (Polarity.DOES_NOT_FIRE, False)),
+    # Ghostfire's 3 damage kills a 3/3: 704.5g's move, observed.
+    ("2-mwqvqdxrusnv.3944", "lethal_damage", (Polarity.FIRES, True)),
+    # A combat whose surviving creatures took less than their toughness, and
+    # no deathtouch source dealt any of it.
+    ("2-mwqvqdxrusnv.2623", "deathtouch_damage", (Polarity.DOES_NOT_FIRE, False)),
     # The game-end rescue: its board is read after a whole turn of events.
-    ("5-mwhr1304zvab.3518", "toughness_zero", None),
-    # A damage-all kills Animate Dead's host: the Aura falls with it.
-    ("0-mwhr12znmj0t.2852", "aura_illegal", (Polarity.FIRES, True)),
+    ("2-mwqvqdxrusnv.4639", "toughness_zero", None),
+    # Molten Disaster's damage to each creature kills an enchanted host: the
+    # Aura falls with it.
+    ("2-mwqvqdxrusnv.5022", "aura_illegal", (Polarity.FIRES, True)),
     # The same record's creatures that took less than their toughness.
-    ("0-mwhr12znmj0t.2852", "deathtouch_damage", (Polarity.DOES_NOT_FIRE, False)),
-    # Faith's Fetters' host is touched (+1/+1) and stays: the Aura stays legal.
-    ("0-mwhr12znmj0t.4540", "aura_illegal", (Polarity.DOES_NOT_FIRE, False)),
-    # One damage kills the Angel of Mercy and its Aura goes with it.
-    ("0-mwhr12znmj0t.4892", "aura_illegal", (Polarity.FIRES, True)),
+    ("2-mwqvqdxrusnv.5022", "deathtouch_damage", (Polarity.DOES_NOT_FIRE, False)),
+    # The effect touches Imperiosaur, enchanted by Bound in Silence, and it
+    # stays: the Aura stays legal.
+    ("2-mwqvqdxrusnv.3912", "aura_illegal", (Polarity.DOES_NOT_FIRE, False)),
+    # Searing Blaze's 3 damage kills an Elephant token, and Claws of Valakut
+    # goes with it.
+    ("0-mwqvqdyrb9c0.613", "aura_illegal", (Polarity.FIRES, True)),
     # Two legendary permanents of one name under one controller.
-    ("3-mwhr1318yo3f.6015", "legend_rule", (Polarity.FIRES, True)),
+    ("3-mwqvu8zeq2sj.8902", "legend_rule", (Polarity.FIRES, True)),
 ]
 
 
@@ -286,11 +295,11 @@ def test_a_saga_sacrificed_in_the_check_is_no_creature_check_s(gen3_records, gen
     """Summon: Shiva's last chapter: the Saga creature leaves with no P/T
     change. The fixture holds no Saga, so a real kill is edited to have none:
     its P/T change gone and its victim a Saga creature."""
-    record = _by_id(gen3_records, _FATIGUE)
-    victim = record.state.entity("E60")
+    record = _by_id(gen3_records, _QUICKSAND)
+    victim = record.state.entity("E80")
     saga = replace(victim, name="Summon: Shiva", subtypes=("saga",))
     state = replace(record.state, entities=tuple(
-        saga if e.id == "E60" else e for e in record.state.entities))
+        saga if e.id == "E80" else e for e in record.state.entities))
     events = tuple(e for e in record.payload.events if e.type is not EventType.PT_CHANGE)
     edited = replace(record, state=state, payload=ResolutionPayload(events=events))
     assert FAMILY.match(edited, gen3_sidecars, {"check": "toughness_zero"}) is None

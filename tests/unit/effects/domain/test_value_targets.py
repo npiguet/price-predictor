@@ -133,8 +133,8 @@ def _texts(card: str) -> list[str]:
     return [line["script_text"] for line in data["lines"] if line["script_text"]]
 
 
-def test_psionic_blast_sums_its_two_segments():
-    assert stated_targets(_texts("p/psionic_blast")[0]).get("damage") == 6
+def test_burn_the_accursed_sums_its_two_segments():
+    assert stated_targets(_texts("b/burn_the_accursed")[0]).get("damage") == 7
 
 
 def test_a_trigger_reads_the_damage_of_its_executed_segment():
@@ -142,10 +142,10 @@ def test_a_trigger_reads_the_damage_of_its_executed_segment():
     assert stated_targets(text).get("damage") == 2
 
 
-def test_a_charms_root_masks_amounts_and_its_draw_mode_reads_two():
-    root, draw, pump = _texts("r/reverent_howl")
+def test_a_charms_root_masks_amounts_and_its_draw_mode_reads_one():
+    root, pump, draw, _ = _texts("a/azorius_charm")
     assert stated_targets(root).get("damage") is None
-    assert stated_targets(draw).get("cards_drawn") == 2
+    assert stated_targets(draw).get("cards_drawn") == 1
     assert stated_targets(pump).get("cards_drawn") == 0
 
 

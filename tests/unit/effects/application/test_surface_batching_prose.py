@@ -162,7 +162,7 @@ def test_a_floating_effects_card_reads_its_source_lines_text():
 
     record = next(
         record_from_dict(raw) for raw in gen3_fixture_records()
-        if raw["record_id"].endswith(".0-mwhr12znmj0t.4891"))
+        if raw["record_id"].endswith(".0-mwqvqdyrb9c0.37"))
     floating, = command_zone_entities(record)
     sidecars = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
     batcher = make_batcher(

@@ -28,11 +28,13 @@ _CHAPTER_III_JSON = (
 
 
 def _keyword_trigger_record() -> dict:
-    """The fixture's first trigger record acting through a keyword's key."""
+    """The fixture's first trigger record acting through a keyword's own
+    key, one naming no trait the keyword built."""
     return next(
         raw for raw in gen3_fixture_records()
         if raw["kind"] == "trigger"
         and any(key["trait_kind"] == "keyword" for key in raw.get("ability") or ())
+        and not any("built" in key for key in raw.get("ability") or ())
     )
 
 

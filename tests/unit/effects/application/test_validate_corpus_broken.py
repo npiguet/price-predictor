@@ -72,7 +72,7 @@ def test_dangling_mirrors_fail_when_the_whole_directory_was_read(tmp_path):
     report = validate_directory(_write(tmp_path / "c", records))
     finding = _named(report.findings, "mirrors")
     assert not finding.ok, finding.measured
-    assert "5 mirrors" in finding.measured
+    assert "6 mirrors" in finding.measured
 
 
 def _mostly_dangling(tmp_path):
@@ -86,7 +86,7 @@ def _mostly_dangling(tmp_path):
 def test_a_share_of_unfound_mirrors_is_reported_with_no_flag(tmp_path):
     finding = _named(validate_directory(_mostly_dangling(tmp_path)).findings, "mirrors")
     assert finding.ok, finding.measured
-    assert "4 mirrors fell outside the window (80.0%, watched, no limit)" in finding.measured
+    assert "4 mirrors fell outside the window (66.7%, watched, no limit)" in finding.measured
 
 
 def test_a_share_of_unfound_mirrors_fails_given_a_ceiling(tmp_path):

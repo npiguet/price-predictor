@@ -2,7 +2,7 @@
 
 A keyword that renders several lines (a saga's chapters) declares on each
 line the ``built`` key of the trait that line renders, and its bare keyword
-key on no line. The fixture is Binding the Old Gods' real sidecar, its chapter
+key on no line. The fixture is Braids's Frightful Return's real sidecar, its chapter
 lines rewritten to that shape.
 """
 
@@ -17,9 +17,9 @@ from effects.infrastructure.sidecar_io import read_sidecar, sidecar_to_dict
 
 _SIDECAR = (
     Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars"
-    / "cardsfolder" / "b" / "binding_the_old_gods.provenance.json"
+    / "cardsfolder" / "b" / "braidss_frightful_return.provenance.json"
 )
-_SAGA = ProvenanceKey("cardsfolder/b/binding_the_old_gods.txt", 0, "keyword", 0)
+_SAGA = ProvenanceKey("cardsfolder/b/braidss_frightful_return.txt", 0, "keyword", 0)
 
 
 def _built_sidecar() -> ProvenanceSidecar:

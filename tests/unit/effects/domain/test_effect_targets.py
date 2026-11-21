@@ -625,7 +625,7 @@ def test_deriving_targets_loads_no_torch():
 
 # ── gen-3's outputs (root spec § 11.2-11.4, T119, T121, T122, T123) ──────────
 
-_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
+_RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 
 
 @functools.cache
@@ -675,12 +675,12 @@ class TestTargetLegalityOnADecisionRecord:
     """Story 5 acceptance 3: ``target_legal`` on every card and player of the
     record, gate-free (root spec section 11.4)."""
 
-    BERSERK = f"{_RUN}.0-mwhr12znmj0t.705"
+    SHREDDERS_TECHNIQUE = f"{_RUN}.5-mwqw5tpydi06.4292"
 
     def test_it_is_one_inside_the_legal_targets_and_zero_on_every_other_entity(self):
-        record = _fixture()[self.BERSERK]
+        record = _fixture()[self.SHREDDERS_TECHNIQUE]
         legal = set(record.payload.candidates[0].legal_targets)
-        assert legal == {"E122", "E35"}
+        assert legal == {"E40", "E41", "E42", "E55", "E68", "E69", "E72"}
         targets = derive_targets(record)
         refs = [e.id for e in record.state.entities] + [p.id for p in record.state.players]
         assert {"P0", "P1"} <= set(refs)
@@ -688,7 +688,7 @@ class TestTargetLegalityOnADecisionRecord:
             assert targets[ref].fields["target_legal"] == (1 if ref in legal else 0), ref
 
     def test_the_record_trains_no_gate(self):
-        targets = derive_targets(_fixture()[self.BERSERK])
+        targets = derive_targets(_fixture()[self.SHREDDERS_TECHNIQUE])
         assert targets.gated is False
         assert not any(entry.affected for entry in targets.values())
 
@@ -755,12 +755,12 @@ class TestCombatLegality:
             assert entry.affected
 
     def test_a_fixture_attack_that_tapped_its_anchor_reads_tapped(self):
-        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.67"]
+        record = _fixture()[f"{_RUN}.0-mwqvqdyrb9c0.14"]
         assert record.payload.tapped_by_attack is True
-        assert derive_targets(record)["E58"].fields["tap_state"] == 1
+        assert derive_targets(record)["E74"].fields["tap_state"] == 1
 
     def test_a_blockers_record_labels_the_block_requirement_on_every_listed_creature(self):
-        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.8781"]
+        record = _fixture()[f"{_RUN}.2-mwqvqdxrusnv.2464"]
         payload = record.payload
         targets = derive_targets(record)
         must = set(payload.must_block)
@@ -773,7 +773,7 @@ class TestGameLost:
     """Story 5 acceptance 6: the loser 1, the winner 0."""
 
     def test_a_win_is_the_other_players_loss(self):
-        targets = derive_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.283"])
+        targets = derive_targets(_fixture()[f"{_RUN}.0-mwqvqdyrb9c0.627"])
         assert targets["P0"].fields["game_lost"] == 1
         assert targets["P1"].fields["game_lost"] == 0
         assert targets["P0"].affected and targets["P1"].affected

@@ -25,8 +25,8 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.surface_collation import entity_target_tensors
 from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
-_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
-_BERSERK = f"{_RUN}.0-mwhr12znmj0t.705"
+_RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
+_SHREDDERS_TECHNIQUE = f"{_RUN}.5-mwqw5tpydi06.4292"
 
 
 @functools.cache
@@ -55,8 +55,8 @@ def _surface_of(record) -> _Surface:
 
 class TestTheGateMask:
     def test_a_playability_record_trains_no_gate_and_an_effect_record_does(self):
-        decision = _fixture()[_BERSERK]
-        resolution = _fixture()[f"{_RUN}.5-mwhr1304zvab.6514"]
+        decision = _fixture()[_SHREDDERS_TECHNIQUE]
+        resolution = _fixture()[f"{_RUN}.2-mwqvqdxrusnv.201"]
         records = [decision, resolution]
         batch = entity_target_tensors(
             [_surface_of(r) for r in records], [derive_targets(r) for r in records],
@@ -69,7 +69,7 @@ class TestTheGateMask:
     def test_target_legal_trains_on_every_entity_slot_of_the_decision(self):
         """Story 5 acceptance 3, as the loss reads it: scored on every card
         and player slot, none of them affected."""
-        record = _fixture()[_BERSERK]
+        record = _fixture()[_SHREDDERS_TECHNIQUE]
         surface = _surface_of(record)
         batch = entity_target_tensors(
             [surface], [derive_targets(record)], (FIELDS_BY_NAME["target_legal"],),

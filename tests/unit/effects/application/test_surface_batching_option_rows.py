@@ -87,20 +87,20 @@ def test_every_option_row_on_a_real_surface_follows_its_root():
 
 
 def test_a_real_charm_gets_its_three_mode_rows_after_its_root():
-    """FR-063a on Fire Magic as the converter writes it."""
+    """FR-063a on Azorius Charm as the converter writes it."""
     gen3 = _FIXTURES / "gen3-sidecars"
     sidecars = SidecarCache({"cardsfolder": gen3 / "cardsfolder"})
-    root = ProvenanceKey("cardsfolder/f/fire_magic.txt", 0, "spell", 0)
+    root = ProvenanceKey("cardsfolder/a/azorius_charm.txt", 0, "spell", 0)
     batcher = make_batcher(
         tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
     )
     modes = batcher.options_for(root)
     assert [mode.option for mode in modes] == [0, 1, 2]
-    fire_magic = make_entity(
-        "E1", "Fire Magic", zone="stack",
+    azorius_charm = make_entity(
+        "E1", "Azorius Charm", zone="stack",
         lines=(CardLine(keys=(root,), kind=LineKind.SPELL, granted=False),))
-    record = make_record(ability=(root,), state=make_snapshot(entities=(fire_magic,)))
+    record = make_record(ability=(root,), state=make_snapshot(entities=(azorius_charm,)))
     texts = batcher.batch_texts([record])
     assert len(texts) == 4  # the root and each mode's own chain
     rows = {text: row for row, text in enumerate(sorted(texts))}

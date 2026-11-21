@@ -236,8 +236,8 @@ def test_sc003_over_real_chained_texts():
 def test_a_real_triggered_charm_keeps_its_labels_in_the_template():
     from effects.infrastructure.sidecar_io import read_sidecar
 
-    ghast = _FIXTURE_SIDECARS / "cardsfolder" / "s" / "shambling_ghast.provenance.json"
-    sidecar = read_sidecar(ghast)
+    trufflesnout = _FIXTURE_SIDECARS / "cardsfolder" / "t" / "trufflesnout.provenance.json"
+    sidecar = read_sidecar(trufflesnout)
     template = masked_template(sidecar.lines[0].script_text)
     assert "Execute$ SV1" in template and "SV1: Choices$ SV2,SV3" in template
 

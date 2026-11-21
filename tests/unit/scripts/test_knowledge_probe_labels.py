@@ -43,12 +43,12 @@ def _resolution_with_huge_damage(records):
 
 class TestLineLabels:
     def test_an_activated_damage_ability(self):
-        line = fixture_line("AB$ DealDamage", "NumDmg$ 3", "Sac<1/CARDNAME>")
+        line = fixture_line("AB$ DealDamage", "NumDmg$ 3", "Cost$ 4 T Sac<1/CARDNAME>")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert found["damage"] == 3
-        assert found["cost_r"] == 0 and found["cost_generic"] == 3
-        assert found["cost_total"] == 3
-        assert found["damage_per_mana"] == pytest.approx(1.0)
+        assert found["cost_r"] == 0 and found["cost_generic"] == 4
+        assert found["cost_total"] == 4
+        assert found["damage_per_mana"] == pytest.approx(0.75)
         assert found["sacrifice_cost"] == 1.0 and found["tap_cost"] == 1.0
         assert found["repeatable"] == 0.0
         assert found["instant_speed"] == 1.0
@@ -79,13 +79,13 @@ class TestLineLabels:
         assert found["produces_g"] == 0.0
 
     def test_a_two_colour_mana_ability(self):
-        line = fixture_line("Produced$ Combo U R")
+        line = fixture_line("Produced$ Combo B R")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
-        assert found["produces_u"] == found["produces_r"] == 1.0
+        assert found["produces_b"] == found["produces_r"] == 1.0
         assert found["produces_w"] == 0.0 and found["any_colour"] == 0.0
 
     def test_a_sorcery_speed_activation(self):
-        line = fixture_line("SorcerySpeed$ True", "KW$ Vigilance")
+        line = fixture_line("SorcerySpeed$ True", "KW$ Flying")
         found = labels.line_labels(line.script_text, line.line_kind, line.script_api_type)
         assert found["instant_speed"] == 0.0 and found["repeatable"] == 1.0
 

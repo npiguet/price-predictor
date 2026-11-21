@@ -321,46 +321,38 @@ _PAYLOAD = "record.payload"
 
 
 def _held_constant_by_the_pilot() -> set[str]:
-    """The gen-3 fixture's constant members outside its events."""
+    """The gen-3 fixture's constant members outside its events, each one its
+    pilot holds constant too."""
     return {
         # One run, one mode.
-        "record.mode",
-        # No emblem, battle, rad or energy counter, spell targeting a spell,
-        # chosen value or granted line with its reason in any pilot game.
-        "record.state.global_.emblems", "record.state.refs.targets_on_stack",
-        "record.state.refs.choices", "record.state.players[].energy",
-        "record.state.players[].rad", "record.state.entities[].printed_defense",
-        "record.state.entities[].lines[].grant",
+        "record.mode", "record.run_id",
+        # No rad counter, speed or initiative in any pilot game.
+        "record.state.players[].rad", "record.state.players[].speed",
+        "record.state.players[].initiative",
         # No rewrite of an event Forge's bus does not name, and no attacker
         # forbidden by a line that keys to nothing or held elsewhere.
         f"{_PAYLOAD}<RewritePayload>.incoming_unknown",
         f"{_PAYLOAD}<PlayabilityAttackersPayload>.forbidden[].responsible_unresolved",
         f"{_PAYLOAD}<PlayabilityAttackersPayload>.forbidden[].required_elsewhere",
-        f"{_PAYLOAD}<PlayabilityBlockersPayload>.min_blockers",
-        # Fifteen contributions, none a colour, hidden-keyword, name or
-        # control change.
-        *(f"{_PAYLOAD}<ContinuousPayload>.contributions[].{name}"
-          for name in ("colors", "hidden_keywords", "name", "controller")),
+        # No contribution changing a name.
+        f"{_PAYLOAD}<ContinuousPayload>.contributions[].name",
     }
 
 
 def _event_members_held_constant() -> set[str]:
-    """The fixture's events: one rewrite with an outgoing event, cost halves
-    of one event type, and the varying durations and attributions on effect
-    halves and combat damage only."""
+    """The pilot's events: cost halves of one event type, and the durations
+    and attributions a cost half, a rewrite's own events, a trigger's event
+    and a turn-based action's hold fixed."""
     outgoing = f"{_PAYLOAD}<RewritePayload>.outgoing"
-    durations = (f"{_PAYLOAD}<ActivationPayload>.events[]", f"{_PAYLOAD}<CombatPayload>.events[]",
+    durations = (f"{_PAYLOAD}<ActivationPayload>.events[]",
                  f"{_PAYLOAD}<RewritePayload>.incoming", outgoing,
-                 f"{_PAYLOAD}<TriggerPayload>.event", f"{_PAYLOAD}<TurnActionPayload>.events[]",
-                 "record.state.pending_event")
+                 f"{_PAYLOAD}<TriggerPayload>.event", "record.state.pending_event")
     attributions = (f"{_PAYLOAD}<ActivationPayload>.events[]",
                     f"{_PAYLOAD}<RewritePayload>.incoming", outgoing,
-                    f"{_PAYLOAD}<RewritePayload>.buffered_events[]",
                     f"{_PAYLOAD}<TriggerPayload>.event",
                     f"{_PAYLOAD}<TurnActionPayload>.events[]", "record.state.pending_event")
     return {
         f"{_PAYLOAD}<ActivationPayload>.events[].type",
-        *(f"{outgoing}.{name}" for name in ("type", "subjects", "params")),
         *(f"{where}.duration" for where in durations),
         *(f"{where}.attributed_to" for where in attributions),
     }
@@ -401,7 +393,7 @@ class TestTheGen3Fields:
 
     def test_the_gen3_fixture_reaches_every_listed_path_and_varies_most(self):
         """The fixture's records reach every member of the table, a real
-        turn_action included, and vary each but the ones the 2026-11-15
+        turn_action included, and vary each but the ones the 2026-11-21
         pilot it was cut from holds constant itself (its ``field-coverage``
         report): the members the writer fixes, the one run's mode, and what
         no pilot game showed."""

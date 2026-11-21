@@ -438,8 +438,31 @@ class TestTheGen3FixtureRead:
         assert any(state.global_.dungeons for state in states)
         assert any(state.global_.day_night is not None for state in states)
 
+    @staticmethod
+    def _merged_state() -> StateSnapshot:
+        """The fixture's pilot mutated nothing: its first record holding a
+        battlefield creature, given a component merged under it as the
+        collector writes one (role ``mutate_component``, zone ``merged``)."""
+        import copy
+
+        from effects.infrastructure.record_codec import record_from_dict
+
+        raw = copy.deepcopy(next(
+            raw for raw in gen3_fixture_records() if any(
+                e["zone"] == "battlefield" and "creature" in e["types"]
+                for e in raw["state"]["entities"])))
+        creature = next(e for e in raw["state"]["entities"]
+                        if e["zone"] == "battlefield" and "creature" in e["types"])
+        component = {**copy.deepcopy(creature), "id": "E9001", "zone": "merged",
+                     "role": "mutate_component", "order_rank": None}
+        raw["state"]["entities"].append(component)
+        raw["state"]["links"].append(
+            {"from": "E9001", "to": creature["id"], "type": "merged_with"})
+        return record_from_dict(raw).state
+
     def test_every_extra_entity_role_reads(self):
-        roles = {e.role for state in self._states() for e in state.entities}
+        states = [*self._states(), self._merged_state()]
+        roles = {e.role for state in states for e in state.entities}
         assert roles == {None, *EntityRole}
 
     def test_a_face_down_card_reads_its_real_face(self):

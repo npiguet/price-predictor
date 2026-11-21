@@ -437,7 +437,7 @@ def test_turn_action_records_are_counted_by_subkind_and_nothing_else(gen3_survey
     totals = survey.totals
     # Each of the fixture's games ends in its marker.
     assert totals.turn_actions == Counter({
-        "draw": 7, "untap": 3, "day_night": 2, "cleanup_discard": 2,
+        "draw": 7, "untap": 8, "fork_edit": 2, "day_night": 2, "cleanup_discard": 2,
         "lore_counter": 2, "phasing": 2, "game_end": GEN3_FIXTURE_GAMES})
     assert not totals.cut.games
     assert sum(totals.kept.values()) + sum(totals.refusals.by_class.values()) == (

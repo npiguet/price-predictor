@@ -81,26 +81,10 @@ def java_golden_entities() -> list[dict]:
 
 #: Real gen-3 records, each line as the collector wrote it, with the sidecars
 #: every key they name resolves to: cut by ``scripts/make_fixture_records.py
-#: --generation 3 --per-category 2`` from the 2026-11-15 pilot and the three
-#: stall runs beside it (``output/effects/gen3/scratch/2026-11-15-{pilot,
-#: stall-1,stall-2,stall-3}``), from games that ended: each of its games ends
-#: in its game-end marker. Eight of its sidecars were since replaced by the
-#: current converter's output (sidecar and converted text), their old ones
-#: declaring one key on two lines of a face, which a reader now refuses: the
-#: sagas ``b/binding_the_old_gods``, ``d/down_down_to_goblin_town`` and
-#: ``t/the_trickster_gods_heist``, whose chapter lines now declare ``built``
-#: keys, and the spells ``b/big_score``, ``f/fumarole``, ``l/laughing_mad``,
-#: ``t/thunderwave`` and ``w/weigh_down``, now one spell line each. The records
-#: keep their old keys: a saga's bare ``keyword 0`` reads as ambiguous. On
-#: 2026-11-18 (task B05a, the commit after cbe63ad6) every entity's
-#: ``combat.attacking`` was rewritten from Forge's rendering of the defender to
-#: the ref its ``attacks`` link ends at, as the collector writes it since;
-#: no other byte of any line changed. On 2026-11-19 (task C07b) each of its 34
-#: fork records gained ``fork_kind`` after ``fork``, read off its flag
-#: signature and, for the six unlinked interventional effect halves the
-#: table leaves open, off its acting line: the five naming a printed line are
-#: interventions, the engine-effect one a protection fork's; no other byte
-#: changed.
+#: --per-category 2`` from the fourth review pilot
+#: (``output/effects/gen3/scratch/2026-11-21-review-pilot-4``, collected at
+#: 4e8a8e57 / Forge e1acd9c8edd), from games that ended: each of its games ends
+#: in its game-end marker. No byte of any line was changed since.
 GEN3_RECORDS = EFFECTS_FIXTURES / "gen3-records.jsonl.gz"
 GEN3_SIDECAR_FOLDERS = (
     EFFECTS_FIXTURES / "gen3-sidecars" / "cardsfolder",
@@ -110,9 +94,9 @@ GEN3_SIDECAR_FOLDERS = (
 #: the SHA-256 of its decompressed lines, pinned by
 #: ``test_record_codec_fixture.py::TestTheGen3Fixture``: a regeneration moves the
 #: three together, and with them every count a test pins on the fixture.
-GEN3_FIXTURE_RECORDS = 314
-GEN3_FIXTURE_GAMES = 57
-GEN3_FIXTURE_SHA256 = "506dc4513e478e842fc55ce98cc70dbb7a0bbc1420059adc303d6e48b72102c6"
+GEN3_FIXTURE_RECORDS = 396
+GEN3_FIXTURE_GAMES = 73
+GEN3_FIXTURE_SHA256 = "052f4311a58f7a62b7d7f026bbb82a8ed865ec23bda9a9a112befbd110239f2e"
 
 
 def gen3_fixture_records() -> list[dict]:

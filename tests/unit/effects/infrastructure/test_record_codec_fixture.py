@@ -115,10 +115,7 @@ class TestTheGen3Fixture:
 
     def test_every_turn_action_subkind_reads_with_its_events(self):
         actions = [r for r in self._records() if r.kind is RecordKind.TURN_ACTION]
-        # A fork's premise (``fork_edit``) was not collected when the fixture
-        # was cut; ProtectionForkRecordsTest pins it on the Java side.
-        uncollected = {TurnActionSubkind.FORK_EDIT}
-        assert {r.subkind for r in actions} == set(TurnActionSubkind) - uncollected
+        assert {r.subkind for r in actions} == set(TurnActionSubkind)
         assert all(r.ability is None for r in actions)
         # The game-end marker alone holds no event (WP7): its payload is
         # ``{events: [], records_withheld}``.

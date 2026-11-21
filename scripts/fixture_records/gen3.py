@@ -1,4 +1,5 @@
-"""Gen-3's own categories: story 2's acceptance scenarios, each
+"""Gen-3's own categories: what became of a stack item and which line
+acted (``resolutions``), story 2's acceptance scenarios, each
 ``turn_action`` subkind and failed check, the anchored legality records, the
 new snapshot members, the combats the keyword detector's real-record tests
 read and the fork tags. Matched before the detector and shared ones."""
@@ -15,6 +16,7 @@ from fixture_records.acceptance import (
     attacker_tapped_categories,
 )
 from fixture_records.members import snapshot_member_categories
+from fixture_records.resolutions import resolution_categories
 from fixture_records.shapes import candidate, events, failed_checks
 from fixture_records.sidecars import Sidecars
 
@@ -131,6 +133,7 @@ def gen3_categories(sidecars: Sidecars, lookup) -> dict[str, Test]:
     """Gen-3's own categories, in the order they are matched; ``lookup`` is a
     sidecar cache over the same trees, for the detectors."""
     return {
+        **resolution_categories(sidecars),
         **acceptance_categories(sidecars),
         **{f"turn-action-{subkind}": _turn_action(subkind)
            for subkind in _TURN_ACTION_SUBKINDS},

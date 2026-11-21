@@ -1,6 +1,7 @@
 """The categories a fixture is filled with, most specific first: a record
 lands in the first category it fits. The gen-3 categories are matched first,
-then the detector categories, then the shared ones."""
+then the detector categories, then the shared ones, then the rare members,
+which take only what no other category took."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from pathlib import Path
 from effects.infrastructure.converted_trees import SourceTrees
 from fixture_records.detector_categories import detector_categories
 from fixture_records.gen3 import gen3_categories
+from fixture_records.rare_members import rare_member_categories
 from fixture_records.shapes import acting_key
 from fixture_records.sidecars import Sidecars
 
@@ -90,4 +92,4 @@ def categories_for(sidecars: Sidecars, folders: list[Path]) -> dict[str, Test]:
     cache of their own."""
     lookup = SourceTrees.of(folders).sidecar_cache()
     return {**gen3_categories(sidecars, lookup), **detector_categories(sidecars),
-            **shared_categories(sidecars)}
+            **shared_categories(sidecars), **rare_member_categories(sidecars)}

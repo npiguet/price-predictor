@@ -73,10 +73,10 @@ class TestAffordabilityEdit:
     """The sweep's mana is the player's untapped lands, and the count beside them."""
 
     def test_the_untapped_lands_make_exactly_the_swept_mana(self, records):
-        # The actor's untapped Swamp is the board the collector wrote.
+        # The actor's untapped Plains is the board the collector wrote.
         record = decision_record(records, "{U}")
         actor = record.actor_player
-        assert [(e.name, e.tapped) for e in _lands(record, actor)] == [("Swamp", False)]
+        assert [(e.name, e.tapped) for e in _lands(record, actor)] == [("Plains", False)]
         pips = sweeps.candidate_cost(record)
         for amount in range(len(pips) + 3):
             edited = sweeps.set_untapped_lands(record, actor, pips, amount)
@@ -112,27 +112,31 @@ class TestAffordabilityEdit:
         def board(amount):
             edited = sweeps.set_untapped_lands(record, actor, pips, amount)
             production = player_of(edited.state, actor).untapped_production
-            swamp = next(e for e in _lands(edited, actor) if e.name == "Swamp")
-            return {c: n for c, n in production.items() if n}, swamp.tapped
+            plains = next(e for e in _lands(edited, actor) if e.name == "Plains")
+            return {c: n for c, n in production.items() if n}, plains.tapped
 
         assert board(0) == ({}, True)
         assert board(1) == ({"U": 1}, True)
-        assert board(2) == ({"U": 1, "B": 1}, False)
-        assert board(4) == ({"U": 3, "B": 1}, False)
+        assert board(2) == ({"U": 1, "W": 1}, False)
+        assert board(4) == ({"U": 3, "W": 1}, False)
 
     def test_every_other_land_of_the_player_is_tapped(self, records):
         record = decision_record(records, "{1}{U}")
         actor = record.actor_player
         lands = _lands(record, actor)
-        assert next(e for e in lands if e.name == "Island").tapped is False
-        swamp = next(e for e in lands if e.name == "Swamp" and not e.tapped)
+        assert any(e.name == "Island" and not e.tapped for e in lands)
+        plains = next(e for e in lands if e.name == "Plains" and not e.tapped)
         edited = sweeps.set_untapped_lands(record, actor, sweeps.candidate_cost(record), 1)
-        assert edited.state.entity(swamp.id).tapped
+        assert edited.state.entity(plains.id).tapped
         assert [e.name for e in _lands(edited, actor) if not e.tapped] == ["Island"]
 
     def test_a_fresh_land_is_the_basic_the_collector_writes(self, records):
-        swamp = next(e for r in records for e in r.state.entities if e.name == "Swamp")
         fresh = sweeps.basic_land("B", "P9~land0", "P9")
+        # A battlefield Swamp first in its board's order and untouched this
+        # turn, as a fresh one is.
+        swamp = next(e for r in records for e in r.state.entities
+                     if e.name == "Swamp" and e.on_battlefield and e.role is None
+                     and e.order_rank == fresh.order_rank and e.history == fresh.history)
         assert fresh == replace(swamp, id="P9~land0", controller="P9", owner="P9",
                                 zone="battlefield", tapped=False, sick=False)
 

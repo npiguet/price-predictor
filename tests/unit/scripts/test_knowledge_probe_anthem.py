@@ -23,8 +23,13 @@ def _combat_or_resolution(record) -> bool:
 
 def _kept_alive_board(record, found, sidecars):
     """``record`` with the first creature ``found`` reaches given the damage the
-    anthem alone keeps from being lethal, or None when no such damage exists."""
-    creature = record.state.entity(found.affected[0])
+    anthem alone keeps from being lethal, or None when no such damage exists.
+    An anthem reaching its own creature is passed over: destroying it takes
+    the creature too."""
+    others = [ref for ref in found.affected if ref != found.entity]
+    if not others:
+        return None
+    creature = record.state.entity(others[0])
     damage = creature.toughness - found.boost[1]
     if damage <= 0:
         return None

@@ -2168,7 +2168,7 @@ def _gen3_config(records: Path, output: Path, **overrides) -> BuildCorpusConfig:
         records_dir=records, output=output, cards_folders=GEN3_SIDECAR_FOLDERS,
         keyword_definitions=None, vocab_path=str(write_vocabulary(records.parent / "vocab.txt")),
         workers=1,
-        holdout=HoldoutRule(permille=100),
+        holdout=HoldoutRule(permille=30),
         game_disjoint_share=0.05, validation_sample=0, min_games_per_half=2,
         max_item_error=math.inf, max_component_error=math.inf,
     )
@@ -2194,8 +2194,8 @@ def test_no_turn_action_record_is_written_and_each_is_counted(gen3_build):
     from tests.unit.effects.builders import GEN3_FIXTURE_GAMES
 
     assert gen3_build.load().turn_action_left_out == {
-        "cleanup_discard": 2, "day_night": 2, "draw": 7, "game_end": GEN3_FIXTURE_GAMES,
-        "lore_counter": 2, "phasing": 2, "untap": 3}
+        "cleanup_discard": 2, "day_night": 2, "draw": 7, "fork_edit": 2,
+        "game_end": GEN3_FIXTURE_GAMES, "lore_counter": 2, "phasing": 2, "untap": 8}
 
 
 def test_a_permanent_spells_resolution_records_reach_their_strata(gen3_build):

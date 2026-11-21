@@ -31,7 +31,11 @@ def _keys_in_dict(obj: dict) -> Iterator[dict]:
 
 
 def _position(key: dict) -> tuple:
-    return key["face"], key["trait_kind"], key["index_within_kind"]
+    """Where a key sits on its card, ``built`` included: a saga's chapters
+    share their keyword's key and differ only there."""
+    built = key.get("built") or {}
+    return (key["face"], key["trait_kind"], key["index_within_kind"],
+            built.get("kind"), built.get("index"))
 
 
 def _sidecar_path(root: Path, relative: str) -> Path:

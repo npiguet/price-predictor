@@ -13,7 +13,7 @@ envelope, state or payload, are copied beside it under the same tree layout,
 so a ``SidecarCache`` rooted there resolves every key.
 
     python scripts/make_fixture_records.py --per-category 2
-        --records-dir output/effects/gen3/scratch/2026-11-15-pilot
+        --records-dir output/effects/gen3/scratch/2026-11-21-review-pilot-4
         --cards-folder output/effects/gen3/converted/cardsfolder
         --cards-folder output/effects/gen3/converted/tokenscripts
         --output tests/fixtures/effects/gen3-records.jsonl.gz
@@ -28,7 +28,13 @@ a later one filling only what the earlier left, and takes records only from
 games that ended: each game the fixture holds a record of brings its
 game-end marker, and every record sharing a ``link_id`` with a chosen one or
 mirrored by one, wherever it sits in the game. Records are written as the
-collector wrote their lines, in shard order. The categories are the shapes the
+collector wrote their lines, in shard order. The categories are, matched first
+because a pilot holds few of each, what became of a stack item and which line
+acted: an effect half fizzled, one partially fizzled and one declined, an
+intervention's forced half, an ability countered (ward), a saga's chapter II
+resolving, a Class at level 2 whose level-2 line acts, mana a pool lost (a
+drain's effect half or a ``LoseMana`` rewrite), and colourless mana paid by a
+cost half or floating in a pool; then the shapes the
 rule detectors and detector families read (a creature killed in the state-based
 check, the legend rule, a damage-step probe, a keyword's own line, a random-seat
 game and a game the Forge AI played on both seats), one per story-2 acceptance
@@ -48,8 +54,22 @@ regular step), a directed fork, a fork whose copy dropped something, and the
 rarer members ``field-coverage`` checks vary (the initiative, a land-play limit
 other than one, a buffered ability's events, a blocker required elsewhere or
 forbidden by its own line), and an effect half creating one continuous effect or
-delayed trigger. Face-down keys name ``variant-scripts/``: pass that tree as a
-``--cards-folder`` too when the records name it. The sidecars directory is
+delayed trigger. Matched last, taking only what no other category took: the
+members a pilot varies on few records (an event of a combat or a turn-based
+action a clause made or that lasts, a buffered event other than a counter
+change, a rewrite into another event than damage, a blocker needed twice or
+forbidden by a line keying to nothing, a spell targeting a spell, a choice
+made, a battle, an emblem, energy, unlimited land plays, a static's
+contribution setting P/T, colours, control or a hidden keyword), and the
+shapes ``effect_family`` names a family by (a charm's cost half, a rewrite
+through a damage replacement line, a blocker a ``CantBlock`` static forbids),
+a static's contribution adding a colour rather than setting the colours, the
+game-end record, an Aura whose host an effect touches and leaves in place, a
+zone change a replacement replaced, a rewrite through a keyword's line, an
+activated line's effect half dealing damage to any target, and an attackers
+record listing no legal attacker beside a noncreature permanent.
+Face-down keys name ``variant-scripts/``: pass that tree as a ``--cards-folder``
+too when the records name it. The sidecars directory is
 emptied first, so it holds exactly the sidecars the records name.
 
 The categories, the scan and the joins live in ``fixture_records/``."""

@@ -60,7 +60,7 @@ def test_every_check_reports_a_count_and_a_total() -> None:
         assert 0 <= count <= total
 
 
-def test_phase_skipped_events_all_carry_the_unknown_phase() -> None:
+def test_phase_skipped_events_with_the_unknown_phase_are_counted() -> None:
     count, total = _run()["phase-skipped-with-unknown-phase"]
     assert (count, total) == PHASE_SKIPPED
 
@@ -73,13 +73,13 @@ def test_sidecar_tree_has_keys_declared_by_two_lines() -> None:
 
 
 def test_a_key_declared_by_two_lines_is_flagged(tmp_path: Path) -> None:
-    """Binding the Old Gods' sidecar with chapter I's key copied onto chapter
+    """Braids's Frightful Return's sidecar with chapter I's key copied onto chapter
     II's line, as a sidecar written before the key change declared it."""
     import json
 
     from gen3_review_checks_parts.sidecars import keys_declared_by_two_lines
 
-    relative = Path("cardsfolder/b/binding_the_old_gods.provenance.json")
+    relative = Path("cardsfolder/b/braidss_frightful_return.provenance.json")
     data = json.loads((SIDECARS / relative).read_text(encoding="utf-8"))
     data["lines"][1]["provenance"].append(data["lines"][0]["provenance"][0])
     (tmp_path / relative).parent.mkdir(parents=True)
@@ -95,8 +95,8 @@ def test_report_line_names_the_review_count() -> None:
     assert "review=n/a" in grc.format_line(Line("no-such-check", 0, 0))
 
 
-PHASE_SKIPPED = (2, 2)
-TREE_DUPLICATES = (0, 947)
+PHASE_SKIPPED = (0, 1)
+TREE_DUPLICATES = (0, 915)
 
 
 STOKE_CONVOKE_ROW = {
@@ -241,12 +241,12 @@ def _joined(acting: list[dict], board: list[dict]) -> dict[str, tuple[int, int]]
     return {line.name: (line.count, line.total) for line in check.lines() if line.total}
 
 
-AIR_ELEMENTAL = "cardsfolder/a/air_elemental.txt"
-SAGA = "cardsfolder/b/binding_the_old_gods.txt"
+AVEN_AUGUR = "cardsfolder/a/aven_augur.txt"
+SAGA = "cardsfolder/b/braidss_frightful_return.txt"
 
 
 def test_a_built_key_of_a_one_line_keyword_resolves_to_its_line() -> None:
-    built = _key(AIR_ELEMENTAL, built={"kind": "trigger", "index": 0})
+    built = _key(AVEN_AUGUR, built={"kind": "trigger", "index": 0})
     counts = _joined([built], [])
     assert counts["acting-keys-line"] == (1, 1)
     assert counts["acting-keys-undescribed"] == (0, 1)

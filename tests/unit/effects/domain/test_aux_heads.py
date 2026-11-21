@@ -58,7 +58,7 @@ from effects.domain.records import (
 from effects.domain.state_snapshot import Refs
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
-_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
+_RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 
 
 @functools.cache
@@ -133,7 +133,7 @@ class TestTheGlobalHead:
 class TestVerdictTargets:
     def test_a_candidate_whose_timing_fails_reads_casting_speed(self):
         """Story 5 acceptance 4: ``timing`` 0 and ``casting_speed`` 1."""
-        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.6"]
+        record = _fixture()[f"{_RUN}.0-mwqvqdyrb9c0.33"]
         candidate = record.payload.candidates[0]
         assert candidate.timing is False
         row = verdict_targets(record)
@@ -147,7 +147,7 @@ class TestVerdictTargets:
         assert failed[FAILED_CHECKS.index("casting_speed")] == 1.0
 
     def test_a_decision_sets_its_verdict_bits_and_nothing_of_the_other_kinds(self):
-        row = verdict_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.705"])
+        row = verdict_targets(_fixture()[f"{_RUN}.0-mwqvqdyrb9c0.16"])
         _, mask = row
         set_fields = {str(spec.name) for spec, on in zip(VERDICT_LAYOUT.fields, mask) if on}
         assert set_fields == {*VERDICT_BITS, "timing", "failed_checks", "cost_adjustment"}
@@ -155,14 +155,14 @@ class TestVerdictTargets:
     def test_a_cost_half_sets_the_mana_it_paid_and_no_resolution_outcome(self):
         """The resolution outcome is supervised on effect halves only (FR-052):
         a cost half, even one a pre-moments gen-3 shard stamped, sets none."""
-        row = verdict_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.229"])
+        row = verdict_targets(_fixture()[f"{_RUN}.2-mwqvqdxrusnv.412"])
         assert _column(row, VERDICT_LAYOUT, "resolution_outcome")[1] is False
         paid, supervised = _column(row, VERDICT_LAYOUT, "mana_paid")
         assert supervised and sum(paid) == 5.0
 
     def test_an_effect_half_sets_its_resolution_outcome(self):
         """FR-052: over resolved, fizzled, partially fizzled and declined."""
-        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.604"]
+        record = _fixture()[f"{_RUN}.0-mwqvqdyrb9c0.681"]
         fizzled = replace(record, payload=replace(
             record.payload, events=(), outcome=ResolutionOutcome.FIZZLED))
         assert _column(verdict_targets(fizzled), VERDICT_LAYOUT, "resolution_outcome") == (
@@ -170,16 +170,16 @@ class TestVerdictTargets:
         assert "countered" not in RESOLUTION_OUTCOMES
 
     def test_an_effect_half_counts_the_effect_objects_it_created(self):
-        row = verdict_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.604"])
+        row = verdict_targets(_fixture()[f"{_RUN}.0-mwqvqdyrb9c0.681"])
         assert _column(row, VERDICT_LAYOUT, "effects_created") == ([1.0], True)
 
     def test_a_rewrite_supervises_the_replacement_result(self):
-        row = verdict_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.44"])
+        row = verdict_targets(_fixture()[f"{_RUN}.2-mwqvqdxrusnv.631"])
         assert _column(row, VERDICT_LAYOUT, "replacement_result") == (
             [float(REPLACEMENT_RESULTS.index("replaced"))], True)
 
     def test_a_trigger_sets_only_whether_it_fired(self):
-        row = verdict_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.0"])
+        row = verdict_targets(_fixture()[f"{_RUN}.2-mwqvqdxrusnv.761"])
         assert sum(row[1]) == 1
         assert _column(row, VERDICT_LAYOUT, "trigger_fired") == ([1.0], True)
 
@@ -208,7 +208,7 @@ class TestCostAdjustment:
         assert sum(abs(value) for value in adjustment) == 2.0
 
     def test_the_fixture_spells_cast_at_their_printed_cost(self):
-        record = _fixture()[f"{_RUN}.0-mwhr12znmj0t.4"]
+        record = _fixture()[f"{_RUN}.0-mwqvqdyrb9c0.50"]
         assert cost_adjustment(record, record.payload.candidates[0]) == [0.0] * len(MANA_SYMBOLS)
 
     @pytest.mark.parametrize("decision", [
@@ -246,18 +246,18 @@ class TestGlobalTargets:
             [float(DAY_NIGHT_CHANGES.index("became_night"))], True)
 
     def test_an_ordinary_resolution_changed_neither(self):
-        row = global_targets(_fixture()[f"{_RUN}.5-mwhr1304zvab.6514"])
+        row = global_targets(_fixture()[f"{_RUN}.2-mwqvqdxrusnv.201"])
         assert _column(row, GLOBAL_LAYOUT, "turn_structure_change") == ([0.0] * 4, True)
         assert _column(row, GLOBAL_LAYOUT, "day_night_change") == (
             [float(DAY_NIGHT_CHANGES.index("unchanged"))], True)
 
     def test_a_decision_supervises_none(self):
-        assert global_targets(_fixture()[f"{_RUN}.0-mwhr12znmj0t.6"]) is None
+        assert global_targets(_fixture()[f"{_RUN}.0-mwqvqdyrb9c0.33"]) is None
 
 
 class TestCreatedObjects:
     def test_a_token_group_carries_its_kind_types_and_subtypes(self):
-        target, known = created_objects_targets(_fixture()[f"{_RUN}.5-mwhr1304zvab.6514"])
+        target, known = created_objects_targets(_fixture()[f"{_RUN}.2-mwqvqdxrusnv.201"])
         assert len(target) == len(known) == CREATED_OBJECTS_WIDTH
         assert target[CreatedSlot.PRESENT] == 1.0
         assert target[CreatedSlot.KIND + CREATED_KINDS.index("token")] == 1.0
@@ -267,7 +267,7 @@ class TestCreatedObjects:
     def test_what_a_token_event_does_not_say_trains_nothing(self):
         """A ``token_created`` without the controller and the counters, as
         collectors before their ``characteristics`` members wrote it."""
-        real = _fixture()[f"{_RUN}.5-mwhr1304zvab.6514"]
+        real = _fixture()[f"{_RUN}.2-mwqvqdxrusnv.201"]
         event = next(e for e in real.payload.events if e.type is EventType.TOKEN_CREATED)
         kept = {k: v for k, v in event.params["characteristics"].items()
                 if k not in ("controller", "counters")}
@@ -282,7 +282,7 @@ class TestCreatedObjects:
         """The collector writes the sample token's controller and counters
         (025 ``record-schema-delta.md``, ``token_created``), so a real token
         group trains every column of its slot."""
-        _, known = created_objects_targets(_fixture()[f"{_RUN}.5-mwhr1304zvab.6514"])
+        _, known = created_objects_targets(_fixture()[f"{_RUN}.2-mwqvqdxrusnv.201"])
         assert all(known)
 
     def test_a_token_event_naming_its_controller_and_counters_trains_them(self):

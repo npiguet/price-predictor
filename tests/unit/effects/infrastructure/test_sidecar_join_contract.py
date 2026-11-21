@@ -37,8 +37,8 @@ from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
 _TRIBUTE_TREE = Path(__file__).resolve().parents[3] / "fixtures" / "effects" / "tribute-sidecars"
 _CHARM_TREE = Path(__file__).resolve().parents[3] / "fixtures" / "effects" / "charm-sidecars"
-_SAGA = "cardsfolder/b/binding_the_old_gods.txt"
-#: Binding the Old Gods' saga keyword, which builds one trigger per chapter.
+_SAGA = "cardsfolder/b/braidss_frightful_return.txt"
+#: Braids's Frightful Return's saga keyword, which builds one trigger per chapter.
 _SAGA_KEY = ProvenanceKey(_SAGA, 0, "keyword", 0)
 
 
@@ -67,7 +67,7 @@ class TestAKeyALineDeclaresResolvesToThatLine:
         assert line.line_kind == "chapter"
         assert line.provenance == (_chapter(2),)
         assert line.script_text.startswith("Chapter$ 3 |")
-        assert cache.prose_for(_chapter(2)).startswith("III — creatures you control gain")
+        assert cache.prose_for(_chapter(2)).startswith("III — target opponent may sacrifice")
 
     def test_every_chapter_reads_its_own_line(self):
         sidecar = _cache().get(_SAGA)
@@ -78,7 +78,7 @@ class TestAKeyALineDeclaresResolvesToThatLine:
         """Finding 7.9: a script parameter is read off the joined line, chapter
         III's trigger, not chapter I's. A real gen-3 resolution, edited to act
         through chapter III."""
-        record = _record(GEN3_RECORDS, 40)
+        record = _record(GEN3_RECORDS, 31)
         assert record.kind.value == "resolution"
         acting = replace(record, ability=(_chapter(2),))
         assert acting_root_params(acting, _cache())["Chapter"] == "3"
@@ -86,38 +86,39 @@ class TestAKeyALineDeclaresResolvesToThatLine:
 
 class TestABuiltKeyNoLineDeclaresReadsTheKeywordLine:
     def test_a_cycling_key_with_built_reads_the_cycling_line(self):
-        """Drifting Meadow as the current converter writes it: its cycling
+        """Gempalm Avenger as the current converter writes it: its cycling
         line declares the bare keyword key only, while the collector names
         the cycling ability the keyword built."""
-        data = _fixture_json("cardsfolder/d/drifting_meadow.txt")
+        data = _fixture_json("cardsfolder/g/gempalm_avenger.txt")
         cycling = data["lines"][0]
         cycling["provenance"] = [key for key in cycling["provenance"]
                                  if key["trait_kind"] == "keyword"]
         sidecar = sidecar_from_dict(data)
-        script = "cardsfolder/d/drifting_meadow.txt"
+        script = "cardsfolder/g/gempalm_avenger.txt"
         built = ProvenanceKey(script, 0, "keyword", 0, built=BuiltTrait("spell", 0))
         assert sidecar.resolution_of(built) is KeyResolution.LINE
-        assert sidecar.line_for(built).script_text == "Cycling:2"
+        assert sidecar.line_for(built).script_text == "Cycling:2 W"
 
 
 class TestABareKeyOfAKeywordOfSeveralLines:
     def test_on_the_board_it_is_its_chapter_lines_in_order(self):
-        """A real gen-3 record's Binding the Old Gods on the battlefield, whose
-        keyword line names the saga's bare key: one slot per chapter line."""
-        record = _record(GEN3_RECORDS, 226)
-        saga = next(e for e in record.state.entities if e.name == "Binding the Old Gods")
+        """A real gen-3 record's Braids's Frightful Return on the battlefield,
+        whose keyword line names the saga's bare key: one slot per chapter
+        line, then its read-ahead line."""
+        record = _record(GEN3_RECORDS, 276)
+        saga = next(e for e in record.state.entities if e.name == "Braids's Frightful Return")
         resolver = KeyResolver(_cache(), Surface.SCRIPT)
         keys = [line.key for line in slot_lines(saga, resolver.board_keys)]
-        assert keys == [ProvenanceKey(_SAGA, 0, "replacement", 0),
-                        _chapter(0), _chapter(1), _chapter(2)]
-        texts = [resolver.text_of(key) for key in keys[1:]]
+        assert keys == [_chapter(0), _chapter(1), _chapter(2),
+                        ProvenanceKey(_SAGA, 0, "keyword", 1)]
+        texts = [resolver.text_of(key) for key in keys[:3]]
         assert [text.split(" |")[0] for text in texts] == [
             "Chapter$ 1", "Chapter$ 2", "Chapter$ 3"]
 
     def test_a_line_printing_two_chapters_is_one_slot(self):
-        """Down, Down to Goblin-town's "III, IV" line: one slot, read through
+        """Life of Toshiro Umezawa's "I, II" line: one slot, read through
         its first chapter's key."""
-        script = "cardsfolder/d/down_down_to_goblin_town.txt"
+        script = "cardsfolder/l/life_of_toshiro_umezawa_memory_of_toshiro.txt"
         sidecar = _cache().get(script)
         keys = sidecar.board_keys(ProvenanceKey(script, 0, "keyword", 0))
         assert len(keys) == len([line for line in sidecar.lines if line.line_kind == "chapter"])
@@ -157,14 +158,14 @@ class TestABareKeyALineDeclaresBesideItsBuiltLines:
         assert [sidecar.row_for(key) for key in keys] == [1, 2]
 
     def test_a_keyword_declaring_its_built_key_on_its_own_line_is_one_slot(self):
-        script = "cardsfolder/a/air_elemental.txt"
+        script = "cardsfolder/a/aven_augur.txt"
         key = ProvenanceKey(script, 0, "keyword", 0)
         assert _cache().get(script).board_keys(key) == (key,)
 
 
 class TestEveryTextlessAnswerIsCounted:
     def test_a_dropped_and_a_runtime_only_key_are_each_counted_once(self):
-        script = "cardsfolder/a/air_elemental.txt"
+        script = "cardsfolder/a/aven_augur.txt"
         cache = _cache()
         assert cache.join(ProvenanceKey(script, 0, "spell", 0)) == (KeyResolution.DROPPED, None)
         runtime = ProvenanceKey(script, 0, "keyword", 9)
@@ -234,7 +235,7 @@ class TestNoKeyIsDeclaredByTwoLines:
         II's line too."""
         data = _fixture_json(_SAGA)
         data["lines"][1]["provenance"].append(data["lines"][0]["provenance"][0])
-        path = tmp_path / "binding_the_old_gods.provenance.json"
+        path = tmp_path / "braidss_frightful_return.provenance.json"
         path.write_text(json.dumps(data), encoding="utf-8")
         with pytest.raises(SidecarError) as raised:
             read_sidecar(path)
@@ -262,7 +263,7 @@ class TestOneJoinAnswersEveryLookup:
         """A variant key on a run given no ``--variant-scripts``: every reader,
         the trainer's text included, counts it, and the run says so once."""
         cache = _cache()
-        key = ProvenanceKey("variant-scripts/binding_the_old_gods_v1.txt", 0, "keyword", 0)
+        key = ProvenanceKey("variant-scripts/braidss_frightful_return_v1.txt", 0, "keyword", 0)
         with caplog.at_level("WARNING", logger="effects.infrastructure.sidecar_io"):
             assert cache.join(key) == (KeyResolution.UNCONFIGURED_TREE, None)
             assert cache.line_for(key) is None

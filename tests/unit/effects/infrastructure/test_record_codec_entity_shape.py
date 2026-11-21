@@ -227,11 +227,13 @@ class TestALinesGrant:
     @staticmethod
     def _with_a_granted_trigger(grant: str | None) -> tuple[dict, dict]:
         """A real fixture record with its first granted trigger line's
-        ``grant`` set (left out on None), and that line."""
+        ``grant`` set (left out on None), every other line's left out, and
+        that line."""
         raw, line = next(
             (raw, line) for raw in gen3_fixture_records()
             for entity in raw["state"]["entities"] for line in entity.get("lines") or ()
             if line["granted"] and line["kind"] == "trigger")
+        _drop_grants(raw)
         if grant is not None:
             line["grant"] = grant
         return raw, line
@@ -251,6 +253,13 @@ class TestALinesGrant:
         assert [card_line.grant for entity in entities for card_line in entity.lines
                 if card_line.granted and card_line.kind == "trigger"][:1] == [None]
         assert "grant" not in line
+
+
+def _drop_grants(raw: dict) -> None:
+    """Leave ``grant`` out of every line of ``raw``'s board."""
+    for entity in raw["state"]["entities"]:
+        for line in entity.get("lines") or ():
+            line.pop("grant", None)
 
 
 def _entity_dict(entity: EntityState) -> dict:

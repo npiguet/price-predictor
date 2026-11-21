@@ -54,26 +54,26 @@ def _first(records, kind, discriminator=None, test=lambda r: True):
 
 def test_a_resolution_takes_its_acting_lines_api_type(records, sidecars):
     record = _first(records, RecordKind.RESOLUTION, "resolution",
-                    lambda r: r.ability and r.ability[0].script_file.endswith("c_a_food_sac.txt"))
+                    lambda r: r.ability and r.ability[0].script_file.endswith("trufflesnout.txt"))
     assert effect_family(record, sidecars) == "GainLife"
 
 
 def test_both_halves_of_a_resolution_share_its_family(records, sidecars):
     halves = [r for r in records if r.link_id and r.ability
-              and r.ability[0].script_file.endswith("firebolt.txt")]
+              and r.ability[0].script_file.endswith("searing_blaze.txt")]
     assert {r.moment.value for r in halves} == {"activation", "resolution"}
     assert {effect_family(r, sidecars) for r in halves} == {"DealDamage"}
 
 
 def test_a_charm_s_activation_half_is_the_charm_family(records, sidecars):
     record = _first(records, RecordKind.RESOLUTION, "activation",
-                    lambda r: r.ability and "sprouting_renewal" in r.ability[0].script_file)
+                    lambda r: r.ability and "azorius_charm" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "Charm"
 
 
 def test_a_trigger_takes_its_root_segments_mode(records, sidecars):
     record = _first(records, RecordKind.TRIGGER,
-                    test=lambda r: "perilous_myr" in r.ability[0].script_file)
+                    test=lambda r: "akoum_battlesinger" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "ChangesZone"
 
 
@@ -87,7 +87,7 @@ def test_a_trigger_with_no_mode_is_no_mode(records):
 
 def test_a_continuous_record_takes_its_static_mode(records, sidecars):
     record = _first(records, RecordKind.CONTINUOUS,
-                    test=lambda r: "holy_strength" in r.ability[0].script_file)
+                    test=lambda r: "crusher_zendikon" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "Continuous"
 
 
@@ -102,7 +102,7 @@ def test_a_multi_mode_static_keeps_its_mode_list_whole(records):
 
 def test_a_rewrite_takes_its_event(records, sidecars):
     record = _first(records, RecordKind.REWRITE,
-                    test=lambda r: "phantom_tiger" in r.ability[0].script_file)
+                    test=lambda r: r.ability and "magma_pummeler" in r.ability[0].script_file)
     assert effect_family(record, sidecars) == "DamageDone"
 
 
@@ -178,8 +178,10 @@ def test_decision_candidates_by_verdict_and_by_static(records):
 
 
 def test_a_blockers_record_restricted_by_a_static_is_that_statics_mode(records, sidecars):
+    """A blocker a ``Mode$ CantBlock`` static forbids."""
     record = _first(records, RecordKind.PLAYABILITY, "blockers",
-                    test=lambda r: any(f.responsible_static for f in r.payload.forbidden))
+                    test=lambda r: r.record_id.endswith(".4-mwqw395jccfe.2282")
+                    and any(f.responsible_static for f in r.payload.forbidden))
     assert effect_family(record, sidecars) == "CantBlock"
 
 

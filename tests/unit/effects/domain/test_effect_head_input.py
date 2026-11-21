@@ -1050,10 +1050,10 @@ class TestPlayerGlobalAndActInputs:
 class TestAKeywordOfSeveralLines:
     """A board line naming a keyword's bare key, where the keyword prints
     several lines (a saga's chapters), is one slot per line, in line order:
-    the real gen-3 record of Binding the Old Gods on the battlefield, against
+    the real gen-3 record of Braids's Frightful Return on the battlefield, against
     the current converter's sidecar."""
 
-    _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
+    _SAGA = "cardsfolder/b/braidss_frightful_return.txt"
 
     @pytest.fixture(scope="class")
     def record(self):
@@ -1062,7 +1062,7 @@ class TestAKeywordOfSeveralLines:
         from effects.infrastructure.shard_io import read_shard
         from tests.unit.effects.builders import GEN3_RECORDS
 
-        return next(itertools.islice(read_shard(GEN3_RECORDS), 226, None))
+        return next(itertools.islice(read_shard(GEN3_RECORDS), 276, None))
 
     @pytest.fixture(scope="class")
     def sidecars(self):
@@ -1077,7 +1077,7 @@ class TestAKeywordOfSeveralLines:
         return ProvenanceKey(self._SAGA, 0, "keyword", 0, built=BuiltTrait("trigger", index))
 
     def test_the_surface_gives_each_chapter_line_its_slot(self, record, sidecars):
-        saga = next(e for e in record.state.entities if e.name == "Binding the Old Gods")
+        saga = next(e for e in record.state.entities if e.name == "Braids's Frightful Return")
         vectors = {self._chapter(n): (float(n + 1),) * E_DIM for n in range(3)}
         surface = SurfaceBuilder(
             _Lines(e_for=vectors.get,
@@ -1086,7 +1086,7 @@ class TestAKeywordOfSeveralLines:
         ).build(record)
         abilities = [slot for slot in slots_of_kind(surface, SlotKind.ABILITY)
                      if slot.entity_id == saga.id]
-        assert [slot.e[0] for slot in abilities] == [0.0, 1.0, 2.0, 3.0]
+        assert [slot.e[0] for slot in abilities] == [1.0, 2.0, 3.0, 0.0]
 
     def test_the_batcher_stages_every_chapter_s_text(self, record, sidecars):
         import torch
@@ -1150,7 +1150,7 @@ def gen3_records():
             for record in map(record_from_dict, gen3_fixture_records())}
 
 
-_RUN = "9442f17f-cb56-4893-8d4a-66b5538de180"
+_RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 
 
 def _relation(family, direction="forward", index=None):
@@ -1176,6 +1176,21 @@ def _gen3_entity(entity_id, name="Serra Angel", lines=(), **fields):
     return _entity(entity_id, name=name, lines=lines, **fields)
 
 
+def _with_mutate_component(record, component_id, creature_id):
+    """``record`` with a component merged under its battlefield creature, as
+    the collector writes one (role ``mutate_component``, zone ``merged``,
+    linked ``merged_with``): the fixture's pilot mutated nothing."""
+    from effects.domain.state_snapshot import Link
+
+    creature = record.state.entity(creature_id)
+    assert creature.zone == "battlefield" and "creature" in creature.types
+    component = replace(creature, id=component_id, zone="merged", role="mutate_component")
+    return replace(record, state=replace(
+        record.state, entities=(*record.state.entities, component),
+        links=(*record.state.links, Link(from_=component_id, to=creature_id,
+                                         type="merged_with"))))
+
+
 def _gen3_record(entities, links=(), players=None, **snapshot):
     """A gen-3 record: a snapshot with ``links`` is one."""
     defaults = {"entities": tuple(entities), "links": tuple(links)}
@@ -1189,11 +1204,11 @@ class TestAttachedTo:
     """Story 5 acceptance 1 (T115, T116)."""
 
     def test_an_aura_relates_to_its_creature_and_no_card_input_says_so(self, gen3_records):
-        record = gen3_records[f"{_RUN}.0-mwhr12znmj0t.148"]
-        aura = record.state.entity("E2")
-        assert "aura" in aura.subtypes and aura.attached_to == "E1"
+        record = gen3_records[f"{_RUN}.0-mwqvqdyrb9c0.240"]
+        aura = record.state.entity("E67")
+        assert "aura" in aura.subtypes and aura.attached_to == "E43"
         surface = _build(record)
-        assert _linked(surface, _subject_slot(surface, "E2"), _subject_slot(surface, "E1"),
+        assert _linked(surface, _subject_slot(surface, "E67"), _subject_slot(surface, "E43"),
                        "attached_to")
         assert "attached" not in card_segments(aura, record)
         assert card_features(replace(aura, attached_to=None), record) == card_features(
@@ -1272,27 +1287,27 @@ class TestCommandZoneSlots:
             EFFECT_DURATIONS.index("permanent")] == 1.0
 
     def test_a_real_floating_effect_affects_each_creature_it_pumps(self, gen3_records):
-        record = gen3_records[f"{_RUN}.0-mwhr12znmj0t.4891"]
-        floating = next(f for f in record.state.global_.floating_effects if f.id == "F373")
+        record = gen3_records[f"{_RUN}.0-mwqvqdyrb9c0.81"]
+        floating = next(f for f in record.state.global_.floating_effects if f.id == "F37")
         source = floating.source_lines[0]
         vector = (0.0, 0.0, 0.0, 1.0)
         surface = _build(record, e_for=lambda key: vector if key == source else None)
-        at = _subject_slot(surface, "F373")
+        at = _subject_slot(surface, "F37")
         assert surface.slots[at + 1].e == vector
-        assert floating.affected == ("E1", "E2", "E40", "E33")
+        assert floating.affected == ("E52", "E173", "E174")
         for creature in floating.affected:
             assert _linked(surface, at, _subject_slot(surface, creature), "affects")
 
     def test_a_real_delayed_trigger_is_a_card_reading_its_source_line(self, gen3_records):
-        record = gen3_records[f"{_RUN}.0-mwhr12znmj0t.1274"]
+        record = gen3_records[f"{_RUN}.0-mwqvqdyrb9c0.424"]
         trigger, = record.state.global_.delayed_triggers
         vector = (0.0, 1.0, 1.0, 0.0)
         surface = _build(record, e_for=lambda key: vector if key in trigger.source_lines else None)
         at = _subject_slot(surface, trigger.id)
         assert surface.slots[at + 1].e == vector
         # Pending on a card of the board: the record's own link relates them.
-        assert trigger.remembered == ("E82",)
-        assert _linked(surface, at, _subject_slot(surface, "E82"), "pending_on")
+        assert trigger.remembered == ("E240",)
+        assert _linked(surface, at, _subject_slot(surface, "E240"), "pending_on")
 
     def test_a_delayed_trigger_is_pending_on_its_card(self):
         from effects.domain.state_snapshot import CommandZoneObject, Link
@@ -1307,14 +1322,17 @@ class TestCommandZoneSlots:
                        "pending_on")
 
     @pytest.mark.parametrize(("record_id", "family", "a", "b"), [
-        (f"{_RUN}.0-mwhr12znmj0t.44", "last_known_state_of", "L70", "E70"),
-        (f"{_RUN}.3-mwhr1318yo3f.3433", "merged_with", "E60", "E70"),
-        (f"{_RUN}.5-mwhr1304zvab.6602", "in_dungeon", "E196", "P0"),
+        (f"{_RUN}.0-mwqvqdyrb9c0.5", "last_known_state_of", "L74", "E74"),
+        (f"{_RUN}.0-mwqvqdyrb9c0.81", "merged_with", "E9001", "E52"),
+        (f"{_RUN}.2-mwqvwtly1zvq.1597", "in_dungeon", "E81", "P0"),
     ])
     def test_the_extra_cards_are_slots_their_links_relate(
         self, gen3_records, record_id, family, a, b,
     ):
-        surface = _build(gen3_records[record_id])
+        record = gen3_records[record_id]
+        if family == "merged_with":
+            record = _with_mutate_component(record, a, b)
+        surface = _build(record)
         assert _linked(surface, _subject_slot(surface, a), _subject_slot(surface, b), family)
 
     def test_a_library_card_reads_its_position_as_order_rank(self, gen3_records):

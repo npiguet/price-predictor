@@ -339,10 +339,10 @@ def _thrasta_combat(*, thrasta: bool):
 
     with gzip.open(GEN3_RECORDS, "rt", encoding="utf-8") as lines:
         data = next(d for line in lines if (d := json.loads(line))["record_id"]
-                    == "9442f17f-cb56-4893-8d4a-66b5538de180.0-mwhr12znmj0t.72")
+                    == "3550376f-3c30-4231-90cd-cc0f1b308e87.0-mwqvqdyrb9c0.15")
     data = copy.deepcopy(data)
     entities = data["state"]["entities"]
-    attacker = next(e for e in entities if e["id"] == "E58")
+    attacker = next(e for e in entities if e["id"] == "E74")
     walker = copy.deepcopy(attacker)
     if thrasta:
         script = "cardsfolder/t/thrasta_tempests_roar.txt"
@@ -361,13 +361,13 @@ def _thrasta_combat(*, thrasta: bool):
                   tapped=False, combat=None, counters={"LOYALTY": 3}, lines=[])
     entities.append(walker)
     excess = [{"type": "damage_dealt", "subjects": ["P0"],
-               "params": {"amount": 4, "combat": True, "cause": "E58", "source": "E58"},
+               "params": {"amount": 4, "combat": True, "cause": "E74", "source": "E74"},
                "duration": "instant", "attributed_to": "unresolved"}] if thrasta else []
-    data["payload"]["assignment_choices"] = {"E58": {"E90": 3, **({"P0": 4} if thrasta else {})}}
+    data["payload"]["assignment_choices"] = {"E74": {"E90": 3, **({"P0": 4} if thrasta else {})}}
     data["payload"]["events"] = [
         {"type": "damage_dealt", "subjects": ["E90"],
-         "params": {"amount": 3 if thrasta else 6, "combat": True, "cause": "E58",
-                    "source": "E58"},
+         "params": {"amount": 3 if thrasta else 6, "combat": True, "cause": "E74",
+                    "source": "E74"},
          "duration": "instant", "attributed_to": "unresolved"}, *excess]
     return record_from_dict(data)
 
@@ -392,7 +392,7 @@ def test_a_live_thrasta_at_a_planeswalker_reads_fires(thrasta_sidecars):
     for lines in (thrasta_sidecars, None):
         found = FAMILY.match(record, lines, {"keyword": "trample_over_planeswalkers"})
         assert (found.polarity, found.observed) == (Polarity.FIRES, True)
-        assert (found.condition, found.outcome) == (("E58",), ("P0",))
+        assert (found.condition, found.outcome) == (("E74",), ("P0",))
 
 
 def test_the_fork_s_plain_trampler_reads_does_not_fire(thrasta_sidecars):
@@ -407,7 +407,7 @@ def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
     from effects.domain.damage_step_keywords import KeywordResolver
 
     record = _thrasta_combat(thrasta=True)
-    thrasta = record.state.entity("E58")
+    thrasta = record.state.entity("E74")
     assert {"trample", "trample_over_planeswalkers"} <= KeywordResolver(
         thrasta_sidecars).keywords_of(thrasta)
     lone = replace(thrasta, granted_temporary=GrantedTemporary(

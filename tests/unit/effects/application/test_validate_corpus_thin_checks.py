@@ -95,7 +95,7 @@ def test_the_rest_of_the_types_repeating_fail_with_their_own_rate(tmp_path):
 def test_every_resolution_event_of_a_current_writer_names_a_clause(tmp_path):
     findings = _findings(tmp_path, _fixture(), Thresholds(min_attributed_rate=0.99))
     finding = _named(findings, "resolution events name")
-    assert finding.ok and "218/218" in finding.measured, finding.measured
+    assert finding.ok and "291/291" in finding.measured, finding.measured
 
 
 def test_a_writer_that_stops_stamping_resolution_events_fails(tmp_path):
@@ -107,24 +107,29 @@ def test_a_writer_that_stops_stamping_resolution_events_fails(tmp_path):
     findings = _findings(tmp_path, records, Thresholds(min_attributed_rate=0.99))
     finding = _named(findings, "resolution events name")
     assert not finding.ok, finding.measured
-    assert "0/218" in finding.measured
+    assert "0/291" in finding.measured
 
 
 # --- the copy-key count --------------------------------------------------
 
 
-def _copy_of_a_card(records: list[dict], indexes=(152, 153)) -> None:
-    """E82 (a copy whose lines key into nacatl_war_pride.txt) copies a real
-    card of the board in each of these records."""
+def _keys_elsewhere(entity: dict) -> bool:
+    """A card other than E32 with a line keyed outside celestial_regulator.txt."""
+    return entity["id"] != "E32" and any(
+        line["keys"] and "celestial_regulator" not in line["keys"][0]["script_file"]
+        for line in entity.get("lines") or ())
+
+
+def _copy_of_a_card(records: list[dict], indexes=(164, 165)) -> None:
+    """E32 (Celestial Regulator, its lines keyed into celestial_regulator.txt)
+    is made a copy of one other real card of the board, the same in each of
+    these records."""
+    source_id = next(e["id"] for e in records[indexes[0]]["state"]["entities"]
+                     if _keys_elsewhere(e))
     for index in indexes:
         entities = records[index]["state"]["entities"]
-        source = next(
-            e for e in entities
-            if e["id"] != "E82" and e.get("lines")
-            and any(line["keys"] and "nacatl" not in line["keys"][0]["script_file"]
-                    for line in e["lines"])
-        )
-        next(e for e in entities if e["id"] == "E82")["copy_source"] = source["id"]
+        source = next(e for e in entities if e["id"] == source_id)
+        next(e for e in entities if e["id"] == "E32")["copy_source"] = source_id
     return source
 
 
@@ -132,7 +137,7 @@ def test_one_miskeyed_copy_seen_in_several_records_is_one_copy(tmp_path):
     records = _fixture()
     _copy_of_a_card(records)
     finding = _named(_findings(tmp_path, records), COPIES)
-    assert "1/1 copies" in finding.measured, finding.measured
+    assert "1/2 copies" in finding.measured, finding.measured
 
 
 def test_a_copy_keeping_the_copied_cards_keys_and_one_file_of_its_own_is_accepted(tmp_path):
@@ -143,14 +148,14 @@ def test_a_copy_keeping_the_copied_cards_keys_and_one_file_of_its_own_is_accepte
     source = _copy_of_a_card(records)
     copied_file = next(
         line["keys"][0]["script_file"] for line in source["lines"]
-        if line["keys"] and "nacatl" not in line["keys"][0]["script_file"])
-    for index in (152, 153):
-        copy_entity = next(e for e in records[index]["state"]["entities"] if e["id"] == "E82")
+        if line["keys"] and "celestial_regulator" not in line["keys"][0]["script_file"])
+    for index in (164, 165):
+        copy_entity = next(e for e in records[index]["state"]["entities"] if e["id"] == "E32")
         kept = copy.deepcopy(copy_entity["lines"][-1])
         kept["keys"][0]["script_file"] = copied_file
         copy_entity["lines"].append(kept)
     finding = _named(_findings(tmp_path, records), COPIES)
-    assert "0/1 copies" in finding.measured, finding.measured
+    assert "0/2 copies" in finding.measured, finding.measured
 
 
 # --- the per-kind duplicate floor ----------------------------------------

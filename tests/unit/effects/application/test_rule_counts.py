@@ -90,15 +90,15 @@ def gen3_dir(tmp_path):
 def test_the_fixture_s_deaths_are_counted_per_side(tmp_path, gen3_dir):
     counts, _ = count(_config(tmp_path, gen3_dir))
     document = counts.to_json({})
-    assert document["records"] == 314
+    assert document["records"] == 396
     assert document["generation"] == "gen-3"
     assert document["rules"]["704.5f"] == {
-        "fires": {"random_seat": 2}, "does_not_fire": {"random_seat": 3}}
-    assert document["rules"]["704.5g"] == {"fires": {"forge_ai": 6, "random_seat": 5}}
-    assert document["rules"]["702.2b"] == {"does_not_fire": {"random_seat": 2}}
+        "fires": {"forge_ai": 3, "random_seat": 2}, "does_not_fire": {"forge_ai": 1}}
+    assert document["rules"]["704.5g"] == {"fires": {"forge_ai": 5, "random_seat": 2}}
+    assert document["rules"]["702.2b"] == {"does_not_fire": {"forge_ai": 2}}
     assert document["rules"]["601.2"] == {
-        "fires": {"aimed": 1, "forge_ai": 4, "random_seat": 18},
-        "does_not_fire": {"aimed": 2, "forge_ai": 12, "random_seat": 10}}
+        "fires": {"aimed": 1, "forge_ai": 11, "random_seat": 8},
+        "does_not_fire": {"aimed": 3, "forge_ai": 8, "random_seat": 14}}
 
 
 def test_the_fixture_holds_every_source(tmp_path, gen3_dir):
@@ -107,30 +107,30 @@ def test_the_fixture_holds_every_source(tmp_path, gen3_dir):
     assert sources == {str(s) for s in RuleSource}
 
 
-_FIRST_DEATH_GAME = "9442f17f-cb56-4893-8d4a-66b5538de180.0-mwhr12znmj0t.0"
+_DEATH_AND_NON_DEATH_GAME = "3550376f-3c30-4231-90cd-cc0f1b308e87.4-mwqw395jccfe.9"
 
 
 def test_a_game_s_source_follows_any_of_its_records(tmp_path, gen3_dir):
-    """The fixture's two 704.5f deaths and the first of its three non-deaths
-    are in one game, a random-seat game by another record of it. Clearing the
-    random seat from that whole game moves its three tags, and no other, to
-    ``forge_ai``.
+    """One of the fixture's five 704.5f deaths and its one non-death are in
+    one game the Forge AI played on both seats. Marking one other record of
+    that game random-seat moves its two tags, and no other, to
+    ``random_seat``.
     """
     original, _ = count(_config(tmp_path / "a", gen3_dir))
-    assert original.to_json({})["rules"]["704.5f"]["fires"] == {
-        str(RuleSource.RANDOM_SEAT): 2}
+    assert original.to_json({})["rules"]["704.5f"] == {
+        "fires": {str(RuleSource.FORGE_AI): 3, str(RuleSource.RANDOM_SEAT): 2},
+        "does_not_fire": {str(RuleSource.FORGE_AI): 1}}
     path = gen3_dir / GEN3.name
     records = [json.loads(line) for line in gzip.open(path, "rt", encoding="utf-8")]
-    assert any(r["random_seat"] for r in records if r["game_id"] == _FIRST_DEATH_GAME)
-    for record in records:
-        if record["game_id"] == _FIRST_DEATH_GAME:
-            record["random_seat"] = False
+    game = [r for r in records if r["game_id"] == _DEATH_AND_NON_DEATH_GAME]
+    assert not any(r["random_seat"] for r in game)
+    next(r for r in game if r["kind"] != "resolution")["random_seat"] = True
     with gzip.open(path, "wt", encoding="utf-8") as out:
         out.write("".join(json.dumps(r) + "\n" for r in records))
     counts, _ = count(_config(tmp_path / "b", gen3_dir))
     rule = counts.to_json({})["rules"]["704.5f"]
-    assert rule["fires"] == {str(RuleSource.FORGE_AI): 2}
-    assert rule["does_not_fire"] == {str(RuleSource.RANDOM_SEAT): 2, str(RuleSource.FORGE_AI): 1}
+    assert rule["fires"] == {str(RuleSource.FORGE_AI): 2, str(RuleSource.RANDOM_SEAT): 3}
+    assert rule["does_not_fire"] == {str(RuleSource.RANDOM_SEAT): 1}
 
 
 def test_every_declared_rule_is_countable_on_gen3_records(tmp_path, gen3_dir):
@@ -171,7 +171,7 @@ def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen3_dir):
     assert "  704.5f-2 (704.3) -> 704.5f-1 (704.5f)" in lines
 
 
-_NON_DEATH = "9442f17f-cb56-4893-8d4a-66b5538de180.0-mwhr12znmj0t.130"
+_NON_DEATH = "3550376f-3c30-4231-90cd-cc0f1b308e87.4-mwqw395jccfe.1855"
 
 
 def test_the_review_list_names_record_and_scenario(tmp_path, gen3_dir):
@@ -331,10 +331,10 @@ def test_a_keyword_rule_s_carrier_acts_through_its_keyword_line(tmp_path):
     """A combat record names no acting line: the deathtouch carrier's own
     deathtouch line is what the rule's tags act through."""
     carriers = _gen3_counts(tmp_path)
-    viper = _carrier(carriers, "702.2b", "cardsfolder/w/wasteland_viper.txt")
-    assert viper["lines"] == [{"key": {"face": 0, "trait_kind": "keyword",
+    archer = _carrier(carriers, "702.2b", "cardsfolder/t/thornweald_archer.txt")
+    assert archer["lines"] == [{"key": {"face": 0, "trait_kind": "keyword",
                                          "index_within_kind": 0},
-                                 "records": viper["records"]}]
+                                 "records": archer["records"]}]
 
 
 def test_a_resolution_rule_s_carrier_acts_through_the_record_s_acting_line(tmp_path):
@@ -355,6 +355,6 @@ def test_carriers_come_most_recorded_first_and_no_line_outcounts_its_card(tmp_pa
 def test_carriers_add_up_across_workers(tmp_path):
     one = _gen3_counts(tmp_path / "a", workers=1)
     two = _gen3_counts(tmp_path / "b", workers=2, copies=2)
-    viper = _carrier(two, "702.2b", "cardsfolder/w/wasteland_viper.txt")
-    assert viper["records"] == 2 * _carrier(
-        one, "702.2b", "cardsfolder/w/wasteland_viper.txt")["records"]
+    archer = _carrier(two, "702.2b", "cardsfolder/t/thornweald_archer.txt")
+    assert archer["records"] == 2 * _carrier(
+        one, "702.2b", "cardsfolder/t/thornweald_archer.txt")["records"]

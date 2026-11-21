@@ -12,8 +12,8 @@ from effect_knowledge_probes.pair_ladders import pair_ladder
 from effects.domain.provenance import ProvenanceKey
 from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 
-AIR_ELEMENTAL = "cardsfolder/a/air_elemental.txt"
-KEYWORD = {"script_file": AIR_ELEMENTAL, "face": 0, "trait_kind": "keyword",
+AVEN_AUGUR = "cardsfolder/a/aven_augur.txt"
+KEYWORD = {"script_file": AVEN_AUGUR, "face": 0, "trait_kind": "keyword",
            "index_within_kind": 0}
 
 

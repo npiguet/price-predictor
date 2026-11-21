@@ -200,11 +200,11 @@ class TestTheKeymap:
     """The keymap reads through the one join, so keys differing only in
     ``built`` are distinct entries (finding 19.1)."""
 
-    _SAGA = "cardsfolder/b/binding_the_old_gods.txt"
+    _SAGA = "cardsfolder/b/braidss_frightful_return.txt"
 
     @pytest.fixture
     def keymap(self, tmp_path, monkeypatch):
-        """The real gen-3 sidecars, Binding the Old Gods among them."""
+        """The real gen-3 sidecars, Braids's Frightful Return among them."""
         gen3 = _FIXTURES / "gen3-sidecars"
         paths = SimpleNamespace(cards_folders=[gen3 / "cardsfolder", gen3 / "tokenscripts"],
                                 surface="script", variant_scripts=tmp_path / "no-variants")
