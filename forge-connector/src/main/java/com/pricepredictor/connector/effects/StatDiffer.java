@@ -9,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 
 /**
  * Changes to a card's computed characteristics, as events.
@@ -66,6 +65,8 @@ final class StatDiffer {
 
     /** Each card's controller as last read, kept beside its stats: {@link #controlChange} reads it alone. */
     private final Map<Integer, String> controllers = new HashMap<>();
+
+    private final TraitSignatures signatures = new TraitSignatures();
 
     /**
      * What changed on this card since it was last read, as events.
@@ -240,7 +241,7 @@ final class StatDiffer {
      * writes, read the same way: a count of what was granted, and whether
      * anything went.
      */
-    private static void addAbilityEvents(
+    private void addAbilityEvents(
             List<EffectEvent> events, String subject, Card card,
             List<String> before, List<String> now) {
         List<String> gained = difference(now, before);
@@ -260,10 +261,10 @@ final class StatDiffer {
     }
 
     /** The gained abilities' names, in signature order. */
-    private static List<String> namesOf(Card card, List<String> gained) {
+    private List<String> namesOf(Card card, List<String> gained) {
         Map<String, List<CardTraitBase> > bySignature = new HashMap<>();
         for (CardTraitBase trait : abilitiesOf(card)) {
-            bySignature.computeIfAbsent(signature(trait), s -> new ArrayList<>()).add(trait);
+            bySignature.computeIfAbsent(signatures.of(trait), s -> new ArrayList<>()).add(trait);
         }
         List<String> names = new ArrayList<>();
         for (String signature : gained) {
@@ -320,25 +321,16 @@ final class StatDiffer {
         }
     }
 
-    /**
-     * An ability's identity across Forge's recomputes: its kind and its
-     * script parameters, which a static's re-granted copy keeps while its
-     * object and id are new.
-     */
-    private static String signature(CardTraitBase trait) {
-        return trait.getClass().getSimpleName() + new TreeMap<>(trait.getOriginalMapParams());
-    }
-
     private static List<String> sorted(List<String> values) {
         List<String> sorted = new ArrayList<>(values);
         java.util.Collections.sort(sorted);
         return sorted;
     }
 
-    private static Stats read(Card card) {
+    private Stats read(Card card) {
         List<String> abilities = new ArrayList<>();
         for (CardTraitBase trait : abilitiesOf(card)) {
-            abilities.add(signature(trait));
+            abilities.add(signatures.of(trait));
         }
         Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
