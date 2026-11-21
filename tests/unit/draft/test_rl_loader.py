@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from draft.application.rl_examples import _Loader
@@ -23,19 +25,29 @@ class _FakeLocator:
         return self._tbl[name]
 
 
+@dataclass(frozen=True)
+class _PodShape:
+    """Seats per pod, packs per seat, and cards per pack of a test draft."""
+
+    pod: int
+    packs: int
+    P: int
+
+
 def _record(
-    agents: list[str], scores: list[float | None], pod: int, packs: int, P: int,
+    agents: list[str], scores: list[float | None], shape: _PodShape,
 ) -> DraftRecord:
-    seats = [Seat(agents[s], [], scores[s]) for s in range(pod)]
+    seats = [Seat(agents[s], [], scores[s]) for s in range(shape.pod)]
     boosters = [
-        Booster("TST", [f"k{k}_{j}" for j in range(P)]) for k in range(pod * packs)
+        Booster("TST", [f"k{k}_{j}" for j in range(shape.P)])
+        for k in range(shape.pod * shape.packs)
     ]
     return DraftRecord("d", "r", "t", seats, boosters)
 
 
 def test_learner_trajectory_and_activation() -> None:
     # pod 2, 1 pack of 4: seat0 is the learner, seat1 is Forge coverage.
-    rec = _record(["gen-k", "forge-full"], [2.0, 1.0], pod=2, packs=1, P=4)
+    rec = _record(["gen-k", "forge-full"], [2.0, 1.0], _PodShape(pod=2, packs=1, P=4))
     loader = _Loader(_FakeLocator(), {"gen-k"})
     examples, trajectories = loader.build([rec], [])
 
@@ -54,7 +66,7 @@ def test_learner_trajectory_and_activation() -> None:
 
 def test_failed_build_seat_is_excluded() -> None:
     # seat1 has a failed build (deck_score None) → excluded entirely (FR-015).
-    rec = _record(["gen-k", "forge-full"], [2.0, None], pod=2, packs=1, P=4)
+    rec = _record(["gen-k", "forge-full"], [2.0, None], _PodShape(pod=2, packs=1, P=4))
     loader = _Loader(_FakeLocator(), {"gen-k"})
     examples, trajectories = loader.build([rec], [])
     assert len(examples) == 4                  # only seat0
@@ -64,9 +76,9 @@ def test_failed_build_seat_is_excluded() -> None:
 
 
 def test_critic_corpus_never_creates_learner_trajectories() -> None:
-    on_policy = _record(["gen-k", "forge-full"], [2.0, 1.0], pod=2, packs=1, P=4)
+    on_policy = _record(["gen-k", "forge-full"], [2.0, 1.0], _PodShape(pod=2, packs=1, P=4))
     # A second corpus, even with a gen-k seat, contributes critic coverage only.
-    critic = _record(["gen-k", "forge-full"], [3.0, 0.0], pod=2, packs=1, P=4)
+    critic = _record(["gen-k", "forge-full"], [3.0, 0.0], _PodShape(pod=2, packs=1, P=4))
     loader = _Loader(_FakeLocator(), {"gen-k"})
     examples, trajectories = loader.build([on_policy], [critic])
 
