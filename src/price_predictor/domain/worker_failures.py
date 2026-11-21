@@ -80,11 +80,17 @@ class WorkerFailure(StrEnum):
     DROPPED_EVENTS_UNWRITABLE = "dropped_events_unwritable"
     #: The stack's primary ability cannot be read; special actions misfiled.
     STACK_UNREADABLE = "stack_unreadable"
-    #: The JVM itself: an uncaught exception, out of memory, a native crash's
+    #: The JVM itself: an uncaught exception (the JVM's own line, or
+    #: ``ToolMain``'s guard's ``Fatal error:`` line, a stale Forge jar's
+    #: ``NoSuchMethodError`` among them), out of memory, a native crash's
     #: fatal-error banner.
     JVM_ERROR = "jvm_error"
     #: A log generation rotated away before it was scanned; never a line.
     LOG_UNREAD = "log_unread"
+    #: A line carrying the status line's prefix whose object does not parse
+    #: (``worker_status.UnreadableStatusLine``): the engine and the counts
+    #: it carried are not read. Counted by the log scan, never by a pattern.
+    STATUS_LINE_UNREADABLE = "status_line_unreadable"
 
 
 @dataclass(frozen=True)
@@ -152,6 +158,8 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
              r"(Exception in thread |java\.lang\.OutOfMemoryError|# There is insufficient memory"
              r"|# A fatal error has been detected by the Java Runtime Environment)",
              None),
+    # A throwable ending a guarded main (ToolMain.guardedStatus prints it).
+    _pattern(WorkerFailure.JVM_ERROR, r"Fatal error: ", "\"Fatal error: \" + thrown"),
 )
 
 

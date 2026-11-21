@@ -15,11 +15,16 @@ from price_predictor.domain.worker_status import WorkerEngineRefused
 from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 from sealed.application.match_outcomes import MatchOutcomeSupervisor, MatchRunOptions
 from tests.unit.sealed.conftest import FakeProcess
-from tests.unit.worker_status_line import PINNED_PREFERENCES, status_line
+from tests.unit.worker_status_line import (
+    FORGE_COMMIT,
+    PINNED_PREFERENCES,
+    hooks_document,
+    status_line,
+)
 
-DEGRADED = status_line("a", hooks={"mode": "degraded", "gaps": []})
+DEGRADED = status_line("a", hooks=hooks_document("degraded"))
 GAP = "EffectRecordListener.onReplacement missing"
-PATCHED_WITH_GAP = status_line("a", hooks={"mode": "patched", "gaps": [GAP]})
+PATCHED_WITH_GAP = status_line("a", hooks=hooks_document("patched", (GAP,)))
 
 
 def _supervisor(tmp_path, *, allow_degraded: bool = False) -> MatchOutcomeSupervisor:
@@ -97,7 +102,9 @@ def test_the_refused_run_still_records_its_totals_and_engine(tmp_path):
 
     entry = _entry(tmp_path)
     assert entry["worker_engine"] == {
-        "mode": "patched", "gaps": [GAP], "pinned_preferences": PINNED_PREFERENCES}
+        "mode": "patched", "gaps": [GAP], "pinned_preferences": PINNED_PREFERENCES,
+        "forge_build_commit": FORGE_COMMIT, "forge_build_dirty": False,
+        "connector_forge_commit": FORGE_COMMIT}
     assert entry["matches"] == 1
 
 
@@ -113,6 +120,27 @@ def test_allow_degraded_lets_it_run_and_run_json_records_the_engine(tmp_path, ca
         json.loads(line.partition(": status: ")[2])["hooks"]["gaps"])
     out = capsys.readouterr().out
     assert out.count("Warning: --allow-degraded") == 1
+
+
+def test_a_worker_on_another_forge_build_than_the_conversion_is_refused(tmp_path):
+    """Finding 11.1, task KR1: judged against the conversion the run records."""
+    other = "fedcba9876543210fedcba9876543210fedcba98"
+    records = tmp_path / "records"
+    records.mkdir()
+    (records / "run.json").write_text(json.dumps({"invocations": [{"conversion": {
+        "run": "converted", "forge_commit": other, "forge_dirty": False,
+        "sidecar_digest": "d", "checkout_dirty": False}}]}), encoding="utf-8")
+
+    with pytest.raises(WorkerEngineRefused, match=(
+            f"connector built at Forge {FORGE_COMMIT} differs from conversion at Forge {other}")):
+        _run(tmp_path, status_line("a"))
+
+
+def test_a_run_whose_workers_print_no_status_line_is_refused(tmp_path):
+    """K1-2: a connector from before the status line names its shard the old
+    way and plays; the run used to end 0 with ``worker_engine: null``."""
+    with pytest.raises(WorkerEngineRefused, match="no worker lifetime printed a status line"):
+        _run(tmp_path, "Effect records: x.jsonl [mode=degraded]", allow_degraded=True)
 
 
 def test_a_whole_engine_runs_on(tmp_path):

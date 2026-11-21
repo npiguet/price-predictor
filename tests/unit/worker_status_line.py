@@ -14,11 +14,24 @@ PINNED_PREFERENCES = {
 }
 
 
+#: The Forge commit a whole worker's builds name: its engine's and its connector's.
+FORGE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def hooks_document(mode: str = "patched", gaps: tuple[str, ...] = (), **builds: object) -> dict:
+    """A status line's ``hooks``: ``mode``, ``gaps``, and both builds at
+    :data:`FORGE_COMMIT` from a clean checkout, ``builds`` replacing them."""
+    return {
+        "mode": mode, "gaps": list(gaps), "forge_build_commit": FORGE_COMMIT,
+        "forge_build_dirty": False, "connector_forge_commit": FORGE_COMMIT, **builds,
+    }
+
+
 def status_document(lifetime: str) -> dict:
     """A patched, whole worker's status object with every count empty."""
     return {
         "lifetime": lifetime,
-        "hooks": {"mode": "patched", "gaps": []},
+        "hooks": hooks_document(),
         "pinned_preferences": dict(PINNED_PREFERENCES),
         "hook_failures": {"connector": {}, "forge": {}},
         "fork_refusals": {},

@@ -5,7 +5,8 @@ Run as ``python stand_in_worker.py -Dkey=value ...``, the properties a
 does (``WorkerStop``, ``WorkerLoop``, ``MatchWorkerMain``): the recycle time
 counts from its start, before "Forge" initialises; the stop file is first
 looked at once initialisation is over, then before each match and at each
-game end; it prints the startup line after initialisation and the stop line
+game end; it prints the startup line and a whole engine's status line
+(``tests.unit.worker_status_line``) after initialisation and the stop line
 when it stops, and exits 0. Its literals are pinned to the Java sources by
 ``test_worker_stop_protocol.py``, so it cannot drift from the real worker.
 
@@ -41,6 +42,10 @@ import signal
 import sys
 import time
 from pathlib import Path
+
+# Run by path: the project root on sys.path, for the status line's spelling.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tests.unit.worker_status_line import status_line  # noqa: E402
 
 #: ``WorkerStop.STOP_FILE`` and ``WorkerStop.RECYCLE_SECONDS``.
 STOP_FILE = "worker.stop.file"
@@ -145,6 +150,7 @@ def main(argv: list[str]) -> int:
         return None
 
     pause(float(props.get("standin.init.seconds", "0")))  # Forge initialising
+    _say(status_line(str(os.getpid())), sys.stderr)
     if stop_file is not None or recycle is not None:
         _say(
             DESCRIBE

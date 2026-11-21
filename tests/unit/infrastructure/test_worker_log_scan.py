@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from price_predictor.infrastructure.worker_log_scan import WorkerLogScan
-from tests.unit.worker_status_line import directed_counts, status_line
+from tests.unit.worker_status_line import directed_counts, hooks_document, status_line
 
 
 def _append(path: Path, text: str) -> None:
@@ -154,10 +154,120 @@ def test_the_first_status_line_stays_the_first_and_later_lifetimes_are_compared(
 
     _append(logs[1], status_line("b") + "\n")
     scan.scan(logs)
-    _append(logs[0], status_line("c", hooks={"mode": "degraded", "gaps": []}) + "\n")
+    _append(logs[0], status_line("c", hooks=hooks_document("degraded")) + "\n")
     scan.scan(logs)
 
     assert scan.first_status().lifetime == "b"
     verdict = scan.engine_verdict()
     assert verdict.first.lifetime == "b"
     assert set(verdict.changed) == {"c"}
+
+
+# ── Workers that print no status line, and the run's conversion (task KR1) ──
+
+#: K1-2's probe: a worker on a connector built before the status line existed
+#: names its shard with the old mode line and prints the old hook report.
+_BEFORE_THE_STATUS_LINE = (
+    "Effect records: x.jsonl [mode=degraded]\n"
+    "effect-record hooks: 50 of 51 missing, so these channels stay empty:\n"
+    "Completed 10 matches generated\n"
+)
+
+
+def _report(tmp_path, text: str = "", **options):
+    from price_predictor.infrastructure.worker_log_files import WorkerLogFiles
+    from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
+
+    logs = WorkerLogFiles(tmp_path, "run")
+    if text:
+        _append(logs.path_for(0), text)
+    return logs, WorkerLogReport(logs, 1, **options)
+
+
+def test_a_log_from_before_the_status_line_refuses_the_run(tmp_path):
+    """K1-2: it used to end 0 with ``worker_engine: null``."""
+    _, report = _report(tmp_path, _BEFORE_THE_STATUS_LINE, allow_degraded=True)
+    report.scan()
+    report.review_engine(ended=True)
+
+    assert report.engine_refusal.startswith(
+        "no worker lifetime printed a status line that parses")
+    assert report.manifest_fields()["worker_engine"] is None
+
+
+def test_a_shard_named_is_judged_silent_one_status_interval_later(tmp_path):
+    """The status line follows the shard line by moments; a scan between the
+    two refuses nothing, the next one does."""
+    logs, report = _report(tmp_path, "Effect records: x.jsonl [mode=patched]\n")
+    report.scan()
+    report.review_engine()
+    assert report.engine_refusal is None
+
+    report.scan()
+    report.review_engine()
+    assert report.engine_refusal is not None
+
+
+def test_a_status_line_after_the_shard_line_is_no_silence(tmp_path):
+    logs, report = _report(tmp_path, "Effect records: x.jsonl [mode=patched]\n")
+    report.scan()
+    report.review_engine()
+    _append(logs.path_for(0), status_line("a") + "\n")
+    report.scan()
+    report.review_engine(ended=True)
+
+    assert report.engine_refusal is None
+
+
+def test_a_match_played_with_no_status_line_is_refused_at_once(tmp_path):
+    _, report = _report(tmp_path, "Completed 10 matches generated\n")
+    report.scan()
+    report.review_engine(played=True)
+
+    assert report.engine_refusal is not None
+
+
+def test_nothing_named_and_nothing_played_is_no_verdict_yet(tmp_path):
+    _, report = _report(tmp_path, "Forge: starting\n")
+    report.scan()
+    report.review_engine(ended=True)
+
+    assert report.engine_refusal is None
+
+
+def test_a_malformed_status_line_is_a_failure_line_of_its_own_kind(tmp_path):
+    from price_predictor.domain.worker_status import STATUS_PREFIX
+
+    malformed = STATUS_PREFIX + '{"lifetime":"a","hooks":{"mode":"patched"}}'
+    _, report = _report(tmp_path, malformed + "\n" + status_line("b") + "\n")
+
+    found = report.scan()
+
+    assert found.as_dict() == {"status_line_unreadable": 1}
+    assert found.examples["status_line_unreadable"] == malformed
+    assert report.manifest_fields()["worker_engine"]["mode"] == "patched"
+
+
+def _record_conversion(run_dir: Path, commit: str) -> None:
+    import json
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "run.json").write_text(json.dumps({"invocations": [{"conversion": {
+        "run": "converted", "forge_commit": commit, "forge_dirty": False,
+        "sidecar_digest": "d", "checkout_dirty": False}}]}), encoding="utf-8")
+
+
+def test_each_lifetime_is_judged_against_the_conversion_the_run_records(tmp_path):
+    """K2-7: the conversion the run's run.json records is the commit every
+    lifetime's builds must name; a JAR rebuilt at another one is refused."""
+    from tests.unit.worker_status_line import FORGE_COMMIT
+
+    other = "fedcba9876543210fedcba9876543210fedcba98"
+    _record_conversion(tmp_path, other)
+    _, report = _report(tmp_path, status_line("a") + "\n", run_dir=tmp_path)
+    report.scan()
+    report.review_engine()
+
+    assert f"connector built at Forge {FORGE_COMMIT} differs from conversion at Forge {other}" \
+        in report.engine_refusal
+    assert report.manifest_fields()["worker_engine"]["forge_build_commit"] == FORGE_COMMIT

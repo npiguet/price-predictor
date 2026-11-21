@@ -8,11 +8,14 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from price_predictor.domain.worker_failures import classify
 from price_predictor.domain.worker_status import (
     STATUS_PREFIX,
     EngineCheck,
     SlotStatuses,
+    UnreadableStatusLine,
     directed_fork_tally_document,
     engine_document,
     fork_refusal_document,
@@ -24,8 +27,10 @@ from price_predictor.domain.worker_status import (
 )
 from tests.unit.forge_sources import connector_source
 from tests.unit.worker_status_line import (
+    FORGE_COMMIT,
     PINNED_PREFERENCES,
     directed_counts,
+    hooks_document,
     status_document,
     status_line,
 )
@@ -46,13 +51,14 @@ def test_the_prefix_and_the_members_are_the_ones_the_connector_prints():
     source = connector_source("WorkerStatus.java")
     assert f'static final String LINE = "{STATUS_PREFIX}";' in source
     written = re.findall(r'\.(?:value|raw)\("([a-z_]+)"', source)
-    assert set(status_document("a")) | set(PINNED_PREFERENCES) | {
-        "mode", "gaps", "connector", "forge"} == set(written)
+    document = status_document("a")
+    assert set(document) | set(PINNED_PREFERENCES) | set(document["hooks"]) | {
+        "connector", "forge"} == set(written)
 
 
 def test_a_reason_and_a_gap_holding_a_comma_quotes_and_non_ascii_round_trip():
     line = status_line(
-        "a", hooks={"mode": "degraded", "gaps": [AWKWARD]},
+        "a", hooks=hooks_document("degraded", (AWKWARD,)),
         fork_refusals={f"directed {AWKWARD}": 2, "probe no combat": 1},
     )
     assert line.isascii(), "the Java side escapes every character past ASCII"
@@ -84,18 +90,45 @@ def test_the_line_is_found_after_another_stream_s_text_and_read_up_to_its_object
     assert status is not None and status.fork_refusals == {"directed dies": 1}
 
 
-def test_a_cut_or_malformed_line_is_skipped():
-    whole = status_line("a", fork_refusals={"directed dies": 1})
-    for line in (
-        whole[: len(whole) // 2],
-        STATUS_PREFIX + "[1]",
-        STATUS_PREFIX + json.dumps({"lifetime": "a"}),
-        status_line("a", fork_refusals={"directed dies": "many"}),
-        status_line("a", fork_refusals={"directed dies": True}),
-        status_line("a", directed={"704.5f": [1, 2]}),
-        "Effect records: x/run.0-a.jsonl.gz [mode=patched]",
-    ):
-        assert parse_status_line(line) is None, line
+_WHOLE = status_line("a", fork_refusals={"directed dies": 1})
+
+
+@pytest.mark.parametrize("line", [
+    _WHOLE[: len(_WHOLE) // 2],
+    STATUS_PREFIX + "[1]",
+    STATUS_PREFIX + json.dumps({"lifetime": "a"}),
+    status_line("a", fork_refusals={"directed dies": "many"}),
+    status_line("a", fork_refusals={"directed dies": True}),
+    status_line("a", directed={"704.5f": [1, 2]}),
+    status_line("a", hooks=hooks_document(forge_build_commit=7)),
+    status_line("a", hooks=hooks_document(forge_build_dirty="no")),
+])
+def test_a_cut_or_malformed_line_is_unreadable_and_not_followed(line):
+    """K1-2: a prefixed line that does not parse is no silence; the slot
+    says so, and keeps nothing of it."""
+    with pytest.raises(UnreadableStatusLine):
+        parse_status_line(line)
+    slot = SlotStatuses()
+    assert slot.add_line(line) is False
+    assert slot.lifetimes == {}
+
+
+def test_another_line_is_no_status_line_and_a_shard_line_is_noted():
+    slot = SlotStatuses()
+    assert parse_status_line("Worker: 10 matches generated") is None
+    assert slot.add_line("Worker: 10 matches generated") is True
+    assert slot.named_shard is False
+
+    shard = "Effect records: x/run.0-a.jsonl.gz [mode=patched]"
+    assert parse_status_line(shard) is None
+    assert slot.add_line(shard) is True
+    assert slot.named_shard is True
+
+
+def test_the_shard_line_is_the_one_the_connector_prints():
+    source = connector_source("MatchWorkerMain.java")
+    assert '"Effect records: " + effectRecords.path()' in source
+    assert '" [mode=" + AttributionMode.detect().wireName() + "]"' in source
 
 
 def test_a_status_line_is_no_failure_line():
@@ -166,7 +199,7 @@ def _status(lifetime: str = "a", **members):
 
 
 def _hooks(mode: str, *gaps: str) -> dict:
-    return {"hooks": {"mode": mode, "gaps": list(gaps)}}
+    return {"hooks": hooks_document(mode, gaps)}
 
 
 def test_a_whole_engine_is_never_refused():
@@ -223,9 +256,11 @@ def test_a_later_lifetime_on_another_engine_is_refused_even_when_allowed():
     assert "'de-DE'" in refusal
 
 
-def test_the_engine_document_is_the_three_members_run_json_keeps():
+def test_the_engine_document_is_the_members_run_json_keeps():
     assert engine_document(_status(**_hooks("patched", "g"))) == {
-        "mode": "patched", "gaps": ["g"], "pinned_preferences": PINNED_PREFERENCES}
+        "mode": "patched", "gaps": ["g"], "pinned_preferences": PINNED_PREFERENCES,
+        "forge_build_commit": FORGE_COMMIT, "forge_build_dirty": False,
+        "connector_forge_commit": FORGE_COMMIT}
 
 
 def test_the_check_keeps_its_first_refusal_and_warns_once():
@@ -241,3 +276,93 @@ def test_the_check_keeps_its_first_refusal_and_warns_once():
     first_reason = refusing.refusal
     refusing.review(judge_engine(_status(), []))
     assert refusing.refusal == first_reason is not None
+
+
+# ── The Forge build the workers loaded (finding 11.1, task KR1) ─────────
+
+#: A Forge commit other than :data:`FORGE_COMMIT`.
+OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
+
+
+def _built(**builds) -> dict:
+    return {"hooks": hooks_document(**builds)}
+
+
+def _refusal(first, conversion_commit=None, *, allow_degraded=False):
+    return judge_engine(first, [], conversion_commit=conversion_commit).refusal(
+        allow_degraded=allow_degraded)
+
+
+def test_a_build_at_the_connector_s_and_the_conversion_s_commit_is_whole():
+    assert _refusal(_status(), FORGE_COMMIT) is None
+
+
+def test_a_stale_forge_build_is_refused_naming_both_commits_first():
+    """K1-1: a ../forge jar built before the connector's commit reads
+    patched with no gap; its build commit tells it apart."""
+    refusal = _refusal(_status(**_built(forge_build_commit=OTHER_COMMIT)), FORGE_COMMIT)
+
+    assert refusal.startswith(
+        f"the Forge workers' engine is not whole (worker lifetime a): Forge build "
+        f"{OTHER_COMMIT} differs from connector built at Forge {FORGE_COMMIT}")
+    assert len(refusal.partition(FORGE_COMMIT)[0]) < 250, "both commits within run.json's 300"
+
+
+def test_a_connector_built_at_another_commit_than_the_conversion_is_refused():
+    """K2-7: the JAR rebuilt under the run, the build installed first."""
+    refusal = _refusal(_status(**_built(
+        forge_build_commit=OTHER_COMMIT, connector_forge_commit=OTHER_COMMIT)), FORGE_COMMIT)
+
+    assert (f"connector built at Forge {OTHER_COMMIT} differs from conversion at "
+            f"Forge {FORGE_COMMIT}") in refusal
+
+
+@pytest.mark.parametrize("hooks", [
+    {"mode": "patched", "gaps": []},
+    hooks_document(forge_build_commit=None),
+    hooks_document(forge_build_commit="${forge.build.commit}"),
+], ids=["a line from before the builds", "null", "an unset Maven property"])
+def test_a_build_that_names_no_commit_is_refused(hooks):
+    """No compatibility: a line without the commit is a build that names none."""
+    refusal = _refusal(_status(hooks=hooks), FORGE_COMMIT)
+
+    assert "the worker's Forge build names no commit" in refusal
+    assert "Forge-Build-Commit" in refusal
+
+
+def test_a_connector_that_names_no_commit_is_refused():
+    refusal = _refusal(_status(**_built(connector_forge_commit=None)))
+
+    assert "connector JAR names no Forge-Commit" in refusal
+
+
+def test_allowed_a_build_shortfall_is_a_warning():
+    verdict = judge_engine(
+        _status(**_built(forge_build_commit=OTHER_COMMIT)), [], conversion_commit=FORGE_COMMIT)
+
+    assert verdict.refusal(allow_degraded=True) is None
+    assert OTHER_COMMIT in verdict.warning()
+
+
+def test_a_later_lifetime_on_another_build_is_refused_even_when_allowed():
+    """K2-7: ../forge reinstalled at another commit during the run; the next
+    lifetime loads it."""
+    later = status_line("b", hooks=hooks_document(forge_build_commit=OTHER_COMMIT))
+
+    verdict = judge_engine(_status("a"), [_slot(status_line("a"), later)],
+                           conversion_commit=FORGE_COMMIT)
+
+    refusal = verdict.refusal(allow_degraded=True)
+    assert refusal.startswith("worker lifetime b runs another engine than the run's first "
+                              "(lifetime a): forge_build_commit ")
+    assert f"'{FORGE_COMMIT}' -> '{OTHER_COMMIT}'" in refusal
+
+
+def test_workers_that_print_no_status_line_are_refused_even_when_allowed():
+    """K1-2: the verdict on a silent run is a refusal, not an empty verdict."""
+    verdict = judge_engine(None, [], silent=True)
+
+    refusal = verdict.refusal(allow_degraded=True)
+    assert refusal.startswith("no worker lifetime printed a status line that parses")
+    assert "Rebuild the connector" in refusal
+    assert judge_engine(_status(), [], silent=True).refusal(allow_degraded=False) is None

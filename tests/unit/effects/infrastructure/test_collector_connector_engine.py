@@ -23,15 +23,20 @@ from price_predictor.domain.worker_status import WorkerEngineRefused
 from price_predictor.infrastructure.forge_worker_pool import ForgeWorkerPool
 from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
 from price_predictor.infrastructure.worker_stops import WorkerStopSettings
-from tests.unit.worker_status_line import PINNED_PREFERENCES, status_line
+from tests.unit.worker_status_line import (
+    FORGE_COMMIT,
+    PINNED_PREFERENCES,
+    hooks_document,
+    status_line,
+)
 
 _DECKS = [["Plains"]]
 _QUICK_STOP = WorkerStopSettings(timeout=1, recycle_seconds=3600)
 
-DEGRADED = status_line("a", hooks={"mode": "degraded", "gaps": []})
+DEGRADED = status_line("a", hooks=hooks_document("degraded"))
 #: A partly patched build: ``patched``, one listener callback missing.
 GAP = "EffectRecordListener.onReplacement missing"
-PATCHED_WITH_GAP = status_line("a", hooks={"mode": "patched", "gaps": [GAP]})
+PATCHED_WITH_GAP = status_line("a", hooks=hooks_document("patched", (GAP,)))
 
 
 class _Round:
@@ -62,7 +67,7 @@ class _Round:
 
 
 def _entry(tmp_path) -> dict:
-    return json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+    return json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][-1]
 
 
 def _recorded(tmp_path, body) -> dict:
@@ -124,7 +129,9 @@ class TestADegradedEngineStopsTheRun:
         entry = _recorded(tmp_path, lambda: _Round(tmp_path).play(PATCHED_WITH_GAP))
 
         assert entry["worker_engine"] == {
-            "mode": "patched", "gaps": [GAP], "pinned_preferences": PINNED_PREFERENCES}
+            "mode": "patched", "gaps": [GAP], "pinned_preferences": PINNED_PREFERENCES,
+            "forge_build_commit": FORGE_COMMIT, "forge_build_dirty": False,
+            "connector_forge_commit": FORGE_COMMIT}
 
     def test_an_engine_changing_under_the_run_is_refused_even_when_allowed(self, tmp_path):
         """A JAR reinstalled under a running collection: the next lifetime differs."""
@@ -132,7 +139,98 @@ class TestADegradedEngineStopsTheRun:
         round_.play(status_line("a"))
 
         with pytest.raises(WorkerEngineRefused, match="lifetime b runs another engine"):
-            round_.play(status_line("b", hooks={"mode": "degraded", "gaps": []}))
+            round_.play(status_line("b", hooks=hooks_document("degraded")))
+
+
+#: A Forge commit other than the one the run converted at.
+OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
+
+
+def _record_conversion(run_dir, commit: str) -> None:
+    """``run_dir``'s ``run.json`` records a collection against a conversion at ``commit``."""
+    (run_dir / "run.json").write_text(json.dumps({"invocations": [{"conversion": {
+        "run": "converted", "forge_commit": commit, "forge_dirty": False,
+        "sidecar_digest": "d", "checkout_dirty": False}}]}), encoding="utf-8")
+
+
+class TestTheForgeBuildTheWorkersLoad:
+    """Finding 11.1, task KR1: a stale ../forge jar reads patched with no gap;
+    its build commit, against the connector's and the conversion's, tells it."""
+
+    def test_a_worker_on_another_forge_build_is_refused_naming_both_commits(self, tmp_path):
+        _record_conversion(tmp_path, FORGE_COMMIT)
+        round_ = _Round(tmp_path)
+
+        with pytest.raises(WorkerEngineRefused) as refused:
+            round_.play(status_line("a", hooks=hooks_document(forge_build_commit=OTHER_COMMIT)))
+
+        assert round_.stopped_at_status == [True]
+        assert str(refused.value).startswith(
+            f"the Forge workers' engine is not whole (worker lifetime a): Forge build "
+            f"{OTHER_COMMIT} differs from connector built at Forge {FORGE_COMMIT}")
+
+    def test_a_connector_rebuilt_at_another_commit_than_the_conversion_is_refused(
+            self, tmp_path):
+        _record_conversion(tmp_path, OTHER_COMMIT)
+        round_ = _Round(tmp_path)
+
+        with pytest.raises(WorkerEngineRefused, match=(
+                f"connector built at Forge {FORGE_COMMIT} differs from conversion at "
+                f"Forge {OTHER_COMMIT}")):
+            round_.play(status_line("a"))
+
+    def test_a_worker_whose_build_names_no_commit_is_refused(self, tmp_path):
+        _record_conversion(tmp_path, FORGE_COMMIT)
+        round_ = _Round(tmp_path)
+
+        with pytest.raises(WorkerEngineRefused, match="Forge build names no commit"):
+            round_.play(status_line("a", hooks={"mode": "patched", "gaps": []}))
+
+    def test_a_later_lifetime_on_another_build_is_refused(self, tmp_path):
+        """K2-7: ../forge reinstalled during the run; the next lifetime loads it."""
+        _record_conversion(tmp_path, FORGE_COMMIT)
+        round_ = _Round(tmp_path)
+        round_.play(status_line("a"))
+
+        with pytest.raises(WorkerEngineRefused, match="lifetime b runs another engine"):
+            round_.play(status_line("b", hooks=hooks_document(forge_build_commit=OTHER_COMMIT)))
+
+    def test_the_build_reaches_run_json(self, tmp_path):
+        _record_conversion(tmp_path, FORGE_COMMIT)
+        stale = status_line("a", hooks=hooks_document(forge_build_commit=OTHER_COMMIT))
+
+        entry = _recorded(tmp_path, lambda: _Round(tmp_path).play(stale))
+
+        assert entry["worker_engine"]["forge_build_commit"] == OTHER_COMMIT
+
+
+class TestWorkersThatPrintNoStatusLine:
+    """K1-2: a connector built before the status line, or after its shape
+    changed: the run used to end 0 with ``worker_engine: null``."""
+
+    def test_a_round_whose_worker_named_its_shard_only_is_refused_at_its_end(self, tmp_path):
+        round_ = _Round(tmp_path, allow_degraded=True)
+
+        with pytest.raises(WorkerEngineRefused, match="no worker lifetime printed a status line"):
+            round_.play("Effect records: x.jsonl [mode=degraded]",
+                        "effect-record hooks: 50 of 51 missing, so these channels stay empty:")
+
+        assert round_.stopped_at_status == [False], "the status line may still be on its way"
+
+    def test_a_round_that_played_a_match_is_refused_at_the_status_scan(self, tmp_path):
+        round_ = _Round(tmp_path)
+        round_.supervisor.progress_path.parent.mkdir(parents=True, exist_ok=True)
+
+        def fake_run(pool: ForgeWorkerPool) -> None:
+            round_.supervisor.progress_path.write_text("match\n", encoding="utf-8")
+            pool._on_status()
+            round_.stopped_at_status.append(pool._shutdown_event.is_set())
+
+        with patch.object(ForgeWorkerPool, "run", fake_run), pytest.raises(WorkerEngineRefused):
+            round_.supervisor.play_round(
+                _DECKS, round_.decks, RoundSpec(label="coverage", matches=1))
+
+        assert round_.stopped_at_status == [True]
 
 
 class TestAllowDegraded:

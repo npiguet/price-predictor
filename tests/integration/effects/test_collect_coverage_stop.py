@@ -233,8 +233,9 @@ def test_run_json_records_the_runs_settings_and_counts(coverage_run) -> None:
 
 def test_each_worker_s_status_line_reads_back_with_the_engine_s_state(coverage_run) -> None:
     """The real workers' status lines parse (``contracts/cli.md`` § Match worker
-    stop protocol): the sibling Forge is the patched one, whole, and the four
-    preferences are the pinned ones as the engine holds them."""
+    stop protocol): the sibling Forge is the patched one, whole, built at the
+    connector's Forge commit, and the four preferences are the pinned ones as
+    the engine holds them."""
     from price_predictor.domain.worker_status import parse_status_line
     from tests.unit.worker_status_line import PINNED_PREFERENCES
 
@@ -249,3 +250,4 @@ def test_each_worker_s_status_line_reads_back_with_the_engine_s_state(coverage_r
     for status in statuses:
         assert (status.mode, status.gaps) == ("patched", ()), status
         assert status.pinned_preferences == PINNED_PREFERENCES, status
+        assert status.builds.forge_build_commit == status.builds.connector_forge_commit, status

@@ -114,6 +114,27 @@ class ToolMainExitTest {
                 .contains("holdout property unreadable"));
     }
 
+    /**
+     * The guard's first line is {@code Fatal error: } and the throwable, the
+     * line {@code worker_failures.JVM_ERROR} counts (finding L1-1): a worker
+     * linked against a stale Forge jar ends on a {@code NoSuchMethodError}.
+     */
+    @Test
+    void theGuardsFirstLineIsFatalErrorAndTheThrowable() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            ToolMain.guardedStatus(() -> {
+                throw new NoSuchMethodError("'void forge.game.Game.foo()'");
+            });
+        } finally {
+            System.setErr(original);
+        }
+        assertEquals("Fatal error: java.lang.NoSuchMethodError: 'void forge.game.Game.foo()'",
+                captured.toString(StandardCharsets.UTF_8).lines().findFirst().orElse(""));
+    }
+
     private static OptionalInt guardedQuietly(Runnable main) {
         PrintStream original = System.err;
         System.setErr(new PrintStream(OutputStream.nullOutputStream()));

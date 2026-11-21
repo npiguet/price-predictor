@@ -256,7 +256,10 @@ records, fork score mismatch, fork fidelity, staging, JVM error and the rest, ea
 anywhere in a line, since a worker's stdout and stderr interleave mid-line), prints them by kind,
 prints the workers' hook-failure counts and fork refusals and how the round's workers ended (§ Match worker stop
 protocol), and names any worker the kill could not end and still running. A log rotated twice
-between two scans counts as `log_unread`. After counting a round's shards it prints how many
+between two scans counts as `log_unread`; a line carrying the status line's prefix whose object
+does not parse counts as `status_line_unreadable`; a JVM error is the JVM's own
+`Exception in thread ` line, its out-of-memory and fatal-error banners, or the
+`Fatal error: <throwable>` line `ToolMain`'s guard prints for a throwable ending a main. After counting a round's shards it prints how many
 gen-3 games they hold without a game-end marker: a cut game credits no coverage card, held-out
 text or variant, as `build-corpus` drops it (the counters read the markers in the pass that
 reads each shard; a damaged shard's game past the damage counts as cut; the cards a cut game
@@ -422,14 +425,14 @@ the JVM:
 | Member | Value |
 |---|---|
 | `lifetime` | the JVM lifetime's token, the one its shard's name carries |
-| `hooks` | `{"mode": "patched" or "degraded", "gaps": [<gap>, …]}`: one string per required engine hook absent or whose listener is short of what the collectors read (`PatchHooks.gaps()`), `[]` when whole |
+| `hooks` | `{"mode": "patched" or "degraded", "gaps": [<gap>, …], "forge_build_commit": <commit>, "forge_build_dirty": <bool>, "connector_forge_commit": <commit>}`: one gap per required engine hook absent or whose listener is short of what the collectors read (`PatchHooks.gaps()`), `[]` when whole; the `Forge-Build-Commit` and `Forge-Build-Dirty` manifest entries of the jar `forge.game.Game` was loaded from, and the connector JAR's `Forge-Commit` (`LoadedBuilds`), each `null` when its manifest names none |
 | `pinned_preferences` | `{"mulligan_rule": …, "filtered_hands": …, "performance_mode": …, "ui_language": …}`, the four Forge preferences as the engine holds them (`PinnedForgePreferences.inEffect()`) |
 | `hook_failures` | `{"connector": {<hook>: <calls>}, "forge": {<slot>: <calls>}}`: the connector's failure counts (`HookFailures.counts()`), then Forge's own contained failures per hook slot, keys in name order |
 | `fork_refusals` | `{"<kind> <reason>": <forks>}`, keys in name order |
 | `directed` | the directed fork tally, `{}` while no rule has counted anything |
 
 Example:
-`Effect records: status: {"lifetime":"mf3k2a1b","hooks":{"mode":"patched","gaps":[]},"pinned_preferences":{"mulligan_rule":"London","filtered_hands":false,"performance_mode":false,"ui_language":"en-US"},"hook_failures":{"connector":{"game-end marker":1},"forge":{}},"fork_refusals":{"directed replace_card remembered, imprinted or exiled cards":2},"directed":{}}`.
+`Effect records: status: {"lifetime":"mf3k2a1b","hooks":{"mode":"patched","gaps":[],"forge_build_commit":"396b403122d80c6cb193e8c80c11e0259f78f9c3","forge_build_dirty":false,"connector_forge_commit":"396b403122d80c6cb193e8c80c11e0259f78f9c3"},"pinned_preferences":{"mulligan_rule":"London","filtered_hands":false,"performance_mode":false,"ui_language":"en-US"},"hook_failures":{"connector":{"game-end marker":1},"forge":{}},"fork_refusals":{"directed replace_card remembered, imprinted or exiled cards":2},"directed":{}}`.
 
 The directed fork tally maps each rule id that has
 counted anything, in name order, to an object holding all six counts, in this order: `matched` (a
@@ -463,10 +466,16 @@ The supervisor of every collecting command (`collect-coverage`, `collect-variant
 `match-outcomes --effect-records`) judges the workers' engine from the status lines at every
 status line's log scan and at each round's end (`price_predictor.domain.worker_status.judge_engine`):
 
-- The run's first status line names the engine: a `hooks.mode` other than `patched` or a
-  non-empty `hooks.gaps` refuses the run.
+- The run's first status line names the engine: a `hooks.mode` other than `patched`, a
+  non-empty `hooks.gaps`, a `forge_build_commit` or `connector_forge_commit` that is no full
+  commit, or a Forge build, connector and conversion (the `conversion` the run's `run.json`
+  records, when it records one) that do not all name one commit refuses the run. A line without
+  the build members names no commit.
 - A later JVM lifetime whose `hooks` or `pinned_preferences` differ from the first's refuses the
   run, `--allow-degraded` or not.
+- Once a worker named its shard (`Effect records: <shard> [mode=<mode>]`) a scan before the last,
+  or at a round's or the run's end, or once a match was played, no JVM lifetime having printed a
+  status line that parses refuses the run, `--allow-degraded` or not.
 - On a refusal the supervisor prints `Stopping the run: <reason>` and ends the pool by the stop
   protocol, as a reached target does; the command then exits 1 with
   `<reason>. The records written before the stop stay under <run dir>`, the message in `run.json`'s
@@ -475,12 +484,20 @@ status line's log scan and at each round's end (`price_predictor.domain.worker_s
   run on an engine that is not whole go on, printing once
   `--allow-degraded: collecting on an engine that is not whole (worker lifetime <token>): <what is missing>`.
 - `run.json` records the first lifetime's engine as `worker_engine`: `{"mode", "gaps",
-  "pinned_preferences"}` as the status line carries them, `null` while no worker has printed one.
+  "pinned_preferences", "forge_build_commit", "forge_build_dirty", "connector_forge_commit"}` as
+  the status line carries them, `null` while no worker has printed one.
 
 The reason for an engine that is not whole:
-`the Forge workers' engine is not whole (worker lifetime <token>): <what is missing>. A run collecting effect records needs every hook: rebuild ../forge on its effect-record-hooks branch and the connector JAR (src/effects/CLAUDE.md § The engine hooks), or pass --allow-degraded to collect anyway`,
-`<what is missing>` being `mode degraded (no effect-record hooks)` when the mode is not
-`patched`, then each gap, joined by `; `. For an engine that changed:
+`the Forge workers' engine is not whole (worker lifetime <token>): <what is missing>. A run collecting effect records needs every hook, built at the Forge commit it converted at: install ../forge on its effect-record-hooks branch, then the connector JAR (src/effects/CLAUDE.md § The engine hooks), or pass --allow-degraded to collect anyway`,
+`<what is missing>` being, joined by `; `: for a build naming no commit
+`the worker's Forge build names no commit (its forge-game jar's manifest has no Forge-Build-Commit: a Forge built before its pom wrote one, or without git)`
+or `the worker's connector JAR names no Forge-Commit in its manifest`; for the first of the Forge
+build, the connector and the conversion whose commit differs from the one before it
+`<first> differs from <second>: the workers' engine is not the Forge the run's keys were converted at`,
+each `Forge build <commit>`, `connector built at Forge <commit>` or `conversion at Forge <commit>`;
+`mode degraded (no effect-record hooks)` when the mode is not `patched`; then each gap. For
+workers that print no status line:
+`no worker lifetime printed a status line that parses (Effect records: status:), though the workers named their shards or played a match: the connector JAR was built before the line existed, or the line changed its shape, so the workers' engine cannot be judged. Rebuild the connector (mvn -f forge-connector/pom.xml install -DskipTests)`. For an engine that changed:
 `worker lifetime <token> runs another engine than the run's first (lifetime <token>): <member> <first> -> <later>; …; a run's records come from one engine (was a Forge or connector jar installed during the run?)`.
 
 ## The conversion a collection joins against (every collecting command)

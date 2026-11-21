@@ -116,7 +116,8 @@ class CollectorSupervisor:
         # vanish into DEVNULL and look like a mechanic that never occurred.
         self._worker_logs = WorkerLogFiles(self.logs_dir, self._run_id)
         self._log_report = WorkerLogReport(
-            self._worker_logs, worker_count, allow_degraded=run.allow_degraded)
+            self._worker_logs, worker_count, allow_degraded=run.allow_degraded,
+            run_dir=self._effect_records)
         #: The failure lines the current round's status-interval scans found.
         self._round_failures = WorkerFailures()
         self._stop = run.stop if run.stop is not None else WorkerStopSettings()
@@ -267,15 +268,28 @@ class CollectorSupervisor:
     def _scan_logs(self) -> None:
         """At a status line: read what the logs gained, and stop the round's
         pool by the stop protocol once the workers' engine is refused."""
+        played = self._played_a_match()
         self._round_failures.merge(self._log_report.scan())
-        self._review_engine(self._pool)
+        self._review_engine(self._pool, played=played)
 
-    def _review_engine(self, pool: ForgeWorkerPool) -> None:
-        """Judge the workers' engine: warn once under ``--allow-degraded``;
-        on a refusal, say so and ask ``pool`` to stop every worker at its
-        game's end, as a run reaching its target does."""
+    def _played_a_match(self) -> bool:
+        """Whether a worker of the round completed a match: its progress file
+        holds a line."""
+        try:
+            with open(self.progress_path, "rb") as progress:
+                return bool(progress.readline())
+        except OSError:
+            return False
+
+    def _review_engine(
+        self, pool: ForgeWorkerPool, *, played: bool, ended: bool = False,
+    ) -> None:
+        """Judge the workers' engine (``WorkerLogReport.review_engine``):
+        warn once under ``--allow-degraded``; on a refusal, say so and ask
+        ``pool`` to stop every worker at its game's end, as a run reaching
+        its target does."""
         refused_before = self._log_report.engine_refusal is not None
-        warning = self._log_report.review_engine()
+        warning = self._log_report.review_engine(played=played, ended=ended)
         if warning is not None:
             logger.warning("%s", warning)
         refusal = self._log_report.engine_refusal
@@ -288,7 +302,7 @@ class CollectorSupervisor:
         outlived the kill, and record the run's totals in ``run.json``."""
         failures, self._round_failures = self._round_failures, WorkerFailures()
         failures.merge(self._log_report.scan())
-        self._review_engine(pool)
+        self._review_engine(pool, played=self._played_a_match(), ended=True)
         if failures:
             logger.warning(
                 "Round %d worker logs: %s (under %s)",

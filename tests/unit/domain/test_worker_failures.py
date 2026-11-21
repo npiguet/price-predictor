@@ -224,3 +224,42 @@ def test_the_stop_protocol_s_lines_are_no_failure():
                f"{java.DESCRIBE_OR}{java.DESCRIBE_RUN}600 s")
     for line in (stopped, recycled, startup):
         assert classify(line) is None, line
+
+
+#: ``ToolMain.guardedStatus``'s real stderr for three throwables (captured from
+#: the connector's classes, finding L1-1): its first line names the throwable,
+#: then the stack trace, whose lines name no failure.
+GUARDED_STDERR = {
+    "NoSuchMethodError": (
+        "Fatal error: java.lang.NoSuchMethodError: 'void forge.game.Game.foo()'\n"
+        "java.lang.NoSuchMethodError: 'void forge.game.Game.foo()'\n"
+        "\tat Guard.lambda$main$0(Guard.java:8)\n"
+        "\tat com.pricepredictor.connector.ToolMain.guardedStatus(ToolMain.java:83)\n"
+    ),
+    "StackOverflowError": (
+        "Fatal error: java.lang.StackOverflowError\n"
+        "java.lang.StackOverflowError\n"
+        "\tat Guard.lambda$main$1(Guard.java:9)\n"
+        "\tat com.pricepredictor.connector.ToolMain.guardedStatus(ToolMain.java:83)\n"
+    ),
+    "IllegalStateException": (
+        "Fatal error: java.lang.IllegalStateException: holdout property unreadable\n"
+        "java.lang.IllegalStateException: holdout property unreadable\n"
+        "\tat Guard.lambda$main$2(Guard.java:10)\n"
+        "\tat com.pricepredictor.connector.ToolMain.guardedStatus(ToolMain.java:83)\n"
+    ),
+}
+
+
+@pytest.mark.parametrize("throwable", sorted(GUARDED_STDERR))
+def test_a_worker_ended_by_the_guard_is_one_jvm_error(throwable):
+    """L1-1: a stale Forge jar's NoSuchMethodError, a StackOverflowError or a
+    main's IllegalStateException ends a guarded worker on ``Fatal error:``,
+    which counts once as ``jvm_error``."""
+    failures = WorkerFailures()
+    for line in GUARDED_STDERR[throwable].splitlines():
+        failures.add_line(line)
+
+    assert failures.as_dict() == {"jvm_error": 1}
+    assert failures.examples["jvm_error"].startswith(f"Fatal error: java.lang.{throwable}")
+

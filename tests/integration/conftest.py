@@ -33,13 +33,14 @@ STOP_SECONDS = 300
 
 
 #: The worker-failure kinds (``price_predictor.domain.worker_failures``) whose
-#: line means a match, a game or a worker's output was lost: a run the stop
-#: protocol ended cleanly has none. The others (a fork discarded, a fidelity
+#: line means a match, a game or a worker's output (its counts, for a status
+#: line that does not parse) was lost: a run the stop protocol ended cleanly
+#: has none. The others (a fork discarded, a fidelity
 #: difference, a hook that threw) cost a record or a fork and are reported,
 #: not asserted: what a few games show of them is a reading, not a verdict.
 LOST_OUTPUT_FAILURES = (
     "match_error", "random_seat_match_error", "worker_gave_up",
-    "game_end_marker_unwritten", "jvm_error", "log_unread",
+    "game_end_marker_unwritten", "jvm_error", "log_unread", "status_line_unreadable",
 )
 
 

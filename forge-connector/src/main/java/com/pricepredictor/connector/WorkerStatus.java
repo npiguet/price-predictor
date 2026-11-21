@@ -21,7 +21,12 @@ import java.util.List;
  *   <li>{@code lifetime}: the JVM lifetime's token, the one its shard is
  *       named by, which tells one lifetime's lines from the next.</li>
  *   <li>{@code hooks}: the attribution {@code mode} and the {@code gaps} of
- *       the hook inventory ({@link PatchHooks#gaps()}, empty when whole).</li>
+ *       the hook inventory ({@link PatchHooks#gaps()}, empty when whole),
+ *       then the builds this JVM runs ({@link LoadedBuilds}):
+ *       {@code forge_build_commit} and {@code forge_build_dirty}, the commit
+ *       the loaded Forge engine was built at and whether its checkout was
+ *       dirty, and {@code connector_forge_commit}, the connector JAR's
+ *       {@code Forge-Commit}, each null when its manifest names none.</li>
  *   <li>{@code pinned_preferences}: the four Forge preferences the engine
  *       runs with ({@link PinnedForgePreferences#inEffect()}).</li>
  *   <li>{@code hook_failures}: the connector's counts ({@link HookFailures#counts})
@@ -46,10 +51,9 @@ final class WorkerStatus {
     private final String pinnedPreferences;
     private Counts printed;
 
-    WorkerStatus(String lifetime, AttributionMode mode, List<String> gaps,
-            PinnedForgePreferences preferences) {
+    WorkerStatus(String lifetime, Engine engine, PinnedForgePreferences preferences) {
         this.lifetime = lifetime;
-        this.hooks = Json.object().value("mode", mode).raw("gaps", Json.stringArray(gaps)).render();
+        this.hooks = engine.json();
         this.pinnedPreferences = Json.object()
                 .value("mulligan_rule", preferences.mulliganRule())
                 .value("filtered_hands", preferences.filteredHands())
@@ -58,10 +62,28 @@ final class WorkerStatus {
                 .render();
     }
 
-    /** The status of this JVM, once Forge is initialised: its mode, gaps and preferences. */
+    /** The status of this JVM, once Forge is initialised: its mode, gaps, builds and preferences. */
     static WorkerStatus ofThisJvm(String lifetime) {
-        return new WorkerStatus(lifetime, AttributionMode.detect(), PatchHooks.gaps(),
+        return new WorkerStatus(lifetime,
+                new Engine(AttributionMode.detect(), PatchHooks.gaps(), LoadedBuilds.ofThisJvm()),
                 PinnedForgePreferences.inEffect());
+    }
+
+    /**
+     * The engine a worker runs, its line's {@code hooks}: the attribution
+     * mode, the hook inventory's gaps and the builds it loaded.
+     */
+    record Engine(AttributionMode mode, List<String> gaps, LoadedBuilds builds) {
+
+        String json() {
+            return Json.object()
+                    .value("mode", mode)
+                    .raw("gaps", Json.stringArray(gaps))
+                    .value("forge_build_commit", builds.forgeBuildCommit())
+                    .value("forge_build_dirty", builds.forgeBuildDirty())
+                    .value("connector_forge_commit", builds.connectorForgeCommit())
+                    .render();
+        }
     }
 
     /** Print the line, whatever the counts: the worker's start-up. */

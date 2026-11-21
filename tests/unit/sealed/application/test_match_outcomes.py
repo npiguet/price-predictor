@@ -391,7 +391,9 @@ class TestTheRunReportsWhatItsWorkersLogged:
 
         def fake_start_worker(worker_id):
             log = supervisor._worker_logs.get(worker_id)
-            log.write("".join(f"{line}\n" for line in log_lines).encode("utf-8"))
+            # A real worker prints its status line before its first match.
+            lines = (status_line("a"), *log_lines)
+            log.write("".join(f"{line}\n" for line in lines).encode("utf-8"))
             log.flush()
             with open(output_file, "a", encoding="utf-8") as out:
                 out.write("row\n" * matches)

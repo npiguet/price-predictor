@@ -129,7 +129,8 @@ class MatchOutcomeSupervisor:
         )
         self._log_report = (
             WorkerLogReport(
-                self._worker_logs, worker_count, allow_degraded=options.allow_degraded)
+                self._worker_logs, worker_count, allow_degraded=options.allow_degraded,
+                run_dir=Path(effect_records_dir))
             if self._worker_logs is not None else None
         )
         self._worker_stop = (
@@ -239,14 +240,25 @@ class MatchOutcomeSupervisor:
                 caps=caps_manifest(self._collection_caps),
             )
 
-    def _report_worker_logs(self) -> None:
-        """Print the failure lines the workers logged since the last look."""
+    def _report_worker_logs(self, *, ended: bool = False) -> None:
+        """Print the failure lines the workers logged since the last look,
+        and judge their engine; ``ended`` once every worker has."""
+        played = self._played_a_match()
         found = self._log_report.scan()
         if found:
             print(f"Worker logs: {found.render()} (under {self._worker_logs_dir})")
-        self._review_engine()
+        self._review_engine(played=played, ended=ended)
         if self._directed_needs is not None:
             self._recompute_directed_probabilities()
+
+    def _played_a_match(self) -> bool:
+        """Whether a worker of this run completed a match: its progress file
+        holds a line (a random-seat match writes no outcome row)."""
+        try:
+            with open(self._progress_path, "rb") as progress:
+                return bool(progress.readline())
+        except OSError:
+            return False
 
     def _recompute_directed_probabilities(self) -> None:
         """The probabilities the kept forks summed at this scan give; the
@@ -258,12 +270,12 @@ class MatchOutcomeSupervisor:
         if moved:
             print(f"Directed fork probabilities for the next workers: {', '.join(moved)}")
 
-    def _review_engine(self) -> None:
-        """Judge the workers' engine: warn once under ``--allow-degraded``; on
-        a refusal, say so and ask the pool to stop every worker at its game's
-        end, as a first Ctrl-C does."""
+    def _review_engine(self, *, played: bool, ended: bool) -> None:
+        """Judge the workers' engine (``WorkerLogReport.review_engine``): warn
+        once under ``--allow-degraded``; on a refusal, say so and ask the pool
+        to stop every worker at its game's end, as a first Ctrl-C does."""
         refused_before = self._log_report.engine_refusal is not None
-        warning = self._log_report.review_engine()
+        warning = self._log_report.review_engine(played=played, ended=ended)
         if warning is not None:
             print(f"Warning: {warning}")
         refusal = self._log_report.engine_refusal
@@ -287,7 +299,7 @@ class MatchOutcomeSupervisor:
     def _finish_effect_records(self) -> None:
         """The run's worker-log totals and record count, printed and kept in
         ``run.json``; an error line when matches recorded nothing."""
-        self._report_worker_logs()
+        self._report_worker_logs(ended=True)
         self._wrote_records = has_shard_record(self._effect_records_dir, self._run_id)
         print(f"Worker logs over the run: {self._log_report.totals.render()}")
         hooks = self._log_report.hook_failures()

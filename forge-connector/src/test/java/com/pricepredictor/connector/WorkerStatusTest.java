@@ -7,11 +7,15 @@ import com.pricepredictor.connector.json.JsonParts;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.jar.JarFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -29,8 +33,12 @@ class WorkerStatusTest {
     /** A name holding what a printed Java map or a split would cut: a comma, quotes, an equals sign, non-ASCII. */
     private static final String AWKWARD = "remembered, \"imprinted\" or exiled=Lim-Dûl's Vault";
 
+    private static final String ENGINE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+    private static final String CONNECTOR_COMMIT = "89abcdef0123456789abcdef0123456789abcdef";
+
     private static WorkerStatus status(List<String> gaps) {
-        return new WorkerStatus("lifetime-1", AttributionMode.PATCHED, gaps,
+        return new WorkerStatus("lifetime-1", new WorkerStatus.Engine(AttributionMode.PATCHED, gaps,
+                new LoadedBuilds(ENGINE_COMMIT, false, CONNECTOR_COMMIT)),
                 PinnedForgePreferences.PINNED);
     }
 
@@ -67,7 +75,9 @@ class WorkerStatusTest {
         assertEquals(List.of("lifetime", "hooks", "pinned_preferences", "hook_failures",
                 "fork_refusals", "directed"), List.copyOf(members.keySet()));
         assertEquals("lifetime-1", decoded(members.get("lifetime")));
-        assertEquals(Map.of("mode", "\"patched\"", "gaps", "[]"),
+        assertEquals(Map.of("mode", "\"patched\"", "gaps", "[]",
+                "forge_build_commit", "\"" + ENGINE_COMMIT + "\"", "forge_build_dirty", "false",
+                "connector_forge_commit", "\"" + CONNECTOR_COMMIT + "\""),
                 JsonParts.fields(members.get("hooks")));
         assertEquals(Map.of("mulligan_rule", "London", "filtered_hands", false,
                 "performance_mode", false, "ui_language", "en-US"),
@@ -162,5 +172,38 @@ class WorkerStatusTest {
                 "kept", 0L, "precondition_threw", 1L), parsed);
         assertEquals(TestHookFailures.directedCounts(rule), parsed);
         assertEquals("", stderrOf(status::afterMatch), "an unchanged tally prints nothing");
+    }
+
+    /**
+     * The status line names the commit the Forge engine this JVM loaded was
+     * built at: the {@code Forge-Build-Commit} of the jar {@code forge.game.Game}
+     * comes from, the installed {@code forge-game} jar on this classpath, read
+     * here from that jar's manifest (finding 11.1, task KR1).
+     */
+    @Test
+    void theLineNamesTheCommitTheLoadedForgeGameJarWasBuiltAt() throws IOException {
+        String installed;
+        try (JarFile jar = new JarFile(forgeGameJar())) {
+            installed = jar.getManifest().getMainAttributes().getValue("Forge-Build-Commit");
+        }
+        assertTrue(installed != null && installed.matches("[0-9a-f]{40}"),
+                "the installed forge-game jar names no build commit: rebuild ../forge with install");
+
+        WorkerStatus status = new WorkerStatus("lifetime-1", new WorkerStatus.Engine(
+                AttributionMode.PATCHED, List.of(), LoadedBuilds.ofThisJvm()),
+                PinnedForgePreferences.PINNED);
+        Map<String, String> hooks = JsonParts.fields(members(stderrOf(status::atStartup)).get("hooks"));
+
+        assertEquals(installed, decoded(hooks.get("forge_build_commit")));
+        assertEquals("false", hooks.get("forge_build_dirty"), "../forge was built with uncommitted changes");
+    }
+
+    /** The forge-game jar on this JVM's classpath. */
+    private static File forgeGameJar() {
+        return Arrays.stream(System.getProperty("java.class.path").split(File.pathSeparator))
+                .map(File::new)
+                .filter(file -> file.getName().matches("forge-game-.*\\.jar"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no forge-game jar on the classpath"));
     }
 }

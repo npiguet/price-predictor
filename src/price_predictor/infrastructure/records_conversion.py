@@ -76,6 +76,18 @@ def _owner(directory: Path, root: Path, owners: set[Path]) -> Path | None:
     return next((path for path in within if path in owners), None)
 
 
+def recorded_forge_commit(run_dir: Path) -> str | None:
+    """The Forge commit of the last conversion ``run_dir``'s own ``run.json``
+    records (a collection records its own before any worker starts), or None
+    when it records none or cannot be read."""
+    manifest = Path(run_dir) / MANIFEST_NAME
+    try:
+        recorded = recorded_conversions(read_document(manifest), manifest)
+    except ConversionRefused:
+        return None
+    return recorded[-1].forge_commit if recorded else None
+
+
 def record_collection(run_dir: Path, conversion: Conversion) -> None:
     """Keep ``conversion`` in ``run_dir``'s ``run.json`` once ``run_dir`` holds
     no other: refused (:class:`ConversionRefused`) before anything is written
