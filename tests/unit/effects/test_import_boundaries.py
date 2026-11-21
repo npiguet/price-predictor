@@ -75,8 +75,11 @@ _ALLOWED: dict[str, set[str] | None] = {
     # and checks against the connector JAR (finding 11.3, K03).
     "price_predictor.infrastructure.converted_provenance": {
         "SIDECAR_SUFFIX", "sidecar_paths", "sidecar_digest", "collection_conversion",
-        "record_conversion",
+        "record_conversion", "trees_conversion",
     },
+    # A records directory holds one conversion: a collection into it and
+    # build-corpus over it refuse another (finding 11.3, KR4).
+    "price_predictor.infrastructure.records_conversion": {"record_collection", "require_joinable"},
     "price_predictor.domain.converted_provenance": {"Conversion", "ConversionRefused"},
     # A directed rule's fork probability, one formula for collect-variants and
     # sealed match-outcomes, which never imports effects (DR1).
