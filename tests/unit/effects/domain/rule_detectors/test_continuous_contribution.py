@@ -145,7 +145,7 @@ def test_a_type_is_compared_without_case(by_kind):
 def test_a_card_type_set_reads_as_every_card_type_removed(by_kind):
     """205.1a: Forge sets a card type (Song of the Dryads' ``RemoveCardTypes$``)
     as a type change removing every card type and adding its own, which the
-    collector writes ``-all-card-types`` (``LayerContributions.typeTokens``,
+    collector writes ``-all-card-types`` (``LayerTokens.typeTokens``,
     the ``-all-`` spelling of each of Forge's ``RemoveType`` classes)."""
     record = next(r for r in by_kind("continuous") if r.payload.contributions)
     declared = {"field": "types", "value": "-all-card-types"}

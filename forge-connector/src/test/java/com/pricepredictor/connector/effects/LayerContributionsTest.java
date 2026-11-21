@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.LayerContributions.Contribution;
 import forge.card.CardChangedType;
 import forge.card.CardType;
 import forge.card.ColorSet;
@@ -46,7 +45,7 @@ class LayerContributionsTest {
     @Test
     void anAddedTypeIsBareAndARemovedOneIsDashed() {
         Contribution into = new Contribution("E1");
-        LayerContributions.typeTokens(new CardChangedType(
+        LayerTokens.typeTokens(new CardChangedType(
                 new CardType(List.of("Creature", "Elf"), true),
                 new CardType(List.of("Land"), true),
                 false, Set.of()), into);
@@ -58,7 +57,7 @@ class LayerContributionsTest {
         // "loses all creature types" names no type, so it cannot be spelled as
         // a list of removals.
         Contribution into = new Contribution("E1");
-        LayerContributions.typeTokens(new CardChangedType(
+        LayerTokens.typeTokens(new CardChangedType(
                 null, null, true,
                 Set.of(RemoveType.CreatureTypes, RemoveType.SuperTypes)), into);
         assertEquals(
@@ -70,7 +69,7 @@ class LayerContributionsTest {
     @Test
     void aStateChangeMarksTheTypeLineAsSetRatherThanAdded() {
         Contribution into = new Contribution("E1");
-        LayerContributions.typeTokens(
+        LayerTokens.typeTokens(
                 new StateChangedType(new CardType(List.of("Land"), true)), into);
         assertEquals("\"=\",\"land\"", tokens(into, "types"));
     }
@@ -78,14 +77,14 @@ class LayerContributionsTest {
     @Test
     void aTextChangeIsARemovalAndAnAdditionInOneEntry() {
         Contribution into = new Contribution("E1");
-        LayerContributions.typeTokens(new WordChangedType("Forest", "Island"), into);
+        LayerTokens.typeTokens(new WordChangedType("Forest", "Island"), into);
         assertEquals("\"-forest\",\"island\"", tokens(into, "types"));
     }
 
     @Test
     void anAdditionalColourIsJustTheLetter() {
         Contribution into = new Contribution("E1");
-        LayerContributions.colorTokens(
+        LayerTokens.colorTokens(
                 new ColorChange(ColorSet.fromNames("green"), true), into);
         assertEquals("\"G\"", tokens(into, "colors"));
     }
@@ -93,7 +92,7 @@ class LayerContributionsTest {
     @Test
     void aReplacingColourIsMarked() {
         Contribution into = new Contribution("E1");
-        LayerContributions.colorTokens(
+        LayerTokens.colorTokens(
                 new ColorChange(ColorSet.fromNames("green"), false), into);
         assertEquals("\"=\",\"G\"", tokens(into, "colors"));
     }
@@ -103,7 +102,7 @@ class LayerContributionsTest {
         // An empty colour set and an empty token list are different answers:
         // one turns the permanent colourless, the other says nothing happened.
         Contribution into = new Contribution("E1");
-        LayerContributions.colorTokens(
+        LayerTokens.colorTokens(
                 new ColorChange(ColorSet.fromMask(0), false), into);
         assertEquals("\"=\",\"C\"", tokens(into, "colors"));
     }
@@ -112,7 +111,7 @@ class LayerContributionsTest {
     void anUnreadableColourEntryContributesNothingRatherThanAReplacement() {
         // Guessing here would report every colour change as an overwrite.
         Contribution into = new Contribution("E1");
-        LayerContributions.colorTokens(new Object(), into);
+        LayerTokens.colorTokens(new Object(), into);
         assertEquals("", tokens(into, "colors"));
     }
 
@@ -122,8 +121,8 @@ class LayerContributionsTest {
         Contribution into = new Contribution("E1");
         CardChangedType change = new CardChangedType(
                 new CardType(List.of("Creature"), true), null, false, Set.of());
-        LayerContributions.typeTokens(change, into);
-        LayerContributions.typeTokens(change, into);
+        LayerTokens.typeTokens(change, into);
+        LayerTokens.typeTokens(change, into);
         assertEquals("\"creature\"", tokens(into, "types"));
     }
 
@@ -169,13 +168,13 @@ class LayerContributionsTest {
         assertEquals("Winning-Name", card.getName());
 
         LayerContributions contributions = new LayerContributions();
-        contributions.addNames(card, "E1");
+        contributions.addNames(card);
         Map<Long, Map<String, Contribution>> byStatic = contributions.byStatic();
 
         assertEquals("\"Superseded-By-Later-Static\"",
-                nameField(byStatic.get(supersededStatic).get("E1")));
+                nameField(byStatic.get(supersededStatic).get(Refs.of(card))));
         assertEquals("\"Winning-Name\"",
-                nameField(byStatic.get(winningStatic).get("E1")));
+                nameField(byStatic.get(winningStatic).get(Refs.of(card))));
     }
 
     /**
@@ -187,7 +186,7 @@ class LayerContributionsTest {
     void aCardWithNoNameChangeRendersNullName() {
         Card card = TestCards.build("Grizzly Bears");
         LayerContributions contributions = new LayerContributions();
-        contributions.addNames(card, "E1");
+        contributions.addNames(card);
         Map<Long, Map<String, Contribution>> byStatic = contributions.byStatic();
         assertTrue(byStatic.isEmpty(), "no static wrote a name, so nothing is filed");
         assertEquals("null", nameField(new Contribution("E1")));
@@ -197,7 +196,7 @@ class LayerContributionsTest {
     void anUnreadableNameEntryContributesNoName() {
         // Guessing here would report every unrelated object as a rename.
         Contribution into = new Contribution("E1");
-        LayerContributions.nameTokens(new Object(), into);
+        LayerTokens.nameTokens(new Object(), into);
         assertEquals("null", nameField(into));
     }
 }

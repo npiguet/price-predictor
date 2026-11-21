@@ -70,7 +70,7 @@ final class ContinuousChannel {
         }
         contributions.addControl(live.game());
         String boardHash = boardHash();
-        for (Map.Entry<Long, Map<String, LayerContributions.Contribution>> entry
+        for (Map.Entry<Long, Map<String, Contribution>> entry
                 : contributions.byStatic().entrySet()) {
             record(entry.getKey(), entry.getValue().values(), boardHash);
         }
@@ -78,7 +78,7 @@ final class ContinuousChannel {
 
     /** One static's record, unless it has nothing new to say. */
     private void record(
-            Long staticId, Collection<LayerContributions.Contribution> contributions,
+            Long staticId, Collection<Contribution> contributions,
             String boardHash) {
         // Id 0 is Forge's "no static" column: a temporary pump written by a
         // resolving ability, which the resolution bracket already records.
@@ -89,7 +89,7 @@ final class ContinuousChannel {
         if (source == null) {
             return;
         }
-        String rendered = Json.array(contributions, LayerContributions.Contribution::toJson);
+        String rendered = Json.array(contributions, Contribution::toJson);
         // Keyed on what the static contributes as well as on the board: the
         // board hash reads ids, names and P/T only, so a boundary where the
         // same static grants another keyword, type, colour or control on an
