@@ -187,7 +187,7 @@ class DirectedForkSchedulerTest {
         DirectedForkTally tally = new DirectedForkTally();
         DirectedForkScheduler scheduler = scheduler(
                 TestCaps.caps().directed(1, 0.25, "broad", "rare")
-                        .directedProbability("broad", 0.0).directedProbability("rare", 1.0).build(),
+                        .directedProbability(new TestCaps.RuleProbability("broad", 0.0)).directedProbability(new TestCaps.RuleProbability("rare", 1.0)).build(),
                 tally, rule("broad", ALWAYS),
                 rule("rare", live -> rareBoard.get() ? Optional.of(Binding.empty()) : Optional.empty()));
 
@@ -214,7 +214,7 @@ class DirectedForkSchedulerTest {
         DirectedForkTally tally = new DirectedForkTally();
         DirectedForkScheduler scheduler = scheduler(
                 TestCaps.caps().directed(1, 1.0, "lower", "higher")
-                        .directedProbability("lower", 0.999_999).build(),
+                        .directedProbability(new TestCaps.RuleProbability("lower", 0.999_999)).build(),
                 tally, rule("lower", ALWAYS), rule("higher", ALWAYS));
 
         scheduler.collect(PhaseType.MAIN1);
@@ -315,7 +315,7 @@ class DirectedForkSchedulerTest {
         DirectedForkTally tally = new DirectedForkTally();
         DirectedForkScheduler scheduler = scheduler(
                 TestCaps.caps().directed(2, 0.5, "A", "B")
-                        .directedProbability("A", 0.0).directedProbability("B", 1.0).build(),
+                        .directedProbability(new TestCaps.RuleProbability("A", 0.0)).directedProbability(new TestCaps.RuleProbability("B", 1.0)).build(),
                 tally, rule("A", ALWAYS).alsoFor("B", "B-1"));
 
         assertEquals(1, scheduler.collect(PhaseType.MAIN1));
@@ -330,7 +330,7 @@ class DirectedForkSchedulerTest {
     @Test
     void anUnlistedRulesProbabilityIsNotTheRegistrations() {
         DirectedForkScheduler scheduler = scheduler(
-                TestCaps.caps().directed(2, 0.0, "A").directedProbability("B", 1.0).build(),
+                TestCaps.caps().directed(2, 0.0, "A").directedProbability(new TestCaps.RuleProbability("B", 1.0)).build(),
                 rule("A", ALWAYS).alsoFor("B", "B-1"));
 
         scheduler.collect(PhaseType.MAIN1);

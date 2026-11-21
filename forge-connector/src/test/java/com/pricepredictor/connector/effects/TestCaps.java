@@ -75,15 +75,18 @@ public final class TestCaps {
     }
 
     /** The shares of zone and plain candidates written, both stages together (FR-033b). */
-    public TestCaps candidateRates(double zone, double plain) {
-        zoneCandidateRate = zone;
-        plainCandidateRate = plain;
+    public record CandidateRates(double zone, double plain) {
+    }
+
+    public TestCaps candidateRates(CandidateRates rates) {
+        zoneCandidateRate = rates.zone();
+        plainCandidateRate = rates.plain();
         return this;
     }
 
     /** Every decision candidate evaluated and written: both sampling stages keep all. */
     public TestCaps everyDecision() {
-        return playabilityRate(1.0).candidateRates(1.0, 1.0);
+        return playabilityRate(1.0).candidateRates(new CandidateRates(1.0, 1.0));
     }
 
     public TestCaps interventions(int perGame) {
@@ -101,9 +104,13 @@ public final class TestCaps {
         return this;
     }
 
-    public TestCaps randomSeat(double share, double probability) {
-        randomSeatShare = share;
-        randomSeatProbability = probability;
+    /** The share of seats played at random, and the probability of a random choice there. */
+    public record RandomSeat(double share, double probability) {
+    }
+
+    public TestCaps randomSeat(RandomSeat seat) {
+        randomSeatShare = seat.share();
+        randomSeatProbability = seat.probability();
         return this;
     }
 
@@ -132,14 +139,11 @@ public final class TestCaps {
     }
 
     /** {@code rule}'s own probability, beside the run's (D8). */
-    public TestCaps directedProbability(String rule, double probability) {
-        directedRuleProbabilities.put(rule, probability);
-        return this;
+    public record RuleProbability(String rule, double probability) {
     }
 
-    /** At most {@code max} records a game (FR-041a). */
-    public TestCaps maxRecordsPerGame(int max) {
-        maxRecordsPerGame = max;
+    public TestCaps directedProbability(RuleProbability own) {
+        directedRuleProbabilities.put(own.rule(), own.probability());
         return this;
     }
 

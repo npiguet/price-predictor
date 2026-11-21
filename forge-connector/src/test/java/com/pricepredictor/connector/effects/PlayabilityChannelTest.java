@@ -64,7 +64,7 @@ class PlayabilityChannelTest {
     @Test
     void aForkPriorityStopDoesNotShiftTheLiveSampleStream() throws Throwable {
         // Stage 2 keeps whatever stage 1 does, so the stream is stage 1's alone.
-        CollectionCaps rate = caps().playabilityRate(0.8).candidateRates(0.8, 0.8).build();
+        CollectionCaps rate = caps().playabilityRate(0.8).candidateRates(new TestCaps.CandidateRates(0.8, 0.8)).build();
         Game live = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
         Player seat = live.getPlayers().get(0);
         Game fork = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));

@@ -658,7 +658,7 @@ class RandomSeatControllerTest {
     /** Scenario 1: one match in eight seats a random player, A or B alike. */
     @Test
     void closeToOneMatchInEightSeatsARandomPlayerOnEitherSide() {
-        CollectionCaps caps = TestCaps.caps().randomSeat(0.125, 0.5).build();
+        CollectionCaps caps = TestCaps.caps().randomSeat(new TestCaps.RandomSeat(0.125, 0.5)).build();
         Random random = new Random(11L);
         int draws = 40_000;
         int a = 0;

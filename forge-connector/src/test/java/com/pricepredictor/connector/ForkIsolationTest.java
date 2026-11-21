@@ -111,7 +111,7 @@ class ForkIsolationTest {
 
     /** Every match a random seat's, its decisions drawn at random half the time. */
     private static TestCaps randomSeat() {
-        return TestCaps.caps().randomSeat(1.0, 0.5);
+        return TestCaps.caps().randomSeat(new TestCaps.RandomSeat(1.0, 0.5));
     }
 
     /** The live records one seeded match writes, in order. */

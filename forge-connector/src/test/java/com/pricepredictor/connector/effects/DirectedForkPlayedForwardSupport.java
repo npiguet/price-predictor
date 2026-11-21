@@ -83,7 +83,7 @@ abstract class DirectedForkPlayedForwardSupport {
         TestCaps built = TestCaps.caps().manaCap(2000).interventions(0).probes(0);
         built = switch (decisions) {
             case SAMPLED -> built;
-            case NONE -> built.playabilityRate(0.0).candidateRates(0.0, 0.0);
+            case NONE -> built.playabilityRate(0.0).candidateRates(new TestCaps.CandidateRates(0.0, 0.0));
             case EVERY -> built.everyDecision();
         };
         CollectionCaps caps = built.directed(1, 1.0, rule).build();

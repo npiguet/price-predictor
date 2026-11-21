@@ -354,7 +354,7 @@ class DecisionSampleTest {
      */
     @Test
     void eachBucketIsWrittenAtItsRateOfAllCandidates() throws Throwable {
-        CollectionCaps rates = caps().playabilityRate(0.5).candidateRates(0.05, 0.1).build();
+        CollectionCaps rates = caps().playabilityRate(0.5).candidateRates(new TestCaps.CandidateRates(0.05, 0.1)).build();
         int trials = 40_000;
 
         assertNear(0.5, trials, written(rates, DecisionSample.SPECIAL, trials), "special");
@@ -380,7 +380,7 @@ class DecisionSampleTest {
      */
     @Test
     void aSpecialCandidateIsWrittenWheneverStageOneKeepsIt() throws Throwable {
-        CollectionCaps rates = caps().playabilityRate(0.3).candidateRates(0.0, 0.0).build();
+        CollectionCaps rates = caps().playabilityRate(0.3).candidateRates(new TestCaps.CandidateRates(0.0, 0.0)).build();
         int trials = 2_000;
         StringBuilder stageOneOnly = new StringBuilder();
         StringBuilder bothStages = new StringBuilder();
@@ -406,7 +406,7 @@ class DecisionSampleTest {
     /** A bulk rate of zero writes nothing of its bucket, however often stage 1 keeps it. */
     @Test
     void aBulkRateOfZeroWritesNothing() throws Throwable {
-        CollectionCaps rates = caps().playabilityRate(1.0).candidateRates(0.0, 0.0).build();
+        CollectionCaps rates = caps().playabilityRate(1.0).candidateRates(new TestCaps.CandidateRates(0.0, 0.0)).build();
 
         assertEquals(0, written(rates, DecisionSample.ZONE, 10_000));
         assertEquals(0, written(rates, DecisionSample.PLAIN, 10_000));
@@ -461,7 +461,7 @@ class DecisionSampleTest {
     @Test
     void aStopWritesOnlyItsSpecialCandidatesWhenTheBulkRatesAreZero() throws Throwable {
         List<Set<String>> written = writtenChecks("special", aBoardWithEachBucket(),
-                caps().manaCap(0).playabilityRate(1.0).candidateRates(0.0, 0.0).build());
+                caps().manaCap(0).playabilityRate(1.0).candidateRates(new TestCaps.CandidateRates(0.0, 0.0)).build());
 
         assertFalse(written.isEmpty(), "the forbidden Bolt is special");
         assertTrue(written.stream().allMatch(DecisionSampleTest::special), written.toString());
@@ -471,7 +471,7 @@ class DecisionSampleTest {
     @Test
     void aStopWritesItsZoneCandidatesAtAZoneRateOfOne() throws Throwable {
         List<Set<String>> written = writtenChecks("zone", aBoardWithEachBucket(),
-                caps().manaCap(0).playabilityRate(1.0).candidateRates(1.0, 0.0).build());
+                caps().manaCap(0).playabilityRate(1.0).candidateRates(new TestCaps.CandidateRates(1.0, 0.0)).build());
 
         assertTrue(written.stream().anyMatch(c -> !special(c) && c.contains("zone")),
                 written.toString());

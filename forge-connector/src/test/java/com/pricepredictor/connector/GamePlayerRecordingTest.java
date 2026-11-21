@@ -331,7 +331,7 @@ class GamePlayerRecordingTest {
     void aRandomSeatMatchEndedByAnErrorSaysItWasOne() {
         RecordShardWriter writer = writer();
         CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
-                .randomSeat(1.0, 0.5).build();
+                .randomSeat(new TestCaps.RandomSeat(1.0, 0.5)).build();
         GamePlayer player = new GamePlayer(new GamePlayer.Config(1, writer, randomSeat, WorkerStop.NEVER,
                 (match, game) -> {
                     throw new StackOverflowError("deep");
@@ -355,7 +355,7 @@ class GamePlayerRecordingTest {
     void aRandomSeatMatchThatThrowsSaysItWasOne() {
         RecordShardWriter writer = writer();
         CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
-                .randomSeat(1.0, 0.5).build();
+                .randomSeat(new TestCaps.RandomSeat(1.0, 0.5)).build();
         GamePlayer player = new GamePlayer(new GamePlayer.Config(1, writer, randomSeat, WorkerStop.NEVER,
                 (match, game) -> {
                     throw new IllegalStateException("boom");
