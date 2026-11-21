@@ -9,15 +9,11 @@ import com.pricepredictor.connector.effects.RandomChoices;
 import com.pricepredictor.connector.effects.TargetingClauses;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
-import forge.ai.ComputerUtilCost;
 import forge.game.Game;
-import forge.game.GameEntity;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.combat.Combat;
-import forge.game.combat.CombatUtil;
-import forge.game.cost.Cost;
 import forge.game.player.Player;
 import forge.game.player.PlayerActionConfirmMode;
 import forge.game.spellability.AbilitySub;
@@ -31,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.function.BiPredicate;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -103,6 +97,8 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
 
     /** The play decision's draw, carried from one engine call to the next; set when attached. */
     private RandomPlayDraw playDraw;
+    /** The seat's attack and block draws; set when attached. */
+    private RandomCombatDeclarations combatDraws;
 
     /** A directed fork's forced play of this seat, or null. */
     private ForcedPlayRun forced;
@@ -151,6 +147,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
         this.random = random;
         this.choices = new RandomChoices(random);
         this.playDraw = new RandomPlayDraw(random);
+        this.combatDraws = new RandomCombatDeclarations(player, random);
     }
 
     @Override
@@ -175,80 +172,6 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
     @Override
     protected int optionIndex(int size) {
         return isLive() ? random.nextInt(size) : super.optionIndex(size);
-    }
-
-    /**
-     * One random play decision, from the draw at a priority to the play that
-     * completes or the pass owed when none does (FR-022c).
-     *
-     * <p>The decision spans two engine calls, which is why it is state rather
-     * than a local: {@link #chooseSpellAbilityToPlay} draws a candidate and
-     * {@link #playChosenSpellAbility} plays it, redrawing over the rest when it
-     * cannot be completed. When every candidate is abandoned the play returns
-     * false, the engine asks for a play again at the same priority, and the
-     * answer then is a pass, not another draw.
-     */
-    private static final class RandomPlayDraw {
-        private final Random random;
-        /** The play the last successful draw picked, until it is played. */
-        private SpellAbility drawn;
-        /** The other playable candidates of that draw, for a redraw. */
-        private List<SpellAbility> remaining = new ArrayList<>();
-        /** Set when every candidate of a draw was abandoned: the next priority passes. */
-        private boolean passOwed;
-
-        RandomPlayDraw(Random random) {
-            this.random = random;
-        }
-
-        /**
-         * Begin a priority: drop a pick the engine never played, and consume
-         * the pass an exhausted draw owes.
-         *
-         * @return whether this priority must pass
-         */
-        boolean beginPriority() {
-            drawn = null;
-            if (!passOwed) {
-                return false;
-            }
-            passOwed = false;
-            return true;
-        }
-
-        /** Pick one of {@code candidates}, none empty, keeping them all for a redraw. */
-        SpellAbility draw(List<SpellAbility> candidates) {
-            remaining = candidates;
-            drawn = pick();
-            return drawn;
-        }
-
-        /**
-         * Whether {@code sa} is the play the last draw picked; claiming it
-         * clears the pick, so the engine's next call is the AI's again.
-         */
-        boolean claims(SpellAbility sa) {
-            if (sa != drawn) {
-                return false;
-            }
-            drawn = null;
-            return true;
-        }
-
-        /** The next candidate once {@code abandoned} could not be completed, or null when none remain. */
-        SpellAbility nextAfterAbandon(SpellAbility abandoned) {
-            remaining.removeIf(candidate -> candidate == abandoned);
-            return remaining.isEmpty() ? null : pick();
-        }
-
-        /** Every candidate was abandoned: the seat passes at its next priority. */
-        void exhausted() {
-            passOwed = true;
-        }
-
-        private SpellAbility pick() {
-            return remaining.get(random.nextInt(remaining.size()));
-        }
     }
 
     /**
@@ -371,12 +294,23 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
         if (!isLive()) {
             return super.playChosenSpellAbility(sa);
         }
-        if (!playDraw.claims(sa)) {
-            if (!sa.isLandAbility() && draw()) {
-                redrawTargets(sa);
-            }
-            return super.playChosenSpellAbility(sa);
+        return playDraw.claims(sa) ? playDrawn(sa) : playAiChoice(sa);
+    }
+
+    /** A play the AI chose, with its targets alone under their own draw. */
+    private boolean playAiChoice(SpellAbility sa) {
+        if (!sa.isLandAbility() && draw()) {
+            redrawTargets(sa);
         }
+        return super.playChosenSpellAbility(sa);
+    }
+
+    /**
+     * The play the random draw picked, then each candidate redrawn over the
+     * rest while one cannot be completed; with none completed the seat owes
+     * a pass.
+     */
+    private boolean playDrawn(SpellAbility sa) {
         for (SpellAbility current = sa; current != null;
                 current = playDraw.nextAfterAbandon(current)) {
             if (playAtRandom(current)) {
@@ -444,27 +378,40 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
      */
     private boolean drawPlayChoices(SpellAbility sa) {
         sa.setXManaCostPaid(null);
-        if (sa.getApi() == ApiType.Charm) {
-            sa.setChosenList(null);
-            sa.setSubAbility(null);
-            Optional<List<AbilitySub>> modes = choices.drawModes(sa);
-            if (modes.isEmpty()) {
-                return false;
-            }
-            sa.setChosenList(modes.get());
+        if (sa.getApi() == ApiType.Charm && !drawCharmModes(sa)) {
+            return false;
         }
         // X before the targets (601.2b, 601.2c): a divided amount of X, and
         // a bound across the targets that reads X (MaxTotalTargetCMC), are
         // read as the targets are drawn.
         choices.announceX(sa, player, 0);
-        if (sa.getChosenList() != null) {
-            for (AbilitySub mode : sa.getChosenList()) {
-                if (!choices.chooseTargets(mode)) {
-                    return false;
-                }
+        return drawModeTargets(sa) && choices.chooseTargets(sa);
+    }
+
+    /** A charm's modes, drawn afresh as its chosen list; false when none can be drawn. */
+    private boolean drawCharmModes(SpellAbility charm) {
+        charm.setChosenList(null);
+        charm.setSubAbility(null);
+        Optional<List<AbilitySub>> modes = choices.drawModes(charm);
+        if (modes.isEmpty()) {
+            return false;
+        }
+        charm.setChosenList(modes.get());
+        return true;
+    }
+
+    /** The targets of each chosen mode, in order; false at the first a draw leaves short. */
+    private boolean drawModeTargets(SpellAbility sa) {
+        List<AbilitySub> modes = sa.getChosenList();
+        if (modes == null) {
+            return true;
+        }
+        for (AbilitySub mode : modes) {
+            if (!choices.chooseTargets(mode)) {
+                return false;
             }
         }
-        return choices.chooseTargets(sa);
+        return true;
     }
 
     /**
@@ -502,83 +449,27 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
      */
     @Override
     public boolean chooseTargetsFor(SpellAbility currentAbility) {
-        if (isLive() && currentAbility.usesTargeting() && draw()
-                && choices.chooseTargetsFor(currentAbility)) {
+        if (drewTargetsFor(currentAbility)) {
             return true;
         }
         return super.chooseTargetsFor(currentAbility);
     }
 
     /**
-     * For each of {@code keys}, the creatures that may legally be declared
-     * against it, both in the order given.
-     *
-     * <p>Read once per declaration rather than per draw: legality does not
-     * change between redraws.
+     * Whether the live seat drew to choose {@code clause}'s targets at random
+     * and the draw completed; a clause that targets nothing takes no draw.
      */
-    private static <K> Map<K, List<Card>> legalBy(
-            Iterable<? extends K> keys, Iterable<Card> creatures,
-            BiPredicate<K, Card> legal) {
-        Map<K, List<Card>> legalBy = new LinkedHashMap<>();
-        for (K key : keys) {
-            List<Card> declarable = new ArrayList<>();
-            for (Card creature : creatures) {
-                if (legal.test(key, creature)) {
-                    declarable.add(creature);
-                }
-            }
-            legalBy.put(key, declarable);
+    private boolean drewTargetsFor(SpellAbility clause) {
+        if (!isLive() || !clause.usesTargeting()) {
+            return false;
         }
-        return legalBy;
+        return draw() && choices.chooseTargetsFor(clause);
     }
 
     /**
-     * What one creature may be declared against: every key of {@code legalBy}
-     * whose list holds it, in the map's order.
-     *
-     * <p>The order is part of the draw: a seeded run picks the same option
-     * only while the options are listed the same way.
-     */
-    private static <K> List<K> optionsFor(Card creature, Map<K, List<Card>> legalBy) {
-        List<K> options = new ArrayList<>();
-        legalBy.forEach((key, legal) -> {
-            if (legal.contains(creature)) {
-                options.add(key);
-            }
-        });
-        return options;
-    }
-
-    /**
-     * Draw a combat declaration until the engine accepts one, at most
-     * {@link RandomChoices#MAX_DRAWS} times, and hand a seat that never drew
-     * an acceptable one back to the AI with nothing declared.
-     *
-     * @param clear    withdraw everything the seat has declared so far
-     * @param drawOnce declare one random draw
-     * @param accepted whether the engine accepts the declaration as it stands
-     * @param fallBack declare as the AI would
-     */
-    private static void drawUntilAccepted(
-            Runnable clear, Runnable drawOnce, BooleanSupplier accepted, Runnable fallBack) {
-        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
-            clear.run();
-            drawOnce.run();
-            if (accepted.getAsBoolean()) {
-                return;
-            }
-        }
-        clear.run();
-        fallBack.run();
-    }
-
-    /**
-     * Each creature that can attack attacks with probability one half, at a
-     * defender drawn among those it may attack (FR-022b).
-     *
-     * <p>The engine validates the whole declaration — requirements, maximums,
-     * "can't attack alone" — and a declaration it rejects is redrawn; after
-     * {@link RandomChoices#MAX_DRAWS} the AI declares.
+     * Attacks drawn at random when the live seat draws to (FR-022b,
+     * {@link RandomCombatDeclarations#declareAttackers}), else the AI's; a
+     * forced attack is added after either.
      */
     @Override
     public void declareAttackers(Player attacker, Combat combat) {
@@ -609,116 +500,35 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
 
     /** The seat's own declaration, before a forced attack is added. */
     private void declareOwnAttackers(Player attacker, Combat combat) {
-        if (!isLive() || attacker != player || !draw()) {
-            super.declareAttackers(attacker, combat);
+        if (drawsToDeclare(attacker)) {
+            combatDraws.declareAttackers(combat, () -> super.declareAttackers(attacker, combat));
             return;
         }
-        CardCollection mine = player.getCreaturesInPlay();
-        Map<GameEntity, List<Card>> legalByDefender = legalBy(
-                combat.getDefenders(), mine,
-                (defender, creature) -> CombatUtil.canAttack(creature, defender));
-        drawUntilAccepted(
-                combat::clearAttackers,
-                () -> drawAttacks(combat, mine, legalByDefender),
-                () -> CombatUtil.validateAttackers(combat),
-                () -> super.declareAttackers(attacker, combat));
-    }
-
-    /** One draw of the attack declaration, before the engine validates it. */
-    private void drawAttacks(
-            Combat combat, CardCollection mine, Map<GameEntity, List<Card>> legalByDefender) {
-        for (Card creature : mine) {
-            List<GameEntity> options = optionsFor(creature, legalByDefender);
-            if (!options.isEmpty() && random.nextBoolean()) {
-                combat.addAttacker(creature, options.get(random.nextInt(options.size())));
-            }
-        }
-        removeUnpayableAttackers(combat);
+        super.declareAttackers(attacker, combat);
     }
 
     /**
-     * Attackers whose attack cost the seat cannot pay are withdrawn before
-     * validation, as the AI withdraws its own: the decision to pay a
-     * Propaganda tax is made at declaration (CR 508.1d), and an attacker
-     * left in that cannot pay is removed by the engine after the fact.
-     */
-    private void removeUnpayableAttackers(Combat combat) {
-        Game game = player.getGame();
-        for (Card attacker : new ArrayList<>(combat.getAttackers())) {
-            Cost attackCost = CombatUtil.getAttackCost(
-                    game, attacker, combat.getDefenderByAttacker(attacker));
-            if (attackCost == null) {
-                continue;
-            }
-            SpellAbility fakeSA = new SpellAbility.EmptySa(attacker, attacker.getController());
-            fakeSA.setCardState(attacker.getCurrentState());
-            fakeSA.setPayCosts(attackCost);
-            fakeSA.setSVar("X", "0");
-            if (!ComputerUtilCost.canPayCost(attackCost, fakeSA, player, true)) {
-                combat.removeFromCombat(attacker);
-            }
-        }
-    }
-
-    /**
-     * Each creature that can block picks uniformly from no block plus the
-     * attackers it may legally block (FR-022b).
-     *
-     * <p>{@code CombatUtil.validateBlocks} is the engine's own check and the
-     * engine never calls it, so the seat calls it before returning; a
-     * declaration it rejects is redrawn, then left to the AI.
+     * Blocks drawn at random when the live seat draws to (FR-022b,
+     * {@link RandomCombatDeclarations#declareBlockers}), else the AI's.
      */
     @Override
     public void declareBlockers(Player defender, Combat combat) {
-        if (!isLive() || defender != player || !draw()) {
-            super.declareBlockers(defender, combat);
+        if (drawsToDeclare(defender)) {
+            combatDraws.declareBlockers(combat, () -> super.declareBlockers(defender, combat));
             return;
         }
-        List<Card> candidates = new ArrayList<>();
-        for (Card creature : player.getCreaturesInPlay()) {
-            if (CombatUtil.canBlock(creature, combat)) {
-                candidates.add(creature);
-            }
-        }
-        List<Card> attackers = new ArrayList<>();
-        for (GameEntity defended : combat.getDefendersControlledBy(player)) {
-            attackers.addAll(combat.getAttackersOf(defended));
-        }
-        Map<Card, List<Card>> legalByAttacker = legalBy(
-                attackers, candidates,
-                (attacker, blocker) -> CombatUtil.canBlock(attacker, blocker, combat));
-        drawUntilAccepted(
-                () -> clearBlocks(combat),
-                () -> drawBlocks(combat, candidates, legalByAttacker),
-                () -> CombatUtil.validateBlocks(combat, player) == null,
-                () -> super.declareBlockers(defender, combat));
+        super.declareBlockers(defender, combat);
     }
 
     /**
-     * One draw of the block declaration: each candidate picks from no block,
-     * listed first, then the attackers it may block.
+     * Whether the live seat declares at random for {@code declaring}: its own
+     * declaration, and the draw succeeds; a fork's copy or another player's
+     * declaration takes no draw.
      */
-    private void drawBlocks(
-            Combat combat, List<Card> candidates, Map<Card, List<Card>> legalByAttacker) {
-        for (Card blocker : candidates) {
-            List<Card> options = new ArrayList<>();
-            options.add(null);
-            options.addAll(optionsFor(blocker, legalByAttacker));
-            Card attacker = options.get(random.nextInt(options.size()));
-            if (attacker != null) {
-                combat.addBlocker(attacker, blocker);
-            }
+    private boolean drawsToDeclare(Player declaring) {
+        if (!isLive() || declaring != player) {
+            return false;
         }
-    }
-
-    private void clearBlocks(Combat combat) {
-        for (Card blocker : new ArrayList<>(combat.getAllBlockers())) {
-            if (blocker.getController() != player) {
-                continue;
-            }
-            for (Card attacker : new ArrayList<>(combat.getAttackersBlockedBy(blocker))) {
-                combat.removeBlockAssignment(attacker, blocker);
-            }
-        }
+        return draw();
     }
 }
