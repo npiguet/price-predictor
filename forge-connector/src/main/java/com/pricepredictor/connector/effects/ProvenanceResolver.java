@@ -439,7 +439,8 @@ public final class ProvenanceResolver {
      * what it copies: its keywords are the original's, keyed into the
      * original's script file; one the copy effect added has the line that
      * made the copy, and is no keyword line of the copier's own file, so
-     * that line's key is returned as it is, without {@code built}. The
+     * that line's key is returned as it is, without {@code built}, and one
+     * another permanent's static granted keys to that static. The
      * original is read as it was when the copy was made
      * ({@link CopyHistory#stateAsOf}), not as it is now: a later copy effect
      * on it (Cytoshape on Moldering Karok) changes the original, not the
@@ -457,6 +458,19 @@ public final class ProvenanceResolver {
         CardState original = depth < MAX_COPY_DEPTH ? copiedStateHolding(copy, state, keyword) : null;
         if (original != null) {
             return keyOfPrinted(original, keyword, built, depth + 1);
+        }
+        return keyOfAddedKeyword(copy, keyword);
+    }
+
+    /**
+     * The key of a keyword the copied state does not hold: the line of the
+     * static that granted it when one did (an Aura's, an Equipment's, a lord's:
+     * the key it has on a creature that copies nothing), else the line of the
+     * copy effect that added it, which carries no static.
+     */
+    private static ProvenanceKey keyOfAddedKeyword(Map.Entry<Long, CardCloneStates> copy, KeywordInterface keyword) {
+        if (keyword.getStatic() != null) {
+            return grantingLine(keyword.getStatic());
         }
         CardTraitBase source = copy.getValue().getSource();
         return source == null ? null : of(source);
