@@ -113,7 +113,7 @@ final class ClauseOutcomeRouter {
         if (live.owns(clause)) {
             // The timestamp a floating effect's rows will carry is drawn
             // while this clause runs; the note is their only join to a line.
-            FloatingEffects.of(live.game()).clauseResolving(live.game(), clause);
+            ClauseNotes.of(live.game()).clauseResolving(live.game(), clause);
             CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
             if (start != null) {
                 bracket.beginMode(clause, start.option());
@@ -144,7 +144,7 @@ final class ClauseOutcomeRouter {
             forkClauseResolved(clause, ran ? observed : null);
             return;
         }
-        FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
+        ClauseNotes.of(live.game()).clauseResolved(live.game(), clause);
         mana.clauseResolved(clause);
         // Filed into the half the clause resolved in: a later mode's first
         // clause has not begun yet (A1).

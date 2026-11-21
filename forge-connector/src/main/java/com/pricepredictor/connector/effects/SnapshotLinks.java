@@ -126,16 +126,16 @@ final class SnapshotLinks {
      * @param entities the entities the snapshot renders: every card entity in
      *                 order, and the cards of the four tiers, whose rows the
      *                 global block's timestamped floating effects are read from
-     * @param floating the clause notes the floating effects are read by
+     * @param notes    the clause notes the floating effects are read by
      */
     static String render(
-            Game game, SnapshotRequest request, SnapshotEntities entities, FloatingEffects floating) {
+            Game game, SnapshotRequest request, SnapshotEntities entities, ClauseNotes notes) {
         Collection<Card> cards = entities.cards();
         SnapshotLinks links = new SnapshotLinks(game, cards);
         links.cardLinks(cards, request.board());
         links.combat(game.getCombat());
         links.stack(request.acting());
-        links.commandZone(cards, entities.tiers(), floating);
+        links.commandZone(cards, entities.tiers(), notes);
         EffectEvent pending = request.pending();
         if (pending != null && pending.lastKnown() != null) {
             Card lastKnown = pending.lastKnown();
@@ -515,9 +515,9 @@ final class SnapshotLinks {
      * what a delayed trigger waits on.
      */
     private void commandZone(Collection<Card> cards, Collection<Card> tiers,
-                             FloatingEffects floating) {
+                             ClauseNotes notes) {
         cards.stream().filter(SnapshotLinks::madeByAnEffect).forEach(this::effectCard);
-        floating.timestamped(tiers).forEach(this::floatingEffect);
+        FloatingEffects.timestamped(notes, tiers).forEach(this::floatingEffect);
         FloatingEffects.pendingDelayedTriggers(game).forEach(this::delayedTrigger);
     }
 

@@ -320,7 +320,7 @@ final class Forks {
             copyDropped = dropped(copier.getNoCounterpartTally());
             // Before anything reads the fork: every builder over it, the audit's
             // and a played-forward recording's, reads the live game's notes too.
-            FloatingEffects.ofFork(fork, live);
+            ClauseNotes.ofFork(fork, live);
             ForkFidelity.report(live, fork, copier.getNoCounterpartTally(), copier.getNoCounterpartExamples());
         } catch (RuntimeException | StackOverflowError e) {
             HookFailures.countContained(new HookFailures.FailureKey("fork " + kind + " copy"), e);
@@ -343,13 +343,13 @@ final class Forks {
 
     /**
      * Forget everything the registries keyed by game hold for {@code fork}
-     * ({@link LibraryCapture}, {@link FloatingEffects}): its fork has ended,
+     * ({@link LibraryCapture}, {@link ClauseNotes}): its fork has ended,
      * or was discarded before it began. Each built card or open note holds
      * its game, so a weak key alone would keep the fork for the JVM's life.
      */
     static void release(Game fork) {
         LibraryCapture.release(fork);
-        FloatingEffects.release(fork);
+        ClauseNotes.release(fork);
     }
 
     // ── one fork, start to finish ───────────────────────────────────────

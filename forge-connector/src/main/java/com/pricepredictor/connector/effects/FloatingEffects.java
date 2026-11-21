@@ -12,19 +12,15 @@ import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.WeakHashMap;
 
 /**
  * Effects from resolved spells that wait or last, as command-zone objects
@@ -43,7 +39,7 @@ import java.util.WeakHashMap;
  *   <li><b>A timestamped change</b> — Giant Growth's +3/+3, "gains flying
  *       until end of turn" — lives only as rows a resolving ability wrote
  *       into a card's layer tables under static id 0, which name no line.
- *       The one join is the timestamp: this class notes, at each live
+ *       The one join is the timestamp: {@link ClauseNotes} notes, at each live
  *       clause's {@code ON_CLAUSE_RESOLVING}, the game's timestamp, the line
  *       resolving and its {@code Duration$}, and closes the note at
  *       {@code ON_CLAUSE_RESOLVED}; a row's timestamp falls inside the
@@ -57,161 +53,10 @@ import java.util.WeakHashMap;
  * {@code TriggerHandler.getPendingDelayedTriggers}), id {@code D<trigger id>},
  * keyed to the ability that spawned them; none are listed on an unpatched
  * Forge.
- *
- * <p>The notes are kept per game in a weak registry, because the clause hook
- * and the several snapshot builders over one game are built apart.
  */
 final class FloatingEffects {
 
-    private static final Map<Game, FloatingEffects> BY_GAME =
-            Collections.synchronizedMap(new WeakHashMap<>());
-
-    /** The notes of {@code game}, made on first use. */
-    static FloatingEffects of(Game game) {
-        return BY_GAME.computeIfAbsent(game, g -> new FloatingEffects(null, 0L));
-    }
-
-    /**
-     * The notes of a fork of {@code live}, made on first use: its own
-     * clauses' notes, and the live game's for every timestamp at or before
-     * the copy point (B4). The copy keeps the live game's timestamps, so a
-     * row drawn before the fork is the live game's to name; a fork's own
-     * notes start empty.
-     */
-    static FloatingEffects ofFork(Game fork, Game live) {
-        return BY_GAME.computeIfAbsent(fork, g -> new FloatingEffects(of(live), fork.getTimestamp()));
-    }
-
-    /**
-     * Forget {@code game}'s notes: its recording has closed, or its fork has
-     * ended. A note still open (a fork whose body threw mid-clause) holds
-     * its clause and so its game, which the weak key alone never lets go.
-     */
-    static void release(Game game) {
-        if (game != null) {
-            BY_GAME.remove(game);
-        }
-    }
-
-    /** How many games' notes are held, for a test. */
-    static int gamesHeld() {
-        return BY_GAME.size();
-    }
-
-    /** Whether notes of {@code game} are held, for a test. */
-    static boolean holds(Game game) {
-        return BY_GAME.containsKey(game);
-    }
-
-    /** One live clause's resolution: the timestamps Forge drew while it ran. */
-    private static final class Note {
-        final long start;
-        final ProvenanceKey line;
-        /** The ref of the card whose line it is, or null. */
-        final String host;
-        final String duration;
-        /**
-         * The clause while it runs, to close the right note; dropped once
-         * closed, because a clause holds its game and the registry holds
-         * games only weakly.
-         */
-        SpellAbility clause;
-        /** The game's timestamp when the clause finished; open until then. */
-        long end = Long.MAX_VALUE;
-
-        Note(long start, ProvenanceKey line, String host, String duration, SpellAbility clause) {
-            this.start = start;
-            this.line = line;
-            this.host = host;
-            this.duration = duration;
-            this.clause = clause;
-        }
-
-        boolean covers(long timestamp) {
-            return timestamp > start && timestamp <= end;
-        }
-    }
-
-    /** By (start, order noted): clauses nest, and nested ones can share a start. */
-    private final NavigableMap<long[], Note> notes = new TreeMap<>((a, b) ->
-            a[0] != b[0] ? Long.compare(a[0], b[0]) : Long.compare(a[1], b[1]));
-    private final Deque<Note> open = new ArrayDeque<>();
-    private long noted;
-    /** The live game's notes, for a fork's; null for a live game's own. */
-    private final FloatingEffects copiedFrom;
-    /** The game's timestamp when a fork was copied; the live game's notes cover up to it. */
-    private final long copyPoint;
-
-    private FloatingEffects(FloatingEffects copiedFrom, long copyPoint) {
-        this.copiedFrom = copiedFrom;
-        this.copyPoint = copyPoint;
-    }
-
-    // ── bookkeeping at the clause hook ───────────────────────────────
-
-    /** A live clause begins resolving: note the timestamp, its line and its duration. */
-    synchronized void clauseResolving(Game game, SpellAbility clause) {
-        Note note = new Note(game.getTimestamp(), ProvenanceResolver.of(clause),
-                Refs.ofNullable(clause.getHostCard()), noteDuration(clause), clause);
-        notes.put(new long[] {note.start, noted++}, note);
-        open.push(note);
-    }
-
-    /** A live clause finished, or threw: close its note. */
-    synchronized void clauseResolved(Game game, SpellAbility clause) {
-        for (var it = open.iterator(); it.hasNext(); ) {
-            Note note = it.next();
-            if (note.clause == clause) {
-                note.end = game.getTimestamp();
-                note.clause = null;
-                it.remove();
-                return;
-            }
-        }
-    }
-
-    /**
-     * The innermost note that covers a timestamp, or null: the live game's,
-     * for a fork's timestamp at or before its copy point.
-     */
-    private Note noteAt(long timestamp) {
-        if (copiedFrom != null && timestamp <= copyPoint) {
-            return copiedFrom.noteAt(timestamp);
-        }
-        return ownNoteAt(timestamp);
-    }
-
-    private synchronized Note ownNoteAt(long timestamp) {
-        for (Note note : notes.headMap(new long[] {timestamp, Long.MAX_VALUE}, false)
-                .descendingMap().values()) {
-            if (note.covers(timestamp)) {
-                return note;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * A noted clause's duration, as a {@code Duration$} value: its declared
-     * one, else, for a {@code GainControl} clause, the one its {@code
-     * LoseControl$} says: {@code EOT} until end of turn, an object's change
-     * ({@code LeavesPlay}, {@code LoseControl}, {@code Untap}, ...) until it
-     * leaves, and none at all for good.
-     */
-    static String noteDuration(SpellAbility clause) {
-        String declared = declaredDuration(clause);
-        if (declared != null || clause == null
-                || clause.getApi() != forge.game.ability.ApiType.GainControl) {
-            return declared;
-        }
-        String lose = clause.getParam("LoseControl");
-        if (lose == null || lose.isEmpty()) {
-            return "Permanent";
-        }
-        if (lose.equals("EOT") || lose.startsWith("UntilTheEndOf")) {
-            return lose.equals("EOT") ? null : lose;
-        }
-        return "UntilHostLeavesPlay";
+    private FloatingEffects() {
     }
 
     /**
@@ -246,19 +91,29 @@ final class FloatingEffects {
         if (duration == null || duration.isEmpty()) {
             return FloatingDuration.END_OF_TURN;
         }
-        if (duration.equals("Permanent") || duration.equals("Perpetual")) {
+        if (lastsForGood(duration)) {
             return FloatingDuration.PERMANENT;
         }
-        if (duration.endsWith("OrEOT") || duration.endsWith("OrEndOfCombat")) {
+        if (endsAtTurnOrCombatEnd(duration)) {
             return FloatingDuration.END_OF_TURN;
         }
-        if (duration.startsWith("UntilHostLeavesPlay") || duration.startsWith("AsLongAs")
+        return endsOnObjectChange(duration) ? FloatingDuration.UNTIL_LEAVES : FloatingDuration.END_OF_TURN;
+    }
+
+    private static boolean lastsForGood(String duration) {
+        return duration.equals("Permanent") || duration.equals("Perpetual");
+    }
+
+    /** A duration that also ends at the end of the turn or of combat. */
+    private static boolean endsAtTurnOrCombatEnd(String duration) {
+        return duration.endsWith("OrEOT") || duration.endsWith("OrEndOfCombat");
+    }
+
+    private static boolean endsOnObjectChange(String duration) {
+        return duration.startsWith("UntilHostLeavesPlay") || duration.startsWith("AsLongAs")
                 || duration.equals("UntilLoseControlOfHost") || duration.endsWith("Untaps")
                 || duration.equals("UntilUnattached") || duration.equals("UntilFacedown")
-                || duration.equals("UntilAnimatedFaceup")) {
-            return FloatingDuration.UNTIL_LEAVES;
-        }
-        return FloatingDuration.END_OF_TURN;
+                || duration.equals("UntilAnimatedFaceup");
     }
 
     // ── the snapshot's three lists ───────────────────────────────────
@@ -272,17 +127,19 @@ final class FloatingEffects {
      *              board without its static, on which an effect card's
      *              statics name nothing they affect: which permanents a
      *              static touches is that record's answer
+     * @param notes the game's clause notes, which name a timestamp's line
      */
-    String floatingEffectsJson(Game game, Collection<Card> cards, StaticSuppression board) {
+    static String floatingEffectsJson(
+            Game game, Collection<Card> cards, StaticSuppression board, ClauseNotes notes) {
         List<String> objects = new ArrayList<>();
         for (Card effect : game.getCardsIn(ZoneType.Command)) {
             if (isEffectCard(effect)) {
                 objects.add(effectCardJson(game, effect, board));
             }
         }
-        for (Timestamped row : timestamped(cards)) {
-            objects.add(objectJson(row.id(), keysOf(row.line()),
-                    row.affected(), List.of(), bucket(row.duration()), null));
+        for (Timestamped row : timestamped(notes, cards)) {
+            objects.add(new ListedObject(row.id(), keysOf(row.line()),
+                    row.affected(), List.of(), bucket(row.duration()), null).json());
         }
         return "[" + String.join(",", objects) + "]";
     }
@@ -305,7 +162,20 @@ final class FloatingEffects {
      * One per timestamp a noted clause wrote on a card in {@code cards},
      * oldest first; a timestamp no note covers is left out.
      */
-    List<Timestamped> timestamped(Collection<Card> cards) {
+    static List<Timestamped> timestamped(ClauseNotes notes, Collection<Card> cards) {
+        List<Timestamped> rows = new ArrayList<>();
+        for (Map.Entry<Long, Set<String>> row : affectedByTimestamp(cards).entrySet()) {
+            ClauseNotes.Note note = notes.noteAt(row.getKey());
+            if (note != null) {
+                rows.add(new Timestamped("F" + row.getKey(), note.host(), note.line(),
+                        List.copyOf(row.getValue()), note.duration()));
+            }
+        }
+        return rows;
+    }
+
+    /** The refs of the cards carrying a resolved row, by the row's timestamp, oldest first. */
+    private static Map<Long, Set<String>> affectedByTimestamp(Collection<Card> cards) {
         Map<Long, Set<String>> affectedByTimestamp = new TreeMap<>();
         for (Card card : cards) {
             for (long timestamp : timestampsOfResolvedRows(card)) {
@@ -313,15 +183,7 @@ final class FloatingEffects {
                         .add(Refs.of(card));
             }
         }
-        List<Timestamped> rows = new ArrayList<>();
-        for (Map.Entry<Long, Set<String>> row : affectedByTimestamp.entrySet()) {
-            Note note = noteAt(row.getKey());
-            if (note != null) {
-                rows.add(new Timestamped("F" + row.getKey(), note.host, note.line,
-                        List.copyOf(row.getValue()), note.duration));
-            }
-        }
-        return rows;
+        return affectedByTimestamp;
     }
 
     /** An effect card: an immutable command-zone card that is no emblem and no dungeon. */
@@ -331,32 +193,41 @@ final class FloatingEffects {
 
     private static String effectCardJson(Game game, Card effect, StaticSuppression board) {
         SpellAbility source = effect.getEffectSourceAbility();
-        // Every static's cards, then every static's players: Explore's
-        // effect card affects its caster, whose land plays it raises.
-        Set<String> cards = new LinkedHashSet<>();
-        Set<String> players = new LinkedHashSet<>();
-        for (StaticAbility stat : board.showsAffected() ? effect.getStaticAbilities() : List.<StaticAbility>of()) {
-            StaticEffect applied = ForgeFields.staticEffectOf(game, stat);
-            if (applied != null) {
-                for (String each : Refs.affectedBy(applied)) {
-                    (Refs.isEntity(each) ? cards : players).add(each);
-                }
-            }
-        }
-        List<String> affected = new ArrayList<>(cards);
-        affected.addAll(players);
+        List<String> affected = affectedBy(game, effect, board);
         List<String> remembered = new ArrayList<>();
         for (Object each : effect.getRemembered()) {
             Refs.ofAny(each).ifPresent(remembered::add);
         }
-        return objectJson(Refs.of(effect),
+        return new ListedObject(Refs.of(effect),
                 keysOf(source == null ? null : ProvenanceResolver.of(source)),
-                affected, remembered,
-                // An effect no ability made is a designation's (the monarch,
-                // the initiative, the city's blessing): it lasts until the
-                // game takes it away.
-                source == null ? FloatingDuration.PERMANENT : bucket(declaredDuration(source)),
-                shieldLeft(effect));
+                affected, remembered, effectCardDuration(source), shieldLeft(effect)).json();
+    }
+
+    /**
+     * Every static's cards, then every static's players: Explore's effect
+     * card affects its caster, whose land plays it raises.
+     */
+    private static List<String> affectedBy(Game game, Card effect, StaticSuppression board) {
+        Set<String> cards = new LinkedHashSet<>();
+        Set<String> players = new LinkedHashSet<>();
+        for (StaticAbility stat : board.showsAffected() ? effect.getStaticAbilities() : List.<StaticAbility>of()) {
+            StaticEffect applied = ForgeFields.staticEffectOf(game, stat);
+            for (String each : applied == null ? List.<String>of() : Refs.affectedBy(applied)) {
+                (Refs.isEntity(each) ? cards : players).add(each);
+            }
+        }
+        List<String> affected = new ArrayList<>(cards);
+        affected.addAll(players);
+        return affected;
+    }
+
+    /**
+     * An effect card's duration: its ability's, bucketed. An effect no
+     * ability made is a designation's (the monarch, the initiative, the
+     * city's blessing): it lasts until the game takes it away.
+     */
+    private static FloatingDuration effectCardDuration(SpellAbility source) {
+        return source == null ? FloatingDuration.PERMANENT : bucket(declaredDuration(source));
     }
 
     /**
@@ -374,14 +245,19 @@ final class FloatingEffects {
             }
             String value = effect.getSVar(amount);
             if (value.startsWith("Number$")) {
-                try {
-                    return Integer.parseInt(value.substring("Number$".length()).trim());
-                } catch (NumberFormatException e) {
-                    return null;
-                }
+                return numberOf(value);
             }
         }
         return null;
+    }
+
+    /** A {@code Number$} SVar's amount, or null when it is no number. */
+    private static Integer numberOf(String value) {
+        try {
+            return Integer.parseInt(value.substring("Number$".length()).trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**
@@ -405,31 +281,46 @@ final class FloatingEffects {
         // one too.
         addResolvedRows(timestamps, ForgeFields.hiddenExtrinsicKeywords(card));
         addResolvedRows(timestamps, ForgeFields.cantHaveKeywords(card));
-        // A resolved GainControl (Blatant Thievery, Act of Treason) files its
-        // change under its timestamp alone, with no static id: a static's is
-        // filed under the static's timestamp, which no clause note covers.
-        Map<?, ?> controllers = ForgeFields.tempControllers(card);
-        if (controllers != null) {
-            java.util.Set<Long> statics = ForgeFields.staticEffectTimestamps(card.getGame());
-            for (Object timestamp : controllers.keySet()) {
-                if (timestamp instanceof Long resolved && !statics.contains(resolved)) {
-                    timestamps.add(resolved);
-                }
-            }
-        }
+        addResolvedControl(timestamps, card);
         return timestamps;
     }
 
-    private static void addResolvedRows(Set<Long> into, Table<?, ?, ?> table) {
+    /**
+     * A resolved GainControl (Blatant Thievery, Act of Treason) files its
+     * change under its timestamp alone, with no static id: a static's is
+     * filed under the static's timestamp, which no clause note covers.
+     */
+    private static void addResolvedControl(Set<Long> into, Card card) {
+        Map<?, ?> controllers = ForgeFields.tempControllers(card);
+        if (controllers == null) {
+            return;
+        }
+        Set<Long> statics = ForgeFields.staticEffectTimestamps(card.getGame());
+        for (Object timestamp : controllers.keySet()) {
+            if (timestamp instanceof Long resolved && !statics.contains(resolved)) {
+                into.add(resolved);
+            }
+        }
+    }
+
+    private static <R, C, V> void addResolvedRows(Set<Long> into, Table<R, C, V> table) {
         if (table == null) {
             return;
         }
-        for (Table.Cell<?, ?, ?> cell : table.cellSet()) {
-            if (cell.getColumnKey() instanceof Long staticId && staticId == 0L
-                    && cell.getRowKey() instanceof Long timestamp) {
+        for (Table.Cell<R, C, V> cell : table.cellSet()) {
+            Long timestamp = resolvedRowTimestamp(cell);
+            if (timestamp != null) {
                 into.add(timestamp);
             }
         }
+    }
+
+    /** A row's timestamp when a resolving ability wrote it (static id 0), else null. */
+    private static Long resolvedRowTimestamp(Table.Cell<?, ?, ?> cell) {
+        if (!(cell.getColumnKey() instanceof Long staticId) || staticId != 0L) {
+            return null;
+        }
+        return cell.getRowKey() instanceof Long timestamp ? timestamp : null;
     }
 
     /**
@@ -441,9 +332,10 @@ final class FloatingEffects {
     static String delayedTriggersJson(Game game) {
         List<String> objects = new ArrayList<>();
         for (Pending pending : pendingDelayedTriggers(game)) {
-            objects.add(objectJson(pending.id(),
-                    keysOf(ProvenanceResolver.of(pending.trigger())), List.of(),
-                    pending.remembered(), pending.thisTurn() ? FloatingDuration.END_OF_TURN : FloatingDuration.PERMANENT, null));
+            objects.add(new ListedObject(pending.id(),
+                    keysOf(ProvenanceResolver.of(pending.trigger())), List.of(), pending.remembered(),
+                    pending.thisTurn() ? FloatingDuration.END_OF_TURN : FloatingDuration.PERMANENT,
+                    null).json());
         }
         return "[" + String.join(",", objects) + "]";
     }
@@ -513,17 +405,26 @@ final class FloatingEffects {
         return "[" + String.join(",", objects) + "]";
     }
 
-    private static String objectJson(
+    /**
+     * One object of a command-zone list, as {@code floating_effects} and
+     * {@code delayed_triggers} render it.
+     *
+     * @param shieldLeft the amount left on a counting-down shield, or null
+     */
+    private record ListedObject(
             String id, List<ProvenanceKey> sourceLines, List<String> affected,
             List<String> remembered, FloatingDuration duration, Integer shieldLeft) {
-        return Json.object()
-                .value("id", id)
-                .raw("source_lines", ProvenanceKey.toJsonArray(sourceLines))
-                .raw("affected", Json.stringArray(affected))
-                .raw("remembered", Json.stringArray(remembered))
-                .value("duration", duration)
-                .value("shield_left", shieldLeft)
-                .render();
+
+        String json() {
+            return Json.object()
+                    .value("id", id)
+                    .raw("source_lines", ProvenanceKey.toJsonArray(sourceLines))
+                    .raw("affected", Json.stringArray(affected))
+                    .raw("remembered", Json.stringArray(remembered))
+                    .value("duration", duration)
+                    .value("shield_left", shieldLeft)
+                    .render();
+        }
     }
 
     private static List<ProvenanceKey> keysOf(ProvenanceKey key) {

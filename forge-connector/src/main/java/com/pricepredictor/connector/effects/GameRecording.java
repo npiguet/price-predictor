@@ -298,7 +298,7 @@ public final class GameRecording implements AutoCloseable {
                 // registries keyed by game would otherwise hold it, and with
                 // it every card and fork of it, for the rest of the JVM's life.
                 LibraryCapture.release(game);
-                FloatingEffects.release(game);
+                ClauseNotes.release(game);
             }
         }
     }

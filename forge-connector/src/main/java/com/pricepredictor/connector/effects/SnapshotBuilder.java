@@ -53,7 +53,7 @@ public final class SnapshotBuilder {
 
     private final Game game;
     /** Whose clause notes join a timestamped floating effect to its line. */
-    private final FloatingEffects floating;
+    private final ClauseNotes notes;
 
     /**
      * A builder over {@code game}, reading its clause notes: a fork's are
@@ -63,7 +63,7 @@ public final class SnapshotBuilder {
      */
     public SnapshotBuilder(Game game) {
         this.game = game;
-        this.floating = FloatingEffects.of(game);
+        this.notes = ClauseNotes.of(game);
     }
 
     /**
@@ -72,7 +72,7 @@ public final class SnapshotBuilder {
      * rows drawn before the copy were noted by the live game's clauses.
      */
     static SnapshotBuilder forFork(Game fork, Game live) {
-        FloatingEffects.ofFork(fork, live);
+        ClauseNotes.ofFork(fork, live);
         return new SnapshotBuilder(fork);
     }
 
@@ -248,7 +248,7 @@ public final class SnapshotBuilder {
         int turn = game.getPhaseHandler().getTurn();
         return new Snapshot(
                 globalToJson(turn, tiers, board), turn, players, entities.elements(),
-                SnapshotLinks.render(game, request, entities, floating),
+                SnapshotLinks.render(game, request, entities, notes),
                 RefsJson.render(acting.chosen() ? acting.ability() : null, request.source()),
                 pending == null ? "null" : pending.toJson(), Snapshot.isOutcome(pending),
                 libraries);
@@ -495,7 +495,7 @@ public final class SnapshotBuilder {
                 // Forge's daytime field is true at night, null for neither.
                 .value("day_night", DayNight.of(night))
                 .raw("floating_effects",
-                        floating.floatingEffectsJson(game, cards, board))
+                        FloatingEffects.floatingEffectsJson(game, cards, board, notes))
                 .raw("delayed_triggers", FloatingEffects.delayedTriggersJson(game))
                 .raw("dungeons", FloatingEffects.dungeonsJson(game))
                 .render();

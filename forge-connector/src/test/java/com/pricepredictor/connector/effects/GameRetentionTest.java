@@ -113,7 +113,7 @@ class GameRetentionTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         library(game, game.getPlayers().get(0), "Hill Giant", 8);
         int built = LibraryCapture.gamesHeld();
-        int noted = FloatingEffects.gamesHeld();
+        int noted = ClauseNotes.gamesHeld();
         boolean[] ran = {false};
 
         Optional<?> written = new Forks.ForkRun("probe", game, () -> { }, () -> null).take(
@@ -126,11 +126,11 @@ class GameRetentionTest {
         assertTrue(written.isEmpty(), "a fork with no perspective writes nothing");
         assertFalse(ran[0], "a fork with no perspective never runs its body");
         int liveBuilt = LibraryCapture.holds(game) ? 1 : 0;
-        int liveNoted = FloatingEffects.holds(game) ? 1 : 0;
+        int liveNoted = ClauseNotes.holds(game) ? 1 : 0;
         assertTrue(LibraryCapture.gamesHeld() - liveBuilt <= built,
                 "the discarded fork's built cards are held: " + LibraryCapture.gamesHeld() + " > " + built);
-        assertTrue(FloatingEffects.gamesHeld() - liveNoted <= noted,
-                "the discarded fork's notes are held: " + FloatingEffects.gamesHeld() + " > " + noted);
+        assertTrue(ClauseNotes.gamesHeld() - liveNoted <= noted,
+                "the discarded fork's notes are held: " + ClauseNotes.gamesHeld() + " > " + noted);
     }
 
     /**
@@ -157,9 +157,9 @@ class GameRetentionTest {
         spell.setActivatingPlayer(caster);
 
         ShardRun.recordedWithClauseHook(tempDir, game, TestCaps.caps().interventions(0).probes(0).build(), WHY,
-                () -> FloatingEffects.of(game).clauseResolving(game, spell));
+                () -> ClauseNotes.of(game).clauseResolving(game, spell));
 
-        assertFalse(FloatingEffects.holds(game), "the closed recording's game holds no note");
+        assertFalse(ClauseNotes.holds(game), "the closed recording's game holds no note");
         return new WeakReference<>(game);
     }
 }
