@@ -141,6 +141,9 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.LIFE_CHANGE: ("delta",),
     # damage_type: on damage to a creature only, how it was dealt
     # (``normal``, ``m1m1_counters``, ``deathtouch``, ``loyalty_loss``).
+    # excess: on damage to a creature, planeswalker or battle, the amount
+    # beyond lethal damage (120.4a), measured before the damage; never on a
+    # player's.
     EventType.DAMAGE_DEALT: ("amount", "combat", "source", "excess", "damage_type"),
     # Forge prevents by replacement, so this and the `rewrite` record for the
     # same replacement are two views of one engine event, not two confirming
@@ -153,7 +156,7 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.MANA_PRODUCED: ("mana_by_color",),
     EventType.MANA_LOST: ("mana_by_color",),
     EventType.CARD_DRAWN: ("count",),
-    EventType.CARD_DISCARDED: ("count", "random"),
+    EventType.CARD_DISCARDED: ("count",),
     EventType.CARD_MILLED: ("count",),
     EventType.CARD_REVEALED: ("count", "from_zone"),
     EventType.CARD_LOOKED_AT: ("count", "from_zone"),
@@ -166,8 +169,8 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.NAME_CHANGE: ("name",),
     # mana_cost as an entity's ``mana_cost`` spells it, absent for no cost.
     EventType.MANA_COST_CHANGE: ("mana_cost", "mana_value"),
-    EventType.TYPE_CHANGE: ("types_added", "types_removed", "overwrite"),
-    EventType.COLOR_CHANGE: ("colors", "colors_removed", "overwrite"),
+    EventType.TYPE_CHANGE: ("types_added", "types_removed"),
+    EventType.COLOR_CHANGE: ("colors", "colors_removed"),
     EventType.ABILITY_CHANGE: ("abilities", "removed"),
     EventType.CONTROL_CHANGE: ("controller",),
     EventType.OWNERSHIP_CHANGE: ("owner",),
@@ -179,6 +182,9 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.ATTACKERS_DECLARED: ("defender",),
     EventType.BLOCKERS_DECLARED: ("blocked",),
     EventType.BECAME_BLOCKED: ("blockers",),
+    # from_zone: the zone the spell was cast from, as an entity's ``zone``;
+    # without_paying: true on a cast without paying its mana cost (118.9),
+    # absent otherwise. Neither on an ability's activation.
     EventType.SPELL_CAST: ("without_paying", "from_zone"),
     # ability: ``{entity, key}``, the line on its host, else the host's ref.
     EventType.ABILITY_COUNTERED: ("ability",),

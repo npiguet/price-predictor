@@ -34,6 +34,7 @@ public enum EventParam implements WireNamed {
     DEFENDER("defender"),
     DELTA("delta"),
     DETACHED_FROM("detached_from"),
+    EXCESS("excess"),
     FLAG("flag"),
     FROM_ZONE("from_zone"),
     HIDDEN("hidden"),
@@ -64,7 +65,8 @@ public enum EventParam implements WireNamed {
     TOUGHNESS_DELTA("toughness_delta"),
     TYPES_ADDED("types_added"),
     TYPES_REMOVED("types_removed"),
-    VALUE("value");
+    VALUE("value"),
+    WITHOUT_PAYING("without_paying");
 
     private final String wireName;
 

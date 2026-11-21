@@ -48,6 +48,8 @@ What the collectors must read of the hooks:
 - `EffectRecordHook.failureCounts()` is printed by the worker's failure report at every match's end, whatever ended it.
 - The state-based-loop signals also bracket the checks made where no player gets priority: the cleanup step's, one for an effect ending the turn, and two for an effect ending the combat phase.
 - Forge's `GameEventCardDamaged` fires for a creature only; damage to a planeswalker or battle that is no creature publishes counter events. Its type reads `Deathtouch` whenever the source has deathtouch, even when wither or infect turned the damage into -1/-1 counters.
+- A `damage_dealt`'s `excess` is read from the branch's `Card.addDamageAfterPrevention`, which measures the damage beyond lethal damage before it deals the damage and carries it on `GameEventCardDamaged.excess` (`PatchHooks.DAMAGE_EXCESS`) and in the `DamageDone` trigger's map (`DamageExcess`). It is never read off the card at the event: the bus publishes the damage once it is marked or the loyalty removed (loyalty stops at 0, so what it was is lost), and a held `DamageDone` trigger is evaluated after the whole damage event. A damage replacement's events are measured by `RunParamSlots.WOULD_BE_EXCESS` off the board as it reports, the damage not yet dealt.
+- A `spell_cast`'s `without_paying` is read off the cast spell ability's description, which `SpellAbility.copyWithNoManaCost` (every cast without paying its mana cost) suffixes with ` (without paying its mana cost)` (`RunParamSlots.WITHOUT_MANA_COST`). Its `WithoutManaCost` parameter says less: a later copy of the spell ability (an optional cost added) drops it, and four `Play` spells print it on their own line.
 
 ## Where the events come from
 

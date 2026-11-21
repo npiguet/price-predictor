@@ -84,6 +84,8 @@ def _entity(**members) -> dict:
      ("global.floating_effects.duration", "forever")),
     (_record(pending_event={"type": "zone_change", "params": {"to_zone": "outside"}}),
      ("zone_change.to_zone", "outside")),
+    (_record(pending_event={"type": "spell_cast", "params": {"from_zone": "hands"}}),
+     ("spell_cast.from_zone", "hands")),
     (_record(pending_event={"type": "life_change", "attributed_to": "sub"}),
      ("event.attributed_to", "sub")),
     (_record(pending_event={"type": "face_change", "params": {"to_state": "transformed"}}),

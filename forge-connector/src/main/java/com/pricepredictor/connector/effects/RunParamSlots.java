@@ -4,6 +4,9 @@ import com.google.common.collect.Table;
 import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
+import forge.game.keyword.Keyword;
+import forge.game.spellability.SpellAbility;
+import forge.game.zone.Zone;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,6 +63,24 @@ final class RunParamSlots {
     /** {@code source}: a {@code CardDamageTable}'s one source, when one source dealt it all. */
     static final ModeRow.Slot DAMAGE_TABLE_SOURCE = RunParamSlots::damageTableSource;
 
+    /**
+     * {@code excess}: the damage beyond lethal damage (120.4a) the patch
+     * measured before the damage was dealt and put in a {@code DamageDone}
+     * trigger's map ({@code DamageExcess}), which is evaluated once the
+     * damage is marked or the loyalty gone; absent on a player's damage and
+     * on a checkout without it.
+     */
+    static final ModeRow.Slot DAMAGE_EXCESS = RunParamSlots::damageExcess;
+
+    /**
+     * {@code excess} of a damage a replacement is changing: the damage not
+     * dealt yet, measured off the board now as the patch measures a dealt
+     * damage, {@code DamageAmount} less {@code Card.getExcessDamageValue}
+     * (deathtouch read off the {@code DamageSource}), never below 0; absent
+     * on a player's damage and a map without an amount.
+     */
+    static final ModeRow.Slot WOULD_BE_EXCESS = RunParamSlots::wouldBeExcess;
+
     /** {@code regenerable}: a destruction's {@code Regeneration}. */
     static final ModeRow.Slot REGENERABLE = RunParamSlots::regenerable;
 
@@ -68,6 +89,33 @@ final class RunParamSlots {
      * every card of the batch ({@code Cards}) made the same move.
      */
     static final ModeRow.Slot ZONE_TABLE_MOVE = RunParamSlots::zoneTableMove;
+
+    private static void damageExcess(EffectEvent event, ModeRow.RunParams params) {
+        event.param(EventParam.EXCESS, intOf(params.get("DamageExcess")));
+    }
+
+    private static void wouldBeExcess(EffectEvent event, ModeRow.RunParams params) {
+        Integer amount = intOf(params.get("DamageAmount"));
+        Card damaged = damageable(params.get("Affected"));
+        if (amount == null || damaged == null) {
+            return;
+        }
+        boolean deathtouch = params.get("DamageSource") instanceof Card source
+                && source.hasKeyword(Keyword.DEATHTOUCH);
+        event.param(EventParam.EXCESS, Math.max(0, amount - damaged.getExcessDamageValue(deathtouch)));
+    }
+
+    /**
+     * {@code affected} when it is a card damage can be dealt to (120.1a): a
+     * creature, a planeswalker or a battle; null for a player or anything else.
+     */
+    private static Card damageable(Object affected) {
+        if (!(affected instanceof Card card)) {
+            return null;
+        }
+        boolean takesDamage = card.isCreature() || card.isPlaneswalker();
+        return takesDamage || card.isBattle() ? card : null;
+    }
 
     private static void zones(EffectEvent event, ModeRow.RunParams params) {
         event.param(EventParam.FROM_ZONE, CardSpelling.zoneName(params.get("Origin")));
@@ -206,6 +254,26 @@ final class RunParamSlots {
     /** {@code blockers}: every creature blocking the attacker. */
     static final ModeRow.Slot BLOCKERS = RunParamSlots::blockers;
 
+    /**
+     * {@code from_zone} and {@code without_paying} of a cast spell, read off
+     * the cast {@code SpellAbility}: the zone its card was cast from ({@code
+     * Card.getCastFrom} on {@code CardLKI}, else the spell's card), and
+     * {@code true} only for a cast without paying its mana cost (118.9).
+     * Nothing for an ability's activation, which casts no card.
+     */
+    static final ModeRow.Slot CAST = RunParamSlots::cast;
+
+    /**
+     * What {@code SpellAbility.copyWithNoManaCost} adds to the description of
+     * the spell ability it makes, the one way Forge casts a spell without
+     * paying its mana cost (a {@code Play} effect's {@code WithoutManaCost$},
+     * cascade, discover, suspend, plot, a {@code MayPlayWithoutManaCost}
+     * static). The {@code WithoutManaCost} parameter it also puts there does
+     * not say it: a later copy of the spell ability (an optional cost added)
+     * drops it, and four {@code Play} spells print it on their own line.
+     */
+    static final String WITHOUT_MANA_COST = " (without paying its mana cost)";
+
     /** {@code reason}: why a player lost ({@code LoseReason}). */
     static final ModeRow.Slot LOSE_REASON = RunParamSlots::loseReason;
 
@@ -307,6 +375,19 @@ final class RunParamSlots {
 
     private static void blockers(EffectEvent event, ModeRow.RunParams params) {
         event.param(EventParam.BLOCKERS, refList(params.byName(), "Blockers", "Blocker"));
+    }
+
+    private static void cast(EffectEvent event, ModeRow.RunParams params) {
+        if (!(params.get("SpellAbility") instanceof SpellAbility spell) || !spell.isSpell()) {
+            return;
+        }
+        Card card = params.get("CardLKI") instanceof Card lastKnown ? lastKnown : spell.getHostCard();
+        Zone from = card == null ? null : card.getCastFrom();
+        event.param(EventParam.FROM_ZONE, from == null ? null : CardSpelling.zoneName(from.getZoneType()));
+        String description = spell.getDescription();
+        if (description != null && description.contains(WITHOUT_MANA_COST)) {
+            event.param(EventParam.WITHOUT_PAYING, true);
+        }
     }
 
     private static void loseReason(EffectEvent event, ModeRow.RunParams params) {

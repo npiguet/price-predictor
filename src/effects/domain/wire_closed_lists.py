@@ -96,6 +96,7 @@ _FORK_KINDS = frozenset(ForkKind)
 _EVENT_PARAM_LISTS: dict[tuple[str, str], frozenset] = {
     (EventType.ZONE_CHANGE, "from_zone"): _ZONES,
     (EventType.ZONE_CHANGE, "to_zone"): _ZONES,
+    (EventType.SPELL_CAST, "from_zone"): _ZONES,
     (EventType.FACE_CHANGE, "to_state"): frozenset(FaceState),
     (EventType.DAMAGE_DEALT, "damage_type"): frozenset(DAMAGE_TYPES),
     (EventType.PLAYER_LOST, "reason"): frozenset(GAME_LOSS_REASONS),

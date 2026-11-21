@@ -114,13 +114,19 @@ final class BusEvents {
      * counters. Damage to a planeswalker or a battle publishes no such
      * event, only its counter change; {@code loyalty_loss} is Forge's
      * spelling for it should it ever.
+     *
+     * <p>{@code excess} is the damage beyond lethal damage (120.4a) the
+     * engine measured before the damage was dealt, which the event carries
+     * ({@link PatchHooks#DAMAGE_EXCESS}): by the time it is published the
+     * damage is marked or the loyalty gone. Absent on a checkout without it.
      */
     static EffectEvent cardDamaged(GameEventCardDamaged event, boolean combat) {
         return new EffectEvent(EventType.DAMAGE_DEALT)
                 .subject(Refs.of(event.card()))
                 .param(EventParam.AMOUNT, event.amount())
                 .param(EventParam.COMBAT, combat)
-                .param(EventParam.DAMAGE_TYPE, damageType(event.type()));
+                .param(EventParam.DAMAGE_TYPE, damageType(event.type()))
+                .param(EventParam.EXCESS, PatchHooks.DAMAGE_EXCESS.read(event));
     }
 
     /** A card damage's type as {@code damage_type} spells it, or null when Forge named none. */

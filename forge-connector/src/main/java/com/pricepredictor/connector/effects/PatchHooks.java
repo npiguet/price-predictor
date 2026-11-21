@@ -181,6 +181,17 @@ public final class PatchHooks {
     static final InstanceAccessor REPLACEMENT_EFFECTS_THROUGH = new InstanceAccessor(
             new HookSite("forge.game.card.CardState", "getEffectRecordReplacementEffectsThrough"),
             "the printed slice of a card's replacement effects, and a printed one's index among them");
+    /**
+     * The damage beyond lethal damage a creature's damage event carries,
+     * measured before the damage was dealt. The same patch puts it in the
+     * {@code DamageDone} trigger's run parameters as {@code DamageExcess},
+     * which is read by key name and adds no method to probe for: this
+     * component's absence names both.
+     */
+    static final InstanceAccessor DAMAGE_EXCESS = new InstanceAccessor(
+            new HookSite("forge.game.event.GameEventCardDamaged", "excess"),
+            "a damage_dealt's excess, the damage beyond lethal damage, on a creature's "
+            + "damage and a DamageDone trigger's");
     static final InstanceAccessor ASSIGNED_DAMAGE = new InstanceAccessor(
             new HookSite(COMBAT, "getAssignedDamage"),
             "a combat record's assignment_choices");
@@ -277,7 +288,7 @@ public final class PatchHooks {
             LEND_TYPE, SET_ASIDE_COLORS, PRIMARY_ABILITY, STATIC_EFFECTS_BY_STATIC,
             CHANGED_CARD_TYPES, CHANGED_CARD_COLORS, COLOR_LAYERS, CHANGED_CARD_MANA_COST,
             HIDDEN_EXTRINSIC_KEYWORDS, CANT_HAVE_KEYWORDS, TEMP_CONTROLLERS, SPELL_ABILITIES_THROUGH,
-            TRIGGERS_THROUGH, STATIC_ABILITIES_THROUGH, REPLACEMENT_EFFECTS_THROUGH, ASSIGNED_DAMAGE, CONFIRM_LISTENER, NOTE_CONFIRM, OUTCOME_LISTENER,
+            TRIGGERS_THROUGH, STATIC_ABILITIES_THROUGH, REPLACEMENT_EFFECTS_THROUGH, DAMAGE_EXCESS, ASSIGNED_DAMAGE, CONFIRM_LISTENER, NOTE_CONFIRM, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, SIMULTANEOUS_STACK_ENTRIES, STATE_BASED_LOOP_LISTENER,
             PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);

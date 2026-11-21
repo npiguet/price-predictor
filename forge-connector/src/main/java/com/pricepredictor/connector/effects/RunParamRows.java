@@ -53,8 +53,15 @@ final class RunParamRows {
      */
     static final ModeRow UNREAD = ModeRow.of(EventType.STATE_FLAG_CHANGE, RunParamSubjects.UNREAD);
 
-    private static final ModeRow.Slot[] DAMAGE = {
-        RunParamSlots.DAMAGE_AMOUNT, RunParamSlots.COMBAT, RunParamSlots.DAMAGE_SOURCE};
+    /** A damage trigger's slots: its excess the patch's, measured before the damage was dealt. */
+    private static final ModeRow.Slot[] DAMAGE_DONE = {
+        RunParamSlots.DAMAGE_AMOUNT, RunParamSlots.COMBAT, RunParamSlots.DAMAGE_SOURCE,
+        RunParamSlots.DAMAGE_EXCESS};
+
+    /** A damage replacement's slots: its excess measured off the board, the damage not dealt yet. */
+    private static final ModeRow.Slot[] WOULD_BE_DAMAGE = {
+        RunParamSlots.DAMAGE_AMOUNT, RunParamSlots.COMBAT, RunParamSlots.DAMAGE_SOURCE,
+        RunParamSlots.WOULD_BE_EXCESS};
 
     /** A replacement's map is about the object or player it would affect. */
     private static final ModeRow.Subjects AFFECTED = about("Affected");
@@ -71,7 +78,7 @@ final class RunParamRows {
                     about("Card"), RunParamSlots.REGENERABLE)),
             Map.entry("Sacrificed", ModeRow.of(EventType.SACRIFICED, CARD_OR_PLAYER)),
             Map.entry("DamageDone", ModeRow.of(EventType.DAMAGE_DEALT,
-                    about("DamageTarget"), DAMAGE)),
+                    about("DamageTarget"), DAMAGE_DONE)),
             // One source's damage to every target at once: DamageSource and a
             // DamageMap of target to amount (CardDamageTable.triggerDamageDoneOnce).
             Map.entry("DamageDealtOnce", ModeRow.of(EventType.DAMAGE_DEALT,
@@ -130,8 +137,9 @@ final class RunParamRows {
             // MagicStack puts CardLKI, Activator and SpellAbility and no Card at
             // all: the last-known copy is the only name the map has for the
             // spell that was cast.
-            Map.entry("SpellCast", ModeRow.of(EventType.SPELL_CAST, about("CardLKI"))),
-            Map.entry("SpellAbilityCast", ModeRow.of(EventType.SPELL_CAST, about("CardLKI"))),
+            Map.entry("SpellCast", ModeRow.of(EventType.SPELL_CAST, about("CardLKI"), RunParamSlots.CAST)),
+            Map.entry("SpellAbilityCast", ModeRow.of(EventType.SPELL_CAST,
+                    about("CardLKI"), RunParamSlots.CAST)),
             Map.entry("Countered", ModeRow.of(EventType.SPELL_COUNTERED, about("Card"))),
             Map.entry("TokenCreated", ModeRow.of(EventType.TOKEN_CREATED,
                     CARD_OR_PLAYER, count(RunParamAmount.ONE))),
@@ -184,8 +192,8 @@ final class RunParamRows {
     static final Map<String, ModeRow> REPLACEMENT_MODES = Map.ofEntries(
             Map.entry("Moved", ModeRow.of(EventType.ZONE_CHANGE, AFFECTED, RunParamSlots.ZONES)),
             Map.entry("Destroy", ModeRow.of(EventType.DESTROYED, AFFECTED, RunParamSlots.REGENERABLE)),
-            Map.entry("DamageDone", ModeRow.of(EventType.DAMAGE_DEALT, AFFECTED, DAMAGE)),
-            Map.entry("DealtDamage", ModeRow.of(EventType.DAMAGE_DEALT, AFFECTED, DAMAGE)),
+            Map.entry("DamageDone", ModeRow.of(EventType.DAMAGE_DEALT, AFFECTED, WOULD_BE_DAMAGE)),
+            Map.entry("DealtDamage", ModeRow.of(EventType.DAMAGE_DEALT, AFFECTED, WOULD_BE_DAMAGE)),
             Map.entry("Draw", ModeRow.of(EventType.CARD_DRAWN, AFFECTED, count(RunParamAmount.ONE))),
             Map.entry("DrawCards", ModeRow.of(EventType.CARD_DRAWN,
                     AFFECTED, count(RunParamAmount.key("Number")))),
