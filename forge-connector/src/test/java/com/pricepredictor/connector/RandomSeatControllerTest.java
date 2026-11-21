@@ -481,10 +481,19 @@ class RandomSeatControllerTest {
 
         @com.google.common.eventbus.Subscribe
         public void onResolved(forge.game.event.GameEventSpellResolved event) {
-            if (event.spell() != null && event.spell().getHostCard() != null
-                    && event.spell().getHostCard().getId() == host.getId()) {
+            if (isAbilityOfHost(event)) {
                 byTurn.merge(game.getPhaseHandler().getTurn(), 1, Integer::sum);
             }
+        }
+
+        private boolean isAbilityOfHost(forge.game.event.GameEventSpellResolved event) {
+            if (event.spell() == null) {
+                return false;
+            }
+            if (event.spell().getHostCard() == null) {
+                return false;
+            }
+            return event.spell().getHostCard().getId() == host.getId();
         }
     }
 
