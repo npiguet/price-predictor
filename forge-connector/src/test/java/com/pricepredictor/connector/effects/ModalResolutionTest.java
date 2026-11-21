@@ -69,10 +69,7 @@ class ModalResolutionTest {
         List<AbilitySub> clones = TestBoard.chain(charm, 0, 2);
 
         ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
-        assertNotNull(root);
-        assertNull(root.option(), "the charm itself is the root line");
-        assertEquals(root.withOption(0), ProvenanceResolver.resolve(clones.get(0)).key());
-        assertEquals(root.withOption(2), ProvenanceResolver.resolve(clones.get(1)).key());
+        assertModeClonesKeyUnderTheRoot(root, clones);
     }
 
     /** A mode's own sub-abilities resolve under the mode, and open no mode of their own. */
@@ -121,9 +118,7 @@ class ModalResolutionTest {
         List<AbilitySub> clones = TestBoard.chain(charm, 1, 1, 0);
 
         assertEquals(3, clones.size());
-        assertEquals(0, CharmModes.modeStartOf(clones.get(0)).option());
-        assertEquals(1, CharmModes.modeStartOf(clones.get(1)).option());
-        assertEquals(1, CharmModes.modeStartOf(clones.get(2)).option());
+        assertModeStartOptions(clones, List.of(0, 1, 1));
     }
 
     // ── the halves ──────────────────────────────────────────────────────
@@ -157,26 +152,8 @@ class ModalResolutionTest {
         });
 
         assertEquals(3, records.size(), records.toString());
-        String cost = records.get(0);
-        String first = records.get(1);
-        String second = records.get(2);
-        assertTrue(cost.contains("\"moment\":\"activation\""), cost);
-        assertFalse(cost.contains("\"option\""), "the cost half acts through the root: " + cost);
-
-        String link = linkOf(cost);
-        assertNotNull(link, cost);
-        assertEquals(link, linkOf(first));
-        assertEquals(link, linkOf(second));
-
-        assertEquals(0L, optionOf(first), first);
-        assertEquals(2L, optionOf(second), second);
-        assertTrue(first.contains("damage_dealt") && !first.contains("keyword_change"),
-                "the first half carries its own mode's events only: " + first);
-        assertTrue(second.contains("keyword_change") && !second.contains("damage_dealt"),
-                "the second half carries its own mode's events only: " + second);
-        assertTrue(first.contains("\"life\":20"), "the first snapshot predates the damage: " + first);
-        assertTrue(second.contains("\"life\":16"),
-                "the second snapshot shows the first mode's effect: " + second);
+        assertTheCostHalfAndTheOneLink(records);
+        assertTheEffectHalvesCarryTheirOwnModes(records);
     }
 
     /**
@@ -200,14 +177,8 @@ class ModalResolutionTest {
         });
 
         assertEquals(3, records.size(), records.toString());
-        assertEquals(0L, optionOf(records.get(1)), records.get(1));
-        assertEquals(List.of(), eventTypes(records.get(1)), records.get(1));
-        // An empty half is still the mode's: resolved, under the cast's link.
-        assertEquals("resolved", RecordLines.outcomeOf(records.get(1)), records.get(1));
-        assertEquals(linkOf(records.get(0)), linkOf(records.get(1)));
-        assertEquals(linkOf(records.get(0)), linkOf(records.get(2)));
-        assertEquals(2L, optionOf(records.get(2)), records.get(2));
-        assertEquals(List.of("keyword_change"), eventTypes(records.get(2)), records.get(2));
+        assertTheEmptyFirstHalf(records);
+        assertTheKeywordSecondHalf(records);
     }
 
     /**
@@ -266,11 +237,8 @@ class ModalResolutionTest {
         });
 
         assertEquals(2, records.size(), records.toString());
-        String effect = records.get(1);
-        assertFalse(effect.contains("\"option\""), "the root line acts: " + effect);
-        assertTrue(effect.contains("damage_dealt") && effect.contains("keyword_change"), effect);
-        assertNotNull(linkOf(effect), effect);
-        assertEquals(linkOf(records.get(0)), linkOf(effect));
+        assertTheRootHalfHoldsBothModesEvents(records);
+        assertTheHalfSharesTheCostsLink(records);
     }
 
     /**
@@ -330,8 +298,7 @@ class ModalResolutionTest {
         assertEquals(3, records.size(), records.toString());
         ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
         for (String record : records) {
-            assertTrue(record.contains("\"interventional\":true"), record);
-            assertFalse(record.contains("\"link_id\":\""), "a forced half has no partner: " + record);
+            assertAForcedHalfHasNoPartner(record);
             assertTrue(List.of(0L, 1L).contains(optionOf(record)),
                     "each half acts through a mode the board offered: " + record);
             assertTrue(record.contains("\"index_within_kind\":" + root.indexWithinKind()), record);
@@ -507,6 +474,107 @@ class ModalResolutionTest {
         }
     }
 
+    private static void assertModeClonesKeyUnderTheRoot(ProvenanceKey root, List<AbilitySub> clones) {
+        assertNotNull(root);
+        assertNull(root.option(), "the charm itself is the root line");
+        assertEquals(root.withOption(0), ProvenanceResolver.resolve(clones.get(0)).key());
+        assertEquals(root.withOption(2), ProvenanceResolver.resolve(clones.get(1)).key());
+    }
+
+    private static void assertModeStartOptions(List<AbilitySub> clones, List<Integer> options) {
+        for (int i = 0; i < options.size(); i++) {
+            assertEquals(options.get(i).intValue(), CharmModes.modeStartOf(clones.get(i)).option());
+        }
+    }
+
+    private static void assertTheCostHalfAndTheOneLink(List<String> records) {
+        String cost = records.get(0);
+        String first = records.get(1);
+        String second = records.get(2);
+        assertTrue(cost.contains("\"moment\":\"activation\""), cost);
+        assertFalse(cost.contains("\"option\""), "the cost half acts through the root: " + cost);
+
+        String link = linkOf(cost);
+        assertNotNull(link, cost);
+        assertEquals(link, linkOf(first));
+        assertEquals(link, linkOf(second));
+    }
+
+    private static void assertTheEffectHalvesCarryTheirOwnModes(List<String> records) {
+        assertTheHalvesOptions(records);
+        assertTheHalvesEvents(records);
+        assertTheHalvesSnapshots(records);
+    }
+
+    private static void assertTheHalvesOptions(List<String> records) {
+        String first = records.get(1);
+        String second = records.get(2);
+        assertEquals(0L, optionOf(first), first);
+        assertEquals(2L, optionOf(second), second);
+    }
+
+    private static void assertTheHalvesEvents(List<String> records) {
+        String first = records.get(1);
+        String second = records.get(2);
+        assertTrue(first.contains("damage_dealt") && !first.contains("keyword_change"),
+                "the first half carries its own mode's events only: " + first);
+        assertTrue(second.contains("keyword_change") && !second.contains("damage_dealt"),
+                "the second half carries its own mode's events only: " + second);
+    }
+
+    private static void assertTheHalvesSnapshots(List<String> records) {
+        String first = records.get(1);
+        String second = records.get(2);
+        assertTrue(first.contains("\"life\":20"), "the first snapshot predates the damage: " + first);
+        assertTrue(second.contains("\"life\":16"),
+                "the second snapshot shows the first mode's effect: " + second);
+    }
+
+    private static void assertTheEmptyFirstHalf(List<String> records) {
+        assertEquals(0L, optionOf(records.get(1)), records.get(1));
+        assertEquals(List.of(), eventTypes(records.get(1)), records.get(1));
+        // An empty half is still the mode's: resolved, under the cast's link.
+        assertEquals("resolved", RecordLines.outcomeOf(records.get(1)), records.get(1));
+        assertEquals(linkOf(records.get(0)), linkOf(records.get(1)));
+    }
+
+    private static void assertTheKeywordSecondHalf(List<String> records) {
+        assertEquals(linkOf(records.get(0)), linkOf(records.get(2)));
+        assertEquals(2L, optionOf(records.get(2)), records.get(2));
+        assertEquals(List.of("keyword_change"), eventTypes(records.get(2)), records.get(2));
+    }
+
+    private static void assertTheRootHalfHoldsBothModesEvents(List<String> records) {
+        String effect = records.get(1);
+        assertFalse(effect.contains("\"option\""), "the root line acts: " + effect);
+        assertTrue(effect.contains("damage_dealt") && effect.contains("keyword_change"), effect);
+    }
+
+    private static void assertTheHalfSharesTheCostsLink(List<String> records) {
+        String effect = records.get(1);
+        assertNotNull(linkOf(effect), effect);
+        assertEquals(linkOf(records.get(0)), linkOf(effect));
+    }
+
+    private static void assertAForcedHalfHasNoPartner(String record) {
+        assertTrue(record.contains("\"interventional\":true"), record);
+        assertFalse(record.contains("\"link_id\":\""), "a forced half has no partner: " + record);
+    }
+
+    private static void assertTheSpellsOwnUnsplitRecord(List<String> records) {
+        String record = records.get(0);
+        assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
+        assertFalse(record.contains("\"option\""), record);
+    }
+
+    private static void assertTheOneMoveIsTheBarbarians(List<String> records, Card barbarian) {
+        String record = records.get(0);
+        assertEquals(1, java.util.Collections.frequency(eventTypes(record), "zone_change"),
+                "the spell's own arrival, and not the trigger's Treasure: " + record);
+        assertTrue(record.contains("{\"type\":\"zone_change\",\"subjects\":[\"E"
+                + barbarian.getId() + "\"]"), "the one move is the Barbarian's: " + record);
+    }
+
     private static Map<String, Object> stateMap(String record) {
         return RecordLines.asMap(RecordLines.parse(record).get("state"));
     }
@@ -547,13 +615,8 @@ class ModalResolutionTest {
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
-        String record = records.get(0);
-        assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
-        assertFalse(record.contains("\"option\""), record);
-        assertEquals(1, java.util.Collections.frequency(eventTypes(record), "zone_change"),
-                "the spell's own arrival, and not the trigger's Treasure: " + record);
-        assertTrue(record.contains("{\"type\":\"zone_change\",\"subjects\":[\"E"
-                + barbarian.getId() + "\"]"), "the one move is the Barbarian's: " + record);
+        assertTheSpellsOwnUnsplitRecord(records);
+        assertTheOneMoveIsTheBarbarians(records, barbarian);
     }
 
     /** A mode of some other resolution cannot cut the open bracket. */

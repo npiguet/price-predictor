@@ -218,17 +218,29 @@ class ForkPlayForwardTest {
 
         List<String> all = forkAt(game, PhaseType.END_OF_TURN, DIRECTED, forker);
 
-        assertNotNull(forker[0].played, "the fork was played out");
-        assertFalse(forker[0].played.gameOver());
+        assertTheForkSacrificedInItsOwnRecords(forker[0], all, giant);
+        assertTheLiveGameSacrificedAndStoodStill(forker[0], all, giant);
+        assertTheLiveBoardDidNotMove(forker[0]);
+    }
+
+    private static void assertTheForkSacrificedInItsOwnRecords(Forker forker, List<String> all, Card giant) {
+        assertNotNull(forker.played, "the fork was played out");
+        assertFalse(forker.played.gameOver());
         assertEquals(1, naming(forkRecords(all), deathOf(giant)),
                 "the fork's own records hold its sacrifice");
+    }
+
+    private static void assertTheLiveGameSacrificedAndStoodStill(Forker forker, List<String> all, Card giant) {
         assertEquals(1, naming(liveRecords(all), deathOf(giant)),
                 "and the live game's hold its own");
-        assertEquals(PhaseType.END_OF_TURN, forker[0].livePhaseAfterFork,
+        assertEquals(PhaseType.END_OF_TURN, forker.livePhaseAfterFork,
                 "the live game had not moved while the fork played");
-        assertEquals(3, forker[0].liveTurnAfterFork);
+        assertEquals(3, forker.liveTurnAfterFork);
+    }
+
+    private static void assertTheLiveBoardDidNotMove(Forker forker) {
         // Nor had its board: every card, player and member as before.
-        assertEquals(forker[0].liveBoardBefore, forker[0].liveBoardAfter,
+        assertEquals(forker.liveBoardBefore, forker.liveBoardAfter,
                 "the live board moved while the fork played");
     }
 
@@ -296,9 +308,17 @@ class ForkPlayForwardTest {
         }
         List<String> all = ShardRun.readShard(writer.path());
 
+        assertTheThrowingForkWasDiscarded(forker, heldBeforeTheThrow);
+        assertOnlyTheLiveGameWrote(all);
+    }
+
+    private static void assertTheThrowingForkWasDiscarded(Forker forker, List<String> heldBeforeTheThrow) {
         assertTrue(forker.taken);
         assertNull(forker.played, "the guard discarded the fork");
         assertFalse(heldBeforeTheThrow.isEmpty(), "the fork had recorded before it threw");
+    }
+
+    private static void assertOnlyTheLiveGameWrote(List<String> all) {
         assertTrue(forkRecords(all).isEmpty(), "and none of it was written");
         assertFalse(liveRecords(all).isEmpty(), "the live game recorded on");
     }
@@ -317,8 +337,16 @@ class ForkPlayForwardTest {
         List<String> forked = forkRecords(
                 forkAt(game, PhaseType.COMBAT_DECLARE_ATTACKERS, DIRECTED, forker));
 
-        assertNotNull(forker[0].played, "the fork was played out");
-        assertTrue(forker[0].played.gameOver(), "the fork's attack won the game");
+        assertTheForkPlayedOutAndWon(forker[0]);
+        assertTheLethalCombatAndTheOutcomeAreRecorded(forked);
+    }
+
+    private static void assertTheForkPlayedOutAndWon(Forker forker) {
+        assertNotNull(forker.played, "the fork was played out");
+        assertTrue(forker.played.gameOver(), "the fork's attack won the game");
+    }
+
+    private static void assertTheLethalCombatAndTheOutcomeAreRecorded(List<String> forked) {
         assertTrue(forked.stream().anyMatch(record -> "combat".equals(parse(record).get("kind"))),
                 "the lethal damage step wrote its combat record: " + forked);
         assertEquals(1, RecordLines.withEventOfType(forked, "player_won").size(),
@@ -399,13 +427,23 @@ class ForkPlayForwardTest {
         }
         all = ShardRun.readShard(writer.path());
 
+        assertTheSeatsWereAttachedToTheFork(forker, attachedTo, game);
+        assertTheForksSeatIsRandomAndTheMatchSourceUntouched(attachedTo, expected, seeds);
+        assertEquals(1, naming(forkRecords(all), deathOf(giant)));
+    }
+
+    private static void assertTheSeatsWereAttachedToTheFork(
+            Forker forker, AtomicReference<Game> attachedTo, Game game) {
         assertNotNull(forker.played);
         assertNotNull(attachedTo.get(), "the fork's seats were attached");
         assertTrue(attachedTo.get() != game, "to the fork, not the live game");
+    }
+
+    private static void assertTheForksSeatIsRandomAndTheMatchSourceUntouched(
+            AtomicReference<Game> attachedTo, Random expected, Random seeds) {
         assertTrue(attachedTo.get().getPlayers().get(0).getController() instanceof RandomSeatController,
                 "the fork's copy of the seat is a random seat");
         assertEquals(expected.nextLong(), seeds.nextLong(), "the fork drew nothing from the match's source");
-        assertEquals(1, naming(forkRecords(all), deathOf(giant)));
     }
 
     // ── the fork's floating effects (B4) ────────────────────────────────
@@ -534,12 +572,26 @@ class ForkPlayForwardTest {
             writer.close();
         }
 
+        assertTheRestartWasRefused(activated, forker, refusal, refusedBefore);
+        assertTheLiveGameWasNotMoved(movedBefore, triggerIdsBefore, karn);
+        assertTheGameWasNotRestartedAndTheForkWroteNothing(game, writer);
+    }
+
+    private static void assertTheRestartWasRefused(
+            AtomicReference<SpellAbility> activated, Forker forker, String refusal, long refusedBefore) {
         assertNotNull(activated.get(), "the fork's seat activated the restart");
         assertNull(forker.played, "the fork was refused");
         assertEquals(refusedBefore + 1, ForkRefusals.counts().getOrDefault(refusal, 0L));
+    }
+
+    private static void assertTheLiveGameWasNotMoved(long movedBefore, int triggerIdsBefore, Card karn) {
         assertTrue(Forks.LiveMarks.currentTriggerIds() >= triggerIdsBefore, "the trigger id counter was not reset");
         assertEquals(movedBefore, HookFailures.counts().getOrDefault("fork directed moved the live game", 0L));
         assertEquals(14, karn.getCounters(forge.game.card.CounterEnumType.LOYALTY));
+    }
+
+    private static void assertTheGameWasNotRestartedAndTheForkWroteNothing(Game game, RecordShardWriter writer)
+            throws java.io.IOException {
         assertTrue(game.getAge() != GameStage.RestartedByKarn);
         assertTrue(forkRecords(ShardRun.readShard(writer.path())).isEmpty(), "the refused fork wrote nothing");
     }
@@ -563,14 +615,18 @@ class ForkPlayForwardTest {
 
         List<String> forked = zeroToughnessFork(game, bears);
 
-        Map<String, Object> premise = parse(forked.get(0));
-        assertEquals("turn_action", premise.get("kind"), forked.get(0));
-        assertEquals("fork_edit", premise.get("subkind"), forked.get(0));
-        assertTrue(forked.get(0).contains(deathOf(bears)), forked.get(0));
+        assertTheDeathIsInTheForkEditPremise(forked, bears);
         assertEquals(1, naming(forked, deathOf(bears)), "the death is the premise's alone");
         for (String record : forked) {
             assertEquals("directed", parse(record).get("fork_kind"), record);
         }
+    }
+
+    private static void assertTheDeathIsInTheForkEditPremise(List<String> forked, Card bears) {
+        Map<String, Object> premise = parse(forked.get(0));
+        assertEquals("turn_action", premise.get("kind"), forked.get(0));
+        assertEquals("fork_edit", premise.get("subkind"), forked.get(0));
+        assertTrue(forked.get(0).contains(deathOf(bears)), forked.get(0));
     }
 
     /** A directed fork at the live main phase setting {@code creature}'s toughness to 0; its lines. */

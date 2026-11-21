@@ -242,10 +242,60 @@ class InterventionSchedulerTest {
     void theWorkersGateSpreadsTheBudgetOverATypicalGame() {
         int typical = InterventionScheduler.TYPICAL_GAME_TURNS;
         int games = 2000;
-        int spentByTheEnd = 0;
-        int firstByTheMiddle = 0;
-        int spentByAFifth = 0;
+        BudgetSpread spread = new BudgetSpread(typical);
         for (long seed = 0; seed < games; seed++) {
+            spread.playOneGame(seed);
+        }
+        int spentByTheEnd = spread.spentByTheEnd;
+        int firstByTheMiddle = spread.firstByTheMiddle;
+        int spentByAFifth = spread.spentByAFifth;
+        assertEquals(games, spentByTheEnd, "the whole budget by the typical game's last turn");
+        assertTrue(firstByTheMiddle > games * 0.3 && firstByTheMiddle < games * 0.85, firstByTheMiddle + "");
+        assertTrue(spentByAFifth < games * 0.1, spentByAFifth + " spent within the first fifth");
+    }
+
+    /**
+     * The step an intervention opens at is drawn with it: over many games
+     * the first opening falls at every step that gives priority, and never
+     * before the turn's upkeep.
+     */
+    @Test
+    void anInterventionOpensAtAStepDrawnWithIt() {
+        Set<PhaseType> opened = new HashSet<>();
+        for (long seed = 0; seed < 500; seed++) {
+            InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(seed, 1);
+            PhaseType first = firstOpeningStep(gate);
+            if (first != null) {
+                opened.add(first);
+            }
+        }
+        assertEquals(Set.copyOf(InterventionScheduler.OPENING_STEPS), opened);
+    }
+
+    /** The step of the gate's first opening over forty turns, or null when it never opens. */
+    private static PhaseType firstOpeningStep(InterventionScheduler.Gate gate) {
+        for (int turn = 1; turn <= 40; turn++) {
+            for (PhaseType phase : PhaseType.values()) {
+                if (gate.open(turn, phase)) {
+                    return phase;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The tallies of games played with a budget of two, forcing at every turn the gate opens. */
+    private static final class BudgetSpread {
+        private final int typical;
+        int spentByTheEnd;
+        int firstByTheMiddle;
+        int spentByAFifth;
+
+        BudgetSpread(int typical) {
+            this.typical = typical;
+        }
+
+        void playOneGame(long seed) {
             InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(seed, 2);
             int forced = 0;
             for (int turn = 1; turn <= typical; turn++) {
@@ -262,32 +312,6 @@ class InterventionSchedulerTest {
             }
             spentByTheEnd += forced == 2 ? 1 : 0;
         }
-        assertEquals(games, spentByTheEnd, "the whole budget by the typical game's last turn");
-        assertTrue(firstByTheMiddle > games * 0.3 && firstByTheMiddle < games * 0.85, firstByTheMiddle + "");
-        assertTrue(spentByAFifth < games * 0.1, spentByAFifth + " spent within the first fifth");
-    }
-
-    /**
-     * The step an intervention opens at is drawn with it: over many games
-     * the first opening falls at every step that gives priority, and never
-     * before the turn's upkeep.
-     */
-    @Test
-    void anInterventionOpensAtAStepDrawnWithIt() {
-        Set<PhaseType> opened = new HashSet<>();
-        for (long seed = 0; seed < 500; seed++) {
-            InterventionScheduler.Gate gate = InterventionScheduler.spreadOverTheGame(seed, 1);
-            turns:
-            for (int turn = 1; turn <= 40; turn++) {
-                for (PhaseType phase : PhaseType.values()) {
-                    if (gate.open(turn, phase)) {
-                        opened.add(phase);
-                        break turns;
-                    }
-                }
-            }
-        }
-        assertEquals(Set.copyOf(InterventionScheduler.OPENING_STEPS), opened);
     }
 
     /** An intervention drawn and not forced is carried to the next boundary, never drawn twice. */
