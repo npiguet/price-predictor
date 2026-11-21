@@ -44,23 +44,38 @@ class ForkOperationRemovePermanentTest {
                 "-" + bears, id(board.holy) + ".attached_to", id(board.holy) + ".lines",
                 id(board.giant) + ".combat"));
         Object rank = entity(before, bears).get("order_rank");
+        addLaterOrderRanks(expected, before, rank);
+        addLinksNaming(expected, before, bears);
+        assertEquals(expected, new TreeSet<>(changed));
+        Map<String, Object> holy = entity(BoardStates.of(board.game), id(board.holy));
+        assertNull(holy.get("attached_to"));
+        assertTheBlockIsGone(board);
+        assertNull(board.bears.getZone());
+        assertFalse(board.triggered(), "a dies or leaves trigger fired on a silent removal");
+    }
+
+    /** Each permanent placed after {@code rank} in timestamp order moves up one place. */
+    private static void addLaterOrderRanks(Set<String> expected, Map<String, Object> before, Object rank) {
         for (Map.Entry<String, Map<String, Object>> other : indexed(before, "entities").entrySet()) {
             if ((Long) other.getValue().get("order_rank") > (Long) rank) {
                 expected.add(other.getKey() + ".order_rank");
             }
         }
+    }
+
+    /** Each link naming the removed {@code bears} goes. */
+    private static void addLinksNaming(Set<String> expected, Map<String, Object> before, String bears) {
         for (String link : links(before)) {
             if (link.contains("=" + bears + ",") || link.contains("=" + bears + "}")) {
                 expected.add("-link " + link);
             }
         }
-        assertEquals(expected, new TreeSet<>(changed));
-        Map<String, Object> holy = entity(BoardStates.of(board.game), id(board.holy));
-        assertNull(holy.get("attached_to"));
+    }
+
+    /** The removed bears block nothing, and the giant has no blocker. */
+    private static void assertTheBlockIsGone(Board board) {
         assertFalse(board.game.getCombat().isBlocking(board.bears));
         assertTrue(board.game.getCombat().getBlockers(board.giant).isEmpty());
-        assertNull(board.bears.getZone());
-        assertFalse(board.triggered(), "a dies or leaves trigger fired on a silent removal");
     }
 
     @Test

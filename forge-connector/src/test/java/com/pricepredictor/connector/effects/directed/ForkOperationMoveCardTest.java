@@ -51,6 +51,11 @@ class ForkOperationMoveCardTest {
         assertTrue(changed.containsAll(Set.of("P0.hand", "P0.library", "+" + id(island))));
         assertEquals(List.of(library.get(0), library.get(2)),
                 List.copyOf(board.you.getCardsIn(ZoneType.Library)));
+        assertNothingDrawnCountedOrTriggered(board, before);
+    }
+
+    /** No draw counted, the global members as {@code before}, and no trigger fired. */
+    private static void assertNothingDrawnCountedOrTriggered(Board board, Map<String, Object> before) {
         assertEquals(0, board.you.getNumDrawnThisTurn());
         assertEquals(before.get("global"), BoardStates.of(board.game).get("global"));
         assertFalse(board.triggered());

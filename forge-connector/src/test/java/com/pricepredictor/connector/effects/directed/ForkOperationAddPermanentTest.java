@@ -54,11 +54,16 @@ class ForkOperationAddPermanentTest {
                     "adding changed " + change);
         }
         Map<String, Object> entity = entity(after, added);
+        assertArrivedTappedSickWithOneCounter(entity);
+        assertEquals(0, board.you.getCardsIn(ZoneType.Hand).size());
+        assertFalse(board.triggered(), "Elvish Visionary's enters trigger fired on a silent add");
+    }
+
+    /** The added permanent's snapshot: tapped, summoning-sick, one +1/+1 counter. */
+    private static void assertArrivedTappedSickWithOneCounter(Map<String, Object> entity) {
         assertEquals(true, entity.get("tapped"));
         assertEquals(true, entity.get("sick"));
         assertEquals(List.of(1L), new ArrayList<>(((Map<?, ?>) entity.get("counters")).values()));
-        assertEquals(0, board.you.getCardsIn(ZoneType.Hand).size());
-        assertFalse(board.triggered(), "Elvish Visionary's enters trigger fired on a silent add");
     }
 
     @Test
@@ -67,12 +72,17 @@ class ForkOperationAddPermanentTest {
         new AddPermanentOperation("Grizzly Bears", board.you, board.opponent, false, false,
                 Map.of()).apply(board.game);
         Card bears = board.opponent.getCardsIn(ZoneType.Battlefield).get(0);
-        assertEquals(board.you, bears.getOwner());
-        assertEquals(board.opponent, bears.getController());
+        assertYoursUnderTheOpponent(board, bears);
         assertFalse(bears.isSick());
         assertEquals(Boolean.FALSE, ((Map<?, ?>) entity(BoardStates.of(board.game), id(bears)).get("history"))
                         .get("entered_this_turn"),
                 "a permanent that is not summoning-sick has been here since an earlier turn");
+    }
+
+    /** You own {@code bears}; the opponent controls it. */
+    private static void assertYoursUnderTheOpponent(Board board, Card bears) {
+        assertEquals(board.you, bears.getOwner());
+        assertEquals(board.opponent, bears.getController());
     }
 
     /**

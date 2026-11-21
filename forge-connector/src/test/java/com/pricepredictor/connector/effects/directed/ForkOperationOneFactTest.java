@@ -80,6 +80,11 @@ class ForkOperationOneFactTest {
         board.creature(board.opponent, "Ajani's Pridemate");
         assertEquals(Set.of("P1.life"), board.edit(new LifeOperation(board.opponent, 25)));
         assertEquals(25, board.opponent.getLife());
+        assertNoLifeGainCounted(board);
+    }
+
+    /** The life edit fired no life-gain trigger and counted no life gained this turn. */
+    private static void assertNoLifeGainCounted(Board board) {
         assertFalse(board.triggered(), "Ajani's Pridemate triggered on a silent life edit");
         assertEquals(0, board.opponent.getLifeGainedThisTurn());
     }

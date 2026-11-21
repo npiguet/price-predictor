@@ -60,11 +60,16 @@ class ForkOperationReplaceCardTest {
                             && identity.contains(change.substring(change.indexOf('.') + 1)),
                     "replacing changed " + change + "; all: " + left);
         }
+        assertTheCourserStandsWhereTheBearsStood(board, courser);
+        assertEquals(1, courser.getDamage());
+        assertFalse(board.triggered());
+    }
+
+    /** The bears are gone; the courser blocks the giant and wears the Holy Strength. */
+    private static void assertTheCourserStandsWhereTheBearsStood(Board board, Card courser) {
         assertNull(board.bears.getZone());
         assertTrue(board.game.getCombat().isBlocking(courser, board.giant));
         assertEquals(courser, board.holy.getEntityAttachedTo());
-        assertEquals(1, courser.getDamage());
-        assertFalse(board.triggered());
     }
 
     /**
@@ -94,8 +99,7 @@ class ForkOperationReplaceCardTest {
 
         assertEquals(3 + 1 + 3, giant.getNetPower(), "the pump and the anthem, once each");
         assertTrue(giant.hasKeyword("Flying"));
-        assertEquals(partner, giant.getPairedWith());
-        assertEquals(giant, partner.getPairedWith());
+        assertPaired(giant, partner);
         assertTrue(giant.getDamageHistory().hasAttackedThisTurn(board.opponent));
 
         board.edit(new ReplaceCardOperation(giant, "Sol Ring"));
@@ -105,6 +109,12 @@ class ForkOperationReplaceCardTest {
                 .filter(cell -> cell.getColumnKey() != 0L).count();
         assertEquals(0, anthemRows, "the anthem's row stayed on a noncreature: " + ring.getPTBoostTable()
                 + " (anthem " + anthem + ")");
+    }
+
+    /** The soulbond pair holds both ways. */
+    private static void assertPaired(Card giant, Card partner) {
+        assertEquals(partner, giant.getPairedWith());
+        assertEquals(giant, partner.getPairedWith());
     }
 
     /** The Hill Giant that replaced {@code old} on {@code owner}'s battlefield. */

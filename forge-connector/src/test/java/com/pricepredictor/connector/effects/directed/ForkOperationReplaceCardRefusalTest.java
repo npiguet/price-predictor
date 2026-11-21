@@ -32,6 +32,18 @@ class ForkOperationReplaceCardRefusalTest {
         assertTrue(old.getZone() != null && old.getZone().is(ZoneType.Battlefield), "the refusal changed the board");
     }
 
+    /** The preconditions read {@code giant} replaced by Grizzly Bears as dying. */
+    private static void assertReadAsDyingAsGrizzlyBears(Card giant) {
+        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
+    }
+
+    /** Replacing {@code giant} by Grizzly Bears is refused as dying. */
+    private static void assertRefusedAsDying(Board board, Card giant) {
+        ForkRefusal refusal = assertThrows(ForkRefusal.class,
+                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
+        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+    }
+
     @Test
     void aFaceDownPermanentIsRefused() {
         Board board = Board.main();
@@ -94,10 +106,8 @@ class ForkOperationReplaceCardRefusalTest {
         Board board = Board.main();
         Card giant = board.creature(board.you, "Hill Giant");
         giant.setDamage(2);
-        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
-        ForkRefusal refusal = assertThrows(ForkRefusal.class,
-                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
-        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+        assertReadAsDyingAsGrizzlyBears(giant);
+        assertRefusedAsDying(board, giant);
     }
 
     @Test
@@ -105,10 +115,8 @@ class ForkOperationReplaceCardRefusalTest {
         Board board = Board.main();
         Card giant = board.creature(board.you, "Hill Giant");
         giant.setCounters(CounterEnumType.M1M1, 2);
-        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
-        ForkRefusal refusal = assertThrows(ForkRefusal.class,
-                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
-        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+        assertReadAsDyingAsGrizzlyBears(giant);
+        assertRefusedAsDying(board, giant);
     }
 
     /** A resolved -2/-2 until end of turn leaves Hill Giant a 1/1 and would leave Grizzly Bears a 0/0. */
@@ -117,11 +125,9 @@ class ForkOperationReplaceCardRefusalTest {
         Board board = Board.main();
         Card giant = board.creature(board.you, "Hill Giant");
         giant.addPTBoost(-2, -2, board.game.getNextTimestamp(), 0);
-        assertTrue(ReplaceCardOperation.replacementDies(giant, "Grizzly Bears"), "the preconditions' reading");
+        assertReadAsDyingAsGrizzlyBears(giant);
         assertFalse(ReplaceCardOperation.replacementDies(giant, "Craw Wurm"), "a 6/4 lives at 2 toughness");
-        ForkRefusal refusal = assertThrows(ForkRefusal.class,
-                () -> new ReplaceCardOperation(giant, "Grizzly Bears").apply(board.game));
-        assertEquals(ReplaceCardOperation.DIES, refusal.reason());
+        assertRefusedAsDying(board, giant);
     }
 
     @Test
