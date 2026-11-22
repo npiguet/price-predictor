@@ -463,8 +463,9 @@ class CorpusManifest:
         default_factory=dict, metadata=_reads(_nested_int_map),
     )
     #: ``kind -> events`` of kept records no output column reads (a hidden
-    #: keyword change, a name change, a mana cost change;
-    #: ``effect_targets.RecordTargets.unsupervised``).
+    #: keyword change, a name change, a mana cost change) and the subtype and
+    #: keyword changes the closed output lists lack
+    #: (``effect_targets.RecordTargets.unsupervised``).
     unsupervised_events: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )

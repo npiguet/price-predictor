@@ -49,6 +49,7 @@ from typing import TYPE_CHECKING
 
 from effects.application.parallel_map import run_parallel
 from effects.application.rule_counts import RuleCounts
+from effects.domain.closed_list_misses import closed_list_misses
 from effects.domain.closed_lists import keywords_named, subtypes_named
 from effects.domain.condition_balance import CONDITION_CLASSES, condition_key, turn_step_condition
 from effects.domain.corpus_curation import game_hash, record_hash
@@ -397,7 +398,8 @@ class ShardSurvey:
     flags: Counter[tuple[str, str]] = field(default_factory=Counter)
     #: What reading the shard met without stopping.
     reading: ReadGaps = field(default_factory=ReadGaps)
-    #: Events of kept records no output column reads, by kind
+    #: Events of kept records no output column reads, by kind, and the subtypes
+    #: and keywords outside the closed output lists
     #: (``effect_targets.RecordTargets.unsupervised``).
     unsupervised: Counter[str] = field(default_factory=Counter)
     #: Gen-3 games with no game-end marker in the shard, dropped whole.
@@ -457,6 +459,15 @@ class SurveyConfig:
 
 #: The collection flags the manifest counts per class (``record_flags``).
 RECORD_FLAGS: tuple[str, ...] = ("fork", "interventional", "directed", "aimed", "degraded")
+
+
+def _unsupervised_of(record: EffectRecord) -> Counter[str]:
+    """``RecordTargets.unsupervised`` of a kept record; the full derivation only
+    where an event names no output column, since the closed-list misses are
+    all the cheap read finds otherwise."""
+    if any(unsupervised_kind(event) for event in record.payload.all_events()):
+        return derive_targets(record).unsupervised
+    return closed_list_misses(record)
 
 
 def record_flags(record: EffectRecord) -> tuple[str, ...]:
@@ -563,8 +574,7 @@ class _ShardSurveyor:
         self.out.flags.update((str(klass), flag) for flag in record_flags(record))
         if self._runtime_only(record):
             self.out.flags[str(klass), "runtime_only"] += 1
-        if any(unsupervised_kind(event) for event in record.payload.all_events()):
-            self.out.unsupervised.update(derive_targets(record).unsupervised)
+        self.out.unsupervised.update(_unsupervised_of(record))
         self.pending.append(self._kept(record, klass, found))
 
     def _cut(self, record: EffectRecord) -> bool:

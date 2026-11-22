@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from effects.application.closed_list_check import ClosedListMismatchError
 from effects.application.train_effect_model import (
     CorpusFacts,
     HoldoutMismatchError,
@@ -433,3 +434,23 @@ def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(corpus, config, make_
     with pytest.raises(UnacceptedGenerationError,
                        match=r"gen1\.jsonl\.gz, line 1: the record is gen-1"):
         run(config)
+
+
+def test_a_manifest_naming_a_subtype_the_closed_lists_lack_is_refused(corpus, config, started):
+    """Finding 10.4: ``bard`` is a subtype a record's effects change that no
+    output column holds, so training on it would read the change as "none
+    gained"; the refusal names it and the script that regenerates the lists."""
+    corpus.save(_manifest(subtypes=("golem", "bard"), keywords=("flying", "assist")))
+    with pytest.raises(ClosedListMismatchError, match="SUBTYPES_CHANGED lacks bard") as refused:
+        run(config)
+    assert "KEYWORDS_CHANGED lacks assist" in str(refused.value)
+    assert "scan_output_vocabularies.py" in str(refused.value)
+    assert not started
+
+
+def test_a_manifest_whose_lists_the_module_covers_is_trained_on(
+    corpus, config, started, reports,
+):
+    corpus.save(_manifest(subtypes=("golem",), keywords=("flying", "hexproof")))
+    _freeze(corpus, reports)
+    assert run(config) == 0

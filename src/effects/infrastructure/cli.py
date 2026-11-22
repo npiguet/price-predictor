@@ -24,6 +24,7 @@ from typing import Any, TypeVar
 
 from effects.application.build_corpus_config import BuildCorpusConfig
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
+from effects.application.closed_list_check import ClosedListMismatchError
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.collector_common import (
@@ -996,6 +997,7 @@ def _train_effect_model_parser(subparsers) -> None:
     _LAYOUT_REFUSED: 1,
     _MANIFEST_REFUSED: 1,
     HoldoutMismatchError: 1,
+    ClosedListMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
     ValidationGameInTrainingError: 1,
     UnacceptedGenerationError: 1,

@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from effects.application.closed_list_check import require_closed_lists
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
@@ -512,6 +513,7 @@ def run(config: TrainEffectModelConfig) -> int:
             "counts (FR-066): the rule mask and the control score read the rules "
             "it records. Rebuild it with a gen-3 build-corpus."
         )
+    require_closed_lists(manifest)
     selection = frozen_selection(store, manifest, Path(config.reports_dir))
     check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)

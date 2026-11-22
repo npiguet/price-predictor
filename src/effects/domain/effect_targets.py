@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 
+from effects.domain.closed_list_misses import closed_list_misses
 from effects.domain.continuous_lines import LineChange, abilities_changed, line_changes
 from effects.domain.effect_head_input import (
     CARD_TYPES,
@@ -198,7 +199,9 @@ class RecordTargets(dict[str, EntityTargets]):
 
     ``unsupervised`` counts, by kind, the events the record carries that no
     output column reads (:func:`unsupervised_kind`): their subjects are
-    affected, and nothing else is written for them.
+    affected, and nothing else is written for them. It also counts the
+    subtypes and keywords the record changes that the closed output lists lack
+    (:func:`closed_list_misses.closed_list_misses`), written to no column.
     """
 
     def __init__(self, *, gated: bool = True) -> None:
@@ -255,6 +258,7 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
         _RecordPass(record, events, slot, targets).run()
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
+    targets.unsupervised.update(closed_list_misses(record))
     _drop_slotless(record, targets)
     return targets
 

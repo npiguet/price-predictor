@@ -1487,6 +1487,9 @@ Startup validation
   (`--exclude-cards`, `--split-from` or `--training-corpus`).
 - `collect-variants --round steered` refuses to start without `--rule-counts`, or with a
   counts file holding gen-2 records.
+- `train-effect-model` refuses a corpus whose manifest `subtypes` or `keywords` hold a name
+  the head's closed output lists lack, naming the missing names and the script that
+  regenerates the lists.
 
 Exit codes
 
