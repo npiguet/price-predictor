@@ -15,6 +15,7 @@ level capped by what its members can supply with ``--reuse-cap`` repeats and
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -73,12 +74,21 @@ def fake_sidecars() -> FakeSidecarCache:
     return FakeSidecarCache(lines=lines, prose=prose)
 
 
-def a_survey(
-    *, heap_cap: int = 200, cells: dict | None = None,
-    keyless: dict | None = None, key_games: dict | None = None,
-    held_out: frozenset[str] = frozenset(), games: frozenset[str] = frozenset(),
-    keyword_combat: frozenset[str] = frozenset(), held_out_text_games: dict | None = None,
-) -> Survey:
+@dataclass(frozen=True)
+class SurveySpec:
+    """What ``a_survey`` builds a survey from; each field is documented there."""
+
+    heap_cap: int = 200
+    cells: dict | None = None
+    keyless: dict | None = None
+    key_games: dict | None = None
+    held_out: frozenset[str] = frozenset()
+    games: frozenset[str] = frozenset()
+    keyword_combat: frozenset[str] = frozenset()
+    held_out_text_games: dict | None = None
+
+
+def a_survey(spec: SurveySpec = SurveySpec()) -> Survey:
     """A real ``Survey`` whose supply holds ``cells`` and ``keyless``.
 
     ``cells`` maps ``(Cell, keys)`` to a record count, or to ``(count,
@@ -87,9 +97,9 @@ def a_survey(
     collide. Absent both, the supply holds one keyless rewrite record, so the
     class mixture has a class to size against.
     """
-    cells = dict(cells or {})
-    supply = TrainingSupply(heap_cap)
-    for cell, count in (keyless or ({} if cells else {Cell(REWRITE): 1})).items():
+    cells = dict(spec.cells or {})
+    supply = TrainingSupply(spec.heap_cap)
+    for cell, count in (spec.keyless or ({} if cells else {Cell(REWRITE): 1})).items():
         supply.keyless[cell] += count
     rarity = RarityTally()
     for position, ((cell, keys), value) in enumerate(cells.items()):
@@ -100,17 +110,18 @@ def a_survey(
             supply.add(cell, keys, item)
         supply.keyed[cell, keys] = count
         rarity.key_records[keys] += count
-    for keys, hashes in (key_games or {}).items():
+    for keys, hashes in (spec.key_games or {}).items():
         rarity.key_records.setdefault(keys, 0)
         rarity.key_games[keys] = set(hashes)
     return Survey(
         totals=ShardSurvey(
             shard=SourceShard(name="", size=0), supply=supply, rarity=rarity,
             games=GameTally(
-                games=set(games) | set(held_out), held_out=set(held_out),
-                keyword_combat=set(keyword_combat),
+                games=set(spec.games) | set(spec.held_out), held_out=set(spec.held_out),
+                keyword_combat=set(spec.keyword_combat),
                 held_out_text_games={
-                    text: set(games) for text, games in (held_out_text_games or {}).items()
+                    text: set(games)
+                    for text, games in (spec.held_out_text_games or {}).items()
                 },
             ),
         ),
@@ -143,9 +154,9 @@ def _written(decisions, survey, cell: Cell, keys) -> int:
 def test_two_keys_folding_to_one_text_share_one_cap(fake_sidecars):
     """The cap is per text: two keys of one text share its ``--text-cap``."""
     cell = Cell(REWRITE, family="Draw")
-    survey = a_survey(
+    survey = a_survey(SurveySpec(
         cells={(cell, REPRINT_A): 300, (cell, REPRINT_B): 300}, heap_cap=100,
-    )
+    ))
     decisions = _decide(survey, fake_sidecars, text_cap=100, class_mix={REWRITE: 1.0})
     plans = decisions.selection.plans
 
@@ -157,7 +168,7 @@ def test_two_keys_folding_to_one_text_share_one_cap(fake_sidecars):
 
 
 def test_rarity_counts_games_over_the_whole_corpus(fake_sidecars):
-    survey = a_survey(key_games={REPRINT_A: {1, 2}, REPRINT_B: {2, 3}})
+    survey = a_survey(SurveySpec(key_games={REPRINT_A: {1, 2}, REPRINT_B: {2, 3}}))
     decisions = _decide(survey, fake_sidecars)
 
     assert decisions.rarity["deals 3 damage"] == 3
@@ -167,7 +178,7 @@ def test_keys_no_sidecar_line_carries_are_sampled_with_the_cells_keyless_records
     fake_sidecars,
 ):
     cell = Cell(REWRITE, family="Draw")
-    survey = a_survey(cells={(cell, UNKNOWN_KEY): 500}, heap_cap=10)
+    survey = a_survey(SurveySpec(cells={(cell, UNKNOWN_KEY): 500}, heap_cap=10))
     decisions = _decide(survey, fake_sidecars, text_cap=10, class_mix={REWRITE: 1.0})
 
     assert (cell, UNKNOWN_KEY) not in decisions.selection.plans
@@ -177,14 +188,14 @@ def test_keys_no_sidecar_line_carries_are_sampled_with_the_cells_keyless_records
 
 def test_a_sidecar_mismatch_propagates_out_of_the_fold(fake_sidecars):
     """A key the sidecar exists for and does not describe fails loudly."""
-    survey = a_survey(cells={(Cell(REWRITE), MISMATCH_KEY): 5}, heap_cap=100)
+    survey = a_survey(SurveySpec(cells={(Cell(REWRITE), MISMATCH_KEY): 5}, heap_cap=100))
 
     with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
         _decide(survey, fake_sidecars, text_cap=100)
 
 
 def test_a_survey_built_at_a_different_text_cap_raises(fake_sidecars):
-    survey = a_survey(cells={(Cell(REWRITE), REPRINT_A): 5}, heap_cap=50)
+    survey = a_survey(SurveySpec(cells={(Cell(REWRITE), REPRINT_A): 5}, heap_cap=50))
 
     with pytest.raises(ValueError, match="text_cap"):
         _decide(survey, fake_sidecars, text_cap=100)
@@ -201,7 +212,7 @@ def test_the_game_disjoint_stratum_is_placed_never_a_held_out_game(fake_sidecars
     games = {f"g{i}" for i in range(400)}
     below = {g for g in games if game_disjoint_draw(g) < 0.01}
     held = frozenset(sorted(below)[:1])
-    decisions = _decide(a_survey(games=frozenset(games), held_out=held), fake_sidecars)
+    decisions = _decide(a_survey(SurveySpec(games=frozenset(games), held_out=held)), fake_sidecars)
 
     assert decisions.strata.game_disjoint == frozenset(below - held)
 
@@ -213,7 +224,7 @@ def test_keyword_threshold_games_are_the_ones_over_the_plain_share(fake_sidecars
     between = {g for g in games if 0.01 <= game_disjoint_draw(g) < 0.15}
     below = {g for g in games if game_disjoint_draw(g) < 0.01}
     assert between and below, "the fixture needs games on both sides of 0.01"
-    survey = a_survey(games=frozenset(games), keyword_combat=frozenset(between | below))
+    survey = a_survey(SurveySpec(games=frozenset(games), keyword_combat=frozenset(between | below)))
     decisions = _decide(survey, fake_sidecars)
 
     assert decisions.strata.game_disjoint == frozenset(between | below)
@@ -222,9 +233,9 @@ def test_keyword_threshold_games_are_the_ones_over_the_plain_share(fake_sidecars
 
 def test_the_card_disjoint_stratum_admits_by_held_out_text(fake_sidecars):
     games = {f"g{i}" for i in range(20)}
-    survey = a_survey(
+    survey = a_survey(SurveySpec(
         held_out=frozenset(games), held_out_text_games={"held out text": games},
-    )
+    ))
     decisions = _decide(survey, fake_sidecars, card_disjoint_text_cap=2)
 
     assert len(decisions.strata.card_disjoint) == 2
@@ -237,18 +248,18 @@ def test_the_card_disjoint_stratum_admits_by_held_out_text(fake_sidecars):
 def test_availability_counts_each_text_once_up_to_the_cap_per_cell(fake_sidecars):
     """The class mixture divides distinct records, never repeats."""
     cell = Cell(REWRITE, family="Draw")
-    survey = a_survey(
+    survey = a_survey(SurveySpec(
         cells={(cell, REPRINT_A): 300, (cell, REPRINT_B): 300},
         keyless={Cell("combat", family="none"): 50},
         heap_cap=100,
-    )
+    ))
     decisions = _decide(survey, fake_sidecars, text_cap=100)
 
     assert decisions.selection.available == {REWRITE: 100, "combat": 50}
 
 
 def test_a_class_with_no_acting_ability_is_never_capped(fake_sidecars):
-    survey = a_survey(keyless={Cell("combat", family="none"): 500}, heap_cap=1)
+    survey = a_survey(SurveySpec(keyless={Cell("combat", family="none"): 500}, heap_cap=1))
     decisions = _decide(survey, fake_sidecars, text_cap=1)
 
     assert decisions.selection.available["combat"] == 500
@@ -278,7 +289,7 @@ def test_a_short_family_is_written_at_capacity_and_the_rest_redistributed(
     share goes equally to the other three.
     """
     cells = _families({"short": [75], "a": [3000], "b": [3000], "c": [3000]})
-    survey = a_survey(cells=cells, heap_cap=NO_CAP)
+    survey = a_survey(SurveySpec(cells=cells, heap_cap=NO_CAP))
     decisions = _decide(
         survey, fake_sidecars, text_cap=0, reuse_cap=4,
         class_mix={REWRITE: 1.0}, training_records=4000,
@@ -299,7 +310,7 @@ def test_a_family_splits_its_share_across_signatures(fake_sidecars):
         (Cell(EFFECT, family="Destroy", signature="died:changed"), TEXT_KEYS["t1"]): 1000,
         (Cell(EFFECT, family="Destroy", signature="stayed:changed"), TEXT_KEYS["t2"]): 1000,
     }
-    survey = a_survey(cells=cells, heap_cap=NO_CAP)
+    survey = a_survey(SurveySpec(cells=cells, heap_cap=NO_CAP))
     decisions = _decide(
         survey, fake_sidecars, text_cap=0, class_mix={EFFECT: 1.0}, training_records=400,
     )
@@ -313,7 +324,7 @@ def test_real_legality_decisions_fill_half_the_budget_first(fake_sidecars):
     real, what_if = Cell(LEGALITY, half="real", family="none"), Cell(
         LEGALITY, half="what-if", family="none",
     )
-    survey = a_survey(keyless={real: 100, what_if: 10_000})
+    survey = a_survey(SurveySpec(keyless={real: 100, what_if: 10_000}))
     decisions = _decide(
         survey, fake_sidecars, class_mix={LEGALITY: 1.0}, training_records=1000,
         reuse_cap=1,
@@ -335,7 +346,7 @@ def test_text_cap_and_reuse_cap_bound_a_short_familys_texts(fake_sidecars):
         # class can supply far more than the short family's share.
         **{(Cell(REWRITE, family="big"), TEXT_KEYS[f"t{i}"]): 1000 for i in range(4, 24)},
     }
-    survey = a_survey(cells=cells, heap_cap=200)
+    survey = a_survey(SurveySpec(cells=cells, heap_cap=200))
     decisions = _decide(
         survey, fake_sidecars, text_cap=200, reuse_cap=4,
         class_mix={REWRITE: 1.0}, training_records=2000,
@@ -355,7 +366,7 @@ def test_text_cap_and_reuse_cap_bound_a_short_familys_texts(fake_sidecars):
 
 
 def test_a_family_with_no_records_takes_no_share(fake_sidecars):
-    survey = a_survey(cells=_families({"a": [500], "b": [500]}), heap_cap=NO_CAP)
+    survey = a_survey(SurveySpec(cells=_families({"a": [500], "b": [500]}), heap_cap=NO_CAP))
     decisions = _decide(
         survey, fake_sidecars, text_cap=0, class_mix={REWRITE: 1.0}, training_records=600,
     )
@@ -367,9 +378,9 @@ def test_a_family_with_no_records_takes_no_share(fake_sidecars):
 def test_the_class_targets_are_planned_in_full(fake_sidecars):
     """Every target is placed somewhere in the class's tree, nothing past it."""
     cells = _families({"a": [700, 20], "b": [3]})
-    survey = a_survey(
+    survey = a_survey(SurveySpec(
         cells=cells, keyless={Cell("combat", family="none"): 90}, heap_cap=200,
-    )
+    ))
     decisions = _decide(survey, fake_sidecars, class_mix={REWRITE: 0.5, "combat": 0.5})
     selection = decisions.selection
 
