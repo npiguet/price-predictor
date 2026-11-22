@@ -64,6 +64,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 
 - `--lethality-copies K` appends counterfactual copies of damage and -X/-X resolutions with the toughness and the amount redrawn and the deaths relabelled by rule 704.5f-g (`domain/lethality_counterfactuals.py`). Forge's AI aims removal at creatures it can kill, so the corpus alone rarely shows damage falling short, and the model learns "small creatures die" instead of comparing amount with toughness.
 - `K = 0` must train bit for bit as a run without the feature.
+- Copies are made for a record's first natural row of a step alone (`step_preparation._first_natural_rows`): a record's other natural rows and its added rows, which repeat its `record_id`, get none.
 - Only natural records qualify for a copy: no fork, intervention, directed fork or synthetic record, no hit creature whose zone outcome is unknown, and no record whose hit creature a regeneration shield or a replacement of its move or destruction may save.
 
 ## Losses
@@ -90,7 +91,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 ## The rule mask
 
 - Under `--rule-mask hard` (the default), a copy that rule budgets added trains only the effective outputs of the rules it was drawn for, and the gate only on its drawn rule's tag entities. Under `soft` it trains everything, the other outputs at `natural_share / copies`.
-- A natural copy of a record with no added copy, a natural copy of an aimed record and a lethality copy train everything at full weight.
+- A natural copy trains everything at full weight under `hard`; under `soft` it weighs `natural_share / copies` like any copy, so a record with no added copy weighs one. An aimed record (`aimed_at` set, `[]` included) is no exception: its natural copy follows the same share and its added copies are masked like any other. A lethality copy trains everything at full weight.
 - A cost half's tags name as outcome entities, beside any its family names, the entities its payment trains at (`cost_targets.paid_entities`, added in `rule_detectors.tag_record`). Otherwise a rule read off a cost half carries none of the payment's fields at its tags, its effective outputs leave them out, and the hard mask trains an added copy of a sacrifice without its creature's death.
 - The value, script-API and MLM heads read texts and no mask reaches them. Evaluation reads records unmasked.
 - Training, validation and the denominator pass all build the mask through the same host half (`StepPreparer.rule_mask`), and the constant-predictor floor weighs each target as the run does.

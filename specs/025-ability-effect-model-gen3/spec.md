@@ -1357,7 +1357,9 @@ and that the reporting half never enters the control score.
   weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
   directed fork or from collection aimed at a rule (one carrying `aimed_at`, `[]` included) is a
   natural record like any other: it carries
-  no drawn rule of its own, its natural copies train every output at full weight under both masks,
+  no drawn rule of its own, its natural copies weigh as any record's do (every output at full weight under `hard`, n / d on
+  the outputs of no drawn rule under `soft`), a lethality copy is made for a record's first natural
+  copy in a step only,
   and only the copies rule budgets add to it carry a drawn rule. Its `aimed_at` marks it only for
   exclusion from the rule tests (FR-009, FR-072).
 - **FR-062**: Each output field's loss MUST be divided by the loss of its constant prediction on the
