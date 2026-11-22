@@ -15,19 +15,29 @@ from pathlib import Path
 
 import pytest
 import rules_catalogue as rc
+from rules_catalogue_parts import (
+    directed_exclusions,
+    gen3_fields,
+    locations,
+    reading,
+    validation,
+)
+from rules_catalogue_parts import (
+    directed_forks as forks,
+)
 
 _UNIT = "704"
 
 
 @pytest.fixture(scope="module")
 def families():
-    return rc.detector_families()
+    return validation.detector_families()
 
 
 @pytest.fixture
 def declared():
     """704.3-1 as a fully declared gen-3 scenario: the edits start from it."""
-    doc = json.loads((rc.RULES / "scenarios" / f"{_UNIT}.json").read_text(encoding="utf-8"))
+    doc = json.loads((locations.RULES / "scenarios" / f"{_UNIT}.json").read_text(encoding="utf-8"))
     scenario = copy.deepcopy(next(s for s in doc["scenarios"] if s["id"] == "704.3-1"))
     scenario["detector"] = {
         "family": "sba_zone_move", "record_kind": "resolution",
@@ -41,7 +51,7 @@ def declared():
 
 
 def _errors(scenario, families):
-    return rc.validate_gen3_fields(scenario, families)
+    return validation.validate_gen3_fields(scenario, families)
 
 
 def test_a_fully_declared_scenario_passes(declared, families):
@@ -104,13 +114,13 @@ def test_the_registry_the_validator_reads_is_the_package_s(families):
 def test_the_real_tree_passes_every_check_but_the_gen3_fields():
     """The detector and operation passes (T030, T031) fill in what the gen-3
     checks ask; every earlier check holds over the real tree already."""
-    rules = rc.load_rules()
+    rules = reading.load_rules()
     all_ids = {r["id"] for r in rules}
-    for path in sorted((rc.RULES / "scenarios").glob("*.json")):
+    for path in sorted((locations.RULES / "scenarios").glob("*.json")):
         unit = path.stem
-        errors, _ = rc.validate_scenarios(
-            rc.load_unit("scenarios", unit), rc.load_unit("triage", unit), all_ids,
-            rc._AnyName())
+        errors, _ = validation.validate_scenarios(
+            reading.load_unit("scenarios", unit), reading.load_unit("triage", unit), all_ids,
+            validation._AnyName())
         assert errors == [], (unit, errors[:3])
 
 
@@ -157,7 +167,7 @@ def _sides(fires, does_not_fire):
 @pytest.fixture
 def catalogue(tmp_path, monkeypatch):
     # The fixture's rule ids are its own: none of the real list's exclusions applies.
-    monkeypatch.setattr(rc, "NOT_DIRECTED", {})
+    monkeypatch.setattr(forks, "NOT_DIRECTED", {})
     """A rules dir, a converted tree and gen-3 counts covering each way a rule
     gets in or stays out."""
     rules = tmp_path / "rules"
@@ -225,7 +235,7 @@ def catalogue(tmp_path, monkeypatch):
 
 
 def _run(args, capsys):
-    rc.cmd_directed_rules(args)
+    forks.cmd_directed_rules(args)
     listed = (args.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8")
     cards = (args.rules_dir / "coverage-wording-cards.txt").read_text(encoding="utf-8")
     return listed.splitlines(), cards.splitlines(), capsys.readouterr().out
@@ -275,7 +285,7 @@ def test_the_subcommand_is_wired(catalogue, monkeypatch):
 
 def test_a_rule_left_out_is_never_listed_and_its_reason_is_printed(
         catalogue, capsys, monkeypatch):
-    monkeypatch.setattr(rc, "NOT_DIRECTED", {"400.6": "no detector tells its fork apart"})
+    monkeypatch.setattr(forks, "NOT_DIRECTED", {"400.6": "no detector tells its fork apart"})
     listed, cards, out = _run(catalogue, capsys)
     # 400.6 is one-sided with a forkable variant, so its counts alone would list it.
     assert listed == ["121.2", "500.3", "702.9a", "702.10b", "704.5f"]
@@ -286,7 +296,7 @@ def test_a_rule_left_out_is_never_listed_and_its_reason_is_printed(
 
 def test_a_rule_always_listed_is_listed_whatever_its_counts_without_its_cards(
         catalogue, capsys, monkeypatch):
-    monkeypatch.setattr(rc, "ALWAYS_DIRECTED", {"704.5f": "always", "500.1": "kept by hand"})
+    monkeypatch.setattr(forks, "ALWAYS_DIRECTED", {"704.5f": "always", "500.1": "kept by hand"})
     listed, cards, out = _run(catalogue, capsys)
     # 500.1 is common and two-sided; its card joins no wording list, as 704.5f's does not.
     assert listed == ["121.2", "400.6", "500.1", "500.3", "702.9a", "702.10b", "704.5f"]
@@ -295,8 +305,8 @@ def test_a_rule_always_listed_is_listed_whatever_its_counts_without_its_cards(
 
 
 def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
-    assert sorted(rc.ALWAYS_DIRECTED) == ["702.98a", "704.5f"]
-    assert all(reason.strip() for reason in rc.ALWAYS_DIRECTED.values())
+    assert sorted(directed_exclusions.ALWAYS_DIRECTED) == ["702.98a", "704.5f"]
+    assert all(reason.strip() for reason in directed_exclusions.ALWAYS_DIRECTED.values())
 
 
 #: The rules no single board edit yields the lacking side of (the user's
@@ -320,19 +330,19 @@ def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
     foresees, or no sealed pool makes it happen); and the rules no single board
     edit yields the lacking side of; 2026-11-15, 702.19e, whose lacking side
     702.19f's fork writes."""
-    assert sorted(rc.NOT_DIRECTED) == sorted([
+    assert sorted(directed_exclusions.NOT_DIRECTED) == sorted([
         "104.2a", "104.4c", "115.7a", "121.4", "122.1g", "122.1h", "500.11", "505.5",
         "614.10a", "701.10c", "701.11c", "701.12d", "701.24f", "701.40c", "701.40d",
         "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c", *NO_EDIT_YIELDS_THEM,
         *ANOTHER_FORK_YIELDS_THEM])
-    assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())
+    assert all(reason.strip() for reason in directed_exclusions.NOT_DIRECTED.values())
     own = [*NO_EDIT_YIELDS_THEM, *ANOTHER_FORK_YIELDS_THEM]
-    reasons = {rc.NOT_DIRECTED[rule] for rule in own}
+    reasons = {directed_exclusions.NOT_DIRECTED[rule] for rule in own}
     assert len(reasons) == len(own), "each with a reason of its own"
-    assert "702.19f" in rc.NOT_DIRECTED["702.19e"]
+    assert "702.19f" in directed_exclusions.NOT_DIRECTED["702.19e"]
     for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
                         "701.42c": "701.42b"}.items():
-        assert other in rc.NOT_DIRECTED[rule], rule
+        assert other in directed_exclusions.NOT_DIRECTED[rule], rule
 
 
 #: The rules whose detectors read gen-3 fields only: the counts checked in
@@ -346,22 +356,22 @@ def test_the_regenerated_list_is_the_committed_one():
     """``directed-rules`` over the counts checked in beside the list writes
     the committed list, order included, on any machine, bar the rules the
     gen-2 counts could not show."""
-    counts = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
-    chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES),
-                               rc.registered_sides(rc.RULES))
-    listed = (rc.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
+    counts = json.loads((locations.RULES / forks.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    chosen = forks.directed_rules(counts, reading.load_scenarios_by_rule(locations.RULES),
+                               forks.registered_sides(locations.RULES))
+    listed = (locations.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
     assert list(chosen) == listed
     assert not GEN3_ONLY_RULES & set(chosen), "unregistered, so never chosen"
 
 
 def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
-    rc.cmd_directed_rules(catalogue)
-    written = json.loads((catalogue.rules_dir / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    forks.cmd_directed_rules(catalogue)
+    written = json.loads((catalogue.rules_dir / forks.DIRECTED_COUNTS).read_text(encoding="utf-8"))
     counts = json.loads(catalogue.counts.read_text(encoding="utf-8"))
-    assert written == rc.decided_from(counts)
+    assert written == forks.decided_from(counts)
     assert "review" not in written and "records" not in written
-    assert list(rc.directed_rules(written, rc.load_scenarios_by_rule(catalogue.rules_dir),
-                                  rc.registered_sides(catalogue.rules_dir))) == (
+    assert list(forks.directed_rules(written, reading.load_scenarios_by_rule(catalogue.rules_dir),
+                                  forks.registered_sides(catalogue.rules_dir))) == (
         catalogue.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
 
 
@@ -398,7 +408,7 @@ def mapped(tmp_path):
     rules = tmp_path / "rules"
     (rules / "heads").mkdir(parents=True)
     (rules / "scenarios").mkdir()
-    (rules / rc.GEN3_FIELDS_NAME).write_text(json.dumps(_registry(), indent=2) + "\n",
+    (rules / gen3_fields.GEN3_FIELDS_NAME).write_text(json.dumps(_registry(), indent=2) + "\n",
                                              encoding="utf-8")
     scenarios = [
         _Scenario("500.1-1", ["500.1"], ["A"], [("off", "does_not_fire", "tap")]).shape(),
@@ -431,7 +441,7 @@ def _write_heads(rules, rows):
 
 
 def _edit_heads(rules, rule, **changes):
-    rows = rc.read_jsonl(rules / "heads" / "500.jsonl")
+    rows = reading.read_jsonl(rules / "heads" / "500.jsonl")
     for row in rows:
         if row["id"] == rule:
             row.update(changes)
@@ -439,16 +449,16 @@ def _edit_heads(rules, rule, **changes):
 
 
 def _gen3_fields(args, capsys):
-    rc.cmd_gen3_fields(args)
+    gen3_fields.cmd_gen3_fields(args)
     return capsys.readouterr().out
 
 
 def _registry_on_disk(args):
-    return json.loads((args.rules_dir / rc.GEN3_FIELDS_NAME).read_text(encoding="utf-8"))
+    return json.loads((args.rules_dir / gen3_fields.GEN3_FIELDS_NAME).read_text(encoding="utf-8"))
 
 
 def _heads_on_disk(args):
-    return {r["id"]: r for r in rc.read_jsonl(args.rules_dir / "heads" / "500.jsonl")}
+    return {r["id"]: r for r in reading.read_jsonl(args.rules_dir / "heads" / "500.jsonl")}
 
 
 def test_the_first_run_records_the_learnable_rules_as_the_baseline(mapped, capsys):
@@ -478,7 +488,7 @@ def test_a_rule_that_stops_being_learnable_is_named(mapped, capsys):
 
 
 def test_recording_the_list_leaves_the_rest_of_the_registry_as_written(mapped, capsys):
-    path = mapped.rules_dir / rc.GEN3_FIELDS_NAME
+    path = mapped.rules_dir / gen3_fields.GEN3_FIELDS_NAME
     before = path.read_text(encoding="utf-8")
     _gen3_fields(mapped, capsys)
     _edit_heads(mapped.rules_dir, "500.2", input="complete", inputs_missing=[])
@@ -500,9 +510,9 @@ def test_learnable_after_gen3_is_recomputed_from_the_heads_line(mapped, capsys):
 
 
 def test_the_turn_action_only_rules_ignore_a_none_detector_and_not_a_declared_one(mapped):
-    by_rule = rc.load_scenarios_by_rule(mapped.rules_dir)
+    by_rule = reading.load_scenarios_by_rule(mapped.rules_dir)
     # 500.6's other scenario declares none; 500.7's other reads resolution records.
-    assert rc.turn_action_rules(by_rule) == {"500.5", "500.6"}
+    assert gen3_fields.turn_action_rules(by_rule) == {"500.5", "500.6"}
 
 
 @pytest.mark.parametrize("rule", ["500.5", "500.6"])
@@ -511,14 +521,14 @@ def test_a_turn_action_only_rule_not_marked_recorded_fails_and_writes_nothing(
         mapped, capsys, rule, verdict):
     _edit_heads(mapped.rules_dir, rule, output=verdict)
     heads_before = (mapped.rules_dir / "heads" / "500.jsonl").read_text(encoding="utf-8")
-    registry_before = (mapped.rules_dir / rc.GEN3_FIELDS_NAME).read_text(encoding="utf-8")
+    registry_before = (mapped.rules_dir / gen3_fields.GEN3_FIELDS_NAME).read_text(encoding="utf-8")
     with pytest.raises(SystemExit) as exit_info:
-        rc.cmd_gen3_fields(mapped)
+        gen3_fields.cmd_gen3_fields(mapped)
     assert exit_info.value.code == 1
     out = capsys.readouterr().out
     assert f"VERDICT {rule}: shown by turn_action records only, verdict {verdict!r}" in out
     assert (mapped.rules_dir / "heads" / "500.jsonl").read_text(encoding="utf-8") == heads_before
-    assert (mapped.rules_dir / rc.GEN3_FIELDS_NAME).read_text(
+    assert (mapped.rules_dir / gen3_fields.GEN3_FIELDS_NAME).read_text(
         encoding="utf-8") == registry_before
     assert not (mapped.rules_dir / "GEN3-FIELDS.md").exists()
 
@@ -548,7 +558,7 @@ def _edited(declared, edit, operation="pt"):
 
 
 def _edit_errors(scenario):
-    return rc.validate_script_edits(scenario, _scripts)
+    return validation.validate_script_edits(scenario, _scripts)
 
 
 def test_a_script_edit_whose_removed_lines_are_in_the_card_s_script_passes(declared):
@@ -594,9 +604,9 @@ def test_a_board_level_variant_needs_no_script_edit(declared, operation):
 
 
 def test_the_forge_script_index_reads_a_card_by_its_name():
-    script = rc.card_scripts()("Grizzly Bears")
+    script = reading.card_scripts()("Grizzly Bears")
     assert script is not None and "PT:2/2" in [line.strip() for line in script]
-    assert rc.card_scripts()("No Such Card Anywhere") is None
+    assert reading.card_scripts()("No Such Card Anywhere") is None
 
 
 MELD_FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "meld_pairs"
@@ -613,6 +623,6 @@ def test_a_melded_face_both_halves_print_maps_to_the_holders_file_whatever_the_c
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text((MELD_FIXTURES / f"{name}.txt").read_text(encoding="utf-8"),
                           encoding="utf-8")
-    faces = rc.converted_card_of_face(tmp_path)
+    faces = forks.converted_card_of_face(tmp_path)
     assert faces["chittering host"] == "graf rats"
     assert faces["urza, planeswalker"] == "urza, lord protector"

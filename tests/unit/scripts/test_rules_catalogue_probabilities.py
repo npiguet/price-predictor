@@ -8,6 +8,8 @@ import json
 import sys
 
 import rules_catalogue as rc
+from rules_catalogue_parts import directed_forks as forks
+from rules_catalogue_parts import locations, reading
 
 
 def _row(counts, sides=("fires", "does_not_fire")):
@@ -20,14 +22,14 @@ def test_each_rule_gets_the_records_of_its_registered_sides():
         "121.2": _row((0, 94402)),
         "702.9a": _row((40, 7000)),
     }
-    assert rc.directed_side_records(chosen) == {
+    assert forks.directed_side_records(chosen) == {
         "121.2": {"fires": 0, "does_not_fire": 94402},
         "702.9a": {"fires": 40, "does_not_fire": 7000},
     }
 
 
 def test_a_rule_the_counts_cannot_speak_for_starts_with_no_record_on_its_sides():
-    assert rc.directed_side_records({"500.6": _row(None, sides=("fires",))}) == {
+    assert forks.directed_side_records({"500.6": _row(None, sides=("fires",))}) == {
         "500.6": {"fires": 0}}
 
 
@@ -38,7 +40,7 @@ def test_a_rule_is_judged_on_the_sides_its_registered_variants_make():
         "704.5b": _row((100, 0), sides=("fires",)),
         "702.118b": _row((0, 30), sides=("does_not_fire",)),
     }
-    assert rc.directed_side_records(chosen) == {
+    assert forks.directed_side_records(chosen) == {
         "704.5b": {"fires": 100}, "702.118b": {"does_not_fire": 30}}
 
 
@@ -46,23 +48,23 @@ def test_a_rule_whose_registered_variants_are_all_other_is_left_to_the_run_defau
     """111.10p and 205.1a register only an `other` variant: no side to fill, so the
     file names no rule and the run's --directed-fork-probability applies, as
     `collect-variants` does."""
-    assert rc.directed_side_records({"205.1a": _row((0, 0), sides=())}) == {}
+    assert forks.directed_side_records({"205.1a": _row((0, 0), sides=())}) == {}
 
 
 def test_the_document_carries_the_count_per_side():
-    document = rc.probabilities_document({"704.5b": _row((5, 0), sides=("fires",))}, 100)
+    document = forks.probabilities_document({"704.5b": _row((5, 0), sides=("fires",))}, 100)
     assert document == {"count_per_side": 100, "rules": {"704.5b": {"fires": 5}}}
 
 
 def _real_chosen():
-    counts = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
-    return counts, rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES),
-                                     rc.registered_sides(rc.RULES))
+    counts = json.loads((locations.RULES / forks.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    return counts, forks.directed_rules(counts, reading.load_scenarios_by_rule(locations.RULES),
+                                     forks.registered_sides(locations.RULES))
 
 
 def test_the_chosen_rules_are_the_registered_listed_rules():
     _, chosen = _real_chosen()
-    listed = (rc.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
+    listed = (locations.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
     assert list(chosen) == listed
 
 
@@ -70,7 +72,7 @@ def _real_needs(tmp_path, chosen):
     from sealed.infrastructure.directed_fork_probabilities_file import read_directed_fork_needs
 
     path = tmp_path / "p.json"
-    path.write_text(json.dumps(rc.probabilities_document(chosen, 100)), encoding="utf-8")
+    path.write_text(json.dumps(forks.probabilities_document(chosen, 100)), encoding="utf-8")
     return read_directed_fork_needs(path, list(chosen))
 
 
@@ -110,8 +112,8 @@ def test_a_rule_at_1_filled_by_this_run_s_kept_forks_is_written_at_0_for_the_nex
 def test_704_5b_reaches_zero_once_its_fires_side_is_full(tmp_path):
     counts, _ = _real_chosen()
     counts["rules"].setdefault("704.5b", {}).setdefault("fires", {})["directed"] = 1000
-    chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES),
-                               rc.registered_sides(rc.RULES))
+    chosen = forks.directed_rules(counts, reading.load_scenarios_by_rule(locations.RULES),
+                               forks.registered_sides(locations.RULES))
     assert _real_needs(tmp_path, chosen).probabilities()["704.5b"] == 0.0
 
 
@@ -139,7 +141,7 @@ def test_the_subcommand_writes_the_file_when_asked(tmp_path, monkeypatch, capsys
     cards = tmp_path / "cards"
     cards.mkdir()
     out = tmp_path / "probabilities.json"
-    monkeypatch.setattr(rc, "NOT_DIRECTED", {})
+    monkeypatch.setattr(forks, "NOT_DIRECTED", {})
     monkeypatch.setattr(sys, "argv", [
         "rules_catalogue.py", "directed-rules", "--counts", str(counts),
         "--cards-folder", str(cards), "--rules-dir", str(rules),

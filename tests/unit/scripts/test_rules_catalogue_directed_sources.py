@@ -4,7 +4,8 @@ a rule's side is lacking when only forks show it."""
 
 from __future__ import annotations
 
-import rules_catalogue as rc
+from rules_catalogue_parts import directed_forks as forks
+from rules_catalogue_parts import locations, reading
 
 from effects.domain.rule_catalogue import Polarity
 
@@ -26,7 +27,7 @@ def _counts(sides: dict) -> dict:
 
 
 def _listed(sides: dict) -> dict:
-    return rc.directed_rules(_counts(sides), {RULE: SCENARIOS}, SIDES)
+    return forks.directed_rules(_counts(sides), {RULE: SCENARIOS}, SIDES)
 
 
 def test_a_side_only_forks_show_is_lacking_and_the_rule_is_listed():
@@ -67,16 +68,16 @@ def test_the_probabilities_still_count_the_directed_forks_records():
     """What a side holds toward ``--count-per-side`` is every record but a
     fork's: the list is decided on natural records alone."""
     chosen = _listed({"fires": {"aimed": 629, "fork": 50}, "does_not_fire": {"forge_ai": 4000}})
-    assert rc.directed_side_records(chosen) == {RULE: {"fires": 629, "does_not_fire": 4000}}
+    assert forks.directed_side_records(chosen) == {RULE: {"fires": 629, "does_not_fire": 4000}}
 
 
 def test_the_committed_list_comes_out_unchanged_on_the_committed_counts():
     import json
 
-    counts = json.loads((rc.RULES / rc.DIRECTED_COUNTS).read_text(encoding="utf-8"))
-    chosen = rc.directed_rules(counts, rc.load_scenarios_by_rule(rc.RULES),
-                               rc.registered_sides(rc.RULES))
-    listed = (rc.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
+    counts = json.loads((locations.RULES / forks.DIRECTED_COUNTS).read_text(encoding="utf-8"))
+    chosen = forks.directed_rules(counts, reading.load_scenarios_by_rule(locations.RULES),
+                               forks.registered_sides(locations.RULES))
+    listed = (locations.RULES / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
     assert list(chosen) == listed
     assert all(row["natural"] == row["counts"] for row in chosen.values()), (
         "the committed gen-2 counts hold natural records only")
