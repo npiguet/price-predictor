@@ -9,7 +9,7 @@ a ``damage_prevented`` at the creature).
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -50,9 +50,18 @@ def gen3_sidecars():
 # ── hand-built boards ───────────────────────────────────────────────────
 
 
-def _creature(entity_id, keywords=(), *, controller="P0", power=3, tapped=False, combat=None):
-    return make_entity(entity_id, entity_id.lower(), controller=controller, types=("creature",),
-                       pt=PowerToughness((power, 3)), tapped=tapped, combat=combat,
+@dataclass(frozen=True)
+class _Seat:
+    """Whose creature it is and whether it is tapped."""
+
+    controller: str = "P0"
+    tapped: bool = False
+
+
+def _creature(entity_id, keywords=(), *, seat=_Seat(), combat=None):
+    return make_entity(entity_id, entity_id.lower(), controller=seat.controller,
+                       types=("creature",), pt=PowerToughness((3, 3)), tapped=seat.tapped,
+                       combat=combat,
                        granted_temporary=GrantedTemporary(keywords=tuple(keywords)))
 
 
@@ -96,7 +105,7 @@ def test_toxic_without_its_poison_is_reviewed():
 
 def test_a_blocked_toxic_attacker_is_the_near_miss_at_the_defending_player():
     board = [_creature("E1", ("toxic",), combat=_attacking(("E2",))),
-             _creature("E2", controller="P1", combat=CombatStatus(blocking=("E1",)))]
+             _creature("E2", seat=_Seat("P1"), combat=CombatStatus(blocking=("E1",)))]
     found = FAMILY.match(_combat(board, [_damage("E1", "E2"), _damage("E2", "E1")]),
                          None, {"keyword": "toxic"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and found.observed is False
@@ -105,7 +114,7 @@ def test_a_blocked_toxic_attacker_is_the_near_miss_at_the_defending_player():
 
 def test_another_attacker_s_poison_leaves_the_near_miss_unreadable():
     board = [_creature("E1", ("toxic",), combat=_attacking(("E2",))),
-             _creature("E2", controller="P1", combat=CombatStatus(blocking=("E1",))),
+             _creature("E2", seat=_Seat("P1"), combat=CombatStatus(blocking=("E1",))),
              _creature("E3", ("infect",), combat=_attacking())]
     events = [_damage("E3", "P1"), Event(type=EventType.POISON_CHANGE, subjects=("P1",),
                                          params={"delta": 3, "cause": "P0"})]
@@ -143,7 +152,7 @@ def test_vigilance_fires_on_its_carriers_and_has_no_near_miss():
     """An attacker without vigilance is 508.1f's ``fires`` side, and says
     nothing of vigilance (finding 7.1)."""
     vigilant = _creature("E1", ("vigilance",), combat=_attacking())
-    plain = _creature("E2", tapped=True, combat=_attacking())
+    plain = _creature("E2", seat=_Seat(tapped=True), combat=_attacking())
     found = FAMILY.match(_combat([vigilant, plain]), None, {"keyword": "vigilance"})
     assert (found.polarity, found.observed) == (Polarity.FIRES, True)
     assert (found.condition, found.outcome) == (("E1",), ("E1",))
@@ -152,7 +161,7 @@ def test_vigilance_fires_on_its_carriers_and_has_no_near_miss():
 
 def test_vigilance_absent_puts_the_tapped_attacker_on_the_fires_side():
     """508.1f: an attacker without vigilance is tapped by attacking."""
-    plain = _creature("E2", tapped=True, combat=_attacking())
+    plain = _creature("E2", seat=_Seat(tapped=True), combat=_attacking())
     found = FAMILY.match(_combat([plain]), None,
                          {"keyword": "vigilance", "fires_when": "absent"})
     assert (found.polarity, found.observed, found.condition) == (Polarity.FIRES, True, ("E2",))
@@ -163,7 +172,7 @@ def test_vigilance_absent_puts_the_tapped_attacker_on_the_fires_side():
 
 def test_a_tapped_vigilant_attacker_still_deals_damage():
     """506.4b: tapped after the declaration, it stays attacking."""
-    tapped = _creature("E1", ("vigilance",), tapped=True, combat=_attacking())
+    tapped = _creature("E1", ("vigilance",), seat=_Seat(tapped=True), combat=_attacking())
     found = FAMILY.match(_combat([tapped], [_damage("E1", "P1")]), None,
                          {"keyword": "vigilance", "tapped": True})
     assert (found.polarity, found.observed, found.outcome) == (Polarity.FIRES, True, ("P1",))
@@ -219,7 +228,7 @@ def test_a_gone_planeswalker_flips_with_fires_when_absent():
 
 def test_absorb_fires_where_damage_aimed_at_the_carrier_is_prevented():
     board = [_creature("E1", combat=_attacking(("E2",))),
-             _creature("E2", ("absorb",), controller="P1", combat=CombatStatus(blocking=("E1",)))]
+             _creature("E2", ("absorb",), seat=_Seat("P1"), combat=CombatStatus(blocking=("E1",)))]
     prevented = Event(type=EventType.DAMAGE_PREVENTED, subjects=("E2",),
                       params={"amount": 1, "source": "E1"})
     found = FAMILY.match(_combat(board, [_damage("E1", "E2", 2), prevented]),

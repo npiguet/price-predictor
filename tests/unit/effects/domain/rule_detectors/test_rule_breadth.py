@@ -34,17 +34,27 @@ def test_the_pool_keeps_the_rule_s_subject_and_drops_its_situation():
     assert pool_params(narrowed, family) == {"event": "zone_change", "api": "OpenAttraction"}
 
 
+def _is_resolution_half(record):
+    return record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
+
+
+def _destination_zones(record):
+    """The zones the record's zone changes move cards to."""
+    return {e.params["to_zone"] for e in record.payload.listed_events()
+            if e.type.value == "zone_change" and (e.params or {}).get("to_zone")}
+
+
+def _names_an_api(line):
+    return line is not None and bool(line.script_api_type)
+
+
 def _zone_change_effect(gen3_records, gen3_sidecars):
     """A real effect half moving cards to one zone only, its acting line's
     API and that zone."""
-    for record in gen3_records:
-        if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
-            continue
+    for record in filter(_is_resolution_half, gen3_records):
         line = acting_line(record, gen3_sidecars)
-        moves = [e for e in record.payload.listed_events() if e.type.value == "zone_change"
-                 and (e.params or {}).get("to_zone")]
-        zones = {move.params["to_zone"] for move in moves}
-        if line is not None and line.script_api_type and len(zones) == 1:
+        zones = _destination_zones(record)
+        if _names_an_api(line) and len(zones) == 1:
             return record, line.script_api_type, zones.pop()
     pytest.fail("no effect half in the fixture moves a card")
 

@@ -207,6 +207,17 @@ class TestTheGen3Lists:
         assert FAMILY.needs({"list": "legal_blockers"}) == frozenset()
 
 
+def _printed_keyword(entity, sidecars):
+    """The first keyword the entity's card prints, or None."""
+    if entity is None or not entity.printed:
+        return None
+    try:
+        lines = sidecars.get(entity.printed[0].script_file).lines
+    except KeyError:
+        return None
+    return next((line.keyword_display_name for line in lines if line.keyword_display_name), None)
+
+
 class TestKeywordAndCounter:
     """A keyword's restriction while a counter is on its carrier (unleash, 702.98a)."""
 
@@ -215,15 +226,7 @@ class TestKeywordAndCounter:
         """A blockers record, one legal blocker whose card prints a keyword, and the keyword."""
         for record in by_kind("playability", "blockers"):
             for entity_id in record.payload.legal_blockers:
-                entity = record.state.entity(entity_id)
-                if entity is None or not entity.printed:
-                    continue
-                try:
-                    lines = sidecars.get(entity.printed[0].script_file).lines
-                except KeyError:
-                    continue
-                keyword = next((line.keyword_display_name for line in lines
-                                if line.keyword_display_name), None)
+                keyword = _printed_keyword(record.state.entity(entity_id), sidecars)
                 if keyword is not None:
                     return record, entity_id, keyword
         raise AssertionError("no legal blocker printing a keyword")

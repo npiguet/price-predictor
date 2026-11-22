@@ -8,6 +8,7 @@ flying included. These boards go through the real catalogue's index.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -48,10 +49,18 @@ def index():
     return DetectorIndex.of(load_scenarios(RULES))
 
 
-def _creature(entity_id, *keywords, controller="P1", colors=("G",), tapped=False, **more):
+@dataclass(frozen=True)
+class _Look:
+    """A creature's colours and whether it is tapped."""
+
+    colors: tuple = ("G",)
+    tapped: bool = False
+
+
+def _creature(entity_id, *keywords, controller="P1", look=_Look()):
     return make_entity(entity_id, entity_id.lower(), controller=controller, types=("Creature",),
-                       colors=colors, tapped=tapped,
-                       granted_temporary=GrantedTemporary(keywords=tuple(keywords)), **more)
+                       colors=look.colors, tapped=look.tapped,
+                       granted_temporary=GrantedTemporary(keywords=tuple(keywords)))
 
 
 def _blockers(attacker, legal=(), forbidden=()):
@@ -77,12 +86,13 @@ def _fires(index, record, rules):
 def test_one_tapped_forbidden_creature_fires_the_tapped_rule_alone(index):
     """V5 #16: a vanilla ground attacker and one tapped forbidden creature
     fired all fourteen blocking rules, flying included."""
-    record = _blockers(_creature("E1", controller="P0"), forbidden=(_creature("E2", tapped=True),))
+    tapped = _creature("E2", look=_Look(tapped=True))
+    record = _blockers(_creature("E1", controller="P0"), forbidden=(tapped,))
     assert _sides(index, record, BLOCKING) == {"509.1a": Polarity.FIRES}
 
 
 def test_a_flier_fires_flying_and_a_reach_blocker_is_its_near_miss(index):
-    flier = _creature("E1", "flying", controller="P0", colors=("U",))
+    flier = _creature("E1", "flying", controller="P0", look=_Look(colors=("U",)))
     record = _blockers(flier, legal=(_creature("E3", "reach"),),
                        forbidden=(_creature("E2"),))
     assert _fires(index, record, BLOCKING) == {"702.9b"}
@@ -94,8 +104,8 @@ def test_a_flier_fires_flying_and_a_reach_blocker_is_its_near_miss(index):
 def test_shadow_forbids_both_ways_and_intimidate_reads_colours(index):
     shadow = _blockers(_creature("E1", controller="P0"), forbidden=(_creature("E2", "shadow"),))
     assert _sides(index, shadow, BLOCKING) == {"702.28b": Polarity.FIRES}
-    intimidating = _creature("E1", "intimidate", controller="P0", colors=("R",))
-    record = _blockers(intimidating, legal=(_creature("E3", colors=("R",)),),
+    intimidating = _creature("E1", "intimidate", controller="P0", look=_Look(colors=("R",)))
+    record = _blockers(intimidating, legal=(_creature("E3", look=_Look(colors=("R",))),),
                        forbidden=(_creature("E2"),))
     assert _fires(index, record, BLOCKING) == {"702.13b"}
 
@@ -286,13 +296,25 @@ def test_detain_has_no_near_miss(index):
 _GRAKK = ProvenanceKey("cardsfolder/g/grakk_the_pacifist.txt", 0, "keyword", 0)
 
 
-def _explained_as_written(attacker, creature, *, statics=(), elsewhere=False, own=False,
-                          unresolved=None, extra=()):
+@dataclass(frozen=True)
+class _Entry:
+    """How the connector writes one forbidden creature's entry, and the
+    ``extra`` entities on the board."""
+
+    statics: tuple = ()
+    elsewhere: bool = False
+    own: bool = False
+    unresolved: str | None = None
+    extra: tuple = ()
+
+
+def _explained_as_written(attacker, creature, written=_Entry()):
     """A blockers record whose one forbidden creature's entry is as the
-    connector writes it, with ``extra`` entities on the board."""
-    entry = ForbiddenEntity(creature.id, statics, elsewhere, responsible_own=own,
-                            responsible_unresolved=unresolved)
-    state = make_snapshot(entities=(attacker, creature, *extra), players=(
+    connector writes it."""
+    entry = ForbiddenEntity(creature.id, written.statics, written.elsewhere,
+                            responsible_own=written.own,
+                            responsible_unresolved=written.unresolved)
+    state = make_snapshot(entities=(attacker, creature, *written.extra), players=(
         PlayerState(id="P0", life=20, hand=0, library=30, graveyard=0),
         PlayerState(id="P1", life=20, hand=0, library=30, graveyard=0)))
     return make_record(RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
@@ -312,13 +334,13 @@ def test_only_a_blocker_nothing_explains_tags_detain_through_the_real_catalogue(
     must = _creature("E9", "cardname must be blocked if able.", controller="P0")
     boards = {
         "must be blocked elsewhere": _explained_as_written(
-            attacker, _creature("E2"), elsewhere=True, extra=(must,)),
+            attacker, _creature("E2"), _Entry(elsewhere=True, extra=(must,))),
         "own printed keyword": _explained_as_written(
             attacker, _creature("E2", "cardname can't attack or block."),
-            statics=(_GRAKK,), own=True),
+            _Entry(statics=(_GRAKK,), own=True)),
         "unkeyed static": _explained_as_written(
-            attacker, _creature("E2"), unresolved="engine_effect"),
-        "pacifism": _explained_as_written(attacker, _creature("E2"), statics=(_PACIFISM,)),
+            attacker, _creature("E2"), _Entry(unresolved="engine_effect")),
+        "pacifism": _explained_as_written(attacker, _creature("E2"), _Entry(statics=(_PACIFISM,))),
         "plain unexplained": _explained_as_written(attacker, _creature("E2")),
     }
     tagged = {name: {t.rule for t in tag_record(record, index).tags}
@@ -336,7 +358,7 @@ def test_a_can_t_block_keyword_of_its_own_explains_without_the_record_s_key(inde
         attacker, _creature("E2", "cardname can't attack or block alone."))
     beside = _explained_as_written(
         attacker, _creature("E2", "cardname can't attack or block alone."),
-        extra=(_creature("E3"),))
+        _Entry(extra=(_creature("E3"),)))
     assert "701.35a" not in _sides(index, grakk, _RESTRICTED)
     assert "701.35a" not in _sides(index, alone, _RESTRICTED)
     assert _fires(index, beside, _RESTRICTED) == {"701.35a"}

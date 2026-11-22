@@ -85,11 +85,15 @@ def test_a_death_the_rule_says_should_not_happen_goes_on_the_review_list(gen3_re
     assert tag.polarity is Polarity.DOES_NOT_FIRE and tag.observed and tag.needs_review
 
 
+def _outside_resolution_and_combat(record):
+    if record.kind.value not in ("resolution", "combat"):
+        return True
+    return record.kind.value == "resolution" and record.moment.value != "resolution"
+
+
 def test_records_of_other_kinds_and_moments_show_nothing(gen3_records):
-    for record in gen3_records:
-        if record.kind.value not in ("resolution", "combat") or (
-                record.kind.value == "resolution" and record.moment.value != "resolution"):
-            assert _toughness_zero(record) is None
+    for record in filter(_outside_resolution_and_combat, gen3_records):
+        assert _toughness_zero(record) is None
 
 
 def test_lethal_damage_tags_a_real_damage_death(gen3_records):
@@ -164,20 +168,25 @@ def test_a_planeswalker_losing_its_last_loyalty_fires(gen3_records):
     assert found.polarity is Polarity.FIRES and found.observed
 
 
+def _is_loyalty_change(event):
+    return event.type is EventType.COUNTER_CHANGE and event.params.get("counter_type") == "LOYALTY"
+
+
+def _with_one_more_loyalty(state, walker_id):
+    walker = state.entity(walker_id)
+    stronger = replace(walker, counters={**walker.counters,
+                                         "LOYALTY": walker.counters["LOYALTY"] + 1})
+    return replace(state, entities=tuple(
+        stronger if e.id == walker_id else e for e in state.entities))
+
+
 def test_a_planeswalker_left_with_loyalty_is_the_near_miss(gen3_records):
     """Chandra, Flamecaller, given a loyalty counter more, loses one of her
     two instead of her last, and stays."""
     record = next(r for r in gen3_records if any(
-        e.type is EventType.COUNTER_CHANGE and e.params.get("counter_type") == "LOYALTY"
-        for e in r.payload.listed_events()))
-    walker_id = next(e.subjects[0] for e in record.payload.events
-                     if e.type is EventType.COUNTER_CHANGE
-                     and e.params.get("counter_type") == "LOYALTY")
-    walker = record.state.entity(walker_id)
-    stronger = replace(walker, counters={**walker.counters,
-                                         "LOYALTY": walker.counters["LOYALTY"] + 1})
-    state = replace(record.state, entities=tuple(
-        stronger if e.id == walker_id else e for e in record.state.entities))
+        _is_loyalty_change(e) for e in r.payload.listed_events()))
+    walker_id = next(e.subjects[0] for e in record.payload.events if _is_loyalty_change(e))
+    state = _with_one_more_loyalty(record.state, walker_id)
     events = tuple(e for e in record.payload.events
                    if not (e.type is EventType.ZONE_CHANGE and e.attributed_to == "unresolved"))
     found = FAMILY.match(replace(record, state=state, payload=ResolutionPayload(events=events)),
