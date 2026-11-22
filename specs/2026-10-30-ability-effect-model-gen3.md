@@ -660,6 +660,8 @@ its events and payload are what the moment changed. No board after the moment is
 | mana record | a mana ability's activation | before its costs are paid and its mana is added | a `tapped` event for each permanent its cost tapped, then `mana_produced` |
 
 - The cost half carries no outcome. It is written when its costs are paid.
+- The cost half supervises no affected gate. Its card's move to the stack supervises nothing.
+  What its costs did supervises the per-entity outputs of § 11.6.
 - The effect half carries the stack item's outcome: resolved, fizzled, partially fizzled or
   declined. A fizzled or declined resolution writes an effect half with no events.
 - A countered stack item writes no effect half. The countering ability's effect half holds the
@@ -1101,6 +1103,31 @@ This section replaces how the base spec derives targets from playability records
   attack/block requirement is supervised on the anchor.
 - These outputs train independently of the affected gate.
 - Playability records do not supervise the affected gate.
+
+## 11.6 Cost-half outputs
+
+This section replaces how the base spec derives targets from the cost half.
+
+- A cost half supervises no affected gate.
+- It supervises these outputs at the entities its `costs` name, independently of the gate:
+
+| `costs` member | entity | output |
+|---|---|---|
+| `sacrificed`, `discarded` | each card named | `zone_outcome` died, the move to the graveyard |
+| `exiled` | each card named | `zone_outcome` exiled |
+| `returned` | each permanent named | `zone_outcome` to hand |
+| `tapped` | each permanent named | `tap_state` tapped |
+| `untapped` | each permanent named | `tap_state` untapped |
+| `counters` | the acting source, where it is on the battlefield | each type's signed counter delta |
+| `life` | the acting source's controller | `life_delta` of minus the life paid |
+
+- A permanent two members name, tapped and sacrificed, takes both outputs.
+- `costs.counters` names no permanent: a source off the battlefield supervises no counter delta.
+- No other entity and no other output of a cost half is supervised, and no output takes its
+  silent value on a cost half.
+- `revealed`, `exerted`, `convoked` and `delved` supervise no per-entity output.
+- `mana_by_color` supervises the verdict head's `mana_paid`.
+- A reader of a cost half's outputs reads them conditionally, never through the affected gate.
 
 ## 11.5 Verdict head columns
 

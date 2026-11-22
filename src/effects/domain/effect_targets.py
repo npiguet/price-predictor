@@ -10,6 +10,9 @@ that a destroyed creature was untapped.
 A playability record trains no gate (root spec § 11.4): what it observes is
 which entities could be chosen, not what an action changed, so its legality
 fields train on every entity they name whether or not the gate's target fires.
+A cost half trains no gate either (D7): whether an entity was affected is the
+effect half's question, and what its payment did trains without the gate at
+the entities that paid (:mod:`effects.domain.cost_targets`).
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from functools import partial
 
 from effects.domain.closed_list_misses import closed_list_misses
 from effects.domain.continuous_lines import LineChange, abilities_changed, line_changes
+from effects.domain.cost_targets import apply_paid_costs, is_cost_half
 from effects.domain.effect_head_input import (
     CARD_TYPES,
     DESIGNATIONS,
@@ -33,14 +37,13 @@ from effects.domain.effect_head_layout import (
     DURATIONS,
     LIBRARY_EVENTS,
     OTHER_COUNTER,
-    OUTPUT_COUNTER_TYPES,
     ZONE_OUTCOMES,
     FieldScope,
     FieldSpec,
     HeadField,
     LibraryEvent,
     ZoneOutcome,
-    counter_field,
+    counter_delta_field,
     mana_field,
 )
 from effects.domain.event_schema import Event, EventType, signed_delta
@@ -231,8 +234,7 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
     if is_game_end(record):
         return RecordTargets(gated=False)
     record_class = sampling_class(record)
-    targets = RecordTargets(
-        gated=not _is_playability(record) and not _outcome_partly_unknown(record))
+    targets = RecordTargets(gated=_trains_gate(record))
     players = {player.id for player in record.state.players}
 
     def slot(subject: str) -> EntityTargets:
@@ -258,6 +260,7 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
         _RecordPass(record, events, slot, targets).run()
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
+    apply_paid_costs(record, slot)
     targets.unsupervised.update(closed_list_misses(record))
     _drop_slotless(record, targets)
     return targets
@@ -270,6 +273,14 @@ def _drop_slotless(record: EffectRecord, targets: RecordTargets) -> None:
     for entity in record.state.entities:
         if not has_card_slot(entity):
             targets.pop(entity.id, None)
+
+
+def _trains_gate(record: EffectRecord) -> bool:
+    """Whether the record trains the affected gate: neither a playability
+    record nor a cost half (D7), nor a rewrite that cannot say who its
+    replacement left unaffected."""
+    return not (
+        _is_playability(record) or is_cost_half(record) or _outcome_partly_unknown(record))
 
 
 def _outcome_partly_unknown(record: EffectRecord) -> bool:
@@ -374,16 +385,8 @@ def _apply_damage_dealt(entry: EntityTargets, event: Event) -> None:
 
 
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
-    counter = normalize_counter_type(str(event.params.get("counter_type", OTHER_COUNTER)))
-    name = (
-        counter_field(counter)
-        if counter in _OUTPUT_COUNTERS
-        else HeadField.COUNTERS_DELTA_OTHER
-    )
-    entry.add(name, signed_delta(event))
-
-
-_OUTPUT_COUNTERS = frozenset(OUTPUT_COUNTER_TYPES)
+    counter = str(event.params.get("counter_type", OTHER_COUNTER))
+    entry.add(counter_delta_field(counter), signed_delta(event))
 
 
 def _apply_pt_change(entry: EntityTargets, event: Event) -> None:

@@ -4,7 +4,8 @@ A field is scored on an affected entity only where present (FR-077, FR-081):
 the record wrote a value, or the field has a **silent** value — what "affected,
 and nothing said" means where absence is itself an observation (no damage, no
 counters). The silent value applies only where the record's sampling class
-supervises the field and the entity is the field's scope; the tap state, the
+supervises the field and the entity is the field's scope, and never on a
+cost half, which names what it paid and nothing else; the tap state, the
 durations and the legality bits have none.
 """
 
@@ -28,7 +29,7 @@ from effects.domain.forge_vocabularies import NAMED_COUNTERS
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import PlayabilityCheck, ResolutionOutcome, RewriteResult
 from effects.domain.sampling import SamplingClass
-from effects.domain.state_snapshot import COLORS
+from effects.domain.state_snapshot import COLORS, normalize_counter_type
 from effects.domain.value_targets import VALUE_TARGETS
 
 
@@ -89,9 +90,15 @@ LIBRARY_EVENTS: tuple[str, ...] = tuple(event.value for event in LibraryEvent)
 #: Classes whose records list every outcome event of what they describe, so an
 #: affected entity no event of a kind names underwent none of that kind.
 _EFFECTFUL = frozenset({
-    SamplingClass.RESOLUTION_EFFECT, SamplingClass.REWRITE, SamplingClass.RESOLUTION_COST,
-    SamplingClass.COMBAT,
+    SamplingClass.RESOLUTION_EFFECT, SamplingClass.REWRITE, SamplingClass.COMBAT,
 })
+#: A resolution's cost half, which names what its payment did and nothing
+#: else (task G11, D7): it supervises the zone outcome, tap state, counters
+#: and life it paid with, at the entities that paid them, and no silence of
+#: it says nothing changed (:attr:`FieldSpec.silent_by`).
+_COST_HALVES = frozenset({SamplingClass.RESOLUTION_COST})
+#: The effectful classes plus a cost half's payment.
+_PAID = _EFFECTFUL | _COST_HALVES
 #: The effectful classes plus ``continuous``, whose contribution names every
 #: P/T, keyword, type and colour change its static makes to the entity.
 _STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
@@ -221,12 +228,16 @@ class FieldSpec:
     #: legal target that nothing affected, and a playability record trains
     #: no gate at all.
     gated: bool = True
+    #: The supervising classes whose records give the silent value: every one
+    #: but a cost half, which supervises only what its payment wrote.
+    silent_by: frozenset[SamplingClass] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         # The type carries the field's width and target shape, so a spec that
         # names no type would fail far from where it was written.
         if not isinstance(self.type, FieldType):
             raise ValueError(f"unhandled field type {self.type}")
+        object.__setattr__(self, "silent_by", self.supervised_by - _COST_HALVES)
 
     @property
     def arity(self) -> int:
@@ -250,7 +261,7 @@ class FieldSpec:
             return value
         if (
             self.silent is None or self.name in unknown
-            or not self.scope.covers(scope) or record_class not in self.supervised_by
+            or not self.scope.covers(scope) or record_class not in self.silent_by
         ):
             return None
         if self.type.per_member:
@@ -276,6 +287,19 @@ def counter_field(counter_type: str) -> str:
 OUTPUT_COUNTER_TYPES: tuple[str, ...] = NAMED_COUNTERS
 
 
+_OUTPUT_COUNTERS = frozenset(OUTPUT_COUNTER_TYPES)
+
+
+def counter_delta_field(raw: str) -> str:
+    """The generated field a change of counter type ``raw``, in any spelling
+    Forge writes, lands in: its own, or :attr:`HeadField.COUNTERS_DELTA_OTHER`
+    for a type the layout does not list."""
+    counter = normalize_counter_type(raw)
+    if counter in _OUTPUT_COUNTERS:
+        return counter_field(counter)
+    return HeadField.COUNTERS_DELTA_OTHER
+
+
 def mana_field(color: str) -> str:
     """The generated per-entity field one colour's mana changes land in."""
     return f"mana_delta_{color.lower()}"
@@ -288,6 +312,7 @@ def _counter_fields() -> tuple[FieldSpec, ...]:
             type=FieldType.SIGNED_DELTA,
             scope=FieldScope.PERMANENT,
             group=FieldGroup.SPARSE,
+            supervised_by=_PAID,
             silent=0.0,
         )
         for name in (*OUTPUT_COUNTER_TYPES, OTHER_COUNTER)
@@ -331,9 +356,10 @@ def _sparse(name: str, field_type: FieldType, scope: FieldScope, **settings) -> 
 PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── permanents and stack entities ──
     FieldSpec(HeadField.ZONE_OUTCOME, FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              classes=ZONE_OUTCOMES, silent=float(ZONE_OUTCOMES.index(ZoneOutcome.STAYED))),
+              classes=ZONE_OUTCOMES, supervised_by=_PAID,
+              silent=float(ZONE_OUTCOMES.index(ZoneOutcome.STAYED))),
     FieldSpec(HeadField.TAP_STATE, FieldType.BINARY, FieldScope.PERMANENT,
-              supervised_by=_EFFECTFUL | _DECLARATIONS),
+              supervised_by=_PAID | _DECLARATIONS),
     FieldSpec(HeadField.DAMAGE_TAKEN, FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
     FieldSpec(HeadField.POWER_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
@@ -369,7 +395,8 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(HeadField.ATTACHED_TO_CHANGE, FieldType.BINARY, FieldScope.PERMANENT,
               group=FieldGroup.SPARSE, silent=0.0),
     # ── players ──
-    FieldSpec(HeadField.LIFE_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
+    FieldSpec(HeadField.LIFE_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER,
+              supervised_by=_PAID, silent=0.0),
     FieldSpec(HeadField.CARDS_DRAWN, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     FieldSpec(HeadField.CARDS_DISCARDED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     FieldSpec(HeadField.CARDS_MILLED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
