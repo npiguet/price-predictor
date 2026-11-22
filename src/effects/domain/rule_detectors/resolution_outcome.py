@@ -27,7 +27,9 @@ Parameters:
   spell): the countered object's card on a countering half;
 - ``ability_kind``: ``cast`` or ``activated``: the acting key is the card's
   cast spell or an activated ability (``acting_line.ability_kind``), so a
-  trigger's resolution is neither;
+  trigger's resolution is neither; of a countered object it is read from the
+  counter's event, not the countering half's own key: a ``spell_countered``
+  names a cast spell, an ``ability_countered`` is never a cast;
 - ``targeted``: true to count only stack objects that had a target, so a
   fizzle rule's near miss is a targeted spell that resolved. The targets are
   read as cast (``Refs.as_cast``: ``targets_at_cast``, else ``targets``).
@@ -45,7 +47,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from effects.domain.event_schema import countered_objects
+from effects.domain.event_schema import EventType, countered_objects
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
     EffectRecord,
@@ -72,6 +74,10 @@ class _Observed:
     condition: tuple[str, ...]
     outcome_entities: tuple[str, ...]
     targeted: bool
+    #: Whether the record's events say what the stack object is (a countered
+    #: object: ``kind``, None for an ability) rather than the acting key.
+    from_event: bool = False
+    kind: str | None = None
 
 
 def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
@@ -85,7 +91,8 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
         return None
     countered = _countered(payload) if countered_asked else ()
     if countered:
-        return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
+        return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True,
+                         True, _countered_kind(payload))
     if payload.outcome is None:
         return None
     # The targets as cast (V5 #25).
@@ -108,6 +115,13 @@ def _activation_observed(record: EffectRecord) -> _Observed | None:
 def _countered(payload: ResolutionPayload) -> tuple[str, ...]:
     return tuple(dict.fromkeys(
         ref for event in payload.events for ref in countered_objects(event)))
+
+
+def _countered_kind(payload: ResolutionPayload) -> str | None:
+    """``cast`` where a ``spell_countered`` event is held, none for an ability:
+    what leaves the stack is the countered object, not the counter's own line."""
+    spell = any(event.type is EventType.SPELL_COUNTERED for event in payload.events)
+    return "cast" if spell else None
 
 
 def _prints(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
@@ -195,14 +209,18 @@ class OutcomeMatcher:
               observed: _Observed) -> bool:
         """Whether the stack object is one ``targeted``, ``ability_kind``,
         ``source_keyword`` and ``keyword`` speak for, each where given."""
-        return (self._targeted_fits(observed) and self._kind_fits(record, lines)
+        return (self._targeted_fits(observed) and self._kind_fits(record, lines, observed)
                 and self._keywords_fit(record, lines, observed))
 
     def _targeted_fits(self, observed: _Observed) -> bool:
         return not self.targeted or observed.targeted
 
-    def _kind_fits(self, record: EffectRecord, lines: SidecarLookup | None) -> bool:
-        return self.kind is None or ability_kind(record.ability or (), lines) == self.kind
+    def _kind_fits(self, record: EffectRecord, lines: SidecarLookup | None,
+                   observed: _Observed) -> bool:
+        if self.kind is None:
+            return True
+        found = observed.kind if observed.from_event else ability_kind(record.ability or (), lines)
+        return found == self.kind
 
     def _keywords_fit(self, record: EffectRecord, lines: SidecarLookup | None,
                       observed: _Observed) -> bool:

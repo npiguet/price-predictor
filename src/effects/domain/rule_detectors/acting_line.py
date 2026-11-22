@@ -23,6 +23,7 @@ parameter means one thing whichever family a declaration names.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from typing import Any
 
 from effects.domain.keyword_names import normalize_keyword
@@ -79,12 +80,19 @@ _NOT_A_CAST = frozenset(normalize_keyword(name) for name in (
     "Suspend", "Foretell", "Plot", "Unearth", "Ninjutsu", "Encore", "Embalm", "Eternalize"))
 
 
-def _keyword_ability_kind(keys: tuple[ProvenanceKey, ...], lines: SidecarLookup | None) -> str:
+#: The line kinds of a keyword's own line that are no cast and no activated ability.
+_NEITHER = frozenset({LineKind.TRIGGERED, LineKind.STATIC})
+
+
+def _keyword_ability_kind(keys: tuple[ProvenanceKey, ...], lines: SidecarLookup | None) -> str | None:
     """A keyword's own line: a cast where the keyword's alternative cost casts
     the spell (awaken, bestow, flashback, harmonize, morph ...), else an
     activated ability (equip, cycling, crew ...), the answer too where no line
-    is readable."""
+    is readable; None for a keyword's trigger or static (ward, prowess, echo),
+    which no player casts or activates."""
     line = line_of(keys, lines)
+    if line is not None and line.line_kind in _NEITHER:
+        return None
     if line is None or line.line_kind != LineKind.ALTERNATE_COST:
         return "activated"
     name = normalize_keyword(line.keyword_display_name or "")
@@ -92,9 +100,10 @@ def _keyword_ability_kind(keys: tuple[ProvenanceKey, ...], lines: SidecarLookup 
 
 
 def ability_kind(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> str | None:
-    """``cast`` or ``activated``; None for no key, a static or trigger, or an
-    unreadable key. A keyword's own line is a cast when it is an alternative
-    cost that casts (:func:`_keyword_ability_kind`), else an activated ability."""
+    """``cast`` or ``activated``; None for no key, a static or trigger (a keyword's
+    included), or an unreadable key. A keyword's own line is a cast when it is an
+    alternative cost that casts (:func:`_keyword_ability_kind`), else an activated
+    ability; a charm mode's key reads its spell's root line."""
     keys = tuple(keys)
     if not keys:
         return None
@@ -107,6 +116,9 @@ def ability_kind(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> 
     if line is None:
         # A permanent's implicit cast spell, which the converter drops.
         return "cast" if key.index_within_kind == 0 and key.option is None else None
+    if key.option is not None:
+        # A charm mode has no kind of its own: its spell's root line has.
+        line = line_of((replace(key, option=None),), lines)
     found = root_params_of(line) or {}
     return "cast" if "SP" in found else "activated" if "AB" in found else None
 

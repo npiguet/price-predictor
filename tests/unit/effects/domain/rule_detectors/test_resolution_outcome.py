@@ -148,3 +148,43 @@ def test_keyword_and_source_keyword_read_the_acting_card_s_line(by_kind):
         assert FAMILY.match(record, _Keyworded("Ward"), declared) is not None
         assert FAMILY.match(record, _Keyworded("Gift"), declared) is None
         assert FAMILY.match(record, None, declared) is None
+
+
+# ── 701.5a-1 reads the countered object's kind (CPC1 D-2, task FR2) ─────────────
+
+_CAST_RESOLVES = {"outcome": "resolved", "near": ["countered"], "ability_kind": "cast"}
+
+
+def _trigger_half(by_kind):
+    """A real effect half of a resolved trigger."""
+    return next(r for r in by_kind("resolution") if r.moment.value == "resolution"
+                and r.ability and r.ability[0].trait_kind == "trigger")
+
+
+def test_a_spell_countered_by_a_trigger_is_701_5a_s_near_miss(by_kind, gen3_sidecars):
+    """The counter's own key is a trigger's: the countered object is a spell."""
+    record = _trigger_half(by_kind)
+    countering = replace(record, payload=replace(record.payload, events=(
+        Event(EventType.SPELL_COUNTERED, subjects=("E99",)),)))
+    found = FAMILY.match(countering, gen3_sidecars, _CAST_RESOLVES)
+    assert found.polarity is Polarity.DOES_NOT_FIRE and found.outcome == ("E99",)
+
+
+def test_a_countered_ability_is_never_a_cast_spell_countered(by_kind, gen3_sidecars):
+    record = next(r for r in by_kind("resolution") if r.moment.value == "resolution"
+                  and r.ability and r.ability[0].trait_kind == "spell"
+                  and r.ability[0].option is None)
+    line = {"entity": "E98", "key": {"script_file": "cardsfolder/p/prodigal_sorcerer.txt",
+                                     "face": 0, "trait_kind": "spell", "index_within_kind": 1}}
+    countering = replace(record, payload=replace(record.payload, events=(
+        Event(EventType.ABILITY_COUNTERED, params={"ability": line}),)))
+    assert FAMILY.match(countering, gen3_sidecars, _CAST_RESOLVES) is None
+
+
+def test_a_resolved_modal_spell_is_a_cast_spell_resolving(by_kind, gen3_sidecars):
+    modal = next(r for r in by_kind("resolution") if r.moment.value == "resolution"
+                 and r.ability and r.ability[0].option is not None
+                 and r.ability[0].trait_kind == "spell"
+                 and r.payload.outcome is ResolutionOutcome.RESOLVED)
+    found = FAMILY.match(modal, gen3_sidecars, _CAST_RESOLVES)
+    assert found is not None and found.polarity is Polarity.FIRES

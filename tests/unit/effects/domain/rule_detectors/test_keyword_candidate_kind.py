@@ -42,3 +42,16 @@ def test_a_declaration_for_the_cast_reads_a_keyword_cast_and_one_for_activated_d
     found = VERDICT.match(record, gen3_sidecars, {**base, "candidate": "cast"})
     assert found is not None and found.polarity in (Polarity.FIRES, Polarity.DOES_NOT_FIRE)
     assert VERDICT.match(record, gen3_sidecars, {**base, "candidate": "activated"}) is None
+
+
+def test_a_keyword_s_triggered_or_static_line_is_neither_a_cast_nor_activated(
+        gen3_records, gen3_sidecars):
+    """A keyword's own trigger (ward, prowess, echo, a token's) is no ability a player
+    activates: only a cast or an activated line answers."""
+    from effects.domain.rule_detectors.acting_line import ability_kind
+
+    held = [r for r in gen3_records if r.ability and r.ability[0].trait_kind == "keyword"
+            and (line := gen3_sidecars.first_line(tuple(r.ability))) is not None
+            and line.line_kind in ("triggered", "static")]
+    assert held
+    assert all(ability_kind(r.ability, gen3_sidecars) is None for r in held)
