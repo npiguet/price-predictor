@@ -100,10 +100,16 @@ committed.
 
 ## Prerequisites
 
-- `../forge` on `effect-record-hooks` with the gen-3 commits (three hooks, the `GameCopier` copy),
-  built with `mvn install -DskipTests`; then `cd forge-connector && mvn install -DskipTests`.
-- Gen-2's raw shards and converted trees under `output\effects\gen2\` (for stage 1), and `rules/`
-  on master.
+- `../forge` on `effect-record-hooks` at the commit the converted tree was converted at
+  (`conversion` in `$gen3\converted\run.json`), its modules installed with
+  `mvn -pl forge-core,forge-game,forge-ai -am install -DskipTests` run from `../forge`; then
+  `mvn -f forge-connector\pom.xml install -DskipTests`. The connector JAR's manifest names that
+  commit (`Forge-Commit`): every collecting command refuses a tree converted at another commit, and
+  its workers refuse Forge jars built at another one (`Forge-Build-Commit`).
+- No Maven build or install of Forge or the connector while a collection's workers run: they load
+  those jars. Python work, its tests included, may go on beside a collection.
+- Gen-2's raw shards and converted trees under `output\effects\gen2\`, for stage 1's counts; without
+  them, the counts committed in `rules/` serve (stage 1).
 - `resources\AllPrintings.json`.
 
 ## Stage 0 — the generation's converted trees and inputs
@@ -143,7 +149,17 @@ the part of the counts they are decided from, `rules/directed-fork-counts.json`,
 It also writes `$probabilities`, each listed rule's records on its registered side, from which every
 `match-outcomes` run below computes the rule's directed-fork probability and recomputes it as its
 workers keep forks; its console, the per-rule table, is that run directory's `console.log`.
-On a machine without the gen-2 shards, `rules/directed-fork-counts.json` serves as `--counts`.
+
+On a machine without the gen-2 shards, skip `rule-counts` and decide from the counts committed
+beside the list, `rules/directed-fork-counts.json`:
+
+```powershell
+Run-Logged (Split-Path $probabilities) "$py -u scripts\rules_catalogue.py directed-rules --counts rules\directed-fork-counts.json --cards-folder $gen3\converted\cardsfolder --probabilities-output $probabilities"
+```
+
+It rewrites the same three files under `rules/` (with LF line endings): `git diff
+--ignore-cr-at-eol rules` shows what changed in content; commit a content change before the first
+collection, and `git checkout -- rules` restores the files that changed only in their line endings.
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
 
@@ -228,10 +244,19 @@ The collection itself, one run directory per collecting command under `$gen3\rec
 first:
 
 - `$runFlags`, the flags all six collecting commands take (`--workers`, the three decision-sampling
-  rates, the fork and random-seat flags);
-- `$collectorFlags`, the flags only `collect-coverage` and `collect-variants` take (their budgets:
-  `--decks-per-round`, `--target-records`, `--no-progress-rounds`), `""` for none;
+  rates, the fork and random-seat flags). Gen 3 keeps gen-2's rates, with the three
+  decision-sampling rates at their defaults:
+  `$runFlags = "--workers 6 --count-dropped-events --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4"`;
+- `$coverageFlags`, the budget flags of `collect-coverage` (`--decks-per-round`,
+  `--target-records`, `--no-progress-rounds`), `""` for its defaults;
+- `$variantFlags`, the budget flags of `collect-variants` (`--decks-per-round`,
+  `--no-progress-rounds`; it takes no `--target-records`), `""` for its defaults;
 - `$anyTargetCards`, the any-target coverage round's `--wording-cards` file.
+
+At these rates the 2026-11-21 and 2026-11-22 review pilots wrote about 0.37 MB of shards per game
+and played 1,400 to 2,700 games an hour at `--workers 6`: 100,000 games take about 37 GB and 1.5 to
+3 days. `build-corpus`'s survey holds about 590 bytes per record read, about 12 GB at 100,000 games
+(200 records a game).
 
 Run the seven commands one at a time, each after the one before it has ended. `match-outcomes` has
 no match budget: it plays until one Ctrl-C, then lets every worker finish its game, and has ended
@@ -254,11 +279,11 @@ $steered   = "$gen3\records\$steeredStart-variants-steered"
 
 Run-Logged $full      "$py -u -m sealed match-outcomes --effect-records $full --cards-folder $gen3\converted\cardsfolder --outcomes-dir $full --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
 Run-Logged $depleted  "$py -u -m sealed match-outcomes --effect-records $depleted --cards-folder $gen3\converted\cardsfolder --outcomes-dir $depleted --exclude-cards $holdout --directed-fork-rules $rules --directed-fork-probabilities $probabilities $runFlags"
-Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags $collectorFlags"
-Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags $collectorFlags"
-Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
+Run-Logged $anytarget "$py -u -m effects collect-coverage --effect-records $anytarget $cards --wording-cards $anyTargetCards --exclude-cards $holdout --count-from $depleted $runFlags $coverageFlags"
+Run-Logged $wording   "$py -u -m effects collect-coverage --effect-records $wording $cards --wording-cards rules\coverage-wording-cards.txt --directed-fork-rules $rules --exclude-cards $holdout --count-from $depleted --count-from $anytarget $runFlags $coverageFlags"
+Run-Logged $untarget  "$py -u -m effects collect-variants --round untargeted --effect-records $untarget --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $variantFlags"
 Run-Logged (Split-Path $counts) "$py -u -m effects rule-counts --records-dir $gen3\records $cards --variant-scripts $variants --rules-dir rules --workers 10 --output $counts"
-Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --directed-fork-rules $rules --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $collectorFlags"
+Run-Logged $steered   "$py -u -m effects collect-variants --round steered --rule-counts $counts --directed-fork-rules $rules --effect-records $steered --forge-cards-path ..\forge\forge-gui\res\cardsfolder --variant-scripts $variants $cards --exclude-cards $holdout $runFlags $variantFlags"
 ```
 
 The `match-outcomes` run without `--exclude-cards` plays full-strength pools and feeds the
@@ -286,9 +311,10 @@ the timeout, by a game outlasting its worker's recycle time by `--stop-timeout`,
 Ctrl-C. Each round's report and `run.json` say how the workers ended (`worker_stops`) and how
 many cut games the counts left out (`cut_games`). Before launching a collection, know that:
 
-- The connector must be rebuilt (`mvn install -DskipTests` in `forge-connector/`) before a gen-3
-  collection: shards written by a connector built before the game-end marker hold no marker, so
-  `build-corpus` refuses them ("every game cut") and `validate-corpus` fails them.
+- The Forge jars and the connector must be built from the commits the prerequisites name: the
+  supervisor stops a run whose workers' engine is not whole or not built at the run's conversion
+  commit, and a collecting command refuses to start over a tree converted at another commit than
+  its connector JAR's.
 - To stop a run by hand, press Ctrl-C once: it reaches the supervisor alone, which asks every
   worker to finish its game and waits up to `--stop-timeout`. A second Ctrl-C kills the workers
   at once, cutting their games. Creating a worker's stop file by hand does not stop the run: the
