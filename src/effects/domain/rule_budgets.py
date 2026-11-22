@@ -139,27 +139,28 @@ class RuleBudgets:
         return self.copies.get(game, {}).get(record_hash, ())
 
 
-def plan_rule_budgets(
-    records: Iterable[BudgetedRecord],
-    *,
-    class_targets: Mapping[str, int],
-    budgeted: Iterable[str],
-    reuse_cap: int,
-    text_cap: int,
-    text_natural: Mapping[str, Mapping[str, int]] | None = None,
-) -> RuleBudgets:
-    """The added copies of every class, and its rule rows.
+@dataclass(frozen=True, slots=True)
+class BudgetInputs:
+    """What :func:`plan_rule_budgets` plans against.
 
-    Args:
-        class_targets: records each class is asked to write, as
-            ``SelectionPlan.targets`` holds them.
-        budgeted: the rules the map snapshot marks ``trained``.
-        text_cap: ``--text-cap``; ``<= 0`` is no cap.
-        text_natural: ``class -> text -> natural copies`` of every record of
-            the text in the class, untagged ones included, which the text cap
-            counts; a text it omits counts its tagged records' alone.
+    ``class_targets``: records each class is asked to write, as
+    ``SelectionPlan.targets`` holds them. ``budgeted``: the rules the map
+    snapshot marks ``trained``. ``text_cap``: ``--text-cap``; ``<= 0`` is no
+    cap. ``text_natural``: ``class -> text -> natural copies`` of every record
+    of the text in the class, untagged ones included, which the text cap
+    counts; a text it omits counts its tagged records' alone.
     """
-    budgeted = frozenset(budgeted)
+
+    class_targets: Mapping[str, int]
+    budgeted: Iterable[str]
+    reuse_cap: int
+    text_cap: int
+    text_natural: Mapping[str, Mapping[str, int]] | None = None
+
+
+def plan_rule_budgets(records: Iterable[BudgetedRecord], inputs: BudgetInputs) -> RuleBudgets:
+    """The added copies of every class, and its rule rows."""
+    budgeted = frozenset(inputs.budgeted)
     by_class: dict[str, list[BudgetedRecord]] = defaultdict(list)
     for record in records:
         by_class[record.klass].append(record)
@@ -171,9 +172,9 @@ def plan_rule_budgets(
     unbudgeted: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
     for klass in sorted(by_class):
         plan = _ClassPlan(
-            by_class[klass], budgeted=budgeted, target=class_targets.get(klass, 0),
-            reuse_cap=reuse_cap, text_cap=text_cap,
-            text_natural=dict((text_natural or {}).get(klass, {})),
+            by_class[klass], budgeted=budgeted, target=inputs.class_targets.get(klass, 0),
+            reuse_cap=inputs.reuse_cap, text_cap=inputs.text_cap,
+            text_natural=dict((inputs.text_natural or {}).get(klass, {})),
         )
         plan.fill()
         _add_copies(copies, plan)
@@ -261,21 +262,22 @@ class _ClassPlan:
             key=lambda i: _seeded(records[i]),
         )
         while active:
-            still: list[int] = []
-            for i in active:
-                record = records[i]
-                if text_room.get(record.text, 1) <= 0:
-                    continue
-                rule = self._furthest_below(record)
-                if rule is None:
-                    continue
-                self._add(i, rule)
-                room[i] -= 1
-                if record.text in text_room:
-                    text_room[record.text] -= 1
-                if room[i] > 0:
-                    still.append(i)
-            active = still
+            active = [i for i in active if self._draw(i, room, text_room)]
+
+    def _draw(self, i: int, room: list[int], text_room: dict[str, int]) -> bool:
+        """Add one copy of record ``i`` if its text and a rule allow; whether
+        the record stays in the rounds."""
+        record = self.records[i]
+        if text_room.get(record.text, 1) <= 0:
+            return False
+        rule = self._furthest_below(record)
+        if rule is None:
+            return False
+        self._add(i, rule)
+        room[i] -= 1
+        if record.text in text_room:
+            text_room[record.text] -= 1
+        return room[i] > 0
 
     def _text_room(self) -> dict[str, int]:
         """Added copies each text may still take: what keeps its total in the
@@ -300,12 +302,12 @@ class _ClassPlan:
     def _furthest_below(self, record: BudgetedRecord) -> str | None:
         """The record's rule whose half is furthest from filled; ties to the
         smaller rule id, so the draw is a function of the corpus alone."""
-        best: tuple[int, str] | None = None
-        for rule, polarity in self._halves(record):
-            deficit = self.half - self.totals[rule, polarity]
-            if deficit > 0 and (best is None or (-deficit, rule) < (-best[0], best[1])):
-                best = (deficit, rule)
-        return None if best is None else best[1]
+        below = [
+            (self.totals[rule, polarity] - self.half, rule)
+            for rule, polarity in self._halves(record)
+            if self.totals[rule, polarity] < self.half
+        ]
+        return min(below)[1] if below else None
 
     def _add(self, index: int, rule: str) -> None:
         record = self.records[index]

@@ -13,7 +13,6 @@ and ``rules/scenarios/`` are read once, here (FR-060a).
 from __future__ import annotations
 
 import contextlib
-import functools
 import logging
 import shutil
 import sys
@@ -68,7 +67,7 @@ from effects.domain.keyword_names import display_name_of, normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
-from effects.domain.rule_budgets import BudgetedRecord, RuleBudgets, plan_rule_budgets
+from effects.domain.rule_budgets import BudgetedRecord, BudgetInputs, RuleBudgets, plan_rule_budgets
 from effects.domain.rule_catalogue import (
     MapVerdict,
     Polarity,
@@ -363,7 +362,7 @@ class Decisions:
     mode_counts: dict[str, int]
     #: The training stratum's rule budgets (FR-054), which the manifest reports.
     budgets: RuleBudgets = field(default_factory=lambda: plan_rule_budgets(
-        (), class_targets={}, budgeted=(), reuse_cap=1, text_cap=0))
+        (), BudgetInputs(class_targets={}, budgeted=(), reuse_cap=1, text_cap=0)))
     #: Each validation stratum's, planned the same way over its own records.
     validation_budgets: dict[Stratum, RuleBudgets] = field(default_factory=dict)
     #: ``validation stratum -> class -> class_weight``, which weighs each
@@ -588,21 +587,22 @@ def _rule_budgets(
         if not record.held_out_text and strata.stratum_of(record.game) is Stratum.TRAINING
         and (record.tags or record.protection)
     )]
-    plan = functools.partial(
-        plan_rule_budgets, budgeted=budgeted, reuse_cap=config.reuse_cap,
-        text_cap=config.text_cap,
-    )
+    def plan(records, targets, text_natural) -> RuleBudgets:
+        return plan_rule_budgets(records, BudgetInputs(
+            class_targets=targets, budgeted=budgeted, reuse_cap=config.reuse_cap,
+            text_cap=config.text_cap, text_natural=text_natural,
+        ))
+
     budgets = plan(
-        _budgeted_records(training, key_text, natural), class_targets=selection.targets,
-        text_natural=selection.text_planned,
+        _budgeted_records(training, key_text, natural), selection.targets,
+        selection.text_planned,
     )
     validation: dict[Stratum, RuleBudgets] = {}
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
         records = [r for r in totals.candidates if strata.stratum_of(r.game) is stratum]
         targets, text_natural = _held_once(records, key_text)
         validation[stratum] = plan(
-            _budgeted_records(records, key_text, _once), class_targets=targets,
-            text_natural=text_natural,
+            _budgeted_records(records, key_text, _once), targets, text_natural,
         )
     return budgets, validation
 

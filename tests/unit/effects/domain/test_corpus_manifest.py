@@ -207,7 +207,7 @@ def test_class_targets_round_trip_beside_what_was_delivered():
 def _gen3_fields(**extra_map) -> dict:
     """``extra_map``: further ``rule -> RuleMapEntry`` snapshot entries."""
     from effects.domain.corpus_plan import GameStrata
-    from effects.domain.rule_budgets import BudgetedRecord, plan_rule_budgets
+    from effects.domain.rule_budgets import BudgetedRecord, BudgetInputs, plan_rule_budgets
     from effects.domain.rule_catalogue import MapVerdict, Polarity, RuleMapEntry
     from effects.domain.rule_detectors import RuleSource
     from effects.domain.strata import Half, Stratum
@@ -221,8 +221,8 @@ def _gen3_fields(**extra_map) -> dict:
                        source=RuleSource.RANDOM_SEAT,
                        tags=(("702.16e", Polarity.DOES_NOT_FIRE), ("510.1", Polarity.FIRES))),
     ]
-    budgets = plan_rule_budgets(records, class_targets={"effects": 8}, budgeted={"702.16e"},
-                                reuse_cap=2, text_cap=0)
+    budgets = plan_rule_budgets(records, BudgetInputs(
+        class_targets={"effects": 8}, budgeted={"702.16e"}, reuse_cap=2, text_cap=0))
     strata = GameStrata(
         card_disjoint=frozenset({"g3"}), game_disjoint=frozenset({"g4", "g5"}),
         held_out=frozenset({"g3"}), surveyed=frozenset({"g1", "g2", "g3", "g4", "g5"}),

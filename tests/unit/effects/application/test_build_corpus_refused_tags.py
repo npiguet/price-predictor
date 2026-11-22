@@ -102,7 +102,7 @@ def test_a_variant_trigger_with_no_sidecar_is_refused_and_counted_by_class(tmp_p
 
 def test_a_rule_counted_only_under_refused_is_tagged_nowhere_written():
     from effects.application.build_corpus import tagged_nowhere_written
-    from effects.domain.rule_budgets import BudgetedRecord, plan_rule_budgets
+    from effects.domain.rule_budgets import BudgetedRecord, BudgetInputs, plan_rule_budgets
     from effects.domain.rule_catalogue import Polarity
     from effects.domain.rule_detectors import RuleSource
     from effects.domain.strata import Stratum
@@ -110,9 +110,10 @@ def test_a_rule_counted_only_under_refused_is_tagged_nowhere_written():
     records = [BudgetedRecord(
         game="g1", record_hash=1, klass="effects", text="t1", natural=1,
         source=RuleSource.FORGE_AI, tags=(("702.16e", Polarity.FIRES),))]
-    budgets = plan_rule_budgets(records, class_targets={"effects": 2}, budgeted=set(),
-                                reuse_cap=1, text_cap=0)
-    empty = plan_rule_budgets([], class_targets={}, budgeted=set(), reuse_cap=1, text_cap=0)
+    budgets = plan_rule_budgets(records, BudgetInputs(
+        class_targets={"effects": 2}, budgeted=set(), reuse_cap=1, text_cap=0))
+    empty = plan_rule_budgets([], BudgetInputs(
+        class_targets={}, budgeted=set(), reuse_cap=1, text_cap=0))
     counts = {"rules": {
         "702.16e": {"fires": {"forge_ai": 1}},
         "104.2a": {"fires": {REFUSED_SOURCE: 2}},
