@@ -63,18 +63,16 @@ def tokenizer_hashes(files: TokenizerFiles) -> dict[str, str]:
 
 def verify_hashes(provenance: SplitProvenance, files: TokenizerFiles) -> None:
     """Re-hash the files actually loaded; raise ``HashMismatchError`` on a
-    mismatch."""
+    mismatch. A hash recorded empty means no file then: a file present now
+    differs, and none now agrees."""
     for (label, recorded), path in zip(
         provenance.file_hashes().items(), (files.vocab, files.keywords),
     ):
-        if not recorded:
-            # A run with no keyword-definition file is degraded, not broken.
-            continue
         actual = content_hash(path)
         if actual != recorded:
             raise HashMismatchError(
                 f"{label} at {path} has changed since training: recorded "
-                f"{recorded[:12]}…, actual {actual[:12] or '(missing)'}…. "
+                f"{recorded[:12] or '(none)'}…, actual {actual[:12] or '(missing)'}…. "
                 "Encoding against a different vocabulary produces vectors "
                 "that look valid and mean nothing."
             )

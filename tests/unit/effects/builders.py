@@ -433,9 +433,10 @@ def make_preparer(
     from effects.domain.split import CorpusSplit
 
     vocab = write_vocabulary(directory / "vocab-script.txt", "script")
+    keywords = Path(directory) / "keyword-definitions.json"
+    keywords.write_text("{}", encoding="utf-8")
     settings = dict(
-        corpus="unused", vocab_path=vocab,
-        keyword_definitions=directory / "no-keyword-definitions.json",
+        corpus="unused", vocab_path=vocab, keyword_definitions=keywords,
         cards_folders=(directory / "cardsfolder",),
     )
     settings.update(config)
@@ -494,6 +495,7 @@ def make_training_loop(
     from effects.application.train_effect_model import CorpusFacts
     from effects.application.training_loop import TrainingLoop
     from effects.domain.split import HoldoutRule
+    from effects.infrastructure.effect_model_store import tokenizer_hashes
 
     return TrainingLoop(
         config,
@@ -503,6 +505,7 @@ def make_training_loop(
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},
         selection=selection,
+        tokenizer_hashes=tokenizer_hashes(config.tokenizer_files),
     )
 
 

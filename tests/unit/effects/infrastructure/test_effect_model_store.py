@@ -204,13 +204,28 @@ class TestHashChecking:
     def test_a_missing_file_hashes_as_empty_rather_than_raising(self, tmp_path):
         assert content_hash(tmp_path / "absent.json") == ""
 
-    def test_an_unrecorded_hash_is_not_checked(self, files):
-        """A run with no keyword file is degraded, not broken."""
+    def test_a_keyword_file_absent_then_and_present_now_is_a_mismatch(self, files):
+        """A run recorded with no keyword file cannot vouch for one now."""
         vocab, keywords = files
+        with pytest.raises(HashMismatchError, match="keyword definitions"):
+            verify_hashes(
+                SplitProvenance(vocab_hash=content_hash(vocab)),
+                TokenizerFiles(vocab, keywords),
+            )
+
+    def test_a_keyword_file_absent_then_and_absent_now_passes(self, files):
+        vocab, _ = files
         verify_hashes(
             SplitProvenance(vocab_hash=content_hash(vocab)),
-            TokenizerFiles(vocab, keywords),
+            TokenizerFiles(vocab, None),
         )
+
+    def test_a_keyword_file_present_then_and_missing_now_is_a_mismatch(self, files):
+        vocab, keywords = files
+        provenance = _provenance(files)
+        keywords.unlink()
+        with pytest.raises(HashMismatchError, match="keyword definitions"):
+            verify_hashes(provenance, TokenizerFiles(vocab, keywords))
 
 
 class TestVariantIsolation:

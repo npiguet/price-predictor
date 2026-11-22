@@ -40,11 +40,13 @@ def parse_keyword_definitions(text: str) -> dict[str, KeywordDefinition]:
 
 
 def load_definitions(keyword_path: Path | None) -> dict[str, KeywordDefinition]:
-    """The keyword definitions at ``keyword_path``; none where it is absent or
-    ``None``, since a checkpoint trained before the table existed recorded
-    none. A directory is no table: it is refused, naming the path."""
-    if keyword_path is None or not Path(keyword_path).exists():
+    """The keyword definitions at ``keyword_path``; none for ``None``, a run
+    that names no table. A path with no file, or a directory, is refused
+    naming the path: a typo is never read as "no definitions"."""
+    if keyword_path is None:
         return {}
+    if not Path(keyword_path).exists():
+        raise FileNotFoundError(f"There is no keyword definitions file at {keyword_path}.")
     if not Path(keyword_path).is_file():
         raise FileNotFoundError(f"The keyword definitions {keyword_path} are not a file.")
     return load_keyword_definitions(Path(keyword_path))

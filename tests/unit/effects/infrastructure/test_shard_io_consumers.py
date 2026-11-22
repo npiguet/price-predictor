@@ -29,9 +29,12 @@ def _train(root: Path, corpus: Path) -> None:
     from tests.unit.effects.application.test_train_startup import _card_tree
     from tests.unit.effects.builders import write_vocabulary
 
+    keywords = root / "keyword-definitions.json"
+    keywords.write_text("{}", encoding="utf-8")
     run(TrainEffectModelConfig.unpathed(
         corpus=str(corpus), cards_folders=(_card_tree(root / "cardsfolder"),),
         vocab_path=write_vocabulary(root / "vocab-script.txt", "script"),
+        keyword_definitions=keywords,
     ))
 
 

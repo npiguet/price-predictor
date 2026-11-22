@@ -353,10 +353,10 @@ class CorpusFacts:
         """The sampling classes, in report order, the run trains no record of."""
         return [name for name in SAMPLING_CLASSES if name not in self.trained_classes]
 
-    def provenance(self, config: TrainEffectModelConfig):
-        """What a checkpoint of this run records about the data it saw."""
+    def provenance(self, config: TrainEffectModelConfig, tokenizer_hashes: Mapping[str, str]):
+        """What a checkpoint of this run records about the data it saw;
+        ``tokenizer_hashes`` are the ones taken when the tokenizer was checked."""
         from effects.domain.split_provenance import SplitProvenance
-        from effects.infrastructure.effect_model_store import tokenizer_hashes
 
         return SplitProvenance(
             held_out_cards=self.split.held_out_cards,
@@ -364,7 +364,7 @@ class CorpusFacts:
             game_disjoint_games=tuple(sorted(self.split.game_disjoint_games)),
             vocab_path=str(config.vocab_path),
             keyword_definitions_path=str(config.keyword_definitions),
-            **tokenizer_hashes(config.tokenizer_files),
+            **tokenizer_hashes,
             withheld_keyword=config.withhold_keyword,
             holdout_permille=self.holdout.permille,
             holdout_max_carriers=self.holdout.max_carriers,
@@ -382,6 +382,10 @@ class RunSpec:
     config: TrainEffectModelConfig
     facts: CorpusFacts
     seed: int
+    #: ``vocab_hash`` and ``keyword_definitions_hash``, taken once when the
+    #: tokenizer's files were checked and never re-read: every save records
+    #: these, so a file rewritten mid-run cannot pass for the one trained on.
+    tokenizer_hashes: Mapping[str, str] = field(default_factory=dict)
 
 
 class SurfaceMismatchError(ValueError):
@@ -503,6 +507,9 @@ def run(config: TrainEffectModelConfig) -> int:
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
         corpus=config.corpus,
     )
+    from effects.application.tokenizer_inputs import checked_tokenizer_hashes
+
+    tokenizer_hashes = checked_tokenizer_hashes(config.tokenizer_files, manifest)
     training_shards = iter_shards(store.training_dir)
     if not training_shards:
         raise MissingTrainingInputError(f"No training shards under {store.training_dir}.")
@@ -541,6 +548,7 @@ def run(config: TrainEffectModelConfig) -> int:
     return TrainingLoop(
         config, facts=facts, training_shards=training_shards,
         validation_samples=validation_samples, selection=selection,
+        tokenizer_hashes=tokenizer_hashes,
     ).execute()
 
 

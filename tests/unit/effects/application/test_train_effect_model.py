@@ -179,7 +179,7 @@ class TestProvenanceRecordsTheCorpus:
         )
 
         provenance = CorpusFacts(digest="abc123").provenance(
-            TrainEffectModelConfig.unpathed(corpus="output/effects/corpus"),
+            TrainEffectModelConfig.unpathed(corpus="output/effects/corpus"), {},
         )
 
         assert provenance.corpus_path == "output/effects/corpus"
@@ -192,7 +192,7 @@ class TestProvenanceRecordsTheCorpus:
             TrainEffectModelConfig,
         )
 
-        provenance = CorpusFacts().provenance(TrainEffectModelConfig.unpathed())
+        provenance = CorpusFacts().provenance(TrainEffectModelConfig.unpathed(), {})
 
         assert provenance.corpus_path == ""
         assert provenance.corpus_digest == ""

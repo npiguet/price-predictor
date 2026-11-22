@@ -1003,6 +1003,8 @@ def _train_effect_model_parser(subparsers) -> None:
     UnacceptedGenerationError: 1,
     **_SHARD_REFUSED,
     SurfaceMismatchError: 1,
+    # A --keyword-definitions that names no file, or not the corpus's (finding 11.5).
+    "effects.application.tokenizer_inputs.KeywordDefinitionsError": 1,
     EmptyHoldoutError: 1,
     # A resume under other settings (contracts/cli.md).
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 1,

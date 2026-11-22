@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from effects.application.closed_list_check import ClosedListMismatchError
+from effects.application.tokenizer_inputs import KeywordDefinitionsError
 from effects.application.train_effect_model import (
     CorpusFacts,
     HoldoutMismatchError,
@@ -135,12 +136,19 @@ def reports(corpus, tmp_path):
     return _freeze(corpus, tmp_path / "reports")
 
 
+def _keyword_file(tmp_path) -> Path:
+    path = tmp_path / "keyword-definitions.json"
+    path.write_text('{"Flying": {}}', encoding="utf-8")
+    return path
+
+
 @pytest.fixture
 def config(corpus, tmp_path, reports):
     return TrainEffectModelConfig.unpathed(
         corpus=str(corpus.directory),
         cards_folders=(_card_tree(tmp_path / "cardsfolder"),),
         vocab_path=write_vocabulary(tmp_path / "vocab-script.txt", "script"),
+        keyword_definitions=_keyword_file(tmp_path),
         reports_dir=reports,
     )
 
@@ -265,6 +273,58 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
     assert facts.rule_map_digest == "map-digest"
+
+
+# ── the keyword file and the tokenizer hashes (finding 11.5) ─────────────
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_a_missing_keyword_file_is_refused_before_any_step(config, started):
+    config.keyword_definitions.unlink()
+    with pytest.raises(KeywordDefinitionsError, match="json: no file at that path"):
+        run(config)
+    assert not started
+
+
+def test_a_keyword_file_the_manifest_does_not_digest_is_refused(corpus, config, started):
+    corpus.save(_manifest(keyword_definitions_digest="0" * 64))
+    _freeze(corpus, config.reports_dir)
+    with pytest.raises(KeywordDefinitionsError, match="keyword_definitions_digest"):
+        run(config)
+    assert not started
+
+
+def test_a_keyword_file_the_manifest_digests_is_accepted(corpus, config, started):
+    corpus.save(_manifest(keyword_definitions_digest=_sha(config.keyword_definitions)))
+    _freeze(corpus, config.reports_dir)
+    assert run(config) == 0
+    assert started
+
+
+def test_a_manifest_without_a_digest_has_nothing_to_compare_and_is_warned_of(
+    config, started, caplog,
+):
+    """A corpus built with no keyword table records none."""
+    with caplog.at_level(logging.WARNING):
+        assert run(config) == 0
+    assert "records no keyword_definitions_digest" in caplog.text
+
+
+def test_a_file_rewritten_during_the_run_is_recorded_with_the_hash_it_had_at_load(
+    config, started,
+):
+    original = _sha(config.keyword_definitions)
+    assert run(config) == 0
+    spec = started[-1].spec
+    config.keyword_definitions.write_text('{"Flying": {"formatter": "x"}}', encoding="utf-8")
+    provenance = spec.facts.provenance(config, spec.tokenizer_hashes)
+    assert provenance.keyword_definitions_hash == original
+    assert _sha(config.keyword_definitions) != original
 
 
 # ── the variant-script tree ──────────────────────────────────────────────

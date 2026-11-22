@@ -61,7 +61,7 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     read it.
     """
     provenance = CorpusFacts(holdout=HoldoutRule(30, 5)).provenance(
-        TrainEffectModelConfig.unpathed(corpus="unused"),
+        TrainEffectModelConfig.unpathed(corpus="unused"), {},
     )
 
     assert provenance.holdout_permille == 30

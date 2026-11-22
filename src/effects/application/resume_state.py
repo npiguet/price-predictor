@@ -28,7 +28,6 @@ from effects.infrastructure.effect_model_store import (
     load_resume_state,
     resume_mismatches,
     save_resume_state,
-    tokenizer_hashes,
 )
 
 if TYPE_CHECKING:
@@ -68,7 +67,7 @@ def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
         "corpus_digest": spec.facts.digest,
         # Scores against another selection set do not compare (FR-069).
         "selection_set_digest": spec.facts.selection_set_digest,
-        **tokenizer_hashes(config.tokenizer_files),
+        **spec.tokenizer_hashes,
         **{name: getattr(config, name) for name in compared_flags()},
         **training_settings,
     }

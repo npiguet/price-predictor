@@ -287,6 +287,7 @@ def _load_definitions(path: Path) -> dict:
             "[UNK] tokens. Run extract-keyword-definitions first.",
             path,
         )
+        return {}
     return load_definitions(path)
 
 

@@ -176,6 +176,7 @@ class TrainingLoop:
         training_shards: Sequence[Path],
         validation_samples: Mapping[str, Path],
         selection: FrozenSelection | None = None,
+        tokenizer_hashes: Mapping[str, str],
     ) -> None:
         self.config = config
         #: The corpus's frozen selection set and its strata's readers, which the
@@ -194,6 +195,7 @@ class TrainingLoop:
             config, facts,
             config.seed if config.seed is not None
             else random.SystemRandom().getrandbits(32),
+            tokenizer_hashes,
         )
         torch.manual_seed(self.spec.seed)
         self.device = default_device()
@@ -330,7 +332,7 @@ class TrainingLoop:
             model_config=run.model_config,
             encoder_state=run.encoder.state_dict(),
             model_state=run.model.state_dict(),
-            provenance=self.spec.facts.provenance(self.config),
+            provenance=self.spec.facts.provenance(self.config, self.spec.tokenizer_hashes),
             variant=self.config.variant,
             epoch=epoch,
             extra=(

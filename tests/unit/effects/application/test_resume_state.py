@@ -18,14 +18,17 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
 )
 from effects.domain.rule_mask import RuleMask
-from effects.infrastructure.effect_model_store import resume_mismatches
+from effects.infrastructure.effect_model_store import resume_mismatches, tokenizer_hashes
 
 FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}
 
 
 def _settings(config: TrainEffectModelConfig, **training_settings) -> dict:
     return resume_settings(
-        RunSpec(config, CorpusFacts(digest="d"), seed=7),
+        RunSpec(
+            config, CorpusFacts(digest="d"), seed=7,
+            tokenizer_hashes=tokenizer_hashes(config.tokenizer_files),
+        ),
         training_settings=training_settings,
     )
 

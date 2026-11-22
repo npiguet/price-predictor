@@ -1,4 +1,4 @@
-"""``load_definitions``: a table is a file; absent or ``None`` is no table."""
+"""``load_definitions``: a table is a file; ``None`` is no table, a missing path is refused."""
 
 from __future__ import annotations
 
@@ -12,9 +12,13 @@ def test_a_real_file_is_read() -> None:
     assert load_definitions(FIXTURE_KEYWORD_DEFINITIONS)
 
 
-def test_an_absent_file_and_none_are_no_table(tmp_path) -> None:
-    assert load_definitions(tmp_path / "absent.json") == {}
+def test_none_is_no_table() -> None:
     assert load_definitions(None) == {}
+
+
+def test_a_path_with_no_file_is_refused_naming_it_rather_than_read_as_empty(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError, match="absent.json"):
+        load_definitions(tmp_path / "absent.json")
 
 
 def test_a_directory_is_refused_naming_its_path(tmp_path) -> None:
