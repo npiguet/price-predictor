@@ -20,6 +20,7 @@ from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
     PER_ENTITY_WIDTH,
+    FieldScope,
 )
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
@@ -258,3 +259,29 @@ class TestAbilitiesTakeTheirSilentZeroOnAContinuousRecord:
     @pytest.mark.parametrize("name", _SILENT_ON_CONTINUOUS)
     def test_no_other_class_reads_silence_as_none_changed(self, name):
         assert FIELDS_BY_NAME[name].supervised_by == {SamplingClass.CONTINUOUS}
+
+
+class TestAWrittenValueOutsideTheScopeIsRefused:
+    """``damage_taken`` is a permanent's field: a player's damage is its
+    ``life_delta`` and ``poison_delta`` (finding 10.6)."""
+
+    _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
+
+    @pytest.mark.parametrize("record_id", [
+        f"{_RUN}.0-mwqvqdyrb9c0.8",  # a combat record: an attacker hits P0
+        f"{_RUN}.0-mwqvqdyrb9c0.613",  # a resolution's effect half: 3 damage to P0
+    ])
+    def test_a_damage_dealt_naming_a_player_sets_no_damage_taken_on_the_player(self, record_id):
+        record = next(r for r in curated_fixture_records() if r.record_id == record_id)
+        players = [t for t in derive_targets(record).values() if t.scope.value == "player"]
+        assert players
+        for player in players:
+            assert player.supervised(FIELDS_BY_NAME["damage_taken"]) is None, record_id
+
+    def test_a_legality_mark_is_kept_on_an_entity_of_either_scope(self):
+        spec = FIELDS_BY_NAME["target_legal"]
+        for scope in (FieldScope.PERMANENT, FieldScope.PLAYER):
+            assert spec.supervised_value(
+                {"target_legal": 1.0}, set(), record_class=SamplingClass.PLAYABILITY_LEGALITY,
+                scope=scope,
+            ) == 1.0

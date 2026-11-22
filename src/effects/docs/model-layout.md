@@ -45,6 +45,7 @@ Rules to respect when changing the input layout, the relation attention or an ou
 ## Outputs
 
 - A field takes a silent value only where the collector writes its event for every occurrence.
+- A written value outside a field's scope is refused (`FieldScope.admits`, `FieldSpec.supervised_value`): a player takes no `damage_taken` (its `life_delta` and `poison_delta` carry the damage), and a permanent takes no player field. The legality fields, which a payload's marks set on a card or a player alike, admit both.
 - A cost half takes no silent value (`FieldSpec.silent_by`, every supervising class but `resolution-cost`): it names what its payment did and nothing else. It supervises `zone_outcome`, `tap_state`, the counter fields and `life_delta` (`supervised_by`), and only where its `costs` write them (`training.md` § Losses).
 - `paired`, `merged`, `class_levels_gained`, `gained_city_blessing` and `completed_dungeon` take their silent 0 on a resolution's effect half alone (`supervised_by` in `effect_head_layout.PER_ENTITY_FIELDS`): the first three come only from their own APIs' clause rules, the last two from `BusEventReader`'s command-zone reading. Without it the head sees only 1s and learns a constant.
 - `abilities_gained` and `abilities_lost` take their silent 0 on a continuous record alone: a contribution's `abilities` names every line its static grants and, with a `-`, every one it takes (`continuous_lines.abilities_changed`: a count, and whether any went). A resolution's silence says nothing, since an `Animate` of its own source names no subject.

@@ -199,6 +199,12 @@ class FieldScope(StrEnum):
     #: Cards and players both (``damage_prevented``).
     ENTITY = "entity"
 
+    def admits(self, scope: FieldScope) -> bool:
+        """Whether an entity of ``scope`` may carry a value written to this
+        field: the legality bits, which a payload's marks set on a card or a
+        player alike, are scoped by their writer."""
+        return self is FieldScope.LEGALITY or self.covers(scope)
+
     def covers(self, scope: FieldScope) -> bool:
         """Whether an entity of ``scope`` takes this field's silent value."""
         return scope is self or (
@@ -254,8 +260,12 @@ class FieldSpec:
         """This field's target for one affected entity, or None where it is absent.
 
         ``written`` holds what the record set; ``unknown`` the fields it
-        declares it cannot say, which no silent value overrides.
+        declares it cannot say, which no silent value overrides. An entity of
+        another scope takes nothing, written or silent (a player's damage is
+        its ``life_delta`` and ``poison_delta``).
         """
+        if not self.scope.admits(scope):
+            return None
         value = written.get(self.name)
         if value is not None:
             return value
