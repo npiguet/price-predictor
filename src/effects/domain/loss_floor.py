@@ -66,6 +66,7 @@ from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.field_kinds import (
     FIELD_KINDS,
     LOG_DISPERSION_MAX,
+    FieldScoring,
     counted,
     fit_log_dispersion,
 )
@@ -311,7 +312,7 @@ def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...],
     records = max(sample.records, 1)
     gate = sample.gate
     losses = {GATE_TERM: _weighted_sum(FIELD_KINDS[FieldType.BINARY].terms(
-        vector[GATE_INDEX].expand(gate.shape[0], 1), gate, arity=1, cap=MAGNITUDE_CAP,
+        vector[GATE_INDEX].expand(gate.shape[0], 1), gate, FieldScoring(1, MAGNITUDE_CAP),
     ), sample.gate_weights) / records}
     for spec in fields:
         target = sample.supervised(spec.name)
@@ -326,7 +327,7 @@ def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...],
         )
         losses[spec.name] = _weighted_sum(FIELD_KINDS[spec.type].terms(
             vector[start:end].expand(target.shape[0], end - start), target,
-            arity=spec.arity, cap=MAGNITUDE_CAP, log_dispersion=dispersion,
+            FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
         ), sample.weights(spec.name)) / records
     return losses
 

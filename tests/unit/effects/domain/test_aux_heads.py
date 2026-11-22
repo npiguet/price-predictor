@@ -42,7 +42,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_losses import global_loss, record_head_loss, verdict_loss
 from effects.domain.event_schema import Event, EventType
-from effects.domain.field_kinds import FIELD_KINDS
+from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
 from effects.domain.field_types import FieldType
 from effects.domain.output_vocabularies import SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey
@@ -326,7 +326,7 @@ class TestRecordHeadLosses:
         shared = dispersion[VERDICT_LAYOUT.dispersion_index["cost_adjustment"]]
         expected = sum(
             kind.loss(prediction[:, out_start + 4 * m:out_start + 4 * m + 4],
-                      target[:, start + m], arity=1, cap=40.0, log_dispersion=shared)
+                      target[:, start + m], FieldScoring(1, 40.0, shared))
             for m in range(end - start)
         ) / 3
         assert torch.allclose(

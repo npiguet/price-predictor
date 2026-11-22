@@ -40,7 +40,7 @@ from effects.domain.effect_head_layout import (
     RecordHeadLayout,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.field_kinds import FIELD_KINDS, counted, negative_binomial
+from effects.domain.field_kinds import FIELD_KINDS, FieldScoring, counted, negative_binomial
 from effects.domain.field_types import FieldType
 from effects.domain.value_targets import VALUE_TARGETS
 
@@ -120,8 +120,7 @@ def field_loss(
     magnitude scored at :data:`MAGNITUDE_CAP`; ``log_dispersion`` is the
     field's own, which a count or signed delta needs."""
     return FIELD_KINDS[spec.type].loss(
-        prediction, target, arity=spec.arity, cap=MAGNITUDE_CAP,
-        log_dispersion=log_dispersion,
+        prediction, target, FieldScoring(spec.arity, MAGNITUDE_CAP, log_dispersion),
     )
 
 
@@ -296,8 +295,7 @@ def _group_sums(
             0, index.to(log_dispersion.device, non_blocking=True),
         )
     terms = FIELD_KINDS[first.type].terms(
-        predicted.float(), target, arity=first.arity, cap=MAGNITUDE_CAP,
-        log_dispersion=dispersion,
+        predicted.float(), target, FieldScoring(first.arity, MAGNITUDE_CAP, dispersion),
     )
     return [spec.name for spec in group], (terms * weights).sum(0)
 
@@ -445,13 +443,11 @@ def record_head_terms(
         kind = FIELD_KINDS[spec.type]
         if weights is None:
             sums[position] = kind.loss(
-                predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP,
-                log_dispersion=dispersion,
+                predicted, wanted, FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
             )
             continue
         terms = kind.terms(
-            predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP,
-            log_dispersion=dispersion,
+            predicted, wanted, FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
         )
         weight = rows.select(weights[:, position]).to(prediction.device, non_blocking=True)
         sums[position] = (terms * weight.reshape(-1, *([1] * (terms.dim() - 1)))).sum()
@@ -492,7 +488,7 @@ def record_head_row_terms(
                 )
             dispersion = log_dispersion[layout.dispersion_index[spec.name]]
         terms = FIELD_KINDS[spec.type].terms(
-            predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP, log_dispersion=dispersion,
+            predicted, wanted, FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
         )
         out[rows.device, position] = terms.reshape(terms.shape[0], -1).sum(-1).float()
     return out
@@ -568,8 +564,7 @@ def value_loss(
             dispersion = log_dispersion[_VALUE_DISPERSION_INDEX[name]]
         # Uncapped: a stated amount is the text's own, which no game compounds.
         total = total + FIELD_KINDS[field_type].loss(
-            predicted[:, start:end], wanted, arity=1, cap=None,
-            log_dispersion=dispersion,
+            predicted[:, start:end], wanted, FieldScoring(1, None, dispersion),
         )
         if name in AT_LEAST_SLICES:
             # Averaged over the steps, so forty bits weigh what one binary

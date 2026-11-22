@@ -13,6 +13,7 @@ from effects.domain.field_kinds import (
     INITIAL_LOG_DISPERSION,
     LOG_DISPERSION_MAX,
     LOG_DISPERSION_MIN,
+    FieldScoring,
     bounded_log_dispersion,
     fit_log_dispersion,
     negative_binomial,
@@ -177,7 +178,7 @@ class TestKinds:
             prediction[:, 0], torch.tensor([0.0, 3.0]), log_dispersion,
         )
         assert torch.allclose(
-            kind.terms(prediction, target, arity=1, cap=40.0, log_dispersion=log_dispersion),
+            kind.terms(prediction, target, FieldScoring(1, 40.0, log_dispersion)),
             expected,
         )
 
@@ -188,8 +189,7 @@ class TestKinds:
         direction = functional.cross_entropy(prediction[:, :3], torch.tensor([2]))
         magnitude = negative_binomial(prediction[:, 3], torch.tensor([3.0]), log_dispersion)
         assert torch.allclose(
-            kind.terms(prediction, torch.tensor([3.0]), arity=1, cap=40.0,
-                       log_dispersion=log_dispersion),
+            kind.terms(prediction, torch.tensor([3.0]), FieldScoring(1, 40.0, log_dispersion)),
             direction + magnitude,
         )
 
@@ -204,7 +204,7 @@ class TestKinds:
             (FieldType.MULTI_BINARY, 6, torch.ones(3, 5, 6)),
         ):
             terms = FIELD_KINDS[field_type].terms(
-                torch.zeros(3, 5, width), target, arity=6 if width == 6 else 1,
-                cap=40.0, log_dispersion=log_dispersion,
+                torch.zeros(3, 5, width), target,
+                FieldScoring(6 if width == 6 else 1, 40.0, log_dispersion),
             )
             assert terms.shape == (3, 5), field_type

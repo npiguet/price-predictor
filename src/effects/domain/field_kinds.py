@@ -25,6 +25,7 @@ fits as k repeated rows would. Without weights every row counts once.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as functional
@@ -216,32 +217,39 @@ def fit_log_dispersion(
     return log_theta.float()
 
 
+@dataclass(frozen=True)
+class FieldScoring:
+    """How a field's terms are read: its ``arity``, the magnitude ``cap``
+    (None scores uncapped) and the ``log_dispersion`` of a type with a
+    magnitude, which broadcasts to the leading dims."""
+
+    arity: int
+    cap: float | None
+    log_dispersion: torch.Tensor | None = None
+
+
 class FieldKind(ABC):
     """One field type's behaviour on tensors.
 
     ``prediction`` is the field's columns, ``(..., width)``; ``target`` its
     targets over the same leading dims, ``(..., arity)`` for a per-member type
-    and ``(...)`` otherwise. ``log_dispersion`` broadcasts to the leading dims
-    and is read only by a type with a magnitude, which requires it.
+    and ``(...)`` otherwise. ``scoring.log_dispersion`` broadcasts to the
+    leading dims and is read only by a type with a magnitude, which requires it.
     """
 
     __slots__ = ()
 
     @abstractmethod
     def terms(
-        self, prediction: torch.Tensor, target: torch.Tensor,
-        *, arity: int, cap: float | None, log_dispersion: torch.Tensor | None = None,
+        self, prediction: torch.Tensor, target: torch.Tensor, scoring: FieldScoring,
     ) -> torch.Tensor:
         """The field's loss at each position of the leading dims (FR-080)."""
 
     def loss(
-        self, prediction: torch.Tensor, target: torch.Tensor,
-        *, arity: int, cap: float | None, log_dispersion: torch.Tensor | None = None,
+        self, prediction: torch.Tensor, target: torch.Tensor, scoring: FieldScoring,
     ) -> torch.Tensor:
         """The field's loss over every row, summed (FR-080)."""
-        return self.terms(
-            prediction, target, arity=arity, cap=cap, log_dispersion=log_dispersion,
-        ).sum()
+        return self.terms(prediction, target, scoring).sum()
 
     @abstractmethod
     def best_constant(
@@ -270,7 +278,7 @@ def _required(log_dispersion: torch.Tensor | None, kind: FieldKind) -> torch.Ten
 class _Binary(FieldKind):
     __slots__ = ()
 
-    def terms(self, prediction, target, *, arity, cap, log_dispersion=None):
+    def terms(self, prediction, target, scoring):
         return functional.binary_cross_entropy_with_logits(
             prediction[..., 0], target.float(), reduction="none",
         )
@@ -282,7 +290,7 @@ class _Binary(FieldKind):
 class _MultiBinary(FieldKind):
     __slots__ = ()
 
-    def terms(self, prediction, target, *, arity, cap, log_dispersion=None):
+    def terms(self, prediction, target, scoring):
         return functional.binary_cross_entropy_with_logits(
             prediction, target.float(), reduction="none",
         ).sum(-1)
@@ -296,10 +304,10 @@ class _MultiBinary(FieldKind):
 class _Count(FieldKind):
     __slots__ = ()
 
-    def terms(self, prediction, target, *, arity, cap, log_dispersion=None):
+    def terms(self, prediction, target, scoring):
         return negative_binomial(
-            prediction[..., 0], self.magnitude(target, cap=cap),
-            _required(log_dispersion, self),
+            prediction[..., 0], self.magnitude(target, cap=scoring.cap),
+            _required(scoring.log_dispersion, self),
         )
 
     def best_constant(self, target, *, arity, cap, weights=None):
@@ -315,8 +323,8 @@ class _SignedDelta(FieldKind):
 
     __slots__ = ()
 
-    def terms(self, prediction, target, *, arity, cap, log_dispersion=None):
-        target = capped(target.float(), cap)
+    def terms(self, prediction, target, scoring):
+        target = capped(target.float(), scoring.cap)
         direction_logits = prediction[..., SIGNED_DIRECTIONS]
         direction = functional.cross_entropy(
             direction_logits.reshape(-1, len(DIRECTIONS)),
@@ -324,7 +332,7 @@ class _SignedDelta(FieldKind):
         ).reshape(target.shape)
         return direction + negative_binomial(
             prediction[..., SIGNED_MAGNITUDE], target.abs(),
-            _required(log_dispersion, self),
+            _required(scoring.log_dispersion, self),
         )
 
     def best_constant(self, target, *, arity, cap, weights=None):
@@ -340,9 +348,9 @@ class _SignedDelta(FieldKind):
 class _Categorical(FieldKind):
     __slots__ = ()
 
-    def terms(self, prediction, target, *, arity, cap, log_dispersion=None):
+    def terms(self, prediction, target, scoring):
         return functional.cross_entropy(
-            prediction.reshape(-1, arity), target.reshape(-1).long(), reduction="none",
+            prediction.reshape(-1, scoring.arity), target.reshape(-1).long(), reduction="none",
         ).reshape(target.shape)
 
     def best_constant(self, target, *, arity, cap, weights=None):

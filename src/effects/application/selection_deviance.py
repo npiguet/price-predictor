@@ -49,7 +49,7 @@ from effects.domain.effect_head_layout import (
     RecordHeadLayout,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.field_kinds import FIELD_KINDS, fit_log_dispersion
+from effects.domain.field_kinds import FIELD_KINDS, FieldScoring, fit_log_dispersion
 from effects.domain.loss_floor import (
     created_objects_record_losses,
     record_head_record_losses,
@@ -265,8 +265,8 @@ def _per_record_losses(spec: FieldSpec | None, target: torch.Tensor, index: torc
     if spec is not None and spec.type.has_magnitude:
         magnitude = kind.magnitude(target, cap=MAGNITUDE_CAP)
         dispersion = fit_log_dispersion(magnitude, weighted_mean(magnitude, weights), weights)
-    terms = kind.terms(constant.expand(target.shape[0], width), target, arity=arity,
-                       cap=MAGNITUDE_CAP, log_dispersion=dispersion)
+    terms = kind.terms(constant.expand(target.shape[0], width), target,
+                       FieldScoring(arity, MAGNITUDE_CAP, dispersion))
     return totals.index_add_(0, index, terms.detach().double().reshape(-1))
 
 
