@@ -10,6 +10,7 @@ import argparse
 import copy
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -116,19 +117,29 @@ def test_the_real_tree_passes_every_check_but_the_gen3_fields():
 # --- directed-rules (T095a): the run-time lists of FR-014b and FR-038a ------------------------
 
 
-def _scenario(sid, rules, cards, variants, *, kind="resolution", detector=None):
+@dataclass(frozen=True)
+class _Scenario:
     """A scenario shaped like ``rules/scenarios/*.json``'s: a base variant, then
     ``variants`` as ``(label, polarity, operation)``."""
-    return {
-        "id": sid, "rules": rules, "title": sid, "record_kind": kind,
-        "variants": [{"label": "base", "polarity": "fires", "delta": "", "expected": "e"}]
-        + [{"label": label, "polarity": polarity, "delta": "d", "expected": "e",
-            "operation": operation} for label, polarity, operation in variants],
-        "cards": cards,
-        "detector": detector or {"family": "sba_zone_move", "record_kind": kind,
-                                 "outcome": "o", "near_miss": "n",
-                                 "params": {"check": "toughness_zero"}, "needs": []},
-    }
+
+    sid: str
+    rules: list
+    cards: list
+    variants: list
+    kind: str = "resolution"
+    detector: dict | None = None
+
+    def shape(self) -> dict:
+        return {
+            "id": self.sid, "rules": self.rules, "title": self.sid, "record_kind": self.kind,
+            "variants": [{"label": "base", "polarity": "fires", "delta": "", "expected": "e"}]
+            + [{"label": label, "polarity": polarity, "delta": "d", "expected": "e",
+                "operation": operation} for label, polarity, operation in self.variants],
+            "cards": self.cards,
+            "detector": self.detector or {
+                "family": "sba_zone_move", "record_kind": self.kind, "outcome": "o",
+                "near_miss": "n", "params": {"check": "toughness_zero"}, "needs": []},
+        }
 
 
 _UNCLASSIFIABLE = {"unclassifiable": "choice: a target"}
@@ -152,25 +163,25 @@ def catalogue(tmp_path, monkeypatch):
     rules = tmp_path / "rules"
     (rules / "scenarios").mkdir(parents=True)
     units = {
-        "121": [_scenario("121.2-1", ["121.2"], ["Mind Rot", "Swamp"],
+        "121": [_Scenario("121.2-1", ["121.2"], ["Mind Rot", "Swamp"],
                           [("empty", "does_not_fire", "move_card"),
-                           ("hand", "fires", "add_permanent")])],
-        "400": [_scenario("400.6-1", ["400.6"], ["Rest in Peace"],
-                          [("no_replacement", "does_not_fire", "remove_permanent")])],
-        "500": [_scenario("500.1-1", ["500.1"], ["Common Card"],
-                          [("off", "does_not_fire", "tap")]),
-                _scenario("500.2-1", ["500.2"], ["Choice Card"],
-                          [("other_target", "does_not_fire", _UNCLASSIFIABLE)]),
-                _scenario("500.3-1", ["500.3"], ["Unseen Card"],
-                          [("off", "does_not_fire", "life")]),
-                _scenario("500.6-1", ["500.6"], ["Uncountable Card"],
-                          [("off", "does_not_fire", "life")])],
-        "702.9": [_scenario("702.9a-1", ["702.9a"], ["Cut"],
-                            [("ribbons", "does_not_fire", "move_card")])],
-        "702.10": [_scenario("702.10b-1", ["702.10b", "702.10c"], ["Ribbons", "Forest"],
-                             [("no_haste", "does_not_fire", "keyword")])],
-        "704": [_scenario("704.5f-1", ["704.5f"], ["Disfigure", "Drudge Skeletons"],
-                          [("counters", "does_not_fire", "counters")])],
+                           ("hand", "fires", "add_permanent")]).shape()],
+        "400": [_Scenario("400.6-1", ["400.6"], ["Rest in Peace"],
+                          [("no_replacement", "does_not_fire", "remove_permanent")]).shape()],
+        "500": [_Scenario("500.1-1", ["500.1"], ["Common Card"],
+                          [("off", "does_not_fire", "tap")]).shape(),
+                _Scenario("500.2-1", ["500.2"], ["Choice Card"],
+                          [("other_target", "does_not_fire", _UNCLASSIFIABLE)]).shape(),
+                _Scenario("500.3-1", ["500.3"], ["Unseen Card"],
+                          [("off", "does_not_fire", "life")]).shape(),
+                _Scenario("500.6-1", ["500.6"], ["Uncountable Card"],
+                          [("off", "does_not_fire", "life")]).shape()],
+        "702.9": [_Scenario("702.9a-1", ["702.9a"], ["Cut"],
+                            [("ribbons", "does_not_fire", "move_card")]).shape()],
+        "702.10": [_Scenario("702.10b-1", ["702.10b", "702.10c"], ["Ribbons", "Forest"],
+                             [("no_haste", "does_not_fire", "keyword")]).shape()],
+        "704": [_Scenario("704.5f-1", ["704.5f"], ["Disfigure", "Drudge Skeletons"],
+                          [("counters", "does_not_fire", "counters")]).shape()],
     }
     for unit, scenarios in units.items():
         (rules / "scenarios" / f"{unit}.json").write_text(
@@ -390,16 +401,16 @@ def mapped(tmp_path):
     (rules / rc.GEN3_FIELDS_NAME).write_text(json.dumps(_registry(), indent=2) + "\n",
                                              encoding="utf-8")
     scenarios = [
-        _scenario("500.1-1", ["500.1"], ["A"], [("off", "does_not_fire", "tap")]),
-        _scenario("500.5-1", ["500.5"], ["B"], [("off", "does_not_fire", "tap")],
-                  kind="turn_action", detector=_TURN_ACTION),
-        _scenario("500.6-1", ["500.6"], ["C"], [("off", "does_not_fire", "tap")],
-                  kind="turn_action", detector=_TURN_ACTION),
-        _scenario("500.6-2", ["500.6"], ["C"], [("off", "does_not_fire", "tap")],
-                  detector={"none": "no record shows it"}),
-        _scenario("500.7-1", ["500.7"], ["D"], [("off", "does_not_fire", "tap")],
-                  kind="turn_action", detector=_TURN_ACTION),
-        _scenario("500.7-2", ["500.7"], ["D"], [("off", "does_not_fire", "tap")]),
+        _Scenario("500.1-1", ["500.1"], ["A"], [("off", "does_not_fire", "tap")]).shape(),
+        _Scenario("500.5-1", ["500.5"], ["B"], [("off", "does_not_fire", "tap")],
+                  kind="turn_action", detector=_TURN_ACTION).shape(),
+        _Scenario("500.6-1", ["500.6"], ["C"], [("off", "does_not_fire", "tap")],
+                  kind="turn_action", detector=_TURN_ACTION).shape(),
+        _Scenario("500.6-2", ["500.6"], ["C"], [("off", "does_not_fire", "tap")],
+                  detector={"none": "no record shows it"}).shape(),
+        _Scenario("500.7-1", ["500.7"], ["D"], [("off", "does_not_fire", "tap")],
+                  kind="turn_action", detector=_TURN_ACTION).shape(),
+        _Scenario("500.7-2", ["500.7"], ["D"], [("off", "does_not_fire", "tap")]).shape(),
     ]
     (rules / "scenarios" / "500.json").write_text(
         json.dumps({"unit": "500", "verified": True, "scenarios": scenarios}), encoding="utf-8")
