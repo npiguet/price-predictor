@@ -40,9 +40,10 @@ their labels alone:
    as is, in every half, one whose tagged records carry none of the outputs
    its map entry names (the manifest's ``effective_outputs`` empty, FR-060a).
    For a rule whose effective outputs are all per-entity, read at the tag's
-   outcome entities, only the rows naming one count toward n and the
-   standard error, and a rule with a polarity holding none is left out as
-   ``no outcome entity`` (finding 7.8); a rule with a verdict, global or
+   outcome entities, only the rows whose record carries one of those outputs
+   at a named entity count toward n and the standard error, and a rule with
+   a polarity holding none is left out as ``no outcome entity`` (finding 7.8);
+   a rule with a verdict, global or
    created-objects output keeps every row, read at the record.
    A deviance item is an output term of any shipped head — a per-entity
    field or the gate, a verdict or global field, a created-objects slot
@@ -80,7 +81,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity, ScenarioCatalogue
 from effects.domain.rule_detectors import DetectorIndex, RuleTag, tag_record
-from effects.domain.rule_output_carriage import read_at_entities_only
+from effects.domain.rule_output_carriage import carried_outputs, read_at_entities_only
 from effects.domain.score_scales import (
     auc_standard_error,
     component_standard_error,
@@ -196,9 +197,11 @@ class RuleTestRules:
     #: entry (the manifest's ``effective_outputs`` empty): nothing to read.
     unreadable: frozenset[str] = frozenset()
     #: Rules whose effective outputs are all per-entity
-    #: (``rule_output_carriage.read_at_entities_only``): a row naming no
-    #: outcome entity is read nowhere, so only rows naming one are tests.
-    entity_read: frozenset[str] = frozenset()
+    #: (``rule_output_carriage.read_at_entities_only``), each with those
+    #: outputs: a row whose record carries none of them at its outcome
+    #: entities is read nowhere (the scorer's ``untargeted``), so only rows
+    #: carrying one are tests.
+    entity_read: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, catalogue: ScenarioCatalogue, manifest: CorpusManifest,
@@ -212,9 +215,9 @@ class RuleTestRules:
             unreadable=frozenset(
                 rule for rule, outputs in manifest.effective_rule_outputs.items()
                 if not outputs),
-            entity_read=frozenset(
-                rule for rule, outputs in manifest.effective_rule_outputs.items()
-                if read_at_entities_only(outputs)),
+            entity_read={rule: tuple(outputs)
+                         for rule, outputs in manifest.effective_rule_outputs.items()
+                         if read_at_entities_only(outputs)},
         )
 
     @property
@@ -234,9 +237,17 @@ class RuleTestRules:
         outcome falls (research R1)."""
         testable = self.testable
         return [
-            (tag.rule, tag.polarity, tag.outcome) for tag in self.tag(record)
+            (tag.rule, tag.polarity, self._read_at(record, tag)) for tag in self.tag(record)
             if tag.rule in testable and rule_test_eligible(record, tag)
         ]
+
+    def _read_at(self, record: EffectRecord, tag: RuleTag) -> tuple[str, ...]:
+        """The tag's outcome entities; none for an entity-read rule whose
+        record carries no effective output of the rule at them."""
+        outputs = self.entity_read.get(tag.rule)
+        if outputs is None or carried_outputs(record, tag.outcome, outputs):
+            return tag.outcome
+        return ()
 
 
 def blocked_rules(catalogue: ScenarioCatalogue) -> frozenset[str]:

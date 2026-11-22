@@ -33,8 +33,8 @@ selected against the one on disk); writing the same set again leaves the file as
    rule masks, for every shipped head's output terms, `√(Σ_g S_g²) / Σ_g S_g` with `S_g` summing over
    game g's copies the constant's loss times the copy's mask weight times its class weight, the
    constant fitted at the class weights). Leave out items above 0.1 and name them, a rule with one polarity only as such. A
-   rule whose effective outputs are all per-entity counts only the rows naming an outcome entity toward
-   n and its standard error, and one with a polarity holding none is left out, `reason` `no outcome
+   rule whose effective outputs are all per-entity counts only the rows whose record carries one of those outputs
+   at a named outcome entity toward n and its standard error, and one with a polarity holding none is left out, `reason` `no outcome
    entity: <named> of <rows> fires, <named> of <rows> does_not_fire name one`; a rule with a verdict,
    global or created-objects output keeps every row. Name
    every rule whose detector finds no test record in a half as `untested`, and in every half every

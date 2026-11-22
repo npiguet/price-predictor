@@ -3,6 +3,10 @@ protection forbids (702.16f, 702.16j): FR7, finding 12.3 (CPC1 C-1)."""
 
 from __future__ import annotations
 
+from effects.domain.protection_model import ProtectionOutcome
+from effects.domain.protection_opportunities import qualify
+from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
 from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_protection_copies import (
     CreatureLook,
@@ -10,10 +14,6 @@ from tests.unit.effects.domain.test_protection_copies import (
     _damage,
     _state,
 )
-from effects.domain.protection_model import ProtectionOutcome
-from effects.domain.protection_opportunities import qualify
-from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
 
 _GOBLIN = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
 _CREATURE = ProtectionQuality(QualityKind.CARD_TYPE, "creature")
@@ -32,7 +32,8 @@ def _combat(attacker_look=CreatureLook(), blocker_look=CreatureLook(), *, extra=
 
 
 def _by_protected(record):
-    return {o.protected: o for o in qualify(record) if o.outcome is ProtectionOutcome.DAMAGE_PREVENTED}
+    return {o.protected: o for o in qualify(record)
+            if o.outcome is ProtectionOutcome.DAMAGE_PREVENTED}
 
 
 def test_an_attacker_is_not_protected_from_its_own_blocker():

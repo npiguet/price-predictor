@@ -24,7 +24,7 @@ from effects.application.freeze_selection_set import (
 )
 from effects.domain.rule_catalogue import MapVerdict, Polarity, RuleMapEntry
 from effects.domain.rule_detectors import RuleTag
-from effects.domain.rule_output_carriage import read_at_entities_only
+from effects.domain.rule_output_carriage import carried_outputs, read_at_entities_only
 from effects.domain.score_scales import auc_standard_error
 from effects.domain.selection_set import NO_OUTCOME_ENTITY, error_of, item_key
 from tests.unit.effects.application.test_freeze_selection_set import (
@@ -39,6 +39,8 @@ from tests.unit.effects.application.test_freeze_selection_set import (
 
 FIRES, NOT = Polarity.FIRES, Polarity.DOES_NOT_FIRE
 RULE = "121.2"
+#: Carried at the actor player by every record the fixture below keeps.
+OUTPUTS = ("gate",)
 HALVES = {GD: {"selection": ["s"], "reporting": ["r"]}}
 
 
@@ -49,7 +51,8 @@ def fixture_records():
 
     eligible = [r for r in curated_fixture_records()
                 if not (r.fork or r.interventional or r.synthetic or r.aimed_at is not None
-                        or r.directed is not None)]
+                        or r.directed is not None)
+                and carried_outputs(r, [r.actor_player], OUTPUTS)]
     assert len(eligible) >= 32
     return [replace(record, game_id="s" if i < 16 else "r")
             for i, record in enumerate(eligible[:32])]
@@ -70,7 +73,7 @@ def _tags(records, *, fires=10, near_with_entity=0):
     return tags
 
 
-def _freeze(records, tags, *, entity_read=frozenset({RULE})):
+def _freeze(records, tags, *, entity_read={RULE: OUTPUTS}):
     rules = RuleTestRules(tag=lambda record: tags.get(record.record_id, []),
                           declared=frozenset({RULE}), trained=frozenset({RULE}),
                           entity_read=entity_read)
@@ -110,7 +113,7 @@ def test_only_rows_naming_an_entity_count_toward_n_and_the_standard_error(fixtur
 
 
 def test_a_rule_read_at_the_record_keeps_its_rows_without_an_entity(fixture_records):
-    frozen = _freeze(fixture_records, _tags(fixture_records), entity_read=frozenset())
+    frozen = _freeze(fixture_records, _tags(fixture_records), entity_read={})
     for half in ("selection", "reporting"):
         sides = frozen.rule_tests[GD][half][RULE]
         assert (len(sides["fires"]), len(sides["does_not_fire"])) == (10, 6)
@@ -133,4 +136,4 @@ def test_the_rules_read_at_entities_only_come_from_the_manifest_s_effective_outp
         effective_outputs={"121.2": ("gate", "zone_outcome"), "601.2": ("gate", "can_play"),
                            "704.5a": ()})
     rules = RuleTestRules.of(load_scenarios(), manifest)
-    assert rules.entity_read == frozenset({"121.2"})
+    assert rules.entity_read == {"121.2": ("gate", "zone_outcome")}
