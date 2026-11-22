@@ -185,6 +185,19 @@ def test_each_text_s_planned_copies_are_what_its_records_are_written():
     """``text_planned``, which the rule budgets' text cap counts, is the
     natural copies the plans give every record of the text in the class,
     over every cell: ``shock`` supplies two."""
+    supply, records = _supplied()
+    plan = plan_selection(
+        members_of(supply, _TEXTS), mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
+        ceiling=60, text_cap=6, reuse_cap=2,
+    )
+    written = _written_by_text(plan, records)
+    assert plan.text_planned == {klass: dict(texts) for klass, texts in written.items()}
+    assert plan.text_planned[EFFECT]["shock"] == 8
+
+
+def _supplied():
+    """The supply :data:`_SUPPLY` describes, and each record it holds as
+    ``(cell, keys, value)``."""
     supply = TrainingSupply(heap_cap=6)
     records = []
     value = 0
@@ -194,18 +207,18 @@ def test_each_text_s_planned_copies_are_what_its_records_are_written():
             keys = () if key is None else _keys(key)
             supply.add(cell, keys, value)
             records.append((cell, keys, value))
-    plan = plan_selection(
-        members_of(supply, _TEXTS), mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
-        ceiling=60, text_cap=6, reuse_cap=2,
-    )
+    return supply, records
+
+
+def _written_by_text(plan, records) -> dict[str, Counter]:
+    """Per class, the copies the plan writes of each record's text."""
     written: dict[str, Counter] = {}
     for cell, keys, value in records:
         text = _TEXTS.get(keys)
         copies = plan.copies(cell, keys, value)
         if text is not None and copies:
             written.setdefault(str(cell.klass), Counter())[text] += copies
-    assert plan.text_planned == {klass: dict(texts) for klass, texts in written.items()}
-    assert plan.text_planned[EFFECT]["shock"] == 8
+    return written
 
 
 def _file(n: int) -> str:
