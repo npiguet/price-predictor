@@ -94,6 +94,11 @@ def candidate_kind(candidate: Candidate, lines: SidecarLookup | None) -> str | N
     return None if candidate.land_play else ability_kind(candidate.ability, lines)
 
 
+def apis_of(api: str | list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    """A declared ``api``'s APIs: the one named, or each of a list."""
+    return (api,) if isinstance(api, str) else tuple(api)
+
+
 def require_candidate(family: str, params: Mapping[str, Any]) -> None:
     """Refuse a ``candidate`` that is no kind, and a ``source_keyword`` without
     the ``candidate`` it speaks for: the keyword is the card's, so an Aura's

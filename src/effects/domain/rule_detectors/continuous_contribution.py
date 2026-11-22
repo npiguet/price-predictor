@@ -60,7 +60,7 @@ from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import Contribution, EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
@@ -151,8 +151,9 @@ def _value_check(field: str):
 
 
 @dataclass(frozen=True, slots=True)
-class ContinuousContribution:
+class ContinuousContribution(EventlessFamily):
     id: str = "continuous_contribution"
+    kinds: frozenset[str] = frozenset({"continuous"})
     params: frozenset[str] = frozenset(
         {"field", "value", "source_token_kind", "counter_condition", "source_keyword",
          "script_param", "affected_face_state", "designation"})

@@ -40,7 +40,7 @@ from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
 
 CHECKS = frozenset({"life_zero", "poison_ten"})
 _GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
@@ -74,8 +74,9 @@ def _outcome_readable(record: EffectRecord) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class SbaGameLoss:
+class SbaGameLoss(EventlessFamily):
     id: str = "sba_game_loss"
+    kinds: frozenset[str] = frozenset({"combat", "resolution"})
     params: frozenset[str] = frozenset({"check"})
     general: frozenset[str] = frozenset({"check"})
 

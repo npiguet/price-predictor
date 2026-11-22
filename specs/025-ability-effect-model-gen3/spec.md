@@ -632,13 +632,18 @@ and that the reporting half never enters the control score.
   ability resolved without the stack) and misses a cost paid while the stack holds something, so a
   declaration keeps to a cost's action through its other parameters.
 - **FR-002c**: Building the detector index (`DetectorIndex.of`) MUST refuse, naming the scenario, a
-  parameter its family does not declare and a value the family cannot read. A declaration asking
+  record kind outside its family's `kinds`, a parameter its family does not declare and a value the
+  family cannot read. A declaration asking
   its record kind for an event the collector never writes on that kind (the per-kind table
-  `rule_detectors.emittable_events`, kept by the event's connector source), or asking a
+  `rule_detectors.emittable_events`, kept by the event's connector source: a combat record may
+  carry `replacement_applied`, a turn-action record the events of its six actions), or asking a
   resolution acting through a line for the game's end (filed in the game-end record), MUST be set
   aside as untaggable with its reason: it tags nothing and `rule-counts` lists it. On a degraded
-  worker's record, and on a forced resolution (an interventional fork), a missing event only the
-  engine hooks build MUST read as unknown: neither an absence's `fires` side nor a near miss.
+  worker's record, a missing event only the engine hooks build MUST read as unknown: neither an
+  absence's `fires` side nor a near miss; a forced resolution's fork forwards the hook events, so
+  its missing event reads as real. A trigger's `origin` and `destination` compare as zone sets
+  without case: a script's comma list holds a declared zone, and its `Any` holds a zone of
+  ordinary play.
 - **FR-002a**: Rule 305's land-play scenarios MUST declare detectors over land-play candidates
   (FR-033a): the land-play limit through the `land_play_limit` check, and the turn and timing
   restrictions on candidates with `land_play = true`.

@@ -24,9 +24,10 @@ and ``test_emittable_events`` reads the sources to keep it so:
   half of the resolution it belongs to. A clause a replacement runs while no
   resolution is open (a regeneration shield used by lethal combat damage, a
   replacement run in the cleanup's discard) is filed as any consequence is
-  (``EventRouter.route``): on the open combat damage step's record,
-  else in the turn-based action's window. So a combat or turn-action record
-  can list a clause-hook event too;
+  (``EventRouter.route``): on the open combat damage step's record. So a
+  combat record can list a clause-hook event too (``replacement_applied``
+  included); a turn-action window takes a clause's events only when they are
+  the action's own (:data:`TURN_ACTIONS`);
 - :data:`CHOKE_POINTS`: the two outcome-hook events Forge reports at an
   engine choke point with no resolving ability, routed as a bus event is;
 - :data:`RUN_PARAMS`: built by ``RunParamNormalizer`` through ``RunParamRows`` from a trigger's or a
@@ -36,7 +37,7 @@ and ``test_emittable_events`` reads the sources to keep it so:
   the bus's events and the choke points'), which three taps take before it
   files them (``EventTap``). ``ForkPremise`` takes, in a fork, everything the
   state-based check after the fork's edit publishes, into a ``turn_action`` /
-  ``fork_edit`` record, whose kind lists them already. ``ManaChannel`` takes a
+  ``fork_edit`` record, which no declaration reads (:data:`TURN_ACTIONS`). ``ManaChannel`` takes a
   mana ability's own:
   what its payment did beyond its taps (a creature sacrificed for mana) and
   what its sub-abilities did (a pain land's damage), into its mana record, a
@@ -52,13 +53,12 @@ asks :func:`carries_buffered` whether the place can hold its event.
 
 A second fact decides whether an event's *absence* is readable on one
 record: the hook-derived events (:data:`HOOK_DERIVED`) need the engine
-hooks, which a degraded worker lacks, and which a forced resolution (an
-``interventional`` fork's lone effect half) does not hear apart from its
-resolution start, its modes, its conditions and its mana
-(``InterventionFork``'s ``ForkHooks``). On such a record a hook-derived event
-that is missing may have happened (:func:`absence_readable`). A protection
-fork's records, played forward with the hooks routed to them, are read as
-any record is.
+hooks, which a degraded worker lacks. On such a record a hook-derived event
+that is missing may have happened (:func:`absence_readable`). A forced
+resolution (an ``interventional`` fork's lone effect half) hears the hook
+events as a live record does (``ForkHooks`` forwards them), and a protection
+fork's records, played forward with the hooks routed to them, likewise: their
+missing events read as real.
 
 Torch-free.
 """
@@ -120,13 +120,24 @@ GAME_END: frozenset[E] = frozenset({E.PLAYER_WON, E.PLAYER_LOST})
 #: The APIs whose own resolution ends the game, so their effect half holds its end.
 GAME_ENDING_APIS: frozenset[str] = frozenset({"WinsGame", "LosesGame"})
 
+#: What the six turn-based actions' records (``draw``, ``cleanup_discard``,
+#: ``untap``, ``phasing``, ``day_night``, ``lore_counter``) list: the window
+#: takes an event only by the action it is part of (``TurnActionWindow
+#: .actionOf``), so a clause's consequence in the window is no action's and
+#: goes to the orphans. A fork's premise (``fork_edit``) holds :data:`TAPPED`
+#: and a game-end marker none; no declaration reads either as a turn action.
+TURN_ACTIONS: frozenset[E] = frozenset({
+    E.PHASED, E.DAY_NIGHT_CHANGED, E.UNTAPPED, E.CARD_DRAWN, E.CARD_DISCARDED, E.ZONE_CHANGE,
+    E.COUNTER_CHANGE,
+})
+
 #: The event types a record of each kind can list. A resolution's cost half
 #: lists its spell's move to the stack alone, and no detector reads it as an
 #: outcome; playability and continuous records list none.
 EMITTABLE: dict[RecordKind, frozenset[E]] = {
     RecordKind.RESOLUTION: BUS | CLAUSE_HOOKS,
     RecordKind.COMBAT: BUS | CHOKE_POINTS | CLAUSE_HOOKS,
-    RecordKind.TURN_ACTION: BUS | CHOKE_POINTS | CLAUSE_HOOKS,
+    RecordKind.TURN_ACTION: TURN_ACTIONS,
     RecordKind.TRIGGER: RUN_PARAMS,
     RecordKind.REWRITE: RUN_PARAMS,
     RecordKind.CONTINUOUS: frozenset(),

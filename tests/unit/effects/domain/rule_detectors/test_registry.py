@@ -12,6 +12,7 @@ from effects.domain.rule_detectors import (
     DeclarationError,
     DetectorIndex,
     Duplicate,
+    EventlessFamily,
     FamilyMatch,
     RuleTag,
     families,
@@ -22,11 +23,12 @@ from tests.unit.effects.domain.rule_detectors.builders import catalogue, declara
 
 
 @dataclass(frozen=True)
-class _Fixed:
+class _Fixed(EventlessFamily):
     """A family that answers the same for every record, so the merge is what is tested."""
 
     answer: FamilyMatch | None
     id: str = "fixed"
+    kinds: frozenset = frozenset({"resolution"})
     params: frozenset = frozenset()
     gen3_fields: frozenset = frozenset()
 
@@ -132,8 +134,8 @@ def test_a_misspelt_declaration_is_refused_when_the_index_is_built(family, param
     """V5 #22: a parameter name the family does not declare, or a value it
     cannot read, stops the command at the index, naming the scenario, rather
     than tagging nothing or raising mid-run."""
-    bad = scenario("9.9-1", ("9.9",), "resolution",
-                   declaration(family, "resolution", **params))
+    kind = sorted(families()[family].kinds)[0]
+    bad = scenario("9.9-1", ("9.9",), kind, declaration(family, kind, **params))
     with pytest.raises(DeclarationError, match=f"9.9-1.*{message}"):
         DetectorIndex.of(catalogue(bad))
 

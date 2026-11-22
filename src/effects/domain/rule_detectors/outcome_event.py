@@ -124,9 +124,10 @@ declaration still needs ``api``, ``keyword`` or ``source_keyword``.
 
 A record kind lists only some event types (``emittable_events``): a
 declaration asking its kind for one it never lists is set aside by the index
-as untaggable. On a degraded worker's record and on a forced resolution a
-missing event only the engine hooks build may have happened, so neither an
-``absent`` declaration's ``fires`` side nor a scoped near miss is read there.
+as untaggable. On a degraded worker's record a missing event only the engine
+hooks build may have happened, so neither an ``absent`` declaration's
+``fires`` side nor a scoped near miss is read there; a forced resolution's
+fork forwards the hook events, so its missing event reads as real.
 
 Entities. The condition entities are the acting ability's source, its
 targets and its controller (``actor_player``): what the rule's condition
@@ -158,6 +159,7 @@ from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
+    apis_of,
     card_has_keyword,
     is_keyword_line,
     root_params_of,
@@ -309,11 +311,6 @@ def acting_api(record: EffectRecord, lines: SidecarLookup | None) -> str | None:
     return line.script_api_type if line is not None else None
 
 
-def apis_of(api: str | list[str] | tuple[str, ...]) -> tuple[str, ...]:
-    """A declared ``api``'s APIs: the one named, or each of a list."""
-    return (api,) if isinstance(api, str) else tuple(api)
-
-
 def _acts_through(line: SidecarLine | None, api: str | list[str], in_chain: bool) -> bool:
     """Whether ``line``'s root API is ``api`` (or one of a list), or under
     ``in_chain`` any segment's of its chain."""
@@ -415,6 +412,7 @@ def subject_verdict(subjects: tuple[str, ...], state: StateSnapshot,
 @dataclass(frozen=True, slots=True)
 class OutcomeEvent:
     id: str = "outcome_event"
+    kinds: frozenset[str] = frozenset({"combat", "resolution", "turn_action"})
     params: frozenset[str] = _OWN | EVENT_FILTERS
     general: frozenset[str] = frozenset(
         {"event", "api", "api_in_chain", "keyword", "source_keyword", "absent"})

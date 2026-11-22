@@ -23,6 +23,7 @@ from effects.domain.rule_detectors.emittable_events import (
     EMITTABLE,
     RUN_PARAMS,
     TAPPED,
+    TURN_ACTIONS,
     absence_readable,
     carries,
     carries_buffered,
@@ -111,11 +112,12 @@ def _source(name: str) -> str:
 def test_the_bracket_s_taps_are_the_mana_and_rewrite_channels_and_the_fork_premise():
     """What a tap takes is what the bracket routes: the bus's events (its
     damage, moves and outcomes) and the choke points', asked of the taps first.
-    The fork premise's record is a turn action, whose kind lists all of them."""
+    The fork premise's record is a ``fork_edit`` turn action no declaration
+    reads, so the turn-action kind lists the six actions' events alone."""
     taps = {path.stem for path in _SOURCES.glob("*.java")
             if re.search(r"implements\s+EventRouter\.EventTap", _source(path.stem))}
     assert taps == {"ManaChannel", "RewriteChannel", "ForkPremise"}
-    assert TAPPED <= EMITTABLE[RecordKind.TURN_ACTION]
+    assert TURN_ACTIONS < TAPPED
     route = _source("EventRouter").split("void route(", 1)[1]
     assert route.index("tap.take(") < route.index("classifyNow()")
     assert TAPPED == BUS | CHOKE_POINTS
@@ -153,9 +155,7 @@ def test_a_clause_a_replacement_runs_in_a_window_files_its_events_on_that_window
     route = _source("EventRouter").split("private void fileConsequence(", 1)[1]
     assert route.index("combatStep.file(") < route.index("turnActions.take(")
     assert "filing != Filing.NON_COMBAT_DAMAGE" in route
-    for kind in ("combat", "turn_action"):
-        for event in CLAUSE_HOOKS:
-            assert carries(kind, event), (kind, event)
-    assert EMITTABLE[RecordKind.COMBAT] == EMITTABLE[RecordKind.TURN_ACTION]
+    for event in CLAUSE_HOOKS:
+        assert carries("combat", event), event
     for event in ("regenerated", "removed_from_combat", "token_created", "replacement_applied"):
         assert carries("combat", event)

@@ -110,7 +110,7 @@ from effects.domain.records import (
     RecordKind,
 )
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     CANDIDATE_KINDS,
@@ -345,8 +345,9 @@ def _near(candidate: Candidate, bit: str) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class VerdictBit:
+class VerdictBit(EventlessFamily):
     id: str = "verdict_bit"
+    kinds: frozenset[str] = frozenset({"playability"})
     params: frozenset[str] = frozenset(
         {"bit", "check", "fires_when", "responsible_static"}) | FILTERS
     general: frozenset[str] = frozenset(

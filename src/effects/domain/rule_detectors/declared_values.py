@@ -187,11 +187,6 @@ def trigger_mode(family: str, name: str, value: Any) -> None:
         _refuse(family, name, value, "Forge TriggerType")
 
 
-def replacement_mode(family: str, name: str, value: Any) -> None:
-    if value not in FORGE_REPLACEMENT_MODES:
-        _refuse(family, name, value, "Forge ReplacementType")
-
-
 def mode_of_rewrite(family: str, name: str, value: Any) -> None:
     """A rewrite's ``mode``: the replacement's Forge mode (``Moved``,
     ``DamageDone``) as its incoming event carries it."""

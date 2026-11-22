@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
+from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordOrigin, is_game_end
 from effects.domain.rule_catalogue import (
@@ -37,6 +38,8 @@ from effects.domain.rule_catalogue import (
     Scenario,
     ScenarioCatalogue,
 )
+from effects.domain.rule_detectors.acting_line import apis_of
+from effects.domain.rule_detectors.emittable_events import carries
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +152,19 @@ class DetectorFamily(Protocol):
     #: and the breadth check (``rule_breadth``) drops them to measure the pool
     #: a rule's detector is cut from.
     general: frozenset[str]
+    #: The record kinds (``RecordKind`` values) the family reads: a declaration
+    #: on another kind could never match, so ``DetectorIndex.of`` refuses it.
+    kinds: frozenset[str]
+
+    def events(self, params: Mapping[str, Any]) -> frozenset[EventType]:
+        """The event types the declaration asks its record kind for (none for
+        a family that reads no event list): one the kind never lists makes
+        the declaration untaggable (``emittable_events``)."""
+        ...
+
+    def reads_acting_line(self, params: Mapping[str, Any]) -> bool:
+        """Whether the declaration only speaks for records acting through a line."""
+        ...
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         """The gen-3 fields the family reads under ``params``."""
@@ -165,6 +181,19 @@ class DetectorFamily(Protocol):
               params: Mapping[str, Any]) -> FamilyMatch | None:
         """The record's side of the rule, or None where the record does not show it."""
         ...
+
+
+class EventlessFamily:
+    """What a family that reads no event list and no acting line inherits:
+    the protocol's ``events`` and ``reads_acting_line`` answered for it."""
+
+    __slots__ = ()
+
+    def events(self, params: Mapping[str, Any]) -> frozenset[EventType]:
+        return frozenset()
+
+    def reads_acting_line(self, params: Mapping[str, Any]) -> bool:
+        return False
 
 
 _REGISTRY: dict[str, DetectorFamily] = {}
@@ -231,7 +260,8 @@ class DetectorIndex:
     a record is only ever matched against the scenarios of its own kind.
 
     Building it checks every declaration: a family that is not registered, a
-    parameter the family does not declare, or a value it cannot read raises
+    parameter the family does not declare, a record kind it does not read, or a
+    value it cannot read raises
     :class:`DeclarationError` naming the scenario. A declaration asking its
     record kind for an event that kind never lists (``emittable_events``) is
     set aside in ``untaggable`` with its reason, since it would read every
@@ -301,6 +331,10 @@ class DetectorIndex:
 
 def _check(scenario: Scenario, declaration: DetectorDeclaration,
            family: DetectorFamily) -> None:
+    if declaration.record_kind not in family.kinds:
+        raise DeclarationError(
+            f"{scenario.id}: {family.id} reads {sorted(family.kinds)} records, "
+            f"not {declaration.record_kind!r}")
     undeclared = set(declaration.params) - family.params
     if undeclared:
         raise DeclarationError(f"{scenario.id}: {family.id} has no parameter {sorted(undeclared)}")
@@ -313,27 +347,20 @@ def _check(scenario: Scenario, declaration: DetectorDeclaration,
 def _untaggable(declaration: DetectorDeclaration, family: DetectorFamily) -> str | None:
     """Why ``declaration`` can tag nothing, or None: an event type it reads
     that its record kind never lists."""
-    from effects.domain.rule_detectors.emittable_events import carries
-
-    events = getattr(family, "events", None)
-    if events is None:
-        return None
-    kind = declaration.record_kind
-    missing = sorted(e.value for e in events(declaration.params) if not carries(kind, e))
+    events, kind = family.events(declaration.params), declaration.record_kind
+    missing = sorted(e.value for e in events if not carries(kind, e))
     if missing:
         return f"a {kind} record never lists {', '.join(missing)} (emittable_events)"
-    reads_line = getattr(family, "reads_acting_line", lambda params: False)
-    if reads_line(declaration.params):
-        from effects.domain.rule_detectors.outcome_event import apis_of
-
-        api = declaration.params.get("api")
-        apis = apis_of(api) if api is not None else (None,)
-        filed = sorted(e.value for e in events(declaration.params)
-                       if not any(carries(kind, e, acting_line=True, api=one) for one in apis))
-        if filed:
-            return (f"{', '.join(filed)} is filed in the game-end record, never in a "
-                    "resolution acting through a line other than one ending the game "
-                    "outright (WinsGame, LosesGame; emittable_events)")
+    if not family.reads_acting_line(declaration.params):
+        return None
+    api = declaration.params.get("api")
+    apis = apis_of(api) if api is not None else (None,)
+    filed = sorted(e.value for e in events
+                   if not any(carries(kind, e, acting_line=True, api=one) for one in apis))
+    if filed:
+        return (f"{', '.join(filed)} is filed in the game-end record, never in a "
+                "resolution acting through a line other than one ending the game "
+                "outright (WinsGame, LosesGame; emittable_events)")
     return None
 
 

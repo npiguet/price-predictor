@@ -99,7 +99,7 @@ from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_outcomes import damage_lethal
 from effects.domain.state_snapshot import EntityState, normalize_counter_type
@@ -378,8 +378,9 @@ def _aura_checks(record, touched, keywords, cause: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class SbaZoneMove:
+class SbaZoneMove(EventlessFamily):
     id: str = "sba_zone_move"
+    kinds: frozenset[str] = frozenset({"combat", "resolution"})
     params: frozenset[str] = frozenset({"check", "marked_before", "aura_cause"})
     general: frozenset[str] = frozenset({"check"})
 
