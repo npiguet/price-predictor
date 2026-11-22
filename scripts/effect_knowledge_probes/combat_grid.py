@@ -31,13 +31,12 @@ blocks, as a ``blocks`` relation between their slots, so the model can tell the 
 apart; the score asks whether it reads the pair the grid edits apart from the rest. Both
 kinds are scored through the same rule, ``rule_outcomes.step_deaths``, on the edited pair.
 
-A combat record's snapshot is taken at the step's first damage event, so the creature
-damaged first already shows that damage as marked. A creature may therefore show marked
-damage equal to the other creature's power, which is this step's own damage; any other
-marked damage disqualifies the record. Every edited record clears both creatures' marked
-damage, so the grid asks about the board before the damage step, the double striker's
-first hit apart. A combat record's input carries no damage assignment, so the grid
-edits none.
+A combat record's snapshot is taken at the start of the damage step, before any
+damage is dealt (root spec § 8.6), so a creature shows no damage marked by this step,
+and one that shows damage from earlier in the turn disqualifies the record. Every
+edited record clears both creatures' marked damage, so the grid asks about the board
+before the damage step, the double striker's first hit apart. A combat record's input
+carries no damage assignment, so the grid edits none.
 
 ``--source validation`` (the default) reads the blocks the corpus's selection set froze
 for the combat grids in ``--half`` (``reporting`` by default, ``selection`` or ``both``) of
@@ -69,7 +68,7 @@ from effects.domain.grid_edits import (  # noqa: E402, F401  (the suite's names 
     grid_records,
     side_of,
 )
-from effects.domain.rule_outcomes import step_deaths, strikes_in_step  # noqa: E402, F401
+from effects.domain.rule_outcomes import step_deaths  # noqa: E402, F401
 
 
 def single_block(record, keywords_of) -> tuple[str, str] | None:
