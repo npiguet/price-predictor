@@ -1,6 +1,9 @@
-"""Which records a curated corpus refuses on sight (FR-148): four rules.
+"""Which records a curated corpus refuses on sight (FR-148): five rules.
 
-A resolution with no acting ability, or whose acting keys all map to no
+A record whose own changes end the game is left out (decision D13): Forge's
+state-based check stops at the game's end before it destroys any creature, so
+the record shows no death the rules would cause, and how a game ends is left
+to a game-playing agent. A resolution with no acting ability, or whose acting keys all map to no
 rendered line, is an outcome with no cause, and a trigger, continuous or
 decision record whose acting keys all name no sidecar would train with no
 acting text; a record with more events than
@@ -23,11 +26,13 @@ from enum import StrEnum
 from effects.domain.event_schema import AttributionKind
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import EffectRecord, RecordKind, acting_keys, events_of
+from effects.domain.rule_detectors.sba_board import game_ends
 
 
 class QualityDefect(StrEnum):
     """Why a record is refused, as the manifest's ``quality_dropped`` spells it."""
 
+    GAME_END = "game-end"
     NO_ABILITY = "no-ability"
     EVENT_FLOOD = "event-flood"
     NO_ACTING_TEXT = "no-acting-text"
@@ -52,14 +57,30 @@ def quality_defect(
 ) -> QualityDefect | None:
     """The first reason this record is refused, or None when it is clean.
 
-    A non-positive ``max_events`` turns the event-flood rule off, as
+    ``GAME_END`` comes first, so a game-end record (no ability) counts there
+    and not as ``NO_ABILITY``. It reads ``sba_board.game_ends``: a
+    ``player_lost`` or ``player_won`` event, or a player its own life or
+    poison changes take to 0 life or 10 poison, since a lethal spell's record
+    holds no game-end event when the game-end record beside it took them. A
+    non-positive ``max_events`` turns the event-flood rule off, as
     ``CapHeap`` reads a non-positive cap; as a literal ceiling, zero would
     refuse nearly every record.
     """
+    if game_ends(record):
+        return QualityDefect.GAME_END
+    return _no_ability_defect(record) or _event_flood_defect(record, max_events)
+
+
+def _no_ability_defect(record: EffectRecord) -> QualityDefect | None:
+    """``NO_ABILITY`` on a resolution acting through no ability."""
     if record.kind is RecordKind.RESOLUTION and not record.ability:
         return QualityDefect.NO_ABILITY
-    events = events_of(record)
-    if max_events > 0 and len(events) > max_events:
+    return None
+
+
+def _event_flood_defect(record: EffectRecord, max_events: int) -> QualityDefect | None:
+    """``EVENT_FLOOD`` past a positive ``max_events``."""
+    if max_events > 0 and len(events_of(record)) > max_events:
         return QualityDefect.EVENT_FLOOD
     return None
 

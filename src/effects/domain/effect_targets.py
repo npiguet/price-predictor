@@ -119,7 +119,6 @@ _SETTERS: dict[EventType, tuple[str, int]] = {
     EventType.TEXT_CHANGE: (HeadField.TEXT_CHANGED, 1),
     EventType.MONARCH_CHANGED: (HeadField.BECAME_MONARCH, 1),
     EventType.INITIATIVE_TAKEN: (HeadField.TOOK_INITIATIVE, 1),
-    EventType.PLAYER_LOST: (HeadField.GAME_LOST, 1),
 }
 
 #: The restrictions a ``restriction_change`` names that are designations.
@@ -596,7 +595,6 @@ class _RecordPass:
         mixed_pt_durations(self.by_type[EventType.PT_CHANGE], self.targets)
         cancel_enchant_swaps(self.targets.values())
         self._copies()
-        self._game_end()
         self._venture()
         for name in self.unknown:
             for entry in self.targets.values():
@@ -760,24 +758,6 @@ class _RecordPass:
             write(entry)
 
     # ── players ──
-
-    def _game_end(self) -> None:
-        """A win is the other players' loss, and a draw is every player's
-        (root spec § 11.2): each player of a record carrying the game's end
-        is affected and supervised."""
-        winners = {
-            subject for event in self.by_type[EventType.PLAYER_WON]
-            for subject in event.subjects
-        }
-        drawn = bool(self.by_type[EventType.GAME_DRAWN])
-        if not winners and not drawn:
-            return
-        for player in self.players:
-            entry = self.slot(player)
-            entry.affected = True
-            lost = drawn or player not in winners
-            if entry.fields.get(HeadField.GAME_LOST) != 1:
-                entry.set(HeadField.GAME_LOST, 1 if lost else 0)
 
     def _venture(self) -> None:
         for event in self.by_type[EventType.DUNGEON_VENTURED]:

@@ -308,6 +308,7 @@ def build_manifest(config: BuildCorpusConfig, outcome: BuildOutcome) -> CorpusMa
         shortfall=decisions.selection.shortfall,
         class_targets=dict(decisions.selection.targets),
         quality_dropped=dict(written.refusals.by_reason),
+        quality_dropped_by_class=_nested(written.refusals.by_reason_and_class),
         # The hundred worst: every permanent carries the implicit spell.
         no_acting_text_scripts=dict(written.refusals.textless_scripts.most_common(100)),
         games_by_source=survey.games_by_source,
@@ -431,7 +432,7 @@ def log_report(
     """The operator's report, read off the manifest the build just wrote."""
     _log_counts(manifest)
     _log_sources(survey)
-    _log_refusals(written)
+    _log_refusals(manifest, written)
     _log_mixture(manifest)
     logger.info(
         "game-disjoint %d game(s), %d of them under the keyword threshold; "
@@ -548,9 +549,14 @@ def _log_sources(survey: Survey) -> None:
         )
 
 
-def _log_refusals(written: WriteResult) -> None:
-    for reason, count in sorted(written.refusals.by_reason.items()):
-        logger.info("%-22s %9d record(s) refused", reason, count)
+def _log_refusals(manifest: CorpusManifest, written: WriteResult) -> None:
+    """Each refusal with its classes, then the join refusals' worst scripts."""
+    for reason, count in sorted(manifest.quality_dropped.items()):
+        by_class = manifest.quality_dropped_by_class.get(reason, {})
+        logger.info(
+            "%-22s %9d record(s) refused (%s)", reason, count,
+            ", ".join(f"{klass} {n}" for klass, n in sorted(by_class.items())),
+        )
     for label, scripts in (
         (QualityDefect.NO_ACTING_TEXT, written.refusals.textless_scripts),
         (QualityDefect.UNJOINABLE_KEY, written.refusals.unjoinable_scripts),

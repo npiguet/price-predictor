@@ -275,6 +275,12 @@ class CorpusManifest:
     quality_dropped: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
+    #: The same records, ``reason -> sampling class -> records``: a class
+    #: losing its records to one reason (``game-end`` takes the combats that
+    #: end a game) is read here.
+    quality_dropped_by_class: dict[str, dict[str, int]] = field(
+        default_factory=dict, metadata=_reads(_nested_int_map),
+    )
     #: Games per top-level source directory under ``--records-dir`` ("." for
     #: the root), and how many name a held-out card: a nonzero count under a
     #: depleted directory is a collection leak (FR-149).

@@ -362,7 +362,7 @@ Run-Logged $freeze "$py -u scripts\effect_knowledge_probes\run.py --freeze-probe
 closed subtype and keyword lists, with the lists the manifest recorded. The lists checked in come
 from the 2026-11-15 pilot collections, and a checkpoint loads only against the lists it trained
 on, so this step comes before any training. `test_layout_vocabularies.py` pins the head widths
-those lists give (181 subtypes and 70 keywords, a per-entity head of 1,635 columns): when it
+those lists give (181 subtypes and 70 keywords, a per-entity head of 1,634 columns): when it
 fails, set its pinned counts and widths to the new lists', then commit both files.
 
 Check: the manifest gives, for every tagged rule in every class, share, written and shortfall per

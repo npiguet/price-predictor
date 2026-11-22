@@ -242,11 +242,14 @@ class WorkerContext:
 @dataclass(slots=True)
 class RefusalTally:
     """Records the quality rules refused (FR-148), by reason, by sampling class
-    (the axis ``MAX_REFUSED_SHARE`` is judged on) and, for the two join
-    refusals, by script, so a stale sidecar names the cards it costs."""
+    (the axis ``MAX_REFUSED_SHARE`` is judged on), by both (the manifest's
+    ``quality_dropped_by_class``) and, for the two join refusals, by script,
+    so a stale sidecar names the cards it costs."""
 
     by_reason: Counter[QualityDefect] = field(default_factory=Counter)
     by_class: Counter[SamplingClass] = field(default_factory=Counter)
+    by_reason_and_class: Counter[tuple[QualityDefect, SamplingClass]] = field(
+        default_factory=Counter)
     textless_scripts: Counter[str] = field(default_factory=Counter)
     unjoinable_scripts: Counter[str] = field(default_factory=Counter)
 
@@ -255,6 +258,7 @@ class RefusalTally:
     ) -> None:
         self.by_reason[defect] += 1
         self.by_class[klass] += 1
+        self.by_reason_and_class[defect, klass] += 1
         if defect is QualityDefect.NO_ACTING_TEXT:
             self.textless_scripts[acting_keys(record)[0].script_file] += 1
         elif defect is QualityDefect.UNJOINABLE_KEY:

@@ -419,8 +419,9 @@ previous run.
    `timing` column is 0 and the `casting_speed` column is 1.
 5. **Given** an Ensoul Artifact resolution, **When** targets are built, **Then** `base_pt_delta`
    carries the change of base power and toughness against the previous base.
-6. **Given** a game a player lost, **When** its final record is encoded, **Then** `game_lost` is 1
-   for that player and 0 for the other.
+6. **Given** a game a player lost, **When** `build-corpus` curates its records, **Then** every
+   record whose own changes end the game is refused as `game-end`, counted per sampling class in
+   the manifest, and no output states the game's end (root § 11.2, § 12.4).
 7. **Given** a gen-3 change to the input layout, **When** the map reruns, **Then** it reports the
    rules newly learnable and writes `rules/heads/` lines for the new layout.
 8. **Given** a record whose board holds Exploration, **When** it is encoded, **Then** the player
@@ -1356,7 +1357,9 @@ and that the reporting half never enters the control score.
   weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
   directed fork or from collection aimed at a rule (one carrying `aimed_at`, `[]` included) is a
   natural record like any other: it carries
-  no drawn rule of its own, its natural copies train every output at full weight under both masks,
+  no drawn rule of its own, its natural copies weigh as any record's do (every output at full weight under `hard`, n / d on
+  the outputs of no drawn rule under `soft`), a lethality copy is made for a record's first natural
+  copy in a step only,
   and only the copies rule budgets add to it carry a drawn rule. Its `aimed_at` marks it only for
   exclusion from the rule tests (FR-009, FR-072).
 - **FR-062**: Each output field's loss MUST be divided by the loss of its constant prediction on the

@@ -299,8 +299,8 @@ Parameters: stock `TransformerEncoderLayer` names plus `rel_k`, `rel_v` of shape
 
 ### Output layout (extended)
 
-The 22 outputs of root § 11.2 and the § 11.3 extensions as `FieldSpec` rows (300 per-entity fields,
-1,635 columns with the 181 subtypes and 70 keywords of the pilot-generated lists, root § 11.3);
+The outputs of root § 11.2 and the § 11.3 extensions as `FieldSpec` rows (299 per-entity fields,
+1,634 columns with the 181 subtypes and 70 keywords of the pilot-generated lists, root § 11.3);
 legality fields scored on a gate-free path; a new shipped `global` head (turn-structure
 changes, day/night change); the verdict head (169 columns) gains `timing`, one failed-check column per
 `PlayabilityCheck`, a cost-adjustment delta per mana symbol kind (on casts only),

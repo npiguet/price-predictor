@@ -165,6 +165,10 @@ show it, and its outcome in one sentence.
 | needs new fields | in a game, but in no record field |
 | none | nowhere |
 
+- A rule whose outcome is a player winning, losing or drawing the game (104.2 to 104.4,
+  704.5a to 704.5c) is mechanical and is not trained: no curated record holds the game's end
+  (§ 12.4), and the directed-fork list names none of these rules.
+
 ## 4.3 Scenarios
 
 Every mechanical and legality rule that some Forge card can produce gets a scenario: a
@@ -1031,7 +1035,7 @@ The trunk's layer has these properties, each checked by a test:
 
 ## 11.2 New outputs
 
-The 22 outputs of `rules/gen3-fields.json`:
+The outputs of `rules/gen3-fields.json` the model has, every one but `out.game_lost` (§ 12.4):
 
 | output | slot | shape |
 |---|---|---|
@@ -1040,7 +1044,6 @@ The 22 outputs of `rules/gen3-fields.json`:
 | face after | card | categorical over the face states, where a face change names the card or it enters |
 | cost adjustment | verdict head, decision records | signed delta per mana symbol kind against the printed cost |
 | player state change | player | binary each for became the monarch, took the initiative, gained the city's blessing, ventured, completed a dungeon; count of speed gained |
-| game lost | player | binary per player |
 | combat status change | card | binary each for removed from combat, became blocked, put onto the battlefield attacking or blocking |
 | subtypes changed | card | multi-binary gained and lost over a closed list the manifest records; supertypes as a second pair |
 | abilities changed | card | count of non-keyword abilities gained; binary for abilities lost; binary for text changed |
@@ -1058,8 +1061,8 @@ The 22 outputs of `rules/gen3-fields.json`:
 | rad delta | player | signed delta |
 | energy delta | player | signed delta |
 
-- A player losing is a binary per player: in a two-player game a win is the other
-  player's loss, and a draw is both players losing.
+- No output states the game's end: no curated record holds it (§ 12.4), and a
+  `player_lost`, `player_won` or `game_drawn` event derives no target.
 - The resolution outcome is an output only, not an input on the acting-ability slot.
 - The replacement result supervises `rewrite` records, which the base spec leaves
   unsupervised.
@@ -1080,7 +1083,7 @@ The 22 outputs of `rules/gen3-fields.json`:
 - The subtype and keyword lists, and with them the head widths, are fixed when the lists are
   generated from the collected corpus. Until then they are generated from pilot collections:
   181 subtypes and 70 keywords.
-- With those lists the per-entity head is 1,635 columns (300 fields, 932 of the columns for
+- With those lists the per-entity head is 1,634 columns (299 fields, 932 of the columns for
   the 233 counter fields), each created-objects slot 285 columns (1,141 for the head), the
   verdict head 169, the global head 7 and the value head 541.
 - Every named counter other than a keyword counter gets a signed-delta output.
@@ -1232,6 +1235,12 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 - A permanent spell's resolution record survives `build-corpus`, keyed to the permanent's
   card.
 - A decision record whose candidate's key is unjoinable is refused as `unjoinable-key`.
+- A record whose own changes end the game is refused as `game-end`, in every stratum, before
+  any copy is planned: a `player_lost` or `player_won` event among its payload's events, or a
+  player its own life or poison changes take to 0 life or 10 poison. Forge performs no
+  state-based action once the game is over, so such a record shows no creature death its
+  damage caused. The raw corpus keeps these records, and the game-end marker is unchanged.
+- The manifest counts the refused records by reason and by reason and sampling class.
 - A `turn_action` record is written to no stratum. The manifest counts the records left
   out by subkind.
 
@@ -1252,9 +1261,11 @@ added.
   full weight on each copy of that record.
 - A gen-2 lethality copy trains every output at full weight.
 - A record from a directed fork or from collection aimed at a rule is a natural record. It
-  carries no drawn rule of its own, and its copies within the natural share train every
-  output at full weight under both masks. Its `aimed_at` only excludes it from the rule
-  tests (§ 14.4).
+  carries no drawn rule of its own, and its natural copies weigh as any record's do: every
+  output at full weight under `hard`, n / d on the outputs of no drawn rule under `soft`.
+  Its `aimed_at` only excludes it from the rule tests (§ 14.4).
+- A gen-2 lethality copy is made for a record's first natural copy in a step only, never
+  for its other natural copies or its added copies.
 
 ## 13.2 One loss scale
 

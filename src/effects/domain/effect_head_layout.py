@@ -173,7 +173,6 @@ class HeadField(StrEnum):
     VENTURED = "ventured"
     COMPLETED_DUNGEON = "completed_dungeon"
     SPEED_GAINED = "speed_gained"
-    GAME_LOST = "game_lost"
     RAD_DELTA = "rad_delta"
     ENERGY_DELTA = "energy_delta"
     ATTACK_TARGET_LEGAL = "attack_target_legal"
@@ -485,10 +484,6 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     _sparse(HeadField.COMPLETED_DUNGEON, FieldType.BINARY, FieldScope.PLAYER,
             supervised_by=_EFFECT_HALVES, silent=0.0),
     _sparse(HeadField.SPEED_GAINED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
-    # No silent value: a burn spell's lethal resolution holds no game-end
-    # event (the game-end rescue record does), so its silence is no "lost
-    # nothing".
-    _sparse(HeadField.GAME_LOST, FieldType.BINARY, FieldScope.PLAYER),
     _sparse(HeadField.RAD_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
     _sparse(HeadField.ENERGY_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
     # ── gen-3: legality (root spec § 11.4) ──

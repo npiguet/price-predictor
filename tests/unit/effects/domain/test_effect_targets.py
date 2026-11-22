@@ -780,28 +780,6 @@ class TestCombatLegality:
         assert targets.gated is False
 
 
-class TestGameLost:
-    """Story 5 acceptance 6: the loser 1, the winner 0."""
-
-    def test_a_win_is_the_other_players_loss(self):
-        targets = derive_targets(_fixture()[f"{_RUN}.0-mwqvqdyrb9c0.627"])
-        assert targets["P0"].fields["game_lost"] == 1
-        assert targets["P1"].fields["game_lost"] == 0
-        assert targets["P0"].affected and targets["P1"].affected
-
-    def test_a_draw_is_both_players_losing(self):
-        targets = derive_targets(_on_board(ResolutionPayload(events=(
-            Event(type=EventType.GAME_DRAWN),
-        ))))
-        assert targets["P0"].fields["game_lost"] == targets["P1"].fields["game_lost"] == 1
-
-    def test_a_record_without_the_games_end_says_nothing_of_it(self):
-        targets = derive_targets(_on_board(ResolutionPayload(events=(
-            Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3}),
-        ))))
-        assert targets["P1"].supervised(_spec("game_lost")) is None
-
-
 class TestBasePowerAndToughness:
     """Story 5 acceptance 5: Ensoul Artifact sets base 5/5; the target is the
     change against the previous base."""
@@ -1137,7 +1115,6 @@ class TestGen3EventFields:
         (EventType.INITIATIVE_TAKEN, "P0", {}, {"took_initiative": 1}),
         (EventType.REMOVED_FROM_COMBAT, "E1", {}, {"removed_from_combat": 1}),
         (EventType.TEXT_CHANGE, "E1", {}, {"text_changed": 1}),
-        (EventType.PLAYER_LOST, "P0", {}, {"game_lost": 1}),
         (EventType.COUNTER_CHANGE, "E1", {"counter_type": "PAGE", "delta": 1},
          {"counters_delta_page": 1.0}),
         (EventType.ABILITY_CHANGE, "E1", {"abilities": "ABPump,ABTap", "removed": True},
@@ -1218,7 +1195,7 @@ class TestEveryFixtureTargetFitsItsField:
                         assert 0 <= value < spec.arity, name
                     seen.add(name)
         assert {"target_legal", "attack_target_legal", "combat_requirement",
-                "game_lost", "face_after"} <= seen
+                "face_after"} <= seen
 
 
 class TestTheWp4Wire:
@@ -1283,14 +1260,6 @@ class TestTheWp4Wire:
                   params={"from_zone": "battlefield", "to_zone": "exile"}),
         ))
         assert targets["E1"].fields["zone_outcome"] == _zone("exiled")
-
-    def test_a_loses_game_effect_half_names_the_loser_and_the_winner(self):
-        targets = derive_targets(_on_board(ResolutionPayload(events=(
-            Event(type=EventType.PLAYER_LOST, subjects=("P1",), params={"reason": "SpellEffect"}),
-            Event(type=EventType.PLAYER_WON, subjects=("P0",)),
-        ))))
-        assert targets["P1"].fields["game_lost"] == 1
-        assert targets["P0"].fields["game_lost"] == 0
 
     def test_a_fizzled_spell_s_card_reads_its_real_move(self):
         """Its half holds exactly its card's move off the stack; a copy's holds none."""

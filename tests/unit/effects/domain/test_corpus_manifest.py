@@ -59,7 +59,7 @@ def test_round_trips_through_a_dict():
 
 def test_the_digest_rule_is_pinned():
     """The hash rule is fixed: a checkpoint records this exact string (FR-147)."""
-    assert manifest().digest() == "c1570dee3a1e4210c68b9b234e6dd7f3"
+    assert manifest().digest() == "e9e79aed80f79a23b7a95b4049565311"
 
 
 def test_every_field_is_written_and_the_manifest_names_its_generation(manifest_dict):

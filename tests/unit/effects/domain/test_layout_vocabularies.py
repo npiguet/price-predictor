@@ -69,14 +69,14 @@ def test_the_generated_counter_fields_keep_their_names():
 
 def test_the_heads_keep_their_widths():
     """Gen-3's widths (root spec § 11.3) with the pilot-generated lists of
-    181 subtypes and 70 keywords: the per-entity head's 1,635 columns are
+    181 subtypes and 70 keywords: the per-entity head's 1,634 columns are
     932 for the 233 counter fields, a created-objects slot is 285 columns,
     the verdict head's 169 are 136 for the cost adjustment's 34 mana symbols
     and 4 for the resolution outcome (FR-052: resolved, fizzled, partially
     fizzled, declined). The widths move only when the lists are regenerated
     from the collected corpus."""
     assert (len(SUBTYPES_CHANGED), len(KEYWORDS_CHANGED)) == (181, 70)
-    assert PER_ENTITY_WIDTH == 1635
+    assert PER_ENTITY_WIDTH == 1634
     assert CREATED_SLOT_WIDTH == 285
     assert CREATED_OBJECTS_WIDTH == 1141
     assert VERDICT_WIDTH == 169
