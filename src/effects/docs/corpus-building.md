@@ -3,7 +3,7 @@
 Rules to respect when running or changing `build-corpus` or `holdout-cards`, or anything that depends on the split, the strata, curation or the manifest. This file does not describe the build:
 
 - Flags and defaults: `python -m effects build-corpus --help`.
-- Placement, budgets and copies: `domain/stratum_placement.py`, `domain/corpus_curation.py`, `domain/rule_budgets.py`, `domain/budget_allocation.py`, `domain/effect_families.py`.
+- Placement, cells, budgets and copies: `domain/stratum_placement.py`, `domain/corpus_curation.py`, `domain/outcome_signature.py`, `domain/condition_balance.py`, `domain/rule_budgets.py`, `domain/budget_allocation.py`, `domain/effect_families.py`.
 - What curation specifies: `specs/2026-10-30-ability-effect-model-gen3.md` § 12, `specs/025-ability-effect-model-gen3/contracts/cli.md`.
 - Why: `experiments/2026-09-18-effect-model-gen2-improvements-design.md`, `experiments/2026-10-30-effect-model-gen3-design.md`.
 
