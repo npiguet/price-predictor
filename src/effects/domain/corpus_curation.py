@@ -133,13 +133,7 @@ def class_targets(
     happens to hold. ``ceiling`` (``--training-records``) lowers that total,
     and what a ceiling above it cannot meet is returned per class (FR-139).
     """
-    shares = {
-        name: float(share)
-        for name, share in mix.items()
-        if share > 0 and available.get(name, 0) > 0
-    }
-    if not shares:
-        raise ValueError(f"no positive share with records available: mix={dict(mix)}")
+    shares = _available_shares(available, mix)
     total_share = sum(shares.values())
     supported = min(
         available[name] * total_share / share for name, share in shares.items()
@@ -151,11 +145,35 @@ def class_targets(
     }
     shortfall: dict[str, int] = {}
     if ceiling > 0 and ceiling > supported:
-        for name, share in shares.items():
-            missing = int(ceiling * share / total_share) - targets[name]
-            if missing > 0:
-                shortfall[name] = missing
+        shortfall = _shortfall(targets, shares, ceiling=ceiling)
     return targets, shortfall
+
+
+def _available_shares(
+    available: Mapping[str, int], mix: Mapping[str, float],
+) -> dict[str, float]:
+    """Each positive share whose class has records, refusing a mix with none."""
+    shares = {
+        name: float(share)
+        for name, share in mix.items()
+        if share > 0 and available.get(name, 0) > 0
+    }
+    if not shares:
+        raise ValueError(f"no positive share with records available: mix={dict(mix)}")
+    return shares
+
+
+def _shortfall(
+    targets: Mapping[str, int], shares: Mapping[str, float], *, ceiling: int,
+) -> dict[str, int]:
+    """What each class's target falls short of its share of ``ceiling``."""
+    total_share = sum(shares.values())
+    shortfall: dict[str, int] = {}
+    for name, share in shares.items():
+        missing = int(ceiling * share / total_share) - targets[name]
+        if missing > 0:
+            shortfall[name] = missing
+    return shortfall
 
 
 def validation_multipliers(

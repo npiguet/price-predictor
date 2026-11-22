@@ -87,25 +87,40 @@ def turn_step_condition(
     """
     if lines is None:
         return None
-    payload = record.payload
     if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
-        return _clause_condition(record, payload, lines)
+        return _clause_condition(record, record.payload, lines)
     if record.kind is RecordKind.CONTINUOUS:
         return _static_condition(record, record.ability or (), lines)
+    return _decision_condition(record, lines)
+
+
+def _decision_condition(
+    record: EffectRecord, lines: SidecarLookup,
+) -> TurnStepCondition | None:
+    """A decision's first candidate's condition, or a decision or legality
+    record's responsible statics'."""
+    payload = record.payload
     if isinstance(payload, PlayabilityDecisionPayload) and payload.candidates:
-        candidate = payload.candidates[0]
-        found = _candidate_condition(candidate, lines)
-        if found is not None:
-            return found
-        listed = [*candidate.responsible_static, *(
-            key for check in candidate.failed_checks or ()
-            for key in check.responsible_static
-        )]
-        return _static_condition(record, listed, lines)
+        return _first_candidate_condition(record, payload.candidates[0], lines)
     if isinstance(payload, PlayabilityAttackersPayload | PlayabilityBlockersPayload):
         listed = [key for entry in payload.forbidden for key in entry.responsible_static]
         return _static_condition(record, listed, lines)
     return None
+
+
+def _first_candidate_condition(
+    record: EffectRecord, candidate: Candidate, lines: SidecarLookup,
+) -> TurnStepCondition | None:
+    """The candidate's own restriction, else the statics it names as
+    responsible, its failed checks' included."""
+    found = _candidate_condition(candidate, lines)
+    if found is not None:
+        return found
+    listed = [*candidate.responsible_static, *(
+        key for check in candidate.failed_checks or ()
+        for key in check.responsible_static
+    )]
+    return _static_condition(record, listed, lines)
 
 
 def _clause_condition(
@@ -124,12 +139,18 @@ def _clause_condition(
         return None
     chain = segments(line.script_text)
     for entry in payload.conditions_met:
-        index = 0 if entry.segment == "root" else _chain_index(entry.segment)
-        if index is None or index >= len(chain):
-            continue
-        if _CLAUSE_PARAMS & params(chain[index]).keys():
+        if _clause_carries(entry.segment, chain):
             return TurnStepCondition(record.ability[0], _side(entry.met))
     return None
+
+
+def _clause_carries(segment: str, chain: list[str]) -> bool:
+    """Whether the clause ``segment`` names in ``chain`` carries a turn or step
+    condition."""
+    index = 0 if segment == "root" else _chain_index(segment)
+    if index is None or index >= len(chain):
+        return False
+    return bool(_CLAUSE_PARAMS & params(chain[index]).keys())
 
 
 def _chain_index(segment: str) -> int | None:
@@ -173,13 +194,12 @@ def _static_condition(
 def _line_active(record: EffectRecord, key: ProvenanceKey) -> bool | None:
     """Forge's answer to whether the static ``key`` holds, read off the snapshot:
     on a card the board holds, never on a last-known copy (no zone)."""
-    for entity in record.state.entities:
-        if entity.zone is None:
-            continue
-        for line in entity.lines:
-            if key in line.keys and line.active is not None:
-                return line.active
-    return None
+    held = (
+        line.active
+        for entity in record.state.entities if entity.zone is not None
+        for line in entity.lines if key in line.keys and line.active is not None
+    )
+    return next(held, None)
 
 
 def _side(met: bool) -> ConditionSide:
@@ -221,12 +241,19 @@ def one_sided_conditions(
 
     ``counts`` is keyed by :func:`condition_key`.
     """
+    out: dict[str, list[str]] = {}
+    for (klass, carrier), seen in sorted(_sides_seen(counts).items()):
+        if len(seen) == 1:
+            out.setdefault(klass, []).append(carrier)
+    return out
+
+
+def _sides_seen(
+    counts: Mapping[tuple[str, str, str], int],
+) -> dict[tuple[str, str], set[str]]:
+    """``(class, carrier) -> sides`` with a positive count."""
     sides: dict[tuple[str, str], set[str]] = {}
     for (klass, carrier, side), n in counts.items():
         if n > 0:
             sides.setdefault((klass, carrier), set()).add(side)
-    out: dict[str, list[str]] = {}
-    for (klass, carrier), seen in sorted(sides.items()):
-        if len(seen) == 1:
-            out.setdefault(klass, []).append(carrier)
-    return out
+    return sides
