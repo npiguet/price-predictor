@@ -13,6 +13,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from effects.domain.event_schema import Event, damage_source
+from effects.domain.records import CombatPayload, EffectRecord
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.entity_facts import (
     has_card_type,
@@ -151,3 +153,25 @@ def _player_in_combat(player: str, state: StateSnapshot, wanted: Any) -> bool | 
     attacked = any(e.combat is not None and e.combat.attacking == player
                    for e in state.entities)
     return (not bool(wanted)) if attacked else None
+
+
+def player_damage_unblocked(record: EffectRecord, event: Event,
+                            wanted: Mapping[str, Any]) -> bool | None:
+    """Whether a combat event's damage to a player is an unblocked attacker's
+    (510.1b), the one reading of ``subject_in_combat`` a player has: a blocked
+    attacker's (a trampler's excess, 702.19b) is not. True where the qualifier
+    is not declared, the record is no combat or the event names no player;
+    None where the event names no source."""
+    payload = record.payload
+    if "subject_in_combat" not in wanted or not isinstance(payload, CombatPayload):
+        return True
+    if not any(_is_player(subject, record.state) for subject in event.subjects):
+        return True
+    source = damage_source(event)
+    if source is None:
+        return None
+    return source in payload.attackers and not payload.blocks.get(source)
+
+
+def _is_player(subject: str, state: StateSnapshot) -> bool:
+    return state.entity(subject) is None and any(p.id == subject for p in state.players)

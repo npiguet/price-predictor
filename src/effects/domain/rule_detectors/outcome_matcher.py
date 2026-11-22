@@ -51,6 +51,7 @@ from effects.domain.rule_detectors.outcome_events import (
 )
 from effects.domain.rule_detectors.outcome_subjects import (
     SUBJECT_QUALIFIERS,
+    player_damage_unblocked,
     subject_qualifiers,
     subjects_meet,
 )
@@ -367,9 +368,10 @@ class Qualified:
                  listed: tuple[Event, ...]) -> bool | None:
         """The event's subject and source verdicts together; None where
         either cannot be read."""
-        subject = subjects_meet(event.subjects, record.state, self.subjects)
-        source = source_dies_verdict(event, listed, self.source_dies)
-        return None if subject is None or source is None else subject and source
+        verdicts = (subjects_meet(event.subjects, record.state, self.subjects),
+                    source_dies_verdict(event, listed, self.source_dies),
+                    player_damage_unblocked(record, event, self.subjects))
+        return None if None in verdicts else all(verdicts)
 
     def _near_side(self, record: EffectRecord, found: Found,
                    missed: list[Event]) -> FamilyMatch | None:

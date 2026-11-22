@@ -80,7 +80,9 @@ miss of every rule about which creature it moved.
 - ``subject_in_combat``: true where the event's subject is attacking or
   blocking in the snapshot, false where it is not; a player subject (an
   unblocked attacker's combat damage to the player it attacks, 510.1b) reads
-  false when an attacker attacks it and is unreadable otherwise, and no other
+  false when an attacker attacks it and is unreadable otherwise, and only for
+  damage whose source is an attacker no creature blocks (a trampler's excess
+  to the player is a blocked attacker's); no other
   qualifier reads a player;
 - ``subject_is_token``: true where the event's subject is a token in the
   snapshot, false where it is a card;
