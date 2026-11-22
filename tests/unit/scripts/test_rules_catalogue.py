@@ -18,6 +18,7 @@ import rules_catalogue as rc
 from rules_catalogue_parts import (
     directed_exclusions,
     gen3_fields,
+    gen3_lines,
     locations,
     reading,
     validation,
@@ -119,8 +120,8 @@ def test_the_real_tree_passes_every_check_but_the_gen3_fields():
     for path in sorted((locations.RULES / "scenarios").glob("*.json")):
         unit = path.stem
         errors, _ = validation.validate_scenarios(
-            reading.load_unit("scenarios", unit), reading.load_unit("triage", unit), all_ids,
-            validation._AnyName())
+            reading.load_unit("scenarios", unit), reading.load_unit("triage", unit),
+            validation.ScenarioChecks(all_ids, validation._AnyName()))
         assert errors == [], (unit, errors[:3])
 
 
@@ -512,7 +513,7 @@ def test_learnable_after_gen3_is_recomputed_from_the_heads_line(mapped, capsys):
 def test_the_turn_action_only_rules_ignore_a_none_detector_and_not_a_declared_one(mapped):
     by_rule = reading.load_scenarios_by_rule(mapped.rules_dir)
     # 500.6's other scenario declares none; 500.7's other reads resolution records.
-    assert gen3_fields.turn_action_rules(by_rule) == {"500.5", "500.6"}
+    assert gen3_lines.turn_action_rules(by_rule) == {"500.5", "500.6"}
 
 
 @pytest.mark.parametrize("rule", ["500.5", "500.6"])
