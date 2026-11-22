@@ -1337,7 +1337,7 @@ def test_without_the_variant_tree_the_build_is_refused(
 def test_the_manifest_records_the_variant_tree_it_read(a_corpus_with_variants, variant_build):
     """Which trees resolved decides which texts the rarity table names."""
     _, variant_root = a_corpus_with_variants
-    assert variant_build.load().variant_scripts == variant_root
+    assert variant_build.load().variant_scripts == Path(variant_root).resolve().as_posix()
 
 
 # ── quality, the gate-one slice, per-source reporting, repacking ───────
@@ -1653,9 +1653,14 @@ def test_a_stratum_whose_sample_comes_out_empty_stops_the_build(
     """The mixture names neither resolution class and the card-disjoint
     stratum holds nothing else, so its sample is empty. Shipped, the trainer
     validates ``nan`` on the stratum that selects the best checkpoint.
+
+    A game-disjoint share places games in that stratum, which a build asking
+    for a sample refuses to leave empty before it writes anything.
     """
-    with pytest.raises(BuildCorpusError, match="card-disjoint"):
-        a_mixture_corpus.build(tmp_path / "curated", **{**_MIXTURE, "validation_sample": 8})
+    with pytest.raises(BuildCorpusError, match="card-disjoint validation sample is empty"):
+        a_mixture_corpus.build(tmp_path / "curated", **{
+            **_MIXTURE, "validation_sample": 8, "game_disjoint_share": 0.5,
+        })
 
 
 def test_a_kept_record_with_an_unresolved_event_is_counted_not_refused(

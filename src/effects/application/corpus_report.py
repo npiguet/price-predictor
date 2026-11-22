@@ -25,6 +25,7 @@ from effects.domain.sampling import SamplingClass
 from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 from effects.domain.text_holdout import normalize_script_text
 from price_predictor.infrastructure.converted_provenance import sidecar_digest
+from price_predictor.infrastructure.forge_classpath import project_root
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
@@ -223,6 +224,22 @@ def held_out_text_report(
     return without, under
 
 
+def recorded_path(path: str | None) -> str:
+    """``path`` as the manifest records it, inside the digest: POSIX, relative
+    to the project root when under it, else absolute; "" for none. A path typed
+    relative to the working directory or absolute, with either slash, is one
+    value, so it pins one digest. A path outside the checkout (another drive, a
+    scratch directory) is recorded absolute rather than refused: it is a valid
+    input, and only its spelling must not move the digest."""
+    if not path:
+        return ""
+    resolved = Path(path).resolve()
+    root = project_root()
+    if resolved.is_relative_to(root):
+        return resolved.relative_to(root).as_posix()
+    return resolved.as_posix()
+
+
 def _unique_texts(keys: Iterable[Keys], key_text: Mapping[Keys, str]) -> int:
     """Distinct ability texts behind ``keys``: what a record count cannot say."""
     return len({key_text.get(key, key) for key in keys})
@@ -253,8 +270,8 @@ def build_manifest(
     return CorpusManifest(
         seed=config.seed,
         surface=surface,
-        vocab_path=config.vocab_path,
-        variant_scripts=config.variant_scripts or "",
+        vocab_path=recorded_path(config.vocab_path),
+        variant_scripts=recorded_path(config.variant_scripts),
         holdout_permille=config.holdout.permille,
         holdout_max_carriers=config.holdout.max_carriers,
         text_cap=config.text_cap,

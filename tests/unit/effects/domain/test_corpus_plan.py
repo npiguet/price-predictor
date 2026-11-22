@@ -270,3 +270,20 @@ def test_the_supply_keeps_each_slots_smallest_hashes():
     assert supply.keyed[Cell("rewrite"), key] == 3
     assert sorted(supply.heaps[Cell("rewrite"), key].values()) == [1, 5]
     assert isinstance(supply.heaps[Cell("rewrite"), key], CapHeap)
+
+
+def test_a_merged_supply_keeps_its_own_heaps():
+    """The supply merged in is read again afterwards (``decide`` folds the
+    survey's into its own): what the merging supply is offered never reaches
+    the other's heaps."""
+    key = (ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0),)
+    cell = Cell("rewrite")
+    surveyed = TrainingSupply(heap_cap=3)
+    for value in (10, 11, 12):
+        surveyed.add(cell, key, value)
+    merged = TrainingSupply(heap_cap=3)
+    merged.merge(surveyed)
+    merged.add(cell, key, 1)
+
+    assert sorted(surveyed.heaps[cell, key].values()) == [10, 11, 12]
+    assert sorted(merged.heaps[cell, key].values()) == [1, 10, 11]

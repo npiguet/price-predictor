@@ -986,7 +986,22 @@ def _decide_or_refuse(
             "under --card-disjoint-text-cap, and one that resolves none is "
             "never admitted."
         )
+    _refuse_an_unsampled_game_disjoint(config, decisions)
     return decisions
+
+
+def _refuse_an_unsampled_game_disjoint(config: BuildCorpusConfig, decisions: Decisions) -> None:
+    """An empty game-disjoint stratum leaves its validation sample empty, which
+    the trainer validates on: refused here, before the old dataset is cleared,
+    rather than when the sample comes out empty."""
+    if config.validation_sample <= 0 or decisions.strata.game_disjoint:
+        return
+    raise BuildCorpusError(
+        "No game is placed in the game-disjoint stratum, so its validation "
+        f"sample would be empty although --validation-sample {config.validation_sample} "
+        "asks for one. Raise --game-disjoint-share or --game-disjoint-keyword-share, "
+        "or pass --validation-sample 0. Nothing under --output was touched."
+    )
 
 
 def _write_validation_samples(

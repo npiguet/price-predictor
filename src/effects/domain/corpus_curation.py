@@ -99,6 +99,12 @@ class CapHeap:
         """Absorb another heap's values, keeping the cap smallest of the union."""
         self._heap.merge(other._heap)
 
+    def copy(self) -> CapHeap:
+        """A heap of the same values that offers to this one never reach."""
+        out = CapHeap(self.cap)
+        out._heap.entries = list(self._heap.entries)
+        return out
+
     def values(self) -> tuple[int, ...]:
         return tuple(-entry for entry in self._heap.entries)
 

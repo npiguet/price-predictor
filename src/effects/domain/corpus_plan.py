@@ -156,7 +156,13 @@ class TrainingSupply:
         self.heaps[cell, keys].offer(value)
 
     def merge(self, other: TrainingSupply) -> None:
-        """Absorb another shard's supply; both must keep the same heap size."""
+        """Absorb another shard's supply; both must keep the same heap size.
+
+        A slot this supply lacks takes a copy of the other's heap, never the
+        heap itself: a supply merged into another is still read afterwards
+        (``decide`` folds the survey's into its own), and an offer to a
+        shared heap would change what it reads.
+        """
         if other.heap_cap != self.heap_cap:
             raise ValueError(
                 f"cannot merge supplies keeping {other.heap_cap} and "
@@ -167,7 +173,7 @@ class TrainingSupply:
         for slot, heap in other.heaps.items():
             mine = self.heaps.get(slot)
             if mine is None:
-                self.heaps[slot] = heap
+                self.heaps[slot] = heap.copy()
             else:
                 mine.merge(heap)
 

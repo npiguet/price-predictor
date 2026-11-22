@@ -246,7 +246,8 @@ no line), all three the survey's; `unsupervised_events` (kind → events no outp
 `code_version` (`git rev-parse HEAD`, "" outside a checkout) and `sidecar_digest` (sha256 over the
 sidecars by tree, path and size), all outside the digest, as is `shards` (output stratum →
 [`{name, records}`]: each shard the stratum's directory holds, by file name, with the records the
-write pass put in it, sorted by name); `cut_games` (gen-3 games
+write pass put in it, sorted by name); `vocab_path` and `variant_scripts` hold POSIX paths
+relative to the project root, absolute outside it; `cut_games` (gen-3 games
 dropped whole for want of a game-end marker in their shard) is inside it; `record_flags` also counts
 `runtime_only` resolutions. `rule_counts` carries `declared_zero`, `none`, `untaggable` and
 `same_as` (`CatalogueStanding`). `per_stratum` counts `dropped-unsurveyed`: records past those the

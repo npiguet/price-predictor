@@ -1327,8 +1327,11 @@ and that the reporting half never enters the control score.
   before any tally reads it, every gen-3 game whose shard holds no game-end marker (a cut game),
   and the write pass the same games, counting their records as `dropped-cut` and the games in the
   manifest's `cut_games`, inside the digest; a records set none of whose gen-3 games has a marker
-  MUST be refused before `--output` is cleared. Two builds of one raw corpus MUST reach one digest
-  wherever it sits and whatever ran before in the process.
+  MUST be refused before `--output` is cleared, as MUST a build asking for a validation sample
+  whose game-disjoint stratum is empty. Two builds of one raw corpus MUST reach one digest
+  wherever it sits, whatever ran before in the process, and however `--vocab-path` and
+  `--variant-scripts` were spelled: the manifest records both as POSIX paths relative to the
+  project root, absolute outside it.
 - **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
   into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
   with the map's content hash, and each rule's effective outputs: the outputs of its map entry at
