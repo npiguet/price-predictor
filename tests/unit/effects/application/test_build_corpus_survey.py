@@ -386,7 +386,24 @@ def test_only_a_resolution_counts_a_game_toward_its_held_out_text(tmp_path):
 
 
 def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_path):
-    """A variant or token printing a held-out text, in a game naming no held-out card."""
+    """A token printing a held-out template no listed card carries, in a game
+    naming no held-out card."""
+    token = (ProvenanceKey("tokenscripts/secret_token_1.txt", 0, "spell", 0),)
+    roots = converted_tree(
+        tmp_path, *token, *_BOLT, text={token[0]: _SECRET_TEXT},
+    )
+    out = _survey_one(tmp_path, [
+        a_record(record_id="v", game_id="g1", kind="rewrite", ability=token),
+        a_record(record_id="b", game_id="g1", kind="rewrite", ability=_BOLT),
+    ], held_out=_HOLDOUT, sidecar_roots=roots)
+
+    assert out.games.held_out == set()
+    assert [keys for _cell, keys in out.supply.keyed] == [_BOLT]
+    assert out.held_out_text_dropped == Counter({"rewrite": 1})
+
+
+def test_a_game_naming_a_variant_printing_a_held_out_text_is_held_out_whole(tmp_path):
+    """Acting or only on the board, the variant's game is held out (finding 14.5)."""
     variant = (ProvenanceKey("variant-scripts/secret_variant_1.txt", 0, "spell", 0),)
     roots = converted_tree(
         tmp_path, *variant, *_BOLT, text={variant[0]: _SECRET_TEXT},
@@ -394,11 +411,10 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
     out = _survey_one(tmp_path, [
         a_record(record_id="v", game_id="g1", kind="rewrite", ability=variant),
         a_record(record_id="b", game_id="g1", kind="rewrite", ability=_BOLT),
+        a_record(record_id="c", game_id="g2", kind="rewrite", ability=_BOLT),
     ], held_out=_HOLDOUT, sidecar_roots=roots)
 
-    assert out.games.held_out == set()
-    assert [keys for _cell, keys in out.supply.keyed] == [_BOLT]
-    assert out.held_out_text_dropped == Counter({"rewrite": 1})
+    assert out.games.held_out == {"g1"}
 
 
 # ── the gen-3 survey: tags, inventories, turn actions, closed lists (T135) ─

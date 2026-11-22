@@ -527,21 +527,33 @@ def drop_held_out_variants(
     fresh variant's files are deleted so a later round cannot stage them; a
     reused one is only left out of the decks, since an earlier run may have
     decked it and its records join its files (FR-058b). One with no sidecar
-    is kept, as the loadable filter has already decided it.
+    is an error: the sidecar pass wrote every variant's, so a missing one is
+    a variant nothing can check or join, and ``build-corpus`` could not tell
+    that it prints a held-out text (``CollectorAbort``).
     """
+    _require_sidecars(variants)
     return [variant for variant in variants if not _dropped(variant, held_out)]
+
+
+def _require_sidecars(variants: list[GeneratedVariant]) -> None:
+    from effects.infrastructure.sidecar_io import sidecar_path_for
+
+    missing = [v.name for v in variants if not sidecar_path_for(v.path).exists()]
+    if missing:
+        logger.error(
+            "%d variant(s) have no sidecar, so nothing can tell whether they "
+            "print a held-out text, e.g. %s.", len(missing), ", ".join(missing[:5]),
+        )
+        raise CollectorAbort
 
 
 def _dropped(variant: GeneratedVariant, held_out: HeldOutCards) -> bool:
     """Whether the variant's sidecar prints a held-out text, its files
-    deleted when it is fresh; False when it has no sidecar."""
+    deleted when it is fresh."""
     from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
 
     sidecar_path = sidecar_path_for(variant.path)
-    try:
-        sidecar = read_sidecar(sidecar_path)
-    except FileNotFoundError:
-        return False
+    sidecar = read_sidecar(sidecar_path)
     if not any(
         line.script_text and held_out.holds_text(line.script_text)
         for line in sidecar.lines
@@ -560,13 +572,13 @@ def _keep_unheld(
     chooses; aborts when it drops every variant."""
     trees = config.source_trees.converted()
     if trees.cards_folder is None or not trees.cards_folder.is_dir():
-        logger.warning(
-            "No converted card tree among %s, so no variant is checked against "
-            "the held-out texts; build-corpus drops a training record acting "
-            "through one, but the variant still reaches training games' boards.",
+        logger.error(
+            "No converted card tree among %s, so no variant can be checked "
+            "against the held-out texts, and one printing a held-out text would "
+            "reach training games' boards.",
             ", ".join(str(folder) for folder in config.cards_folders),
         )
-        return variants
+        raise CollectorAbort
     held_out = trees.holdout(config.holdout)
     kept = drop_held_out_variants(variants, held_out)
     if len(kept) < len(variants):

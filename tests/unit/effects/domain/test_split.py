@@ -207,3 +207,55 @@ def test_a_held_out_token_on_the_board_names_its_game_held_out():
     )))
     held = held_out_cards(script_files={"tokenscripts/goblin.txt"})
     assert record_names_held_out_card(record, held)
+
+
+class TestVariantNamingHeldOutText:
+    """A variant script is named by its keys, an entity's lines included."""
+
+    _VARIANT = ProvenanceKey("variant-scripts/bolt_variant_ab12.txt", 0, "spell", 0)
+
+    def _on_board(self) -> object:
+        entity = named_entity("Bolt Variant ab12", lines=lines_of(printed=(self._VARIANT,)))
+        return record_on_board("g1", entities=(entity,))
+
+    def test_a_variant_printing_a_held_out_text_on_the_board_names_the_game(self):
+        prints = {self._VARIANT.script_file}.__contains__
+        assert record_names_held_out_card(self._on_board(), held_out_cards(), prints)
+
+    def test_a_variant_printing_no_held_out_text_does_not(self):
+        assert not record_names_held_out_card(
+            self._on_board(), held_out_cards(), lambda script_file: False)
+
+    def test_without_the_variant_check_the_record_names_nothing(self):
+        assert not record_names_held_out_card(self._on_board(), held_out_cards())
+
+    def test_only_variant_tree_keys_reach_the_check(self):
+        asked: list[str] = []
+
+        def prints(script_file: str) -> bool:
+            asked.append(script_file)
+            return False
+
+        record = record_on_board("g1", ability=(
+            ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "spell", 0), self._VARIANT))
+        record_names_held_out_card(record, held_out_cards(), prints)
+        assert asked == [self._VARIANT.script_file]
+
+
+def test_a_game_holding_no_variant_is_placed_as_before_over_the_gen3_fixture():
+    """The fixture holds no variant key, so the variant check is never asked and
+    every record answers as it did without it."""
+    from effects.domain.records import key_sites
+    from effects.infrastructure.shard_io import read_shard
+    from tests.unit.effects.builders import GEN3_RECORDS
+
+    held = held_out_cards({"Grizzly Bears", "Lightning Bolt"})
+    records = list(read_shard(GEN3_RECORDS))
+    assert not [k for r in records for k in key_sites(r) if k.tree == "variant-scripts"]
+
+    def never(_script_file: str) -> bool:
+        raise AssertionError("no variant to ask about")
+
+    for record in records:
+        assert record_names_held_out_card(record, held, never) == (
+            record_names_held_out_card(record, held))

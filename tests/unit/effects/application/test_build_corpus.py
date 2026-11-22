@@ -1953,11 +1953,9 @@ def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus)
 
 
 def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus):
-    """A training game's record acting through a held-out text is dropped (G14).
-
-    The game names no held-out card, so it stays in training; the one record
-    would teach the very text the card-disjoint stratum measures.
-    """
+    """A game whose record acts through a variant printing a held-out text is
+    held out whole (finding 14.5), not trained on with the one record dropped:
+    the variant's text is the very text the card-disjoint stratum measures."""
     variant_file = "variant-scripts/held_out_bears_variant_1.txt"
     variant_key = ProvenanceKey(variant_file, 0, "spell", 0)
     root = tmp_path / "source"
@@ -1986,9 +1984,8 @@ def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus
     )
 
     training = list(read_records(store.training_dir))
-    assert not [r for r in training if r.ability == (variant_key,)]
-    assert any(r.game_id == "g-var" for r in training)
-    assert store.load().per_stratum["dropped-held-out-text"] == 1
+    assert not [r for r in training if r.game_id == "g-var"]
+    assert "g-var" not in store.load().game_disjoint_games
 
 
 # ── gen-3 curation: rule budgets, curation, turn actions (T140) ──────────

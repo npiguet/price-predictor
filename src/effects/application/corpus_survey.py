@@ -144,6 +144,7 @@ class WorkerContext:
         self._resolver = None
         self._index: DetectorIndex | None = None
         self._held_text: dict[Keys, str | None] = {}
+        self._variant_held: dict[str, bool] = {}
 
     @property
     def sidecars(self) -> SidecarCache:
@@ -213,6 +214,21 @@ class WorkerContext:
 
     def protection_hash_of(self, record: EffectRecord) -> int:
         return protection_hash(record.record_id, seed=self.read.seed)
+
+    def variant_prints_held_out(self, script_file: str) -> bool:
+        """Whether a variant script's sidecar prints a held-out text on any
+        line, as ``collect-variants`` reads it; False for one with no sidecar
+        (its keys resolve to no line, so no record acting through it trains)."""
+        if script_file not in self._variant_held:
+            try:
+                lines = self.sidecars.get(script_file).lines
+            except KeyError:
+                lines = ()
+            self._variant_held[script_file] = any(
+                line.script_text and self.read.held_out.holds_text(line.script_text)
+                for line in lines
+            )
+        return self._variant_held[script_file]
 
     def held_out_text(self, keys: Keys) -> str | None:
         """The held-out script text these acting keys resolve to, normalized,
@@ -587,7 +603,9 @@ class _ShardSurveyor:
             and qualifying_observations(record, self.keyword_rows, self.context.resolver)
         ):
             games.keyword_combat.add(game)
-        if record_names_held_out_card(record, self.config.read.held_out):
+        if record_names_held_out_card(
+            record, self.config.read.held_out, self.context.variant_prints_held_out,
+        ):
             games.held_out.add(game)
 
     def _count_tags(self, record: EffectRecord, *, held: bool) -> TagResult:

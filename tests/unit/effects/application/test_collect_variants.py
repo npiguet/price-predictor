@@ -41,6 +41,29 @@ from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_script_variants import _BOLT_SCRIPT
 
 
+def _write_plain_sidecars(variant_scripts: Path) -> int:
+    """What the sidecar pass leaves: a sidecar of one plain line beside every
+    variant script in the tree (the pass itself needs a JVM)."""
+    from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+    from effects.infrastructure.sidecar_io import sidecar_path_for
+    from tests.unit.effects.builders import write_sidecar
+
+    for script in Path(variant_scripts).glob("*.txt"):
+        file = f"variant-scripts/{script.name}"
+        write_sidecar(ProvenanceSidecar(card=script.stem, script_file=file, lines=(SidecarLine(
+            line_index=0, line_kind="spell", script_text="SP$ Draw | NumCards$ 1",
+            provenance=(ProvenanceKey(file, 0, "spell", 0),), prose_offset=0,
+        ),)), sidecar_path_for(script))
+    return 0
+
+
+def _empty_card_tree(tmp_path: Path) -> Path:
+    """A converted card tree holding no card: no text is held out by it."""
+    tree = tmp_path / "cardsfolder"
+    tree.mkdir(exist_ok=True)
+    return tree
+
+
 @pytest.fixture(autouse=True)
 def _no_real_unstaging(monkeypatch):
     """A run ends by emptying Forge's real custom-cards directory; never here."""
@@ -381,7 +404,7 @@ class TestTheVariantRoundPlaysTheVariants:
         (records / "seed.jsonl").write_text("{}\n" * 100, encoding="utf-8")
 
         with patch.object(collect_variants, "write_variant_sidecars",
-                          return_value=0), \
+                          side_effect=_write_plain_sidecars), \
              patch.object(collect_variants, "loadable_variants",
                           side_effect=lambda generated, _root: generated):
             # The loadable list is written by the sidecar writer, which is
@@ -393,9 +416,9 @@ class TestTheVariantRoundPlaysTheVariants:
                     forge_cards_path=source,
                     variant_scripts=tmp_path / "variants",
                     decks_per_round=3, workers=1,
-                    # No converted tree: the held-out text check is skipped,
-                    # rather than reading the machine's real output tree.
-                    cards_folders=(tmp_path / "no-converted-cards",),
+                    # An empty converted tree holds no text out, rather than
+                    # reading the machine's real output tree.
+                    cards_folders=(_empty_card_tree(tmp_path),),
                 )
             )
 
@@ -586,7 +609,8 @@ class TestTheUntargetedRound:
             collect_variants, "loadable_variants", lambda generated, _root: generated,
         )
         monkeypatch.setattr(
-            collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
+            collect_variants, "write_variant_sidecars",
+            MagicMock(side_effect=_write_plain_sidecars),
         )
         records = tmp_path / "records"
         records.mkdir()
@@ -594,7 +618,7 @@ class TestTheUntargetedRound:
         supervisor.play_round.side_effect = _round_writes(records, *rounds, ended=ended)
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
-        config.setdefault("cards_folders", (tmp_path / "no-converted-cards",))
+        config.setdefault("cards_folders", (_empty_card_tree(tmp_path),))
         return collect_variants, CollectVariantsConfig(
             effect_records=records, forge_cards_path=forge_cards,
             variant_scripts=tmp_path / "variant-scripts", decks_per_round=4,

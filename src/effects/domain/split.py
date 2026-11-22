@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
 from effects.domain.card_names import fold_card_name
-from effects.domain.provenance import ProvenanceKey, first_text
+from effects.domain.provenance import ProvenanceKey, SourceTree, first_text
 from effects.domain.records import EffectRecord, key_sites
 from effects.domain.text_holdout import holdout_key, select_holdout
 
@@ -139,14 +139,32 @@ def text_keyed_holdout(
     )
 
 
+def variant_script_files(record: EffectRecord) -> frozenset[str]:
+    """The variant scripts a record names: the script file of every key it
+    carries (``key_sites``: an entity's lines on the board included, whatever
+    acts) that lies in the variant tree."""
+    return frozenset(
+        key.script_file for key in key_sites(record) if key.tree == SourceTree.VARIANT_SCRIPTS
+    )
+
+
 def record_names_held_out_card(
     record: EffectRecord, held_out: HeldOutCards,
+    variant_prints_held_out: Callable[[str], bool] | None = None,
 ) -> bool:
     """Whether this record names a held-out card or token, acting or in context.
 
-    By entity name, and by every key the record carries (``key_sites``).
+    By entity name, and by every key the record carries (``key_sites``). A
+    variant script is named by its keys too: with ``variant_prints_held_out``
+    (script file -> whether its sidecar prints a held-out text) a record
+    naming such a variant, acting or not, is held out as a held-out card's
+    record is.
     """
     for entity in record.state.entities:
         if fold_card_name(entity.name) in held_out.names:
             return True
-    return any(key.script_file in held_out.script_files for key in key_sites(record))
+    if any(key.script_file in held_out.script_files for key in key_sites(record)):
+        return True
+    return variant_prints_held_out is not None and any(
+        variant_prints_held_out(script_file) for script_file in variant_script_files(record)
+    )

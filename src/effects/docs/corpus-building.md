@@ -27,8 +27,9 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 
 - Training records are selected per record. Both validation strata are selected per game, the unit the split is decided in, so the card-disjoint cap admits or declines a whole game.
 - The split runs over the card tree and the token tree alike. A token script printing a held-out text is a carrier, is held out by its script file, and a game holding it is held out.
+- A variant script whose sidecar prints a held-out text (by template) is a carrier too: a game in which any entity or key names one, acting or on the board, is held out whole (`split.record_names_held_out_card`, the sidecar read through `WorkerContext.variant_prints_held_out`).
 - A game with a record naming a held-out card or token script goes to the card-disjoint stratum, random-seat games included. The game-disjoint stratum takes only games two Forge AIs played.
-- A record of a training game that acts through a held-out text (a token or variant script printing it, or its template) is not trained on. It is counted as `dropped-held-out-text`, and the rest of its game still trains.
+- A record of a training game that acts through a held-out text (a token script printing it, or its template; a variant printing it holds its game out whole) is not trained on. It is counted as `dropped-held-out-text`, and the rest of its game still trains.
 - The card-disjoint stratum holds at most `--card-disjoint-text-cap` games per held-out text. A game counts toward a text only through a resolution record acting through it, the only kind gate 1 scores, and a held-out game resolving no held-out text is dropped rather than trained on. This keeps every held-out text weighing comparably in gate 1 and in checkpoint selection.
 - No evaluator resolves a probe's `mirror_of` within a stratum.
 - A build that would produce a dataset gate 1 cannot be scored on (an empty holdout, an empty card-disjoint stratum) writes nothing and exits non-zero.
