@@ -57,6 +57,9 @@ GENERAL = {
     # a static applies while its source is on the battlefield (604.2): every
     # continuous record is one, and its other side writes no record
     "604.2-1",
+    # each turn-action kind's own action: a draw step draws (504.1), an untap step
+    # untaps (703.4c), a cleanup step discards to hand size (514.1)
+    "504.1-1", "703.4c-1", "514.1-1",
 }
 
 
@@ -162,3 +165,18 @@ def test_every_declared_scenario_is_a_declaration():
     assert all(isinstance(s.detector, DetectorDeclaration)
                for s in load_scenarios(RULES).scenarios
                if s.detector is not None and hasattr(s.detector, "family"))
+
+
+#: Each turn-action kind's own fact (504.1, 703.4c, 514.1): it fires on every record of its
+#: kind (pilot 5: all 9,711 draws, 7,273 untaps and 49 cleanup discards), yet the fixtures
+#: hold fewer than ``_MIN_KIND`` records of each kind, so the check never reads them.
+TURN_ACTION_FACTS = {"504.1-1", "703.4c-1", "514.1-1"}
+
+
+def test_the_turn_action_kinds_own_facts_are_general():
+    assert TURN_ACTION_FACTS <= GENERAL
+
+
+def test_every_general_declaration_is_a_declared_scenario():
+    declared = {s.id for s in load_scenarios(RULES).scenarios}
+    assert GENERAL <= declared
