@@ -132,6 +132,15 @@ def auc_standard_error(positives: int, negatives: int) -> float:
     return 2 * math.sqrt((positives + negatives + 1) / (12 * positives * negatives))
 
 
+def clustered_auc_standard_error(positive_games: Iterable[Hashable],
+                                 negative_games: Iterable[Hashable]) -> float:
+    """:func:`auc_standard_error` clustered by game (research E4): ``n₊`` and
+    ``n₋`` are the distinct games among the positive rows and among the
+    negative rows, whose game ids are given, so the records of one game count
+    once."""
+    return auc_standard_error(len(set(positive_games)), len(set(negative_games)))
+
+
 def grid_standard_error(cell_records: Sequence[int], outcomes: Sequence[float]) -> float:
     """A grid's worst-case standard error on the rescaled scale,
     ``(1/C) Σ_c 1/(2√N_c) / B``, over cells of ``cell_records`` records each

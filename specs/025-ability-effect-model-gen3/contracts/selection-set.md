@@ -29,7 +29,7 @@ selected against the one on disk); writing the same set again leaves the file as
    from the probe scripts through ports (`scripts/effect_knowledge_probes/selection.py`).
 3. Balance with r = 4 by seeded draw: rule-test polarities, probe types (against the smallest type
    that meets the item target), record-drawn grid cells.
-4. Compute each item's worst-case standard error (research Decision E4; a deviance item's under both
+4. Compute each item's worst-case standard error (research Decision E4; a rule test's or a binary probe's clusters by game: `n₊` and `n₋` are the distinct games among its positive and among its negative rows; a deviance item's under both
    rule masks, for every shipped head's output terms, `√(Σ_g S_g²) / Σ_g S_g` with `S_g` summing over
    game g's copies the constant's loss times the copy's mask weight times its class weight, the
    constant fitted at the class weights). Leave out items above 0.1 and name them, a rule with one polarity only as such. A

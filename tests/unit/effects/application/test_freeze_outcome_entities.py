@@ -7,7 +7,7 @@ outputs are all per-entity, the freeze counts only rows naming one toward n
 and the standard error, and leaves out, naming it, a rule with a polarity
 holding none. A rule with a verdict, global or created-objects output keeps
 every row. The records are the real gen-3 fixture's, their games edited into
-the two halves.
+the two halves, one game a record (a standard error counts games, finding 12.7).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from dataclasses import replace
 import pytest
 
 from effects.application.freeze_selection_set import (
+    ProbeItem,
     RuleTestRules,
     SelectionSetRefused,
     freeze_selection_set,
@@ -33,7 +34,6 @@ from tests.unit.effects.application.test_freeze_selection_set import (
     _Grid,
     _Losses,
     _manifest,
-    _Probes,
     _reader,
 )
 
@@ -41,12 +41,13 @@ FIRES, NOT = Polarity.FIRES, Polarity.DOES_NOT_FIRE
 RULE = "121.2"
 #: Carried at the actor player by every record the fixture below keeps.
 OUTPUTS = ("gate",)
-HALVES = {GD: {"selection": ["s"], "reporting": ["r"]}}
+HALVES = {GD: {"selection": [f"s{i}" for i in range(16)],
+               "reporting": [f"r{i}" for i in range(16)]}}
 
 
 @pytest.fixture(scope="module")
 def fixture_records():
-    """32 rule-test-eligible fixture records, 16 in each half's one game."""
+    """32 rule-test-eligible fixture records, 16 in each half, one game each."""
     from tests.unit.effects.builders import curated_fixture_records
 
     eligible = [r for r in curated_fixture_records()
@@ -54,7 +55,7 @@ def fixture_records():
                         or r.directed is not None)
                 and carried_outputs(r, [r.actor_player], OUTPUTS)]
     assert len(eligible) >= 32
-    return [replace(record, game_id="s" if i < 16 else "r")
+    return [replace(record, game_id=f"s{i}" if i < 16 else f"r{i - 16}")
             for i, record in enumerate(eligible[:32])]
 
 
@@ -63,7 +64,7 @@ def _tags(records, *, fires=10, near_with_entity=0):
     ``does_not_fire``, the first ``near_with_entity`` of them naming it too."""
     tags = {}
     for half in ("s", "r"):
-        rows = [r for r in records if r.game_id == half]
+        rows = [r for r in records if r.game_id[0] == half]
         for i, record in enumerate(rows):
             polarity = FIRES if i < fires else NOT
             named = polarity is FIRES or i - fires < near_with_entity
@@ -71,6 +72,15 @@ def _tags(records, *, fires=10, near_with_entity=0):
                 RULE, polarity, observed=polarity is FIRES, condition=(record.actor_player,),
                 outcome=(record.actor_player,) if named else (), scenario=f"{RULE}-1")]
     return tags
+
+
+class _Probes:
+    """One binary probe type, positive on the records of the even-numbered games."""
+
+    def items(self, records):
+        for record in records:
+            yield ProbeItem("dies", "binary", record.record_id, "E1",
+                            float(int(record.game_id[1:]) % 2))
 
 
 def _freeze(records, tags, *, entity_read={RULE: OUTPUTS}):

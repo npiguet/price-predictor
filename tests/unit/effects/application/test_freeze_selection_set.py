@@ -209,14 +209,15 @@ def test_no_two_polarity_rule_in_a_half_refuses_naming_it() -> None:
 def test_three_rules_at_68_each_miss_the_component_target() -> None:
     """Story 8 acceptance 8: the smaller rules left out and named; three items
     at 0.0994 give the component 0.0574, above 0.05."""
-    halves = {GD: {"selection": ["s"], "reporting": ["r"]}}
+    halves = {GD: {"selection": [f"s{i}" for i in range(68)],
+                   "reporting": [f"r{i}" for i in range(68)]}}
     records, tags = [], {}
     sizes = {"A": 68, "B": 68, "C": 68, "small1": 20, "small2": 5}
-    for half, game in (("selection", "s"), ("reporting", "r")):
+    for half, prefix in (("selection", "s"), ("reporting", "r")):
         for rule, n in sizes.items():
             for polarity in (FIRES, NOT):
-                for i in range(n):
-                    record = _Record(f"{game}.{rule}.{polarity}.{i}", game)
+                for i in range(n):  # one game a record: the error counts games
+                    record = _Record(f"{prefix}.{rule}.{polarity}.{i}", f"{prefix}{i}")
                     records.append(record)
                     tags[record.record_id] = [_tag(rule, polarity)]
     with pytest.raises(SelectionSetRefused) as refused:

@@ -83,7 +83,7 @@ from effects.domain.rule_catalogue import Polarity, ScenarioCatalogue
 from effects.domain.rule_detectors import DetectorIndex, RuleTag, tag_record
 from effects.domain.rule_output_carriage import carried_outputs, read_at_entities_only
 from effects.domain.score_scales import (
-    auc_standard_error,
+    clustered_auc_standard_error,
     component_standard_error,
     grid_standard_error,
     loss_ratio_standard_error,
@@ -459,6 +459,12 @@ def _gather(
                     ProbeRecord(item.record_id, game, item.entity, float(item.label)))
 
 
+def _games_error(positives: Sequence, negatives: Sequence) -> float:
+    """The clustered AUC standard error of rows carrying a ``game_id`` (E4)."""
+    return clustered_auc_standard_error([row.game_id for row in positives],
+                                        [row.game_id for row in negatives])
+
+
 def _sample(heap: list, record: EffectRecord, copy: int, *, seed: int, cap: int) -> None:
     """Keep the ``cap`` copies of smallest keyed hash, as a max-heap."""
     if cap <= 0:
@@ -536,8 +542,7 @@ class _Assembly:
             drawn = balanced(rows, self.limits.r,
                              seed=self.seed, salt=f"rule-test|{stratum}|{half}|{rule}",
                              key=lambda row: row.record_id)
-            error = auc_standard_error(len(drawn[Polarity.FIRES]),
-                                       len(drawn[Polarity.DOES_NOT_FIRE]))
+            error = _games_error(drawn[Polarity.FIRES], drawn[Polarity.DOES_NOT_FIRE])
             if self._enters(stratum, half, RULE_TESTS, rule, error):
                 errors.append(error)
                 kept[rule] = {str(p): tuple(rows) for p, rows in drawn.items()}
@@ -568,8 +573,8 @@ class _Assembly:
 
     def _probe_error(self, probe_type: str, rows: Sequence[ProbeRecord]) -> float:
         if self.probe_kinds[probe_type] == BINARY:
-            positives = sum(1 for row in rows if row.label >= 0.5)
-            return auc_standard_error(positives, len(rows) - positives)
+            return _games_error([row for row in rows if row.label >= 0.5],
+                                [row for row in rows if row.label < 0.5])
         if not rows:
             return math.inf
         mean = sum(row.label for row in rows) / len(rows)
