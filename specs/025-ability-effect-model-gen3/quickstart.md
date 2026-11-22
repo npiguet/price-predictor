@@ -251,7 +251,11 @@ first:
   `--target-records`, `--no-progress-rounds`), `""` for its defaults;
 - `$variantFlags`, the budget flags of `collect-variants` (`--decks-per-round`,
   `--no-progress-rounds`; it takes no `--target-records`), `""` for its defaults;
-- `$anyTargetCards`, the any-target coverage round's `--wording-cards` file.
+- `$anyTargetCards`, the any-target coverage round's `--wording-cards` file (FR-038): every card
+  with an activated `AB$ DealDamage` line targeting `ValidTgts$ Any`, one lower-case name per line.
+  The 2026-11-22 list holds 240 cards, every one with converted text:
+  `$anyTargetCards = "$gen3\inputs\2026-11-22-any-target-cards\any-target-cards.txt"`; the
+  script that wrote it from `..\forge\forge-gui\res\cardsfolder` is beside it, with its console.
 
 At these rates the 2026-11-21 and 2026-11-22 review pilots wrote about 0.37 MB of shards per game
 and played 1,400 to 2,700 games an hour at `--workers 6`: 100,000 games take about 37 GB and 1.5 to
