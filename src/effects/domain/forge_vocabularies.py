@@ -575,6 +575,20 @@ SUBTYPES: tuple[str, ...] = (
     "zhalfir",
 )
 
+#: Each ``TypeLists.txt`` section and the end of its rows in ``SUBTYPES``.
+SUBTYPE_SECTIONS: tuple[tuple[str, int], ...] = (
+    ("BasicTypes", 5),
+    ("LandTypes", 17),
+    ("CreatureTypes", 356),
+    ("SpellTypes", 362),
+    ("EnchantmentTypes", 375),
+    ("ArtifactTypes", 397),
+    ("WalkerTypes", 483),
+    ("DungeonTypes", 484),
+    ("BattleTypes", 485),
+    ("PlanarTypes", 565),
+)
+
 #: Counter types, in ``CounterEnumType`` order, as a record spells them.
 NAMED_COUNTERS: tuple[str, ...] = (
     "M1M1",

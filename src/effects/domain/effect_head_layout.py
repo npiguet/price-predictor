@@ -95,6 +95,9 @@ _EFFECTFUL = frozenset({
 #: The effectful classes plus ``continuous``, whose contribution names every
 #: P/T, keyword, type and colour change its static makes to the entity.
 _STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
+#: A continuous record alone, whose contributions name every ability a
+#: static grants or takes.
+_CONTINUOUS = frozenset({SamplingClass.CONTINUOUS})
 #: A resolution's effect half alone: what a field whose event an effect
 #: API's clause rule or a command-zone reading writes says nothing about on
 #: any other record (finding 10.2).
@@ -421,10 +424,13 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
             classes=SUPERTYPES, supervised_by=_STATIC_CHANNELS, silent=0.0),
     _sparse(HeadField.SUPERTYPES_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
             classes=SUPERTYPES, supervised_by=_STATIC_CHANNELS, silent=0.0),
-    # A continuous record's silent 0 waits for its contributions' abilities
-    # to be read (task G09).
-    _sparse(HeadField.ABILITIES_GAINED, FieldType.COUNT, FieldScope.PERMANENT),
-    _sparse(HeadField.ABILITIES_LOST, FieldType.BINARY, FieldScope.PERMANENT),
+    # A contribution names every ability its static grants or takes, so a
+    # continuous record that names none changed none. A resolution's silence
+    # says nothing: an Animate of its own source names no subject.
+    _sparse(HeadField.ABILITIES_GAINED, FieldType.COUNT, FieldScope.PERMANENT,
+            supervised_by=_CONTINUOUS, silent=0.0),
+    _sparse(HeadField.ABILITIES_LOST, FieldType.BINARY, FieldScope.PERMANENT,
+            supervised_by=_CONTINUOUS, silent=0.0),
     _sparse(HeadField.TEXT_CHANGED, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
     _sparse(HeadField.BASE_POWER_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
             supervised_by=_STATIC_CHANNELS),

@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 
+from effects.domain.continuous_lines import LineChange, abilities_changed, line_changes
 from effects.domain.effect_head_input import (
     CARD_TYPES,
     DESIGNATIONS,
@@ -46,6 +47,7 @@ from effects.domain.keyword_names import changed_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
     ContinuousPayload,
+    Contribution,
     EffectRecord,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
@@ -174,12 +176,15 @@ class EntityTargets:
 
     def flag(self, name: str, index: int, width: int) -> None:
         """Set one bit of a multi-binary field, allocating it on first use."""
-        vector = self.fields.get(name)
-        if not isinstance(vector, list):
-            vector = [0.0] * width
-            self.fields[name] = vector
+        self.clear(name, width)
         if 0 <= index < width:
-            vector[index] = 1.0
+            self.fields[name][index] = 1.0
+
+    def clear(self, name: str, width: int) -> None:
+        """Write a multi-binary field with no member set, where none is: the
+        record says every member it does not set is unchanged."""
+        if not isinstance(self.fields.get(name), list):
+            self.fields[name] = [0.0] * width
 
     def forget(self, name: str) -> None:
         """Declare ``name`` unknown for this entity, dropping what was written."""
@@ -389,19 +394,6 @@ def _apply_type_change(entry: EntityTargets, event: Event) -> None:
         _apply_multi(entry, gained, params.get("types_added"), vocabulary)
         _apply_multi(entry, lost, params.get("types_removed"), vocabulary)
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
-
-
-def _displaceable(entity) -> dict[str, tuple[str, ...]] | None:
-    """Each lost field's values on the board a continuous record's static
-    displaces, keyed by the lost field; None where the entity is not on it."""
-    if entity is None:
-        return None
-    return {
-        HeadField.TYPES_LOST: entity.types,
-        HeadField.SUBTYPES_LOST: entity.subtypes,
-        HeadField.SUPERTYPES_LOST: entity.supertypes,
-        HeadField.COLORS_LOST: entity.colors,
-    }
 
 
 #: A type change's three readings: the card types, the subtypes of the
@@ -916,7 +908,8 @@ def _mark_legality(slot, name: str, legal, payload) -> None:
 
 
 def _apply_continuous(record: EffectRecord, slot) -> None:
-    """A continuous record's contributions are its targets directly."""
+    """A continuous record's contributions are its targets directly, read
+    against its board, which is the board without the static."""
     payload = record.payload
     if not isinstance(payload, ContinuousPayload):
         return
@@ -924,49 +917,46 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
     for contribution in payload.contributions:
         entry = slot(contribution.entity)
         entry.affected = True
-        if contribution.pt_boost != (0, 0):
-            entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
-            entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
-        if contribution.set_pt is not None:
-            # Against the board without the static, as a resolution's
-            # ``set_pt`` is against its snapshot: no base on a permanent that
-            # was no creature there is a base of 0/0.
-            entity = entities.get(contribution.entity)
-            base = entity.pt.base if entity is not None and entity.pt is not None else (0, 0)
-            for half, field_name in ((0, HeadField.BASE_POWER_DELTA),
-                                     (1, HeadField.BASE_TOUGHNESS_DELTA)):
-                if contribution.set_pt[half] is not None:
-                    entry.set(field_name, float(contribution.set_pt[half]) - base[half])
-        if contribution.controller is not None:
-            entry.set(HeadField.CONTROL_CHANGE, 1)
-        keywords = contribution.keyword_changes
-        for keyword in keywords.gained:
-            _flag_keyword(entry, HeadField.KEYWORDS_GAINED, keyword)
-        for keyword in keywords.lost:
-            _flag_keyword(entry, HeadField.KEYWORDS_LOST, keyword)
-        # Whole-class tokens (``all-creature-types``) match no slot and drop.
-        entity = entities.get(contribution.entity)
-        before = _displaceable(entity)
-        channels = [
-            (contribution.type_changes, vocabulary, gained, lost)
-            for gained, lost, vocabulary in _TYPE_CHANNELS
-        ] + [(contribution.color_changes, COLORS,
-              HeadField.COLORS_GAINED, HeadField.COLORS_LOST)]
-        for change, vocabulary, gained_field, lost_field in channels:
-            _apply_multi(entry, gained_field, change.gained, vocabulary)
-            _apply_multi(entry, lost_field, change.lost, vocabulary)
-            if not change.sets_outright:
-                continue
-            if before is None:
-                # The displaced values cannot be named, so the lost field is
-                # unknown rather than silently empty.
-                if lost_field not in entry.fields:
-                    entry.unknown.add(lost_field)
-                continue
-            # What the line held on the board without the static, less what
-            # the static sets it to, is what it displaced.
-            entry.flag(lost_field, -1, len(vocabulary))
-            kept = {str(value) for value in change.gained}
-            _apply_multi(entry, lost_field,
-                         [value for value in before[lost_field] if value not in kept],
-                         vocabulary)
+        _apply_contribution(entry, contribution, entities.get(contribution.entity))
+
+
+def _apply_contribution(entry: EntityTargets, contribution: Contribution, entity) -> None:
+    if contribution.pt_boost != (0, 0):
+        entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
+        entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
+    _apply_set_pt(entry, contribution.set_pt, entity)
+    if contribution.controller is not None:
+        entry.set(HeadField.CONTROL_CHANGE, 1)
+    granted, taken = abilities_changed(contribution)
+    if granted:
+        entry.add(HeadField.ABILITIES_GAINED, float(granted))
+    if taken:
+        entry.set(HeadField.ABILITIES_LOST, 1)
+    for line in line_changes(contribution, entity):
+        _apply_channel(entry, line)
+
+
+def _apply_set_pt(entry: EntityTargets, set_pt, entity) -> None:
+    """Against the board without the static, as a resolution's ``set_pt`` is
+    against its snapshot: no base on a permanent that was no creature there is
+    a base of 0/0."""
+    if set_pt is None:
+        return
+    base = entity.pt.base if entity is not None and entity.pt is not None else (0, 0)
+    for half, field_name in ((0, HeadField.BASE_POWER_DELTA), (1, HeadField.BASE_TOUGHNESS_DELTA)):
+        if set_pt[half] is not None:
+            entry.set(field_name, float(set_pt[half]) - base[half])
+
+
+def _apply_channel(entry: EntityTargets, line: LineChange) -> None:
+    """One line's gained and lost values; a line the static replaces names
+    every value it displaced, so its lost field is written even where empty."""
+    _apply_multi(entry, line.gained_field, line.gained, line.vocabulary)
+    if line.gained_unknown:
+        entry.forget(line.gained_field)
+    _apply_multi(entry, line.lost_field, line.lost, line.vocabulary)
+    if line.lost_unknown:
+        if line.lost_field not in entry.fields:
+            entry.unknown.add(line.lost_field)
+    elif line.replaces:
+        entry.clear(line.lost_field, len(line.vocabulary))

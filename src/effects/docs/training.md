@@ -69,7 +69,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 - The affected gate trains on every entity with a slot (`model-layout.md` § Input slots) of a record that is not a playability record. A field trains only where the gate's target fires and the field is present. The legality fields are the exception: they train wherever present, gate or no gate.
 - A field is present where the record wrote it, or where it has a silent value, the record's sampling class supervises it and the entity is in the field's scope. Silent values are "nothing happened": zone stayed, no damage, no counters, no change.
 - `tap_state`, both durations, the legality bits and `min_blockers` have no silent value and train only where an event or a payload sets them. A creature no event mentions is neither tapped nor untapped; do not give these a default.
-- A `=` in a continuous contribution's `types` or `colors` marks the matching `*_lost` field unknown, and no silent value overrides it.
+- A continuous contribution that displaces a line (a `=`, or a whole-class token: `model-layout.md` § Outputs) on an entity its board lacks marks the matching `*_lost` field unknown, and no silent value overrides it.
 - A `trigger` record derives no per-entity targets. Its events are what caused it; what it does arrives as its resolution record. It supervises the verdict head's fired bit, and the gate trains on its entities as negatives.
 - Per-entity counts are scored from 0 to the cap, never below zero (`damage_taken` nets healing).
 - A `zone_change` to a zone no zone outcome names (`stack`, `merged`, `sideboard` and Forge's other rare zones) marks the moved card's zone outcome unknown, never "stayed".

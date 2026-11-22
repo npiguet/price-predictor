@@ -53,6 +53,12 @@ def test_every_section_lists_subtypes_in_file_order():
         "plains", "island", "cave", "time_lord", "human", "bolas's_meditation_realm")
 
 
+def test_each_section_ends_where_its_first_named_subtypes_end():
+    assert sfv.subtype_sections(_TYPE_LISTS + "[ArtifactTypes]\nCave\nClue\n") == (
+        ("BasicTypes", 2), ("LandTypes", 3), ("CreatureTypes", 5), ("PlanarTypes", 6),
+        ("ArtifactTypes", 7))
+
+
 def test_a_counter_is_spelled_as_a_record_spells_it():
     assert sfv.named_counters(_COUNTER_ENUM) == (
         "M1M1", "P1P1", "LOYALTY", "ACQUIRED TASTE", "ENERGY")
@@ -64,8 +70,8 @@ def test_keyword_counters_are_in_the_package_s_spelling():
 
 
 def test_the_written_module_reads_back(tmp_path):
-    lists = {"SUBTYPES": ("human",), "NAMED_COUNTERS": ("P1P1",),
-             "KEYWORD_COUNTERS": ("flying",)}
+    lists = {"SUBTYPES": ("human",), "SUBTYPE_SECTIONS": (("CreatureTypes", 1),),
+             "NAMED_COUNTERS": ("P1P1",), "KEYWORD_COUNTERS": ("flying",)}
     target = tmp_path / "vocabularies.py"
     target.write_text(sfv.render(lists), encoding="utf-8")
     namespace: dict = {}

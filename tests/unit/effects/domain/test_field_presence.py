@@ -202,9 +202,11 @@ _LEFT_WITHOUT_A_SILENT_VALUE = {
     "door_unlocked": "a Room spell's entry unlocks the door cast with no UnlockDoor clause",
     "entered_in_combat": "Dig, DigUntil, Meld, Block and a sneak cast add combatants unread",
     "became_blocked": "a creature put onto the battlefield blocking blocks its attacker unread",
-    "abilities_gained": "a contribution's abilities are not read yet (task G09)",
-    "abilities_lost": "a contribution's abilities are not read yet (task G09)",
 }
+#: The one-valued fields whose silent 0 is a continuous record's alone: a
+#: contribution names every ability its static grants or takes (task G09),
+#: and an Animate of its own source names no subject on a resolution.
+_SILENT_ON_CONTINUOUS = ("abilities_gained", "abilities_lost")
 
 
 def _scored_values(records, name: str) -> dict[SamplingClass, set[str]]:
@@ -245,3 +247,14 @@ class TestOneValuedFieldsTakeTheirSilentZero:
     @pytest.mark.parametrize("name", sorted(_LEFT_WITHOUT_A_SILENT_VALUE))
     def test_a_field_whose_rule_misses_a_case_takes_no_silent_value(self, name):
         assert FIELDS_BY_NAME[name].silent is None, _LEFT_WITHOUT_A_SILENT_VALUE[name]
+
+
+class TestAbilitiesTakeTheirSilentZeroOnAContinuousRecord:
+    @pytest.mark.parametrize("name", _SILENT_ON_CONTINUOUS)
+    def test_the_fixture_s_continuous_records_score_both_values(self, fixture_records, name):
+        values = _scored_values(fixture_records, name).get(SamplingClass.CONTINUOUS, set())
+        assert values == {"0", "+"}, f"{name} is scored on {sorted(values)} there"
+
+    @pytest.mark.parametrize("name", _SILENT_ON_CONTINUOUS)
+    def test_no_other_class_reads_silence_as_none_changed(self, name):
+        assert FIELDS_BY_NAME[name].supervised_by == {SamplingClass.CONTINUOUS}

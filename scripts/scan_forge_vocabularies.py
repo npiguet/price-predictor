@@ -6,7 +6,8 @@ section 9.4, section 9.6):
 - **Subtypes** (``forge-gui/res/lists/TypeLists.txt``): every section's subtypes,
   basic land, land, creature, artifact, enchantment, spell, planeswalker, dungeon, battle and
   planar, each one learned embedding summed into the card slot and shared with a
-  chosen creature type.
+  chosen creature type; and where each section's rows end, which the targets read
+  to tell a creature type from a land or an artifact type.
 - **Named counters** (``forge-game/.../card/CounterEnumType.java``): each counter type
   as a record spells it (its name upper-cased, then
   ``effects.domain.state_snapshot.normalize_counter_type``), one scalar input each.
@@ -61,6 +62,24 @@ def subtypes(type_lists: str) -> tuple[str, ...]:
     return tuple(found)
 
 
+def subtype_sections(type_lists: str) -> tuple[tuple[str, int], ...]:
+    """Each ``TypeLists.txt`` section by name and the end of its rows in
+    :func:`subtypes`, in file order: a section's rows are the subtypes it names
+    first, so a subtype two sections list stays in the earlier one's."""
+    seen: set[str] = set()
+    ends: dict[str, int] = {}
+    section = ""
+    for raw in type_lists.splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+        elif line:
+            seen.add(subtype_spelling(line.split(":", 1)[0]))
+        ends[section] = len(seen)
+    ends.pop("", None)
+    return tuple(ends.items())
+
+
 def named_counters(counter_enum: str) -> tuple[str, ...]:
     """Every counter type of ``CounterEnumType``, as a record spells it, in enum order.
 
@@ -90,6 +109,7 @@ def scan(forge: Path) -> dict[str, tuple[str, ...]]:
 
     return {
         "SUBTYPES": subtypes(read(TYPE_LISTS)),
+        "SUBTYPE_SECTIONS": subtype_sections(read(TYPE_LISTS)),
         "NAMED_COUNTERS": named_counters(read(COUNTER_ENUM)),
         "KEYWORD_COUNTERS": keyword_counters(read(KEYWORD_COUNTERS)),
     }
@@ -97,12 +117,13 @@ def scan(forge: Path) -> dict[str, tuple[str, ...]]:
 
 _COMMENTS = {
     "SUBTYPES": "Subtypes, in ``TypeLists.txt`` order, in the input's spelling.",
+    "SUBTYPE_SECTIONS": "Each ``TypeLists.txt`` section and the end of its rows in ``SUBTYPES``.",
     "NAMED_COUNTERS": "Counter types, in ``CounterEnumType`` order, as a record spells them.",
     "KEYWORD_COUNTERS": "The keywords a counter grants (rule 122.1b), in the package's spelling.",
 }
 
 
-def render(lists: dict[str, tuple[str, ...]]) -> str:
+def render(lists: dict[str, tuple]) -> str:
     """The checked-in module's text."""
     lines = [
         '"""Forge\'s closed lists the effect head\'s input reads: generated, do not edit.',
@@ -114,10 +135,23 @@ def render(lists: dict[str, tuple[str, ...]]) -> str:
         '"""',
     ]
     for name, values in lists.items():
-        lines += ["", f"#: {_COMMENTS[name]}", f"{name}: tuple[str, ...] = ("]
-        lines += [f"    {json.dumps(value, ensure_ascii=False)}," for value in values]
+        lines += ["", f"#: {_COMMENTS[name]}", f"{name}: {_annotation(values)} = ("]
+        lines += [f"    {_literal(value)}," for value in values]
         lines.append(")")
     return "\n".join(lines) + "\n"
+
+
+def _annotation(values) -> str:
+    """A list of names is ``tuple[str, ...]``; one of ``(section, end)`` pairs
+    ``tuple[tuple[str, int], ...]``."""
+    pairs = bool(values) and isinstance(values[0], tuple)
+    return "tuple[tuple[str, int], ...]" if pairs else "tuple[str, ...]"
+
+
+def _literal(value) -> str:
+    if isinstance(value, tuple):
+        return f"({json.dumps(value[0], ensure_ascii=False)}, {value[1]})"
+    return json.dumps(value, ensure_ascii=False)
 
 
 def main(argv: list[str] | None = None) -> None:
