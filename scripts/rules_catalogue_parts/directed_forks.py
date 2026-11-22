@@ -209,31 +209,40 @@ def probabilities_document(chosen, count):
     return {"count_per_side": count, "rules": directed_side_records(chosen)}
 
 
-def cmd_directed_rules(args):
-    rules_dir = args.rules_dir
-    counts = json.loads(args.counts.read_text(encoding="utf-8"))
-    by_rule = load_scenarios_by_rule(rules_dir)
-    chosen = directed_rules(counts, by_rule, registered_sides(rules_dir))
-    cards, unknown = wording_cards(chosen, by_rule, converted_card_of_face(args.cards_folder))
+def _write_lists(rules_dir, chosen, counts):
+    """The enabled rules and the counts they were decided from."""
     (rules_dir / "directed-fork-rules.txt").write_text(
         "".join(f"{rule}\n" for rule in chosen), encoding="utf-8", newline="\n")
     write_decided_from(rules_dir / DIRECTED_COUNTS, counts)
+
+
+def _write_probabilities(args, chosen):
+    """With ``--probabilities-output``, each listed rule's records per registered side."""
     output = getattr(args, "probabilities_output", None)
-    if output is not None:
-        document = probabilities_document(
-            chosen, getattr(args, "count_per_side", DEFAULT_STEER_FLOOR))
-        output.write_text(json.dumps(document, indent=1) + "\n",
-                          encoding="utf-8", newline="\n")
-    (rules_dir / "coverage-wording-cards.txt").write_text(
-        "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
-    for rule, row in chosen.items():
-        fires, does_not_fire = row["natural"] if row["natural"] is not None else ("?", "?")
-        why = ", ".join(sorted(({"rare"} if FIRES in row["lacking"] else set())
-                               | ({"one-sided"} if DOES_NOT_FIRE in row["lacking"] else set())))
-        print(f"{rule:12s} fires {fires:>9} does_not_fire {does_not_fire:>9}  {why or 'always'}")
-        for scenario_id, label, polarity, operation in row["variants"]:
-            mark = "*" if polarity in row["lacking"] else " "
-            print(f"    {mark} {scenario_id} {label} ({polarity}): {operation}")
+    if output is None:
+        return
+    document = probabilities_document(
+        chosen, getattr(args, "count_per_side", DEFAULT_STEER_FLOOR))
+    output.write_text(json.dumps(document, indent=1) + "\n",
+                      encoding="utf-8", newline="\n")
+
+
+def _why_listed(row):
+    """``rare`` and ``one-sided``, sorted, for the sides the counts lack."""
+    return ", ".join(sorted(({"rare"} if FIRES in row["lacking"] else set())
+                            | ({"one-sided"} if DOES_NOT_FIRE in row["lacking"] else set())))
+
+
+def _print_rule(rule, row):
+    fires, does_not_fire = row["natural"] if row["natural"] is not None else ("?", "?")
+    print(f"{rule:12s} fires {fires:>9} does_not_fire {does_not_fire:>9}  "
+          f"{_why_listed(row) or 'always'}")
+    for scenario_id, label, polarity, operation in row["variants"]:
+        mark = "*" if polarity in row["lacking"] else " "
+        print(f"    {mark} {scenario_id} {label} ({polarity}): {operation}")
+
+
+def _print_summary(chosen, cards):
     rare = sum(FIRES in row["lacking"] for row in chosen.values())
     one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
     for rule, reason in ALWAYS_DIRECTED.items():
@@ -243,5 +252,20 @@ def cmd_directed_rules(args):
     print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
           f"{sum(not row['by_counts'] for row in chosen.values())} always), {len(cards)} wording "
           f"cards; * marks a variant of a polarity the counts lack")
+
+
+def cmd_directed_rules(args):
+    rules_dir = args.rules_dir
+    counts = json.loads(args.counts.read_text(encoding="utf-8"))
+    by_rule = load_scenarios_by_rule(rules_dir)
+    chosen = directed_rules(counts, by_rule, registered_sides(rules_dir))
+    cards, unknown = wording_cards(chosen, by_rule, converted_card_of_face(args.cards_folder))
+    _write_lists(rules_dir, chosen, counts)
+    _write_probabilities(args, chosen)
+    (rules_dir / "coverage-wording-cards.txt").write_text(
+        "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
+    for rule, row in chosen.items():
+        _print_rule(rule, row)
+    _print_summary(chosen, cards)
     if unknown:
         print(f"no converted card under {args.cards_folder}: {', '.join(unknown)}")
