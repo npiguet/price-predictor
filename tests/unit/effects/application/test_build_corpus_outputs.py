@@ -11,11 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.build_corpus import BuildCorpusError
 from effects.application.corpus_report import recorded_path
 from effects.application.corpus_survey import SurveyedRecord
 from effects.domain.corpus_manifest import CuratedShard
-from effects.domain.corpus_plan import Cell
+from effects.domain.corpus_plan import BuildCorpusError, Cell
 from effects.domain.rule_detectors import RuleSource
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import OUTPUT_STRATA

@@ -42,15 +42,13 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.build_corpus import (
-    BuildCorpusConfig,
-    BuildCorpusError,
-    build,
-)
+from effects.application.build_corpus import build
+from effects.application.build_corpus_config import BuildCorpusConfig
 from effects.application.corpus_report import check_refusals as _check_refusals
 from effects.application.corpus_report import check_samples as _check_samples
 from effects.application.corpus_survey import RefusalTally
 from effects.domain.corpus_manifest import SourceShard
+from effects.domain.corpus_plan import BuildCorpusError
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (

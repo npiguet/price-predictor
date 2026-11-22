@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.build_corpus import BuildCorpusConfig, decide
+from effects.application.build_corpus_config import BuildCorpusConfig
+from effects.application.corpus_decisions import decide
 from effects.application.corpus_survey import GameTally, RarityTally, ShardSurvey, Survey
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, TrainingSupply
@@ -390,7 +391,7 @@ def test_the_class_targets_are_planned_in_full(fake_sidecars):
 
 
 def test_a_mixture_naming_no_class_the_corpus_holds_is_an_operator_error(fake_sidecars):
-    from effects.application.build_corpus import BuildCorpusError
+    from effects.domain.corpus_plan import BuildCorpusError
 
     with pytest.raises(BuildCorpusError):
         _decide(a_survey(), fake_sidecars, class_mix={"trigger": 1.0})

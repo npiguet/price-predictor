@@ -28,7 +28,8 @@ from price_predictor.infrastructure.converted_provenance import sidecar_digest
 from price_predictor.infrastructure.forge_classpath import project_root
 
 if TYPE_CHECKING:
-    from effects.application.build_corpus import BuildCorpusConfig, Decisions
+    from effects.application.build_corpus_config import BuildCorpusConfig
+    from effects.application.corpus_decisions import Decisions
     from effects.domain.split import HeldOutCards
 
 logger = logging.getLogger(__name__)

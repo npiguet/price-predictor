@@ -338,6 +338,10 @@ _TORCH_FREE = (
     "effects.application.corpus_write",
     "effects.application.corpus_report",
     "effects.application.build_corpus",
+    "effects.application.build_corpus_config",
+    "effects.application.corpus_rule_catalogue",
+    "effects.application.corpus_decisions",
+    "effects.application.stratum_budgets",
     "effects.application.freeze_selection_set",
 )
 

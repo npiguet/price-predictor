@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.build_corpus import BuildCorpusConfig
+from effects.application.build_corpus_config import BuildCorpusConfig
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.corpus_validation.findings import Thresholds

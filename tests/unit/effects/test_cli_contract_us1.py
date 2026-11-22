@@ -168,7 +168,7 @@ class TestBuildCorpusDispatch:
         assert run_build_corpus(args) == 1
 
     def test_an_operator_condition_becomes_an_exit_code(self, tmp_path, monkeypatch):
-        from effects.application.build_corpus import BuildCorpusError
+        from effects.domain.corpus_plan import BuildCorpusError
         from effects.infrastructure.cli import run_build_corpus
 
         def explode(config):

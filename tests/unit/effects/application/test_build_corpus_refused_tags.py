@@ -102,7 +102,7 @@ def test_a_variant_trigger_with_no_sidecar_is_refused_and_counted_by_class(tmp_p
 
 
 def test_a_rule_counted_only_under_refused_is_tagged_nowhere_written():
-    from effects.application.build_corpus import tagged_nowhere_written
+    from effects.application.corpus_decisions import tagged_nowhere_written
     from effects.domain.rule_budgets import BudgetedRecord, BudgetInputs, plan_rule_budgets
     from effects.domain.rule_catalogue import Polarity
     from effects.domain.rule_detectors import RuleSource

@@ -22,7 +22,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any, TypeVar
 
-from effects.application.build_corpus import BuildCorpusConfig, BuildCorpusError
+from effects.application.build_corpus_config import BuildCorpusConfig
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
@@ -46,6 +46,7 @@ from effects.application.train_effect_model import (
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
+from effects.domain.corpus_plan import BuildCorpusError
 from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_CARDS_FOLDERS
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
