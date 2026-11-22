@@ -78,7 +78,6 @@ class TestSeveralBlocks:
         assert cell.state.entity(blocker).toughness == 5
         for entity in other:
             assert cell.state.entity(entity) == record.state.entity(entity)
-        assert cell.payload.assignment_choices[attacker] == {blocker: 3}
 
     def test_the_freeze_freezes_the_several_block_grids_beside_the_rest(self):
         names = [grid.name for grid in selection.grid_sources(None, _plain_keywords)]

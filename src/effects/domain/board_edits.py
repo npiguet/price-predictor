@@ -12,8 +12,7 @@ grid cell reads as the list of what it changed::
     BoardEdit(record).set_power("A", 3).set_toughness("B", 4).record
 
 An input the record states in two places is edited in both by the caller that
-knows the second place (the probes' ``sweeps.set_untapped_lands``, the combat
-grid's damage assignment ``grid_edits.assign_step_damage``); the edits here
+knows the second place (the probes' ``sweeps.set_untapped_lands``); the edits here
 touch one field each, but for a granted keyword, which a gen-3 entity states as
 a list entry and a line, both edited here.
 

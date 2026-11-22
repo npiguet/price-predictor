@@ -483,6 +483,7 @@ link made by an ability is recorded from that ability's line, not from its card.
   is dealt.
 - The combat shape is read at the first damage event, and the assignment at any point of
   the step.
+- The assignment stays in the record and is no model input (§ 9.4).
 
 ## 8.7 State-based checks
 
@@ -817,6 +818,12 @@ places:
   relation types of their own as well: a floating effect its `affects`, `created by` and
   `pending on`, a dungeon `in dungeon`, a pending event's subject `last known state of`,
   a chosen object `chose`, history `damaged this turn`, goad `goaded by`, a copy `copy of`.
+- A combat record feeds no damage assignment: no card slot reads `assignment_choices`.
+  This amends the base spec's combat rows, which list the damage-assignment choices as
+  inputs (§ Per-kind payloads) and put them in the overlays (§ Effect head input). The
+  assignment states which creatures deal damage in the step, so a first-strike step would
+  show who has first strike without the keyword. Who attacks and who blocks is read from
+  the snapshot's combat status and the `attacks` and `blocks` relations.
 - Subtypes, is a copy, is a token, and the same-name, attached-to, attacks and targets
   relations read what the snapshot already records. Face state and pending-event details
   read it in part, and § 8.4 adds the rest.

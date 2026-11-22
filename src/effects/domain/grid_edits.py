@@ -52,7 +52,6 @@ from effects.domain.rule_outcomes import (
     has_changeling,
     may_block,
     step_deaths,
-    strikes_in_step,
 )
 
 #: Damage and toughness of the damage grid, power and toughness of the combat grid.
@@ -134,26 +133,6 @@ VARIANTS: dict[str, tuple[str | None, str | None, str, bool]] = {
     "attacker-double-strike": ("attacker", "double_strike", "first_strike", False),
     "attacker-double-strike-second-hit": ("attacker", "double_strike", "regular", True),
 }
-
-
-def assign_step_damage(record, attacker: str, blocker: str):
-    """``record`` with both combatants' damage assignment matching their edited board.
-
-    A combat record's input carries each creature's assignment, the targets it assigns
-    to and the damage it assigns, so an edit to a creature's power or to the step has to
-    move its assignment with it, or the board and the assignment disagree. In a
-    one-on-one block a creature that strikes in this step assigns all its power to the
-    other; one that does not strike, or has no power, assigns nothing.
-    """
-    step = record.state.global_.combat_substep
-    choices = {source: dict(targets)
-               for source, targets in record.payload.assignment_choices.items()
-               if source not in (attacker, blocker)}
-    for source, target in ((attacker, blocker), (blocker, attacker)):
-        (power, _, _), keywords = side_of(record, source)
-        if power > 0 and strikes_in_step(keywords, step):
-            choices[source] = {target: power}
-    return replace(record, payload=replace(record.payload, assignment_choices=choices))
 
 
 def side_of(record, entity_id: str):
@@ -255,7 +234,7 @@ def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
             cell = base.set_power(striker, power).set_toughness(struck, toughness)
             if carried:
                 cell = cell.set_marked_damage(blocker, side_of(cell.record, attacker)[0][0])
-            edited = assign_step_damage(cell.record, attacker, blocker)
+            edited = cell.record
             row.append(edited)
             a, a_kw = side_of(edited, attacker)
             b, b_kw = side_of(edited, blocker)
@@ -615,7 +594,7 @@ __all__ = [
     "ATTACKER_KEYWORDS", "BLOCKER_TRAITS", "BLOCKS", "COMBAT_KEYWORDS", "EVASION_KEYWORDS",
     "GRID_PREFIX", "OTHER_CREATURE_TYPES", "PROTECTION_ROWS", "VALUES", "VARIANTS",
     "AbilityTexts", "CellRead", "CombatGrid", "DamageGrid", "EvasionGrid", "GridEdits",
-    "GridQualification", "TextOverride", "assign_step_damage", "damage_cells",
+    "GridQualification", "TextOverride", "damage_cells",
     "damage_target", "evasion_cell", "evasion_pair", "grid_block", "grid_records",
     "grid_sources", "label", "protection_quality", "side_of",
 ]

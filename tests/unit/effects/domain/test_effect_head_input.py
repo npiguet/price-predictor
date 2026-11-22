@@ -36,7 +36,6 @@ from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     Candidate,
-    CombatPayload,
     EffectRecord,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
@@ -45,7 +44,6 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
-    CombatStatus,
     EntityState,
     GlobalState,
     GrantedTemporary,
@@ -398,21 +396,6 @@ class TestPerKindVariations:
         for keyword in ("first_strike", "double_strike", "deathtouch", "lifelink",
                         "trample", "indestructible", "wither", "infect"):
             assert keyword in OVERLAY_KEYWORDS
-
-    def test_a_combat_record_carries_its_damage_assignment_choices(self):
-        entity = _entity("E1", combat=CombatStatus(attacking="P1"))
-        plain = _record(
-            kind=RecordKind.COMBAT, ability=None,
-            state=_snapshot(entities=(entity,)), payload=CombatPayload(),
-        )
-        assigned = _record(
-            kind=RecordKind.COMBAT, ability=None,
-            state=_snapshot(entities=(entity,)),
-            payload=CombatPayload(
-                attackers=("E1",), assignment_choices={"E1": {"E2": 4}},
-            ),
-        )
-        assert card_features(entity, plain) != card_features(entity, assigned)
 
     def test_a_trigger_record_overlays_its_pending_event(self):
         entity = _entity("E1")

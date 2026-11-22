@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from effects.domain.effect_head_input import COMBAT_SUBSTEPS, ZONES
+from effects.domain.effect_head_input import (
+    COMBAT_SUBSTEPS,
+    ZONES,
+    card_features,
+    card_segments,
+)
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
     CREATED_OBJECTS_WIDTH,
@@ -29,6 +34,8 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.field_types import DIRECTIONS
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
+from effects.infrastructure.record_codec import record_from_dict
+from tests.unit.effects.builders import gen3_fixture_records
 
 _PINNED = [
     (COMBAT_SUBSTEPS, ("first_strike", "regular")),
@@ -70,6 +77,22 @@ def test_the_heads_keep_their_widths():
     assert VERDICT_WIDTH == 169
     assert GLOBAL_WIDTH == 7
     assert VALUE_WIDTH == 541
+
+
+def test_the_card_slot_keeps_its_width_and_parts():
+    """A card slot is 536 features in 17 parts. A combat record's damage
+    assignment is no part of it (D3): it reads the first-strike rule
+    without the keyword. The width moves with the kept keyword flags and
+    the other lists the parts one-hot over."""
+    record = record_from_dict(gen3_fixture_records()[0])
+    entity = record.state.entities[0]
+    assert len(card_features(entity, record)) == 536
+    assert list(card_segments(entity, record)) == [
+        "characteristics", "face_state", "mana_cost", "printed_loyalty_defense",
+        "status", "keyword_flags", "relation_to_act", "designations", "x_paid",
+        "chosen", "costs_paid", "history", "order_rank", "stack_extras",
+        "pending_event", "command_zone", "comparable_amounts",
+    ]
 
 
 def test_the_value_head_keeps_its_slices():

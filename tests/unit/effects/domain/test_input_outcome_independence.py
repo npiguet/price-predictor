@@ -115,18 +115,7 @@ def records_by_kind() -> dict[type, list[EffectRecord]]:
     return grouped
 
 
-_KINDS = [
-    pytest.param(
-        CombatPayload, id="combat",
-        marks=pytest.mark.xfail(
-            strict=True, reason="G03: the damage assignment is an input (finding 4.4)"),
-    ),
-    *(pytest.param(kind, id=kind.__name__) for kind in _WITHOUT_OUTCOME
-      if kind is not CombatPayload),
-]
-
-
-@pytest.mark.parametrize("kind", _KINDS)
+@pytest.mark.parametrize("kind", list(_WITHOUT_OUTCOME), ids=lambda kind: kind.__name__)
 def test_the_input_does_not_depend_on_the_outcome(records_by_kind, kind):
     records = records_by_kind[kind]
     assert records, f"the fixture holds no {kind.__name__} record"

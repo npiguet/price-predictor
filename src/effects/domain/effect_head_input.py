@@ -43,7 +43,6 @@ from effects.domain.keyword_names import normalize_keyword, overlay_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey, TraitKind, first_text
 from effects.domain.records import (
-    CombatPayload,
     EffectRecord,
     Moment,
     PlayabilitySubkind,
@@ -775,18 +774,6 @@ def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
     _push_scalar(out, sum(extras.up_to_counts.values()))
 
 
-def _push_damage_assignment(out, entity: EntityState, record: EffectRecord, masked) -> None:
-    """A combat record's declared combat and damage-assignment choices."""
-    payload = record.payload
-    if not isinstance(payload, CombatPayload):
-        out += (0.0, 0.0, 0.0)
-        return
-    assigned = payload.assignment_choices.get(entity.id, {})
-    out.append(1.0 if entity.id in payload.attackers else 0.0)
-    out.append(float(len(assigned)))
-    out.append(float(sum(assigned.values())))
-
-
 def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) -> None:
     """Whether a ``rewrite`` or ``trigger`` record has a pending event, and
     whether this card is its subject; the event's type and amount are the
@@ -847,7 +834,6 @@ _CARD_PARTS = (
     ("history", _push_history),
     ("order_rank", _push_order_rank),
     ("stack_extras", _push_stack_extras),
-    ("damage_assignment", _push_damage_assignment),
     ("pending_event", _push_pending_event),
     ("command_zone", _push_command_zone),
     ("comparable_amounts", _push_comparable_amounts),

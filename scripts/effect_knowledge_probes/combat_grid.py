@@ -36,8 +36,8 @@ damaged first already shows that damage as marked. A creature may therefore show
 damage equal to the other creature's power, which is this step's own damage; any other
 marked damage disqualifies the record. Every edited record clears both creatures' marked
 damage, so the grid asks about the board before the damage step, the double striker's
-first hit apart. It also sets both creatures' damage assignment to what the edited board
-assigns, because the input carries each creature's assignment beside its power.
+first hit apart. A combat record's input carries no damage assignment, so the grid
+edits none.
 
 ``--source validation`` (the default) reads the blocks the corpus's selection set froze
 for the combat grids in ``--half`` (``reporting`` by default, ``selection`` or ``both``) of
@@ -65,7 +65,6 @@ from effects.domain.grid_edits import (  # noqa: E402, F401  (the suite's names 
     GRID_PREFIX,
     VALUES,
     VARIANTS,
-    assign_step_damage,
     grid_block,
     grid_records,
     side_of,
