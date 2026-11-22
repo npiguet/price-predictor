@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
-from effects.application.corpus_write import WriteResult
+from effects.application.corpus_write import TrainingTally, WriteResult
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, FamilyRow
 from effects.domain.corpus_plan import BuildCorpusError, Keys
@@ -67,6 +67,12 @@ def check_refusals(refusals: RefusalTally, kept: Mapping[SamplingClass, int]) ->
     Read from the survey, which judges every record under the write pass's own
     rule, so a refused build stops before it clears the previous dataset.
     """
+    _check_unjoinable(refusals, kept)
+    _check_class_refusals(refusals, kept)
+
+
+def _check_unjoinable(refusals: RefusalTally, kept: Mapping[SamplingClass, int]) -> None:
+    """Stop past both unjoinable-key limits over every record read."""
     unjoinable = refusals.by_reason.get(QualityDefect.UNJOINABLE_KEY, 0)
     total_read = sum(kept.values()) + sum(refusals.by_class.values())
     if (
@@ -87,6 +93,10 @@ def check_refusals(refusals: RefusalTally, kept: Mapping[SamplingClass, int]) ->
             "records were collected against: the cards were reconverted "
             f"after collection. Worst scripts: {worst}."
         )
+
+
+def _check_class_refusals(refusals: RefusalTally, kept: Mapping[SamplingClass, int]) -> None:
+    """Stop when the quality rules refused most of any one sampling class."""
     for name in sorted(refusals.by_class):
         refused = refusals.by_class[name]
         total = refused + kept.get(name, 0)
@@ -193,6 +203,11 @@ def family_tables(
     decisions: Decisions, written: WriteResult,
 ) -> tuple[dict[str, dict[str, FamilyRow]], dict[str, dict[str, dict[str, int]]]]:
     """The manifest's per-family and per-signature tables (FR-053)."""
+    return _family_rows(decisions, written), _signature_rows(written)
+
+
+def _family_rows(decisions: Decisions, written: WriteResult) -> dict[str, dict[str, FamilyRow]]:
+    """``class -> family -> row``: each planned family against what was written."""
     families: dict[str, dict[str, FamilyRow]] = {}
     for klass, per_family in decisions.selection.families.items():
         for label, row in per_family.items():
@@ -206,11 +221,16 @@ def family_tables(
                 repeats=wrote - distinct,
                 shortfall=max(0, row.share - wrote),
             )
+    return families
+
+
+def _signature_rows(written: WriteResult) -> dict[str, dict[str, dict[str, int]]]:
+    """``class -> family -> signature -> records written``, the empty signature left out."""
     signatures: dict[str, dict[str, dict[str, int]]] = {}
     for (klass, label, signature), count in sorted(written.families.signatures.items()):
         if signature:
             signatures.setdefault(klass, {}).setdefault(label, {})[signature] = count
-    return families, signatures
+    return signatures
 
 
 def held_out_text_report(
@@ -264,44 +284,21 @@ class BuildOutcome:
 
 def build_manifest(config: BuildCorpusConfig, outcome: BuildOutcome) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""
-    surface, held_out, survey = outcome.surface, outcome.held_out, outcome.survey
+    held_out, survey = outcome.held_out, outcome.survey
     decisions, written = outcome.decisions, outcome.written
-    training = written.training
-    per_class = {
-        name: ClassCounts(
-            read=training.read.get(name, 0),
-            kept=training.kept.get(name, 0),
-            dropped_by_cap=training.dropped_by_cap.get(name, 0),
-            unique_texts=_unique_texts(training.kept_keys.get(name, ()), decisions.key_text),
-        )
-        for name in sorted(training.read)
-    }
-    trained = sum(training.kept.values())
-    delivered_mix = {
-        name: count / trained for name, count in sorted(training.kept.items())
-    } if trained else {}
     families, signatures = family_tables(decisions, written)
     without_resolution, under_floor = held_out_text_report(survey, written, held_out.texts)
     strata = written.strata
     return CorpusManifest(
-        seed=config.seed,
-        surface=surface,
-        vocab_path=recorded_path(config.vocab_path),
-        variant_scripts=recorded_path(config.variant_scripts),
-        holdout_permille=config.holdout.permille,
-        holdout_max_carriers=config.holdout.max_carriers,
-        text_cap=config.text_cap,
-        card_disjoint_text_cap=config.card_disjoint_text_cap,
-        training_records=config.training_records,
-        class_mix=config.mix(),
-        delivered_mix=delivered_mix,
+        surface=outcome.surface,
+        delivered_mix=_delivered_mix(written.training),
         held_out_cards=tuple(sorted(held_out.names)),
         held_out_texts=tuple(sorted(held_out.texts)),
         card_disjoint_games=tuple(sorted(decisions.strata.card_disjoint)),
         game_disjoint_games=tuple(sorted(decisions.strata.game_disjoint)),
         rarity=decisions.rarity,
         sources=survey.shards,
-        per_class=per_class,
+        per_class=_per_class(written.training, decisions.key_text),
         # The two dropped strata write nothing, so have no unique texts.
         per_stratum={name: strata.records.get(name, 0) for name in Stratum},
         unique_texts={
@@ -315,9 +312,6 @@ def build_manifest(config: BuildCorpusConfig, outcome: BuildOutcome) -> CorpusMa
         no_acting_text_scripts=dict(written.refusals.textless_scripts.most_common(100)),
         games_by_source=survey.games_by_source,
         held_out_games_by_source=survey.held_out_games_by_source,
-        shard_records=config.shard_records,
-        validation_sample=config.validation_sample,
-        max_events_per_record=config.max_events_per_record,
         unattributed_records=written.unattributed,
         families=families,
         signatures=signatures,
@@ -327,13 +321,53 @@ def build_manifest(config: BuildCorpusConfig, outcome: BuildOutcome) -> CorpusMa
         keyword_threshold_games=tuple(sorted(decisions.keyword_threshold_games)),
         held_out_texts_without_resolution=without_resolution,
         held_out_texts_under_five_games=under_floor,
-        game_disjoint_share=config.game_disjoint_share,
-        game_disjoint_keyword_share=config.game_disjoint_keyword_share,
-        game_disjoint_keywords=tuple(config.game_disjoint_keywords),
-        reuse_cap=config.reuse_cap,
+        **_flag_fields(config),
         **decisions.rule_fields,
         **_collection_fields(config, outcome),
     )
+
+
+def _flag_fields(config: BuildCorpusConfig) -> dict:
+    """The flags the manifest records as the build ran under them."""
+    return {
+        "seed": config.seed,
+        "vocab_path": recorded_path(config.vocab_path),
+        "variant_scripts": recorded_path(config.variant_scripts),
+        "holdout_permille": config.holdout.permille,
+        "holdout_max_carriers": config.holdout.max_carriers,
+        "text_cap": config.text_cap,
+        "card_disjoint_text_cap": config.card_disjoint_text_cap,
+        "training_records": config.training_records,
+        "class_mix": config.mix(),
+        "shard_records": config.shard_records,
+        "validation_sample": config.validation_sample,
+        "max_events_per_record": config.max_events_per_record,
+        "game_disjoint_share": config.game_disjoint_share,
+        "game_disjoint_keyword_share": config.game_disjoint_keyword_share,
+        "game_disjoint_keywords": tuple(config.game_disjoint_keywords),
+        "reuse_cap": config.reuse_cap,
+    }
+
+
+def _per_class(training: TrainingTally, key_text: Mapping[Keys, str]) -> dict[str, ClassCounts]:
+    """Each class's training records read, kept, dropped by the cap, and unique texts."""
+    return {
+        name: ClassCounts(
+            read=training.read.get(name, 0),
+            kept=training.kept.get(name, 0),
+            dropped_by_cap=training.dropped_by_cap.get(name, 0),
+            unique_texts=_unique_texts(training.kept_keys.get(name, ()), key_text),
+        )
+        for name in sorted(training.read)
+    }
+
+
+def _delivered_mix(training: TrainingTally) -> dict[str, float]:
+    """Each class's share of the training records kept; none when none was."""
+    trained = sum(training.kept.values())
+    return {
+        name: count / trained for name, count in sorted(training.kept.items())
+    } if trained else {}
 
 
 def _under(where: str, records_dir: Path) -> str:
@@ -418,15 +452,30 @@ def _log_rules(manifest: CorpusManifest, decisions: Decisions, written: WriteRes
         dict(sorted(written.added.items())) or "none",
         dict(sorted(written.protection.items())) or "none",
     )
+    _log_one_sided(manifest)
+    logger.info("%d (class, rule, polarity) half(s) short of their share", _short_halves(manifest))
+    _log_halves(manifest, decisions)
+
+
+def _log_one_sided(manifest: CorpusManifest) -> None:
+    """The rules and the conditions seen on one side only, by class."""
     for klass, rules in sorted(manifest.one_sided_rules.items()):
         logger.info("%-22s %d one-sided rule(s): %s", klass, len(rules), ", ".join(rules[:10]))
     for klass, carriers in sorted(manifest.one_sided_conditions.items()):
         logger.info("%-22s condition(s) on one side only: %s", klass, ", ".join(carriers))
-    short = sum(
+
+
+def _short_halves(manifest: CorpusManifest) -> int:
+    """The training ``(class, rule, polarity)`` rows short of their share."""
+    return sum(
         1 for by_rule in manifest.rules.values() for rows in by_rule.values()
         for row in rows.values() if row.shortfall
     )
-    logger.info("%d (class, rule, polarity) half(s) short of their share", short)
+
+
+def _log_halves(manifest: CorpusManifest, decisions: Decisions) -> None:
+    """Each stratum's halves, the rules each half leaves out, and the
+    turn-action records written nowhere."""
     for stratum, by_half in sorted(decisions.strata.halves.items()):
         logger.info(
             "%-22s halves: %s", stratum,
@@ -515,6 +564,13 @@ def _log_refusals(written: WriteResult) -> None:
 
 def _log_mixture(manifest: CorpusManifest) -> None:
     """The class mixture and targets requested against delivered, and every shortfall."""
+    _log_class_mix(manifest)
+    _log_targets(manifest)
+    _log_shortfalls(manifest)
+
+
+def _log_class_mix(manifest: CorpusManifest) -> None:
+    """Each class's requested share against the delivered one."""
     requested, delivered = manifest.class_mix, manifest.delivered_mix
     for name in sorted(set(requested) | set(delivered)):
         asked, got = requested.get(name, 0.0), delivered.get(name, 0.0)
@@ -522,6 +578,10 @@ def _log_mixture(manifest: CorpusManifest) -> None:
             "%-22s requested %6.2f%%  delivered %6.2f%%  (%.2fx)",
             name, 100.0 * asked, 100.0 * got, (got / asked) if asked else 0.0,
         )
+
+
+def _log_targets(manifest: CorpusManifest) -> None:
+    """Each class's target against what was kept, warning on a short one."""
     for name, target in sorted(manifest.class_targets.items()):
         kept = manifest.per_class[name].kept if name in manifest.per_class else 0
         short = kept < (1.0 - _DELIVERY_TOLERANCE) * target
@@ -530,6 +590,10 @@ def _log_mixture(manifest: CorpusManifest) -> None:
             name, target, kept, 100.0 * kept / target if target else 0.0,
             " — the plan counted records the write pass did not deliver" if short else "",
         )
+
+
+def _log_shortfalls(manifest: CorpusManifest) -> None:
+    """Every class short of its share, then every family short of its share."""
     for name, missing in sorted(manifest.shortfall.items()):
         logger.warning(
             "%s is short %d record(s) of its share: --training-records asks for "
