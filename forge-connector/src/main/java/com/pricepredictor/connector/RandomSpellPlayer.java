@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.RandomChoices;
+import com.pricepredictor.connector.effects.TapCreatureCost;
 import forge.ai.AiCostDecision;
 import forge.ai.AiPlayDecision;
 import forge.ai.PlayerControllerAi;
@@ -27,6 +28,7 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
@@ -98,12 +100,23 @@ public final class RandomSpellPlayer {
         game.getStack().freezeStack(sa);
 
         final CostPayment pay = new CostPayment(cost, sa);
-        if (pay.payComputerCosts(decision)) {
+        if (paid(pay, decision)) {
             putOnStack(game, ai, sa);
             return true;
         }
         skipFailedPlay(game, sa, host, hz);
         return false;
+    }
+
+    /** Whether the costs are paid; the creatures the decision held back from the mana payment are let go after. */
+    private static boolean paid(CostPayment pay, CostDecisionMakerBase decision) {
+        try {
+            return pay.payComputerCosts(decision);
+        } finally {
+            if (decision instanceof RandomCostDecision random) {
+                random.releaseHeld();
+            }
+        }
     }
 
     /** Whether the play is a spell cast from its card, which splices and moves to the stack. */
@@ -212,6 +225,8 @@ public final class RandomSpellPlayer {
                 List.of("sharesCreatureTypeWith", "+withTotalPowerGE");
 
         private final Random random;
+        /** The creatures drawn to be tapped, which the mana payment must not tap. */
+        private final List<Card> held = new ArrayList<>();
 
         RandomCostDecision(Player ai, SpellAbility sa, Random random) {
             super(ai, sa, false);
@@ -269,7 +284,33 @@ public final class RandomSpellPlayer {
             if (!cost.canTapSource) {
                 valid.remove(source);
             }
-            return pick(valid, cost.getAbilityAmount(ability));
+            return pickTapped(valid, cost.getAbilityAmount(ability));
+        }
+
+        /**
+         * Creatures to tap that leave the mana payable, held back from the
+         * mana payment, which runs first and would tap a drawn creature for
+         * mana, a creature the tap part then taps again (601.2g).
+         */
+        private PaymentDecision pickTapped(CardCollection valid, int count) {
+            if (count < 0 || valid.size() < count) {
+                return null;
+            }
+            List<Card> tapped = TapCreatureCost.drawLeavingMana(ability, valid, count, random);
+            if (tapped == null) {
+                return null;
+            }
+            if (TapCreatureCost.hasManaPart(ability)) {
+                TapCreatureCost.hold(tapped);
+                held.addAll(tapped);
+            }
+            return PaymentDecision.card(new CardCollection(tapped));
+        }
+
+        /** Lets go of the creatures held back from the mana payment. */
+        void releaseHeld() {
+            TapCreatureCost.release(held);
+            held.clear();
         }
 
         /** Whether a sacrifice is the AI's: of the source, of the original host, or of all. */

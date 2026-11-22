@@ -209,7 +209,7 @@ public record PlayabilityVerdict(
             // The cost cannot be read on this board: the printed cost.
             rules = RulesCost.printed(cost);
         }
-        return ManaAffordability.canPay(candidate, payer, rules)
+        return TapCreatureCost.manaPayable(candidate, payer, rules)
                 && CostPayment.canPayAdditionalCosts(cost, candidate, false, payer);
     }
 }

@@ -77,28 +77,55 @@ class RandomSeatCostChoiceTest {
 
     /**
      * Revelsong Horn ({1}, {T}, tap an untapped creature you control) with
-     * Llanowar Elves the only creature and the only mana: the play is either
-     * not made, leaving nothing tapped, or on the stack; the game goes on.
+     * Llanowar Elves the only creature and the only mana: the Elves cannot
+     * make the mana and be tapped as the creature (601.2g), so the play is
+     * never made, and nothing is tapped or left in the stack zone.
      */
     @Test
-    void aTapCostPlayIsNotMadeHalfOrLeftOnTheStackZone() {
+    void aTapCostPlayWithTheOnlyCreatureMakingTheManaIsNeverMade() {
         Game game = newGame();
         Player a = game.getPlayers().get(0);
         Card elves = TestBoard.inPlay(game, a, "Llanowar Elves");
         Card horn = TestBoard.inPlay(game, a, "Revelsong Horn");
         RandomSeatController seat = seatOf(game);
 
-        boolean[] played = new boolean[1];
-        String where = playOnce(seat, game, horn, played);
+        List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
 
-        if (played[0]) {
-            assertEquals(1, game.getStack().size(), where);
-        } else {
-            assertTrue(!game.getCardState(elves).isTapped() && !game.getCardState(horn).isTapped(),
-                    "the paid parts are undone: " + where);
+        assertTrue(chosen == null || chosen.stream().noneMatch(sa -> sa.getHostCard().equals(horn)),
+                "the Horn is not offered: " + chosen);
+        assertTrue(!game.getCardState(elves).isTapped() && !game.getCardState(horn).isTapped());
+        assertEquals(0, game.getStack().size());
+    }
+
+    /**
+     * The same Horn with a second creature: made, whatever the seed draws
+     * first, the other creature tapped for the cost and the Elves for the mana.
+     */
+    @Test
+    void aSecondCreatureIsTheOneTapped() {
+        for (long seed = 1; seed <= 12; seed++) {
+            Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1,
+                    new RandomSeatLobbyPlayer("a", 1.0, new Random(seed)), new LobbyPlayerAi("b", null));
+            Player a = game.getPlayers().get(0);
+            Card elves = TestBoard.inPlay(game, a, "Llanowar Elves");
+            Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
+            Card horn = TestBoard.inPlay(game, a, "Revelsong Horn");
+            RandomSeatController seat = seatOf(game);
+
+            List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
+            assertNotNull(chosen, "seed " + seed);
+            SpellAbility play = chosen.stream().filter(sa -> sa.getHostCard().equals(horn))
+                    .findFirst().orElse(chosen.get(0));
+            if (!play.getHostCard().equals(horn)) {
+                continue; // the seat drew another play (the Elves are no candidate; the Bears neither)
+            }
+            boolean made = seat.playChosenSpellAbility(play);
+            String where = "seed " + seed + " made=" + made + " stack=" + game.getStack().size();
+            assertTrue(made, where);
+            assertTrue(game.getCardState(bears).isTapped(), where);
+            assertTrue(game.getCardState(elves).isTapped(), where);
+            assertEquals(ZoneType.Battlefield, game.getCardState(horn).getZone().getZoneType(), where);
+            assertTrue(!game.getCardState(elves).isUsedToPay() && !game.getCardState(bears).isUsedToPay(), where);
         }
-        assertEquals(ZoneType.Battlefield, game.getCardState(horn).getZone().getZoneType(), where);
-        game.getStack().resolveStack();
-        seat.chooseSpellAbilityToPlay();
     }
 }
