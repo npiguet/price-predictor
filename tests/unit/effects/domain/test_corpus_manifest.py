@@ -352,7 +352,8 @@ def test_a_rule_row_s_drawn_count_stays_outside_the_digest():
     built = manifest(**_gen3_fields())
     row = built.rules["effects"]["702.16e"]["fires"]
     moved = replace(row, drawn={"forge_ai": row.drawn.get("forge_ai", 0) + 1})
+    rows = built.rules["effects"]
     other = replace(built, rules={"effects": {
-        **built.rules["effects"], "702.16e": {**built.rules["effects"]["702.16e"], "fires": moved}}})
+        **rows, "702.16e": {**rows["702.16e"], "fires": moved}}})
     assert other.as_dict() != built.as_dict()
     assert other.digest() == built.digest()
