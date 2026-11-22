@@ -95,8 +95,10 @@ def test_the_fixture_s_deaths_are_counted_per_side(tmp_path, gen3_dir):
     assert document["rules"]["704.5f"] == {
         "fires": {"forge_ai": 3, "random_seat": 2}, "does_not_fire": {"forge_ai": 1}}
     assert document["rules"]["704.5g"] == {"fires": {"forge_ai": 5, "random_seat": 2}}
-    # Deathtouch's near misses are the damage-step probes that strip it.
-    assert document["rules"]["702.2b"] == {"does_not_fire": {"fork": 2}}
+    # Deathtouch's near misses are the damage-step probes that strip it, but
+    # for the one whose combat ends the game (.426), which keyword_combat
+    # does not tag (sba_board.game_ends).
+    assert document["rules"]["702.2b"] == {"does_not_fire": {"fork": 1}}
     # Five of the decisions are protection forks' re-recordings of a live one.
     assert document["rules"]["601.2"] == {
         "fires": {"aimed": 1, "forge_ai": 9, "fork": 3, "random_seat": 7},
