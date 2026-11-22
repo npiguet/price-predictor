@@ -70,12 +70,11 @@ reads them (``KeywordResolver``).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from effects.domain.damage_step_keywords import (
     CombatParticipant,
-    KeywordResolver,
     combat_participant,
     defender_ref,
 )
@@ -83,8 +82,9 @@ from effects.domain.event_schema import EventType, damage_source
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors import declared_values as dv
+from effects.domain.rule_detectors.keyword_reading import KeywordReading
 from effects.domain.rule_outcomes import strikes_in_step
 from effects.domain.state_snapshot import (
     CombatSubstep,
@@ -163,42 +163,81 @@ def _players(found: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(e for e in found if e.startswith("P"))
 
 
+# ── the declaration ─────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class _Declared:
+    """What a keyword shape reads off its declaration, read once."""
+
+    keyword: str
+    #: ``fires_when: absent``: the creatures without the keyword on the ``fires`` side.
+    flip: bool
+    defender: str
+    tapped: bool
+
+    @classmethod
+    def of(cls, params: Mapping[str, Any]) -> _Declared:
+        return cls(params.get("keyword"), params.get("fires_when") == _ABSENT,
+                   params.get("defender", _PLANESWALKER), bool(params.get("tapped")))
+
+
 # ── the keyword shapes ──────────────────────────────────────────────────
 
 
-def _poison(combat: _Combat, params: Mapping[str, Any], keyword: str,
-            readable: bool) -> Iterator[_Finding]:
-    for entity, participant in combat.attackers():
-        player = participant.defending_player
-        if (player is None or not entity.power >= 1 or keyword not in combat.keywords_of(entity)
-                or not combat.strikes(entity)):
-            continue
+def _poison(combat: _Combat, keyword: str, readable: bool) -> Iterator[_Finding]:
+    for entity, player in _poisoning(combat, keyword):
         hit = _players(combat.damage_from(entity.id))
-        seen = None
-        if readable and (hit or set(combat.damage_to(player)) <= {entity.id}):
-            seen = any(player in event.subjects
-                       for event in combat.events(EventType.POISON_CHANGE)
-                       if event.params.get("delta", 0) > 0)
+        seen = _poison_seen(combat, entity, player, hit) if readable else None
         yield _Finding(entity.id, bool(hit), hit or (player,), seen)
 
 
-def _toxic(combat, params, keyword):
-    return _poison(combat, params, keyword, readable=True)
+def _poisoning(combat: _Combat, keyword: str) -> Iterator[tuple[EntityState, str]]:
+    """Each attacker that would poison the player it attacks, with that player."""
+    for entity, participant in combat.attackers():
+        player = participant.defending_player
+        if player is not None and _deals_poison(combat, entity, keyword):
+            yield entity, player
 
 
-def _poisonous(combat, params, keyword):
-    return _poison(combat, params, keyword, readable=False)
+def _deals_poison(combat: _Combat, entity: EntityState, keyword: str) -> bool:
+    """With power, carrying the keyword and striking in this step."""
+    if not entity.power >= 1:
+        return False
+    return keyword in combat.keywords_of(entity) and combat.strikes(entity)
 
 
-def _vigilance(combat: _Combat, params: Mapping[str, Any], keyword: str) -> Iterator[_Finding]:
-    if params.get("tapped"):
-        yield from _tapped_carriers(combat, keyword)
-        return
+def _poison_seen(combat: _Combat, entity: EntityState, player: str,
+                 hit: tuple[str, ...]) -> bool | None:
+    """Whether a poison change reached ``player``; None where ``entity`` hit
+    nothing and another source's combat damage reached them."""
+    if not (hit or set(combat.damage_to(player)) <= {entity.id}):
+        return None
+    return any(player in event.subjects
+               for event in combat.events(EventType.POISON_CHANGE)
+               if event.params.get("delta", 0) > 0)
+
+
+def _toxic(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
+    return _poison(combat, declared.keyword, readable=True)
+
+
+def _poisonous(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
+    return _poison(combat, declared.keyword, readable=False)
+
+
+def _vigilance(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
+    if declared.tapped:
+        return _tapped_carriers(combat, declared.keyword)
+    return _vigilant(combat, declared)
+
+
+def _vigilant(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
     # An attacker without vigilance is the fires side of attacking tapping it
     # (508.1f), and says nothing of vigilance: no near miss of the keyword.
-    judged = (True, False) if params.get("fires_when") == _ABSENT else (True,)
+    judged = (True, False) if declared.flip else (True,)
     for entity, _participant in combat.attackers():
-        carried = keyword in combat.keywords_of(entity)
+        carried = declared.keyword in combat.keywords_of(entity)
         if carried in judged:
             yield _Finding(entity.id, carried, (entity.id,), not entity.tapped)
 
@@ -212,30 +251,61 @@ def _tapped_carriers(combat: _Combat, keyword: str) -> Iterator[_Finding]:
                            bool(hit) if entity.power >= 1 else None)
 
 
-def _trample_over_planeswalkers(combat: _Combat, params: Mapping[str, Any],
-                                keyword: str) -> Iterator[_Finding]:
-    defender = params.get("defender", _PLANESWALKER)
+def _trample_over_planeswalkers(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
+    reach = _REACHED[declared.defender]
+    for entity, participant in _striking_attackers(combat):
+        outcome = reach(combat, entity, participant)
+        if outcome is not None:
+            yield _Finding(entity.id, declared.keyword in combat.keywords_of(entity), outcome,
+                           bool(_players(combat.damage_from(entity.id))))
+
+
+def _striking_attackers(combat: _Combat) -> Iterator[tuple[EntityState, CombatParticipant]]:
+    """The attackers with power dealing combat damage in this step."""
     for entity, participant in combat.attackers():
-        if entity.power < 1 or not combat.strikes(entity):
-            continue
-        attacked = _attacked_card(combat.state, entity)
-        if defender == _PLANESWALKER:
-            if (attacked is None or "planeswalker" not in {t.lower() for t in attacked.types}
-                    or not participant.is_unblocked or entity.power <= _loyalty(attacked)):
-                continue
-            player = attacked.controller
-        else:
-            if not _defender_gone(combat.state, entity):
-                continue
-            player = _other_player(combat.state, entity)
-        outcome = (player,) if player else ()
-        yield _Finding(entity.id, keyword in combat.keywords_of(entity), outcome,
-                       bool(_players(combat.damage_from(entity.id))))
+        if entity.power >= 1 and combat.strikes(entity):
+            yield entity, participant
 
 
-def _absorb(combat: _Combat, params: Mapping[str, Any], keyword: str) -> Iterator[_Finding]:
+def _over_planeswalker(combat: _Combat, entity: EntityState,
+                       participant: CombatParticipant) -> tuple[str, ...] | None:
+    """``defender: planeswalker``: the controller of the planeswalker the
+    attacker is unblocked against with excess to assign; None for any other
+    attacker."""
+    attacked = _attacked_card(combat.state, entity)
+    if attacked is None or not _excess_over(attacked, entity, participant):
+        return None
+    return _outcome_player(attacked.controller)
+
+
+def _excess_over(attacked: EntityState, entity: EntityState,
+                 participant: CombatParticipant) -> bool:
+    if "planeswalker" not in {t.lower() for t in attacked.types}:
+        return False
+    return participant.is_unblocked and entity.power > _loyalty(attacked)
+
+
+def _past_gone(combat: _Combat, entity: EntityState,
+               participant: CombatParticipant) -> tuple[str, ...] | None:
+    """``defender: gone``: the other player, where the attacked permanent left."""
+    if not _defender_gone(combat.state, entity):
+        return None
+    return _outcome_player(_other_player(combat.state, entity))
+
+
+def _outcome_player(player: str | None) -> tuple[str, ...]:
+    return (player,) if player else ()
+
+
+_Reach = Callable[[_Combat, EntityState, CombatParticipant], "tuple[str, ...] | None"]
+
+#: ``trample_over_planeswalkers``' ``defender``: where an attacker's excess goes.
+_REACHED: dict[str, _Reach] = {_PLANESWALKER: _over_planeswalker, _GONE: _past_gone}
+
+
+def _absorb(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
     for entity, _participant in combat.combatants():
-        if keyword not in combat.keywords_of(entity):
+        if declared.keyword not in combat.keywords_of(entity):
             continue
         prevented = any(entity.id in event.subjects
                         for event in combat.events(EventType.DAMAGE_PREVENTED))
@@ -243,24 +313,36 @@ def _absorb(combat: _Combat, params: Mapping[str, Any], keyword: str) -> Iterato
             yield _Finding(entity.id, True, (entity.id,), prevented)
 
 
-def _first_strike(combat: _Combat, params: Mapping[str, Any],
-                  keyword: str) -> Iterator[_Finding]:
+def _first_strike(combat: _Combat, declared: _Declared) -> Iterator[_Finding]:
     if combat.state.global_.combat_substep != CombatSubstep.REGULAR:
         return
     for entity, participant in combat.combatants():
-        carried = combat.keywords_of(entity)
-        if keyword not in carried or "double_strike" in carried or entity.power < 1:
-            continue
-        aimed = tuple(o.id for o in participant.opponents) or (
-            (participant.defending_player,) if participant.is_unblocked
-            and participant.defending_player else ())
-        if not aimed:
-            continue
-        hit = combat.damage_from(entity.id)
-        yield _Finding(entity.id, bool(hit), hit or aimed, bool(hit))
+        aimed = (_aimed(participant) if _first_strike_alone(combat, entity, declared.keyword)
+                 else ())
+        if aimed:
+            hit = combat.damage_from(entity.id)
+            yield _Finding(entity.id, bool(hit), hit or aimed, bool(hit))
 
 
-_Shape = Callable[[_Combat, Mapping[str, Any], str], Iterator[_Finding]]
+def _first_strike_alone(combat: _Combat, entity: EntityState, keyword: str) -> bool:
+    """Carrying first strike without double strike, with power."""
+    carried = combat.keywords_of(entity)
+    if keyword not in carried or "double_strike" in carried:
+        return False
+    return entity.power >= 1
+
+
+def _aimed(participant: CombatParticipant) -> tuple[str, ...]:
+    """What the creature would hit: the creatures it fights, else the player
+    an unblocked attacker attacks."""
+    fought = tuple(o.id for o in participant.opponents)
+    if fought:
+        return fought
+    player = participant.defending_player
+    return (player,) if participant.is_unblocked and player else ()
+
+
+_Shape = Callable[[_Combat, _Declared], Iterator[_Finding]]
 
 _SHAPES: dict[str, _Shape] = {
     "toxic": _toxic,
@@ -305,11 +387,89 @@ def _loyalty(card: EntityState) -> int:
     return sum(n for name, n in card.counters.items() if normalize_counter_type(name) == _LOYALTY)
 
 
+# ── the sides ───────────────────────────────────────────────────────────
+
+
+def _side_match(found: list[_Finding], flip: bool) -> FamilyMatch | None:
+    """The ``fires`` side where any finding is on it, else the near miss."""
+    for polarity, fires in ((Polarity.FIRES, True), (Polarity.DOES_NOT_FIRE, False)):
+        side = [f for f in found if (f.effect_side != flip) is fires]
+        if side:
+            return _side(polarity, side, flip)
+    return None
+
+
+def _side(polarity: Polarity, side: list[_Finding], flip: bool) -> FamilyMatch:
+    seen = [f.effect_seen != flip for f in side if f.effect_seen is not None]
+    return FamilyMatch(
+        polarity, _observed(seen, polarity is Polarity.FIRES),
+        tuple(dict.fromkeys(f.carrier for f in side)),
+        tuple(dict.fromkeys(e for f in side for e in f.outcome)))
+
+
+def _observed(seen: list[bool], fires: bool) -> bool | None:
+    """Every creature of the side must show the rule's outcome for a
+    ``fires``; any one showing it on the near miss is a disagreement."""
+    if not seen:
+        return None
+    return all(seen) if fires else any(seen)
+
+
+def _by_entity_id(keywords_of: Callable[[EntityState], set[str]]
+                  ) -> Callable[[EntityState], set[str]]:
+    """``keywords_of`` read once per entity id of one record."""
+    memo: dict[str, set[str]] = {}
+
+    def memoized(entity: EntityState) -> set[str]:
+        if entity.id not in memo:
+            memo[entity.id] = keywords_of(entity)
+        return memo[entity.id]
+    return memoized
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class CombatKeywordMatcher:
+    """A compiled ``combat_keyword_effect`` declaration."""
+
+    shape: _Shape
+    declared: _Declared
+    keywords: KeywordReading = field(default_factory=KeywordReading)
+
+    @classmethod
+    def of(cls, params: Mapping[str, Any]) -> CombatKeywordMatcher:
+        return cls(_SHAPES[params.get("keyword")], _Declared.of(params))
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        if record.kind is not RecordKind.COMBAT or record.is_probe:
+            return None
+        combat = _Combat(record, _by_entity_id(self.keywords.of(lines).keywords_of))
+        return _side_match(list(self.shape(combat, self.declared)), self.declared.flip)
+
+
 # ── the family ──────────────────────────────────────────────────────────
 
 
+def _check_keyword(keyword: Any) -> None:
+    if keyword not in _SHAPES:
+        raise ValueError(
+            f"combat_keyword_effect: {keyword!r} is not one of its keywords; "
+            f"known: {sorted(_SHAPES)}")
+
+
+def _fires_when_applies(fires_when: Any, keyword: str) -> bool:
+    if fires_when == _ABSENT:
+        return keyword in _FLIPPABLE
+    return fires_when == _CARRIED
+
+
+def _defender_applies(params: Mapping[str, Any], keyword: str) -> bool:
+    if "defender" not in params:
+        return True
+    return keyword == "trample_over_planeswalkers" and params["defender"] in (_PLANESWALKER, _GONE)
+
+
 @dataclass(frozen=True, slots=True)
-class CombatKeywordEffect(BindsParams, EventlessFamily):
+class CombatKeywordEffect(EventlessFamily):
     id: str = "combat_keyword_effect"
     kinds: frozenset[str] = frozenset({"combat"})
     params: frozenset[str] = frozenset({"keyword", "fires_when", "defender", "tapped"})
@@ -320,53 +480,24 @@ class CombatKeywordEffect(BindsParams, EventlessFamily):
 
     def validate(self, params: Mapping[str, Any]) -> None:
         keyword = params.get("keyword")
-        if keyword not in _SHAPES:
-            raise ValueError(
-                f"combat_keyword_effect: {keyword!r} is not one of its keywords; "
-                f"known: {sorted(_SHAPES)}")
+        _check_keyword(keyword)
         fires_when = params.get("fires_when", _CARRIED)
-        if fires_when not in (_CARRIED, _ABSENT) or (
-                fires_when == _ABSENT and keyword not in _FLIPPABLE):
+        if not _fires_when_applies(fires_when, keyword):
             raise ValueError(f"combat_keyword_effect: fires_when {fires_when!r} "
                              f"does not apply to {keyword!r}")
-        if "defender" in params and (keyword != "trample_over_planeswalkers"
-                                     or params["defender"] not in (_PLANESWALKER, _GONE)):
+        if not _defender_applies(params, keyword):
             raise ValueError(f"combat_keyword_effect: defender {params['defender']!r} "
                              f"does not apply to {keyword!r}")
         dv.check(self.id, params, {"tapped": dv.boolean})
         if "tapped" in params and keyword != "vigilance":
             raise ValueError(f"combat_keyword_effect: tapped does not apply to {keyword!r}")
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return CombatKeywordMatcher.of(params)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        keyword = params.get("keyword")
-        shape = _SHAPES[keyword]
-        fires_when = params.get("fires_when", _CARRIED)
-        if record.kind is not RecordKind.COMBAT or record.is_probe:
-            return None
-        resolver = KeywordResolver(lines)
-        memo: dict[str, set[str]] = {}
-
-        def keywords_of(entity: EntityState) -> set[str]:
-            if entity.id not in memo:
-                memo[entity.id] = resolver.keywords_of(entity)
-            return memo[entity.id]
-
-        flip = fires_when == _ABSENT
-        found = list(shape(_Combat(record, keywords_of), params, keyword))
-        for polarity, fires in ((Polarity.FIRES, True), (Polarity.DOES_NOT_FIRE, False)):
-            side = [f for f in found if (f.effect_side != flip) is fires]
-            if not side:
-                continue
-            seen = [f.effect_seen != flip for f in side if f.effect_seen is not None]
-            # Every creature of the side must show the rule's outcome for a
-            # ``fires``; any one showing it on the near miss is a disagreement.
-            observed = (all(seen) if fires else any(seen)) if seen else None
-            return FamilyMatch(
-                polarity, observed,
-                tuple(dict.fromkeys(f.carrier for f in side)),
-                tuple(dict.fromkeys(e for f in side for e in f.outcome)))
-        return None
+        return self.compile(params)(record, lines)
 
 
 FAMILY = register(CombatKeywordEffect())
