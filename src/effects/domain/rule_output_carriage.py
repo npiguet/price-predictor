@@ -3,8 +3,10 @@
 The rules-to-fields map names, per rule, the outputs its outcome moves. A
 record of the kind a rule's detector tags may carry none of them: a
 ``trigger`` record holds no per-entity target (what the trigger does arrives
-as its resolution's record), a cost half holds no events, a decision record
-supervises its verdict and target legality and nothing a resolution changes.
+as its resolution's record), a cost half holds what its payment did at the
+entities that paid (its tags' outcome entities, ``rule_detectors.tag_record``)
+and nothing else, a decision record supervises its verdict and target
+legality and nothing a resolution changes.
 A rule's **effective outputs** are the map's outputs at least one of its
 tagged records carries; ``build-corpus`` writes them to the manifest beside
 the map's, and the rule mask and the rule tests read them alone.

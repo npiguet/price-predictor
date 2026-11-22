@@ -51,7 +51,10 @@ half and component, which ``train-effect-model`` turns into exit 1 (FR-068c).
 reading is the probability of the scenario's category, for a count or delta
 its expected value under the negative binomial; per-entity readings are the
 unconditional ones gate 2 and the probes read (``HeadReading``: the gate's
-probability times the field's, a legality field ungated). The selection set
+probability times the field's, a legality field ungated), except on a record
+that trains no gate (a cost half, a playability record, a rewrite whose outcome
+is partly unknown), where a field trains at the entities its targets mark
+affected and is read conditionally (:class:`_ConditionalRead`). The selection set
 names a rule's records and their polarity, not the scenario's category, so
 the category is read off the frozen records' own targets once, at startup:
 the category (or, for a multi-member output, the member) whose observed share
@@ -419,6 +422,16 @@ class _Decoder:
         """``(asks, candidates)``: each ask's reading of every candidate."""
         raise NotImplementedError
 
+    def conditional_candidates(self, heads: _Heads, rows: torch.Tensor,
+                               columns: torch.Tensor) -> torch.Tensor:
+        """:meth:`candidates` read without the affected gate, where
+        :meth:`reads_conditionally` says so; the same reading elsewhere."""
+        return self.candidates(heads, rows, columns)
+
+    def reads_conditionally(self, targets: EntityTargetBatch, row: int, column: int) -> bool:
+        """Whether one entity's reading leaves the affected gate out."""
+        return False
+
     def entity_indicators(self, targets: EntityTargetBatch, row: int,
                           column: int) -> list[float] | None:
         return None
@@ -441,7 +454,10 @@ class _GateDecoder(_Decoder):
 
 class _EntityFieldDecoder(_Decoder):
     """A per-entity field, read unconditionally (gated by the affected gate,
-    a legality field ungated)."""
+    a legality field ungated), except on a record that trains no gate (a cost
+    half, a playability record, a rewrite whose outcome is partly unknown),
+    where a gated field trains at the entities the gate's target marks and is
+    read conditionally, as training reads it (task G11b)."""
 
     per_entity = True
 
@@ -450,34 +466,34 @@ class _EntityFieldDecoder(_Decoder):
         self.categorical = not spec.type.has_magnitude
 
     def candidates(self, heads, rows, columns):
+        return self._read(heads, rows, columns, conditional=not self.spec.gated)
+
+    def conditional_candidates(self, heads, rows, columns):
+        return self._read(heads, rows, columns, conditional=True)
+
+    def _read(self, heads, rows, columns, *, conditional: bool) -> torch.Tensor:
         outputs = heads.gathered[rows, columns]
         spec = self.spec
         if spec.type.has_magnitude:
-            value = HeadReading(outputs).expected(spec.name, conditional=not spec.gated)
-            return value.unsqueeze(-1)
+            return HeadReading(outputs).expected(spec.name, conditional=conditional).unsqueeze(-1)
         start, end = FIELD_SLICES[spec.name]
         read = outputs[:, start:end].float()
         if spec.type is FieldType.CATEGORICAL:
             value = torch.softmax(read, dim=-1)
         else:
             value = torch.sigmoid(read)
-        if spec.gated:
+        if not conditional:
             value = HeadReading(outputs).p_affected.unsqueeze(-1) * value
         return value
 
+    def reads_conditionally(self, targets, row, column):
+        return self.spec.gated and not bool(targets.gate_scored[row, column])
+
     def entity_indicators(self, targets, row, column):
         spec = self.spec
-        present = (spec.name in targets.fields
-                   and bool(targets.fields.present[spec.name][row, column]))
-        scored = present and bool(targets.scored(spec.name)[row, column])
-        if spec.gated:
-            if not bool(targets.gate_scored[row, column]):
-                return None
-            if not bool(targets.affected[row, column]):
-                return [0.0] * _width(spec)
-            if not scored:
-                return None
-        elif not scored:
+        if spec.gated and not bool(targets.affected[row, column]):
+            return self._unaffected(targets, row, column)
+        if not self._scored(targets, row, column):
             return None
         value = targets.fields.values[spec.name][row, column]
         if spec.type is FieldType.CATEGORICAL:
@@ -487,6 +503,18 @@ class _EntityFieldDecoder(_Decoder):
         if spec.type is FieldType.MULTI_BINARY:
             return [float(v) for v in value.reshape(-1)]
         return [float(value)]
+
+    def _unaffected(self, targets, row, column) -> list[float] | None:
+        """A gated field at an entity nothing affected: nothing happened
+        where the record trains the gate, unread where it trains none."""
+        if bool(targets.gate_scored[row, column]):
+            return [0.0] * _width(self.spec)
+        return None
+
+    def _scored(self, targets, row, column) -> bool:
+        name = self.spec.name
+        return (name in targets.fields and bool(targets.fields.present[name][row, column])
+                and bool(targets.scored(name)[row, column]))
 
 
 def _width(spec: FieldSpec) -> int:
@@ -594,6 +622,7 @@ class _OutputReading:
         self.sign = 1.0
         self.fires: list[list[int]] = []
         self.does_not: list[list[int]] = []
+        self._conditional: _ConditionalRead | None = None
 
     def observe(self, polarity: str, indicators: Sequence[float]) -> None:
         vector = np.asarray(indicators, dtype=np.float64)
@@ -618,6 +647,34 @@ class _OutputReading:
                  columns: torch.Tensor) -> torch.Tensor:
         """The settled reading at every ask of one chunk: a :data:`Read`."""
         return self.sign * self.decoder.candidates(heads, rows, columns)[:, self.candidate]
+
+    def at(self, targets: EntityTargetBatch, row: int, column: int) -> Read:
+        """The read of one entity: this one, or :attr:`conditional` where the
+        decoder leaves the gate out there."""
+        if self.decoder.reads_conditionally(targets, row, column):
+            return self.conditional
+        return self
+
+    @property
+    def conditional(self) -> Read:
+        """The settled reading without the affected gate, one per output so
+        its asks gather into one group."""
+        if self._conditional is None:
+            self._conditional = _ConditionalRead(self)
+        return self._conditional
+
+
+class _ConditionalRead:
+    """An output's settled reading without the affected gate: a :data:`Read`."""
+
+    def __init__(self, reading: _OutputReading) -> None:
+        self.reading = reading
+
+    def __call__(self, heads: _Heads, rows: torch.Tensor,
+                 columns: torch.Tensor) -> torch.Tensor:
+        reading = self.reading
+        read = reading.decoder.conditional_candidates(heads, rows, columns)
+        return reading.sign * read[:, reading.candidate]
 
 
 class _Observation:
@@ -748,18 +805,14 @@ class _ChunkBuilder:
                     if len(self.unplaced_refs) < 5:
                         self.unplaced_refs.append(str(request.subject))
                     continue
+                read = request.read
                 if request.observation is not None:
-                    # A rule test reads an output only where the record says
-                    # what it is: elsewhere the reading compares nothing.
-                    indicators = request.observation.reading.decoder.entity_indicators(
-                        targets, row, column)
-                    if indicators is None:
-                        self.untargeted += 1
+                    read = self._observed(request.observation, targets, row, column)
+                    if read is None:
                         continue
-                    request.observation.add(indicators)
                     observations.append(request.observation)
                 gather = asked[row].setdefault(column, len(asked[row]))
-                reads.append((row, gather, request.read, request.position))
+                reads.append((row, gather, read, request.position))
             for observation in {id(o): o for o in observations}.values():
                 observation.close()
         width = max([len(a) for a in asked] + [1])
@@ -770,6 +823,19 @@ class _ChunkBuilder:
         self.chunks.append(_Chunk(pack(stripped(batch), rows=len(records)), index,
                                   _grouped(reads)))
         self.pending = []
+
+    def _observed(self, observation: _Observation, targets: EntityTargetBatch,
+                  row: int, column: int) -> Read | None:
+        """A rule test's read of one entity, its target observed; None where
+        the record does not say what the output is there, so the reading
+        would compare nothing."""
+        reading = observation.reading
+        indicators = reading.decoder.entity_indicators(targets, row, column)
+        if indicators is None:
+            self.untargeted += 1
+            return None
+        observation.add(indicators)
+        return reading.at(targets, row, column)
 
 
 # ── items ───────────────────────────────────────────────────────────────

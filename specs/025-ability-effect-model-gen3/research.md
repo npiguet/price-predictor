@@ -219,8 +219,16 @@ curation, the rule mask, the selection-set freeze and the rule tests.
   `does_not_fire` whose record holds no event of the kind) names as its outcome entities where the
   outcome would have fallen: the acting clause's targets as the effect half's refs block holds
   them, else its controller.
-- A record that carries no per-entity target (a `trigger` record, a cost half, a rewrite that ran
-  another ability) gives its tags no outcome entity a per-entity output can be read at.
+- A record that carries no per-entity target (a `trigger` record, a rewrite that ran another
+  ability) gives its tags no outcome entity a per-entity output can be read at.
+- A cost half trains no affected gate, and trains what its payment did at the entities
+  `payload.costs` names (root spec § 11.6): a sacrificed or discarded card's zone outcome
+  `died`, an exiled card's `exiled`, a returned permanent's `to_hand`, a tapped or untapped
+  permanent's `tap_state`, the counter deltas at the acting source on the battlefield and the
+  life paid at its controller. Its tags name those entities as outcome entities, beside any the
+  family names (`cost_targets.paid_entities`, added in `tag_record`), so the rule's effective
+  outputs, the hard mask and the rule tests read the payment there. No shipped family tags a
+  cost half: each family reads an effect half.
 
 Per family:
 
@@ -812,7 +820,10 @@ is still read (user decision).
 `probe_readouts` at the tag's outcome entities (the mean over entities when the outcome names
 several), or at `[ACT]` for a verdict-head output. An output is read only where the record's targets
 define it; a read at an entity with no slot is logged. A categorical output reads the probability of the scenario's
-category, a count or delta its expected value under the negative binomial.
+category, a count or delta its expected value under the negative binomial. A per-entity field is
+read through the affected gate, except on a record that trains no gate (a cost half, a playability
+record, a rewrite whose outcome is partly unknown): there the field head alone is read, at the
+entities the record's targets mark affected, as training reads it.
 
 ### Spec corrections
 

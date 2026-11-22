@@ -234,6 +234,8 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
     gaining life, the cards and players a target legality is written at).
 - A tag whose outcome is an absence names as its outcome entities where the outcome would have
   fallen: the acting clause's targets, else its controller.
+- A tag of a cost half also names as its outcome entities every entity its payment supervises
+  (§ 11.6).
 
 ## 5.2 Per-rule counts
 
@@ -1374,7 +1376,8 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
   prediction at the tag's outcome entities (§ 5.1), or at the record for an output on the
   acting ability: the probability of the scenario's outcome for a binary or categorical
   output, the expected value for a count or a delta. An output is read only where the
-  record's targets define it.
+  record's targets define it. On a record that supervises no affected gate, a per-entity
+  output is read conditionally, at the entities its targets mark affected.
 - A rule test's score is the AUC with which that prediction ranks the records where the
   outcome happens above those where it does not, averaged over the rule's outputs.
 - A rule whose test records in a stratum hold one polarity only is left out of that

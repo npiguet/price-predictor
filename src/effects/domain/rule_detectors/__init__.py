@@ -25,10 +25,11 @@ from __future__ import annotations
 import importlib
 import json
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any, Protocol
 
+from effects.domain.cost_targets import is_cost_half, paid_entities
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordOrigin, is_game_end
@@ -505,6 +506,19 @@ def tag_record(record: EffectRecord, index: DetectorIndex,
             per_rule.setdefault(rule, []).append(RuleTag(
                 rule, found.polarity, found.observed, found.condition, found.outcome,
                 scenario.id))
-    tags = tuple(_merge(rule, found) for rule, found in sorted(per_rule.items()))
+    tags = _paid_outcomes(record, tuple(
+        _merge(rule, found) for rule, found in sorted(per_rule.items())))
     review = tuple(tag for found in per_rule.values() for tag in found if tag.needs_review)
     return TagResult(tags, review=review)
+
+
+def _paid_outcomes(record: EffectRecord, tags: tuple[RuleTag, ...]) -> tuple[RuleTag, ...]:
+    """``tags``, on a cost half each naming among its outcome entities the
+    entities the payment trains at (``cost_targets.paid_entities``, task
+    G11b, research R1): what a cost half's targets place is what it paid,
+    so a rule read off one reads its outputs there."""
+    if not tags or not is_cost_half(record):
+        return tags
+    paid = paid_entities(record)
+    return tuple(replace(tag, outcome=tuple(dict.fromkeys((*tag.outcome, *paid))))
+                 for tag in tags)

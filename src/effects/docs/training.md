@@ -89,5 +89,6 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 
 - Under `--rule-mask hard` (the default), a copy that rule budgets added trains only the effective outputs of the rules it was drawn for, and the gate only on its drawn rule's tag entities. Under `soft` it trains everything, the other outputs at `natural_share / copies`.
 - A natural copy of a record with no added copy, a natural copy of an aimed record and a lethality copy train everything at full weight.
+- A cost half's tags name as outcome entities, beside any its family names, the entities its payment trains at (`cost_targets.paid_entities`, added in `rule_detectors.tag_record`). Otherwise a rule read off a cost half carries none of the payment's fields at its tags, its effective outputs leave them out, and the hard mask trains an added copy of a sacrifice without its creature's death.
 - The value, script-API and MLM heads read texts and no mask reaches them. Evaluation reads records unmasked.
 - Training, validation and the denominator pass all build the mask through the same host half (`StepPreparer.rule_mask`), and the constant-predictor floor weighs each target as the run does.

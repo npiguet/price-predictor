@@ -69,6 +69,28 @@ def apply_paid_costs(record: EffectRecord, slot: Callable) -> None:
         _paid(slot(source.controller)).add(HeadField.LIFE_DELTA, -costs.life)
 
 
+def paid_entities(record: EffectRecord) -> tuple[str, ...]:
+    """The entities :func:`apply_paid_costs` trains at, in the order it
+    reaches them: a cost half's tag's outcome entities (task G11b), where a
+    rule's outcome fell when the payment is the outcome; none on any other
+    record."""
+    reached: dict[str, _Reached] = {}
+    apply_paid_costs(record, lambda ref: reached.setdefault(ref, _Reached()))
+    return tuple(reached)
+
+
+class _Reached:
+    """A slot that keeps nothing: :func:`paid_entities` asks only who paid."""
+
+    affected = False
+
+    def set(self, name: str, value: float) -> None:
+        """What the payment wrote, not kept."""
+
+    def add(self, name: str, value: float) -> None:
+        """What the payment wrote, not kept."""
+
+
 def _source(record: EffectRecord) -> EntityState | None:
     source = record.state.refs.source
     return record.state.entity(source) if source is not None else None
