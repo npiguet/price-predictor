@@ -19,9 +19,10 @@ copies stay each record's natural share:
    class, tagged or not (``text_natural``);
 5. each added copy goes to the record's rule furthest below its half.
 
-Copies are added in rounds, one per record per round, records in seeded
-order, so repeats spread over a rule's records rather than piling onto the
-first ones; a record leaves once none of its rules is below its half.
+Copies are added in rounds, one per record per round, over every tagged
+record of the class, fork records included, in seeded order, so repeats spread
+over a rule's records rather than piling onto the first ones; a record leaves
+once none of its rules is below its half.
 
 Not ``budget_allocation.allocate``: it hands a short member's share to its
 siblings, which FR-054a forbids between polarity halves, and it needs
@@ -79,10 +80,12 @@ class RuleRow:
     for this very rule, the copies whose ``curation.drawn_rule`` it is: a
     natural record's copy counts toward every rule the record is tagged with,
     so the rest of ``added`` is a copy drawn for another rule of the record.
-    ``available`` leaves out ``fork``: a probe's,
-    an intervention's or a protection fork's record re-records a moment of
-    its live game, so a combat counts once however many probes re-ran it,
-    while every copy of such a record is written and counted in ``written``.
+    ``available`` leaves out ``fork`` and is a report figure no budget
+    decision reads: a probe's, an intervention's or a protection fork's
+    record re-records a moment of its live game, so a combat counts once
+    however many probes re-ran it in ``available``, while every copy of
+    such a record is written and counted in ``written``, which the halves'
+    fills read.
     ``share`` is the polarity's half, None on ``other`` and on an unbudgeted
     rule, which draw none; ``shortfall`` is ``max(0, share - written)``, zero
     where ``share`` is None. A half is filled from every source alike, so

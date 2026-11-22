@@ -246,9 +246,9 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
   the last two whatever its game. A gen-2 record is natural.
 - A fork record is the record of a damage-step probe, an intervention or a protection fork.
   It is a fork record even when it carries `aimed_at`. A directed fork's record is aimed.
-- The counts a decision reads leave out fork records, so a combat re-run by its probes counts
-  once: the directed-fork list (§ 6) and the records available to a rule in the rule budgets
-  (§ 12.1). Fork records still train and are still written to the strata.
+- The directed-fork list (§ 6) reads counts that leave out fork records, so a combat re-run by
+  its probes counts once. The rule budgets (§ 12.1) count fork copies: a half's written copies
+  and a rule's totals include them. Fork records train and are written to the strata.
 - The directed-fork list is decided from the two natural sources alone. Aimed records are left
   out of that decision too, because a directed fork's records would otherwise take its rule off
   the list that makes them.
@@ -1116,8 +1116,14 @@ The verdict head gains a column for `timing` and one for each identifier of
   one added copy was drawn for.
 - The manifest records, per class, rule and polarity, the records available, the share,
   the records written and the shortfall, each split by the sources of § 5.2, and
-  names every rule whose two sides stay unequal in a class. The records available leave out
-  fork records; the records written count their copies.
+  names every rule whose two sides stay unequal in a class. The records available are the
+  distinct tagged records of the rule with fork records left out, a figure the manifest
+  reports and no budget decision reads; the records written count every copy, fork copies
+  included.
+- A half's share counts every copy written for it, fork copies included. Added copies are
+  drawn over every tagged record of the class, fork records included, in a seeded order
+  (`--seed`) that does not depend on the order the shards arrived in, one added copy per
+  record per round.
 
 ## 12.2 Condition balance
 

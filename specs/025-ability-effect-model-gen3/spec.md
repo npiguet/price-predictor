@@ -1179,7 +1179,9 @@ and that the reporting half never enters the control score.
   drawn for the rule furthest below its share and carry that rule as its drawn rule. A copy within the natural share
   MUST carry none. A record with no tag keeps its natural share. A protection copy (FR-058) of a
   record offering several protection rules MUST count toward its drawn rule alone, in the rule's
-  written and added copies.
+  written and added copies. A half's share MUST count every copy written, fork copies included,
+  and added copies MUST be drawn over every tagged record of the class, fork records included, in
+  a seeded order that does not depend on the order the shards arrived in.
 - **FR-056**: For a record whose acting line, candidate or listed static carries a turn or step
   condition, the outcome signature MUST gain whether the condition held, read from `failed_checks`,
   `conditions_met` or `active`; met and unmet MUST draw equal budgets, a short side repeating up to
@@ -1307,7 +1309,7 @@ and that the reporting half never enters the control score.
   sample, the freeze's standard errors) MUST multiply by it; a reader taking each record once
   MUST NOT.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, four sources), per class
-  and rule the records available (fork records left out), share, written and shortfall, each split
+  and rule the records available (distinct tagged records, fork records left out: a report figure no budget decision reads), share, written (every copy, fork copies included) and shortfall, each split
   by polarity and by the same sources, for the training stratum and for each validation stratum, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
   and keyword lists of FR-052/FR-053; per class, the kept records collected as forks,
