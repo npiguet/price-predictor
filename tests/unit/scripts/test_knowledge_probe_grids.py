@@ -13,6 +13,7 @@ from effect_knowledge_probes import (
 )
 from effect_knowledge_probes.board_edits import BoardEdit
 
+from effects.domain.rule_outcomes import Combatant
 from tests.unit.scripts.knowledge_probe_support import (
     LETHAL_STEP,
     block_pair,
@@ -192,7 +193,8 @@ class TestEvasionGrid:
     @pytest.mark.parametrize("case", _MAY_BLOCK_CASES, ids=_MAY_BLOCK_IDS)
     def test_the_rule(self, case):
         attacker, blocker, colours, types, expected = case
-        assert evasion_grid.may_block(attacker, ("R",), blocker, colours, types) is expected
+        assert evasion_grid.may_block(
+            Combatant.made(attacker, ("R",)), Combatant.made(blocker, colours, types)) is expected
 
     def test_a_cell_grants_the_keyword_and_the_trait_and_scores_them(self, records):
         record, attacker, blocker = block_pair(records)

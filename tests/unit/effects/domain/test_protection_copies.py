@@ -18,6 +18,7 @@ from effects.domain.protection_copies import (
     EVERYTHING_RULE,
     PROTECTION_RULES,
     ProtectionOutcome,
+    copied,
     protection_copy,
     qualify,
     rare_qualities,
@@ -46,9 +47,18 @@ from effects.domain.state_snapshot import (
     Refs,
 )
 from effects.infrastructure.record_codec import record_from_dict, record_to_dict
+from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 REPO_ROOT = Path(__file__).parents[4]
+_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "effects" / "gen3-records.jsonl.gz"
+_GAME = "3550376f-3c30-4231-90cd-cc0f1b308e87"
+
+
+@pytest.fixture(scope="module")
+def real() -> dict[str, EffectRecord]:
+    """The fixture's real records, by the tail of their id."""
+    return {r.record_id.removeprefix(_GAME + "."): r for r in read_shard(_FIXTURE)}
 
 DIED = ZONE_OUTCOMES.index("died")
 PLAYERS = (PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0, max_land_plays=1),
@@ -91,6 +101,10 @@ def _died(subject: str) -> Event:
                  params={"from_zone": "battlefield", "to_zone": "graveyard"})
 
 
+def _destroyed(subject: str) -> Event:
+    return Event(type=EventType.DESTROYED, subjects=(subject,), params={})
+
+
 _SWEEP_KEY = ProvenanceKey("cardsfolder/p/pyroclasm.txt", 0, "spell", 0)
 
 
@@ -98,21 +112,22 @@ class _Lines:
     """The sidecar read: the acting key names one line of ``text``, and each
     key of ``others`` its own line."""
 
-    def __init__(self, text: str, others=None) -> None:
+    def __init__(self, text: str, others=None, key: ProvenanceKey = _SWEEP_KEY) -> None:
         from effects.domain.provenance import SidecarLine
 
         def line(key, script):
             return SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
                                script_text=script, prose_offset=0)
 
-        self.line = line(_SWEEP_KEY, text)
+        self.line = line(key, text)
+        self.key = key
         self.others = {key: line(key, script) for key, script in (others or {}).items()}
 
     def first_line(self, keys):
         return self.line if keys else None
 
     def line_or_none(self, key):
-        return self.others.get(key, self.line if key == _SWEEP_KEY else None)
+        return self.others.get(key, self.line if key == self.key else None)
 
 
 _SWEEP = "SP$ DamageAll | NumDmg$ 2 | ValidCards$ Creature"
@@ -127,13 +142,19 @@ def _sweeper(*creatures: EntityState, source: EntityState | None = None,
         for creature in creatures:
             events.append(_damage(creature.id, 2, source.id))
             if creature.toughness <= 2:
-                events.append(_died(creature.id))
+                events.extend((_destroyed(creature.id), _died(creature.id)))
     return make_record(
         record_id="g.0-0.1", game_id="g.0-0.1", generation=3,
         state=_state((source, *creatures), source=source.id, targets=targets,
                      targets_at_cast=targets, targets_on_stack=()),
         payload=ResolutionPayload(events=tuple(events), conditions_met=()),
     )
+
+
+def _copy_of(record: EffectRecord, opportunity, seed: int = 0):
+    """The copy drawn for ``opportunity`` alone, in its own rule."""
+    return protection_copy(record, (opportunity,), rule=opportunity.rule,
+                           rng=random.Random(seed), index=0)
 
 
 def _copy(record: EffectRecord, rule: str, seed: int = 0):
@@ -221,6 +242,36 @@ class TestDamagePrevented:
                      if e.type is EventType.DAMAGE_PREVENTED]
         assert prevented[0].params == {"amount": 2, "source": "S1", "cause": "S1"}
 
+    def test_a_real_death_the_damage_caused_is_undone_whole(self, real):
+        """The fixture's combat 0-mwqvqdyrb9c0.240: the 6/6-less E43 is dealt 2
+        and 6 and dies, its record holding ``destroyed``, the move to the
+        graveyard and the ``unattached`` of its Aura E67, which falls off and
+        is put into the graveyard. A copy that prevents both hits keeps none
+        of those, and leaves the other creatures' deaths."""
+        record = real["0-mwqvqdyrb9c0.240"]
+        (opportunity,) = [o for o in qualify(record) if o.protected == "E43"]
+        assert opportunity.covered == ("E27", "E22")
+        quality = ProtectionQuality.everything()
+        copy, named = copied(record, opportunity, quality, 0)
+        assert named == ("E43",)
+        left = [(e.type, e.subjects) for e in copy.payload.events]
+        assert left.count((EventType.DAMAGE_PREVENTED, ("E43",))) == 2
+        assert not [1 for kind, who in left if "E43" in who and kind in (
+            EventType.DESTROYED, EventType.ZONE_CHANGE, EventType.DAMAGE_DEALT)]
+        assert (EventType.UNATTACHED, ("E67",)) not in left
+        assert (EventType.ZONE_CHANGE, ("E67",)) not in left
+        # What belongs to the other creatures' deaths stays.
+        assert (EventType.DESTROYED, ("E22",)) in left and (EventType.UNATTACHED, ("E9",)) in left
+        assert (EventType.DESTROYED, ("E27",)) in left
+
+    def test_a_real_lethal_combat_death_becomes_prevented_damage(self, real):
+        record = real["0-mwqvqdyrb9c0.602"]
+        (found,) = [o for o in qualify(record) if o.protected == "E63"]
+        copy = _copy_of(record, found)
+        assert [e.type for e in copy.record.payload.events] == [EventType.DAMAGE_PREVENTED]
+        targets = derive_targets(copy.record)
+        assert targets["E63"].fields == {HeadField.DAMAGE_PREVENTED: 6.0}
+
     def test_the_quality_is_granted_as_a_line_and_its_kept_flag(self):
         copy = _copy(_sweeper(_creature("E1")), "702.16e")
         protected = copy.record.state.entity("E1")
@@ -293,12 +344,12 @@ class TestDamagePrevented:
         assert qualify(record, lines=_Lines(fixed)) != ()
 
     def test_a_death_the_damage_did_not_cause_is_refused(self):
-        events = [_damage("E1", 1, "S1"), _died("E1")]
+        events = [_damage("E1", 1, "S1"), _destroyed("E1"), _died("E1")]
         assert qualify(_sweeper(_creature("E1", 4), events=events)) == ()
 
     def test_a_deathtouch_death_is_the_damage_s(self):
         source = replace(_spell(), granted_temporary=GrantedTemporary(keywords=("deathtouch",)))
-        events = [_damage("E1", 1, "S1"), _died("E1")]
+        events = [_damage("E1", 1, "S1"), _destroyed("E1"), _died("E1")]
         assert len(qualify(_sweeper(_creature("E1", 4), source=source, events=events))) == 1
 
     def test_any_other_event_on_the_creature_is_refused(self):
@@ -383,6 +434,39 @@ class TestTargetIllegal:
             record.payload.candidates[0], ability=(stomp,)),)))
         assert qualify(record) == ()
 
+    def test_a_clause_with_one_target_is_the_only_one_a_removal_keeps_legal(self):
+        """Two targeting clauses (a fight spell: one creature on each side)
+        or a clause that can take no target (``TargetMin$ 0``) would not stay
+        castable for the one target left: only one clause of minimum one
+        qualifies. Read off the sidecar the candidate's key names."""
+        key = ProvenanceKey("cardsfolder/b/bolt.txt", 0, "spell", 0)
+        one = "SP$ DealDamage | ValidTgts$ Creature | NumDmg$ 3"
+        fight = ("SP$ Pump | ValidTgts$ Creature.YouCtrl | SubAbility$ SV1 [SEG] "
+                 "SV1: DB$ Fight | ValidTgts$ Creature.YouDontCtrl")
+        record = _decision("E1", "E2", "P1")
+        record = replace(record, payload=PlayabilityDecisionPayload(candidates=(replace(
+            record.payload.candidates[0], ability=(key,)),)))
+        assert [o.protected for o in qualify(record, lines=_Lines(one, key=key))] == ["E1", "E2"]
+        up_to = one + " | TargetMin$ 0 | TargetMax$ 1"
+        explicit = one + " | TargetMin$ 1"
+        assert qualify(record, lines=_Lines(fight, key=key)) == ()
+        assert qualify(record, lines=_Lines(up_to, key=key)) == ()
+        assert qualify(record, lines=_Lines(one + " | TargetMin$ X", key=key)) == ()
+        assert len(qualify(record, lines=_Lines(explicit, key=key))) == 2
+
+    def test_a_real_two_clause_spell_offers_no_target_copy(self, real):
+        """The fixture's Aether Tradewinds (a permanent you control and one
+        you don't, each its own clause) lists 18 legal targets and offers a
+        copy of each when the chain is not read."""
+        from effects.infrastructure.sidecar_io import SidecarCache
+
+        fixtures = REPO_ROOT / "tests" / "fixtures" / "effects" / "gen3-sidecars"
+        sidecars = SidecarCache({"cardsfolder": fixtures / "cardsfolder",
+                                 "tokenscripts": fixtures / "tokenscripts"})
+        record = real["0-mwqvqdyrb9c0.407"]
+        assert len(qualify(record)) == 18
+        assert qualify(record, sidecars) == ()
+
     def test_a_split_card_s_half_is_not_copied(self):
         """A split card in hand shows both halves' characteristics at once,
         never the cast half's alone."""
@@ -429,11 +513,24 @@ class TestBlockIllegal:
         copy = protection_copy(record, only_goblins, rule="702.16f", rng=random.Random(0), index=0)
         assert copy.outcome_entities == ("B1", "B3")
         payload = copy.record.payload
-        assert payload.legal_blockers == ("B2",) and payload.must_block == ()
+        assert payload.legal_blockers == ("B2",) and payload.must_block == ("B3",)
         targets = derive_targets(copy.record)
         assert [targets[b].fields[HeadField.BLOCKER_LEGAL] for b in ("B1", "B2", "B3")] == [0, 1, 0]
         attacker = copy.record.state.entity("A1")
         assert attacker.lines[-1].fragment == "Protection:Goblin"
+
+    def test_a_changeling_has_every_creature_type_and_is_forbidden(self):
+        """702.73a: protection from Goblins keeps a changeling from blocking,
+        whatever creature types its card lists."""
+        record = _blockers(_creature("B1", subtypes=("goblin",)),
+                           _creature("B2", subtypes=("shapeshifter",), keywords=("changeling",)),
+                           _creature("B3", subtypes=("elf",)))
+        goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
+        (only,) = [replace(o, qualities=(goblins,)) for o in qualify(record)
+                   if o.covered == ("B1",)]
+        copy = protection_copy(record, (only,), rule="702.16f", rng=random.Random(0), index=0)
+        assert copy.outcome_entities == ("B1", "B2")
+        assert copy.record.payload.legal_blockers == ("B3",)
 
     def test_protection_from_everything_forbids_every_blocker(self):
         record = _blockers(_creature("B1"), _creature("B2", subtypes=("elf",)))

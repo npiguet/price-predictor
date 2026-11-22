@@ -46,6 +46,7 @@ import numpy as np
 from effects.domain.board_edits import BoardEdit
 from effects.domain.rule_outcomes import (
     COLOUR_WORDS,
+    Combatant,
     ProtectionQuality,
     QualityKind,
     has_changeling,
@@ -362,9 +363,7 @@ def evasion_cell(record, attacker_id: str, blocker_id: str, row: str | None,
     record = board.record
     a = record.state.entity(attacker_id)
     b = record.state.entity(blocker_id)
-    rule = may_block(a.granted_temporary.keywords, a.colors, b.granted_temporary.keywords,
-                     b.colors, b.types, attacker_protections=granted,
-                     blocker_subtypes=b.subtypes, blocker_mana_value=b.mana_value)
+    rule = may_block(Combatant.of(a), Combatant.of(b), attacker_protections=granted)
     return record, rule
 
 

@@ -23,7 +23,9 @@ record shows:
   after Forge's illegal-target check (``refs.targets_at_cast``,
   ``refs.targets``; a targeted spell would lose its target instead). Each
   ``damage_dealt`` becomes the ``damage_prevented`` Forge writes for a
-  prevented hit, and a death the damage caused is undone. Refused: a source
+  prevented hit, and a death the damage caused is undone whole: its
+  ``destroyed``, its move to the graveyard, the ``unattached`` of each Aura
+  or Equipment that fell off it and the Aura's own move. Refused: a source
   with lifelink, infect or wither, whose damage does more than mark damage;
   a resolution whose half does not say its targets as cast (no resolution
   hook); damage that can't be prevented (``NoPrevention$`` in the chain, an
@@ -32,12 +34,15 @@ record shows:
   storing what was dealt, or an amount read from a variable, a drain's
   "gain life equal to the damage dealt");
 - **target made illegal** (702.16b): a decision whose candidate has at least
-  two legal targets loses one permanent from them, the verdict unchanged; the
+  two legal targets loses one permanent from them, the verdict unchanged, the
+  acting chain having one targeting clause of minimum one (a second clause,
+  a fight spell's, may have had it as its only candidate); the
   candidate acts through the first face its card shows (no Adventure, back
   face or split half, whose characteristics the snapshot does not hold);
 - **block made illegal** (702.16f): a real blockers record's anchored
   attacker gains protection from a quality one of its legal blockers has, and
-  every legal blocker with the quality becomes forbidden;
+  every legal blocker with the quality becomes forbidden (a changeling has
+  every creature type) and stays in ``must_block``;
 - **Aura put into the graveyard** (702.16c): an Aura spell's resolution whose
   one target gains protection from the Aura; the spell has no legal target
   and fizzles (608.2b, ``outcome`` ``fizzled``), so the Aura goes from the
@@ -65,6 +70,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import NamedTuple
 
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import SidecarLookup
@@ -82,6 +88,7 @@ from effects.domain.rule_outcomes import (
     CARD_TYPES,
     CONDITIONS,
     Characteristics,
+    Combatant,
     ProtectionQuality,
     QualityKind,
     damage_lethal,
@@ -223,7 +230,7 @@ def _opportunities(record: EffectRecord, lines: SidecarLookup | None,
                    entities) -> tuple[Opportunity, ...]:
     payload = record.payload
     if isinstance(payload, PlayabilityDecisionPayload):
-        return _target_opportunities(record, payload, entities)
+        return _target_opportunities(record, payload, entities, lines)
     if isinstance(payload, PlayabilityBlockersPayload):
         return _block_opportunities(record, payload, entities)
     if isinstance(payload, CombatPayload):
@@ -294,18 +301,17 @@ def _no_prevention_on_the_board(record: EffectRecord, lines: SidecarLookup) -> b
     """Whether a static on the board says damage can't be prevented: an
     active ``Mode$ CantPreventDamage`` line of a permanent or command-zone
     object."""
-    for entity in record.state.entities:
-        if not entity.on_battlefield and entity.zone != Zone.COMMAND:
-            continue
-        for card_line in entity.lines:
-            if card_line.kind != LineKind.STATIC or card_line.active is False:
-                continue
-            for key in card_line.keys:
-                found = lines.line_or_none(key)
-                if found is not None and found.script_text and params(
-                        root(found.script_text)).get("Mode") == "CantPreventDamage":
-                    return True
-    return False
+    keys = (key for entity in record.state.entities
+            if entity.on_battlefield or entity.zone == Zone.COMMAND
+            for card_line in entity.lines
+            if card_line.kind == LineKind.STATIC and card_line.active is not False
+            for key in card_line.keys)
+    return any(_says_cant_prevent(lines.line_or_none(key)) for key in keys)
+
+
+def _says_cant_prevent(found) -> bool:
+    return (found is not None and bool(found.script_text)
+            and params(root(found.script_text)).get("Mode") == "CantPreventDamage")
 
 
 def _permanent(entities: dict[str, EntityState], ref: str | None) -> EntityState | None:
@@ -313,22 +319,47 @@ def _permanent(entities: dict[str, EntityState], ref: str | None) -> EntityState
     return entity if entity is not None and entity.on_battlefield else None
 
 
-def _target_opportunities(record, payload: PlayabilityDecisionPayload,
-                          entities) -> tuple[Opportunity, ...]:
+def _target_opportunities(record, payload: PlayabilityDecisionPayload, entities,
+                          lines: SidecarLookup | None) -> tuple[Opportunity, ...]:
     """A decision's legal targets, one of them made illegal while another stays."""
     if not payload.candidates:
         return ()
     candidate = payload.candidates[0]
     source = entities.get(record.state.refs.source)
-    if candidate.land_play or source is None or len(candidate.legal_targets) < 2:
-        return ()
-    if not _shows_the_acting_face(source, candidate.ability or ()):
+    if source is None or not _removable_target(candidate, source, lines):
         return ()
     qualities = rare_qualities(source)
     return tuple(
         Opportunity(ProtectionOutcome.TARGET_ILLEGAL, target, (source.id,), qualities)
         for target in candidate.legal_targets if _permanent(entities, target) is not None
     )
+
+
+def _removable_target(candidate, source: EntityState, lines: SidecarLookup | None) -> bool:
+    """Whether a legal target of ``candidate`` can leave while another stays
+    and the verdict holds: a spell or ability with two legal targets, acting
+    through the face the snapshot shows, and (where the sidecars are read)
+    one required target clause."""
+    keys = candidate.ability or ()
+    if candidate.land_play or len(candidate.legal_targets) < 2:
+        return False
+    if not _shows_the_acting_face(source, keys):
+        return False
+    return lines is None or _one_required_target(keys, lines)
+
+
+def _one_required_target(keys, lines: SidecarLookup) -> bool:
+    """Whether the acting chain has one targeting clause, whose minimum is
+    one: removing a legal target from a clause that may take none leaves the
+    spell playable, and a second clause (a fight spell's creature on each
+    side) may have had that target as its only candidate, which a candidate
+    lists no per-clause legality of. A chain the sidecars cannot show is
+    refused."""
+    line = lines.first_line(keys)
+    if line is None or not line.script_text:
+        return False
+    clauses = [found for found in map(params, segments(line.script_text)) if "ValidTgts" in found]
+    return len(clauses) == 1 and clauses[0].get("TargetMin", "1").strip() == "1"
 
 
 def _shows_the_acting_face(source: EntityState, keys) -> bool:
@@ -380,6 +411,56 @@ def _is_death(event: Event, subject: str) -> bool:
             and str(event.params.get("to_zone", "")).lower() == Zone.GRAVEYARD)
 
 
+def _is_destroyed(event: Event, subject: str) -> bool:
+    return event.type is EventType.DESTROYED and event.subjects == (subject,)
+
+
+def _death_is_the_damages(entity: EntityState, dealt: int, deathtouch: bool) -> bool:
+    """Whether ``dealt`` damage alone kills ``entity``: not already lethal
+    before it, and lethal with it or any deathtouch."""
+    return not damage_lethal(entity.toughness, entity.damage, 0) and (
+        deathtouch or damage_lethal(entity.toughness, entity.damage, dealt))
+
+
+class _Hits(NamedTuple):
+    """What one permanent's events in a record show of the damage it took."""
+
+    sources: tuple[str, ...]
+    dealt: int
+    deathtouch: bool
+    died: bool
+    destroyed: bool
+
+
+def _keywords(entity: EntityState) -> set[str]:
+    return set(entity.granted_temporary.keywords)
+
+
+def _hits(subject: str, events: tuple[Event, ...], entities) -> _Hits | None:
+    """``subject``'s damage events and its death, or None where any other
+    event touches it or a source does more than mark damage."""
+    sources: list[str] = []
+    dealt = 0
+    deathtouch = died = destroyed = False
+    for event in events:
+        if subject not in event.subjects:
+            continue
+        if event.type is EventType.DAMAGE_DEALT and event.subjects == (subject,):
+            source = entities.get(_source_of(event))
+            if source is None or _keywords(source) & SOURCE_EXCLUSIONS:
+                return None
+            sources.append(source.id)
+            dealt += int(event.params.get("amount", 0) or 0)
+            deathtouch = deathtouch or "deathtouch" in _keywords(source)
+        elif _is_death(event, subject) and not died:
+            died = True
+        elif _is_destroyed(event, subject) and not destroyed:
+            destroyed = True  # every real lethal-damage death carries one
+        else:
+            return None
+    return _Hits(tuple(dict.fromkeys(sources)), dealt, deathtouch, died, destroyed)
+
+
 def _prevented_sources(subject: str, events: tuple[Event, ...], entities,
                        targets: tuple[str, ...]) -> tuple[str, ...] | None:
     """The sources that damaged ``subject``, or None where preventing their
@@ -387,28 +468,19 @@ def _prevented_sources(subject: str, events: tuple[Event, ...], entities,
     entity = _permanent(entities, subject)
     if entity is None or subject in targets or entity.pt is None:
         return None
-    sources: list[str] = []
-    dealt = 0
-    deathtouch = died = False
-    for event in events:
-        if subject not in event.subjects:
-            continue
-        if event.type is EventType.DAMAGE_DEALT and event.subjects == (subject,):
-            source = entities.get(_source_of(event))
-            keywords = set(source.granted_temporary.keywords) if source is not None else set()
-            if source is None or keywords & SOURCE_EXCLUSIONS:
-                return None
-            sources.append(source.id)
-            dealt += int(event.params.get("amount", 0) or 0)
-            deathtouch = deathtouch or "deathtouch" in keywords
-        elif _is_death(event, subject) and not died:
-            died = True
-        else:
-            return None
-    if died and (damage_lethal(entity.toughness, entity.damage, 0)
-                 or not (deathtouch or damage_lethal(entity.toughness, entity.damage, dealt))):
-        return None  # it died of something besides the damage
-    return tuple(dict.fromkeys(sources))
+    hits = _hits(subject, events, entities)
+    if hits is None or _death_unexplained(entity, hits):
+        return None
+    return hits.sources
+
+
+def _death_unexplained(entity: EntityState, hits: _Hits) -> bool:
+    """Whether the record's death of ``entity`` is not the damage's: a
+    ``destroyed`` with no move (a regeneration the copy does not show), or a
+    death the damage alone does not cause."""
+    if hits.destroyed and not hits.died:
+        return True
+    return hits.died and not _death_is_the_damages(entity, hits.dealt, hits.deathtouch)
 
 
 def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportunity | None:
@@ -512,20 +584,45 @@ def _prevent(payload, opportunity: Opportunity, quality: ProtectionQuality, enti
     """Each damage a source with the quality dealt the protected permanent is
     prevented (702.16e); once every one is, the death it caused is undone."""
     protected = opportunity.protected
-    events = []
-    for event in payload.events:
-        source = entities.get(_source_of(event))
-        if (event.type is EventType.DAMAGE_DEALT and event.subjects == (protected,)
-                and source is not None
-                and damage_prevented((quality,), Characteristics.of(source))):
-            params = {"amount": event.params.get("amount", 0), "source": source.id}
-            if "cause" in event.params:
-                params["cause"] = event.params["cause"]
-            event = replace(event, type=EventType.DAMAGE_PREVENTED, params=params)
-        events.append(event)
-    if not any(e.type is EventType.DAMAGE_DEALT and e.subjects == (protected,) for e in events):
-        events = [e for e in events if not _is_death(e, protected)]
+    events = [_prevented(event, protected, quality, entities) for event in payload.events]
+    if not any(_is_damage_to(e, protected) for e in events):
+        events = _without_the_death(events, protected, entities)
     return replace(payload, events=tuple(events)), (protected,)
+
+
+def _is_damage_to(event: Event, subject: str) -> bool:
+    return event.type is EventType.DAMAGE_DEALT and event.subjects == (subject,)
+
+
+def _prevented(event: Event, protected: str, quality: ProtectionQuality, entities) -> Event:
+    """``event`` as Forge writes a hit the protection prevents, else itself."""
+    source = entities.get(_source_of(event))
+    if (not _is_damage_to(event, protected) or source is None
+            or not damage_prevented((quality,), Characteristics.of(source))):
+        return event
+    params = {"amount": event.params.get("amount", 0), "source": source.id}
+    if "cause" in event.params:
+        params["cause"] = event.params["cause"]
+    return replace(event, type=EventType.DAMAGE_PREVENTED, params=params)
+
+
+def _without_the_death(events: list[Event], protected: str, entities) -> list[Event]:
+    """``events`` without the death of ``protected``: its ``destroyed``, its
+    move to the graveyard, the ``unattached`` of each Aura or Equipment that
+    fell off it and the Aura's own move to the graveyard (704.5m). Left: the
+    player counters (``this_turn`` is the state before the half) and every
+    event of another permanent."""
+    fallen = {e.subjects[0] for e in events if e.type is EventType.UNATTACHED
+              and e.params.get("detached_from") == protected}
+    auras = {i for i in fallen if _is_aura(entities.get(i))}
+    gone = (protected, *auras)
+    return [e for e in events
+            if not (_is_destroyed(e, protected) or any(_is_death(e, i) for i in gone)
+                    or (e.type is EventType.UNATTACHED and e.subjects[0] in fallen))]
+
+
+def _is_aura(entity: EntityState | None) -> bool:
+    return entity is not None and "aura" in {s.lower() for s in entity.subtypes}
 
 
 def _untarget(payload, opportunity: Opportunity, quality: ProtectionQuality, entities):
@@ -547,19 +644,15 @@ def _forbid(payload, opportunity: Opportunity, quality: ProtectionQuality, entit
     for blocker_id in payload.legal_blockers:
         blocker = entities.get(blocker_id)
         if blocker is not None and not may_block(
-                attacker.granted_temporary.keywords, attacker.colors,
-                blocker.granted_temporary.keywords, blocker.colors,
-                {t.lower() for t in blocker.types}, attacker_protections=(quality,),
-                blocker_subtypes={s.lower() for s in blocker.subtypes},
-                blocker_mana_value=blocker.mana_value):
+                Combatant.of(attacker), Combatant.of(blocker), attacker_protections=(quality,)):
             forbidden.append(blocker_id)
     gone = set(forbidden)
-    must_block = payload.must_block
+    # ``must_block`` lists the creatures a requirement makes block, legal or
+    # forbidden, whether or not they can obey (509.1c): a forbidden one stays.
     return replace(
         payload,
         legal_blockers=tuple(b for b in payload.legal_blockers if b not in gone),
         forbidden=(*payload.forbidden, *(ForbiddenEntity(entity=b) for b in forbidden)),
-        must_block=None if must_block is None else tuple(b for b in must_block if b not in gone),
     ), tuple(forbidden)
 
 

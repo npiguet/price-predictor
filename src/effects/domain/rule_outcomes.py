@@ -328,20 +328,46 @@ class BlockingRestriction(StrEnum):
     SKULK = "skulk"  # 702.118b: no creature with greater power
 
 
+class Combatant(NamedTuple):
+    """One creature as the blocking rules read it: its keywords, its
+    characteristics (types, creature types, colours, mana value, changeling:
+    every creature type, 702.73a) and its power where it has one."""
+
+    keywords: frozenset[str]
+    characteristics: Characteristics
+    power: int | None = None
+
+    @classmethod
+    def of(cls, entity: EntityState, keywords: Iterable[str] | None = None) -> Combatant:
+        """``entity`` with ``keywords`` (its granted ones by default; a caller
+        that resolves printed keywords too passes them)."""
+        found = frozenset(entity.granted_temporary.keywords if keywords is None else keywords)
+        characteristics = Characteristics.of(entity)
+        if "changeling" in found:
+            characteristics = characteristics._replace(changeling=True)
+        return cls(found, characteristics, entity.power if entity.pt is not None else None)
+
+    @classmethod
+    def made(cls, keywords: Iterable[str] = (), colours: Iterable[str] = (),
+             types: Iterable[str] = (), subtypes: Iterable[str] = (), mana_value: int = 0,
+             power: int | None = None) -> Combatant:
+        """A combatant from its parts, for a case no entity states."""
+        found = frozenset(keywords)
+        return cls(found, Characteristics.made(
+            types, subtypes, colours, mana_value, changeling="changeling" in found), power)
+
+
 def blocking_restrictions(
-    attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
-    blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
-    blocker_types: Collection[str], *,
+    attacker: Combatant, blocker: Combatant, *,
     attacker_protections: Iterable[ProtectionQuality] = (),
-    blocker_subtypes: Collection[str] = (), blocker_mana_value: int = 0,
-    attacker_power: int | None = None, blocker_power: int | None = None,
-    blocker_changeling: bool = False,
 ) -> frozenset[BlockingRestriction]:
-    """Every :class:`BlockingRestriction` that keeps the blocker from blocking
-    the attacker, as far as these keywords decide; empty where it may block.
-    :func:`may_block` is its emptiness."""
-    a, b = set(attacker_keywords), set(blocker_keywords)
-    attacker_colours, blocker_colours = set(attacker_colours), set(blocker_colours)
+    """Every :class:`BlockingRestriction` that keeps ``blocker`` from blocking
+    ``attacker``, as far as these keywords decide; empty where it may block.
+    :func:`may_block` is its emptiness. The keyword list states a protection
+    from a colour, from each colour or from everything; ``attacker_protections``
+    adds the ones only a keyword line's fragment states (a card type, a
+    creature type, a condition)."""
+    a, b = attacker.keywords, blocker.keywords
     found: set[BlockingRestriction] = set()
     if "unblockable" in a:
         found.add(BlockingRestriction.UNBLOCKABLE)
@@ -349,42 +375,45 @@ def blocking_restrictions(
         found.add(BlockingRestriction.FLYING)
     if "horsemanship" in a and "horsemanship" not in b:
         found.add(BlockingRestriction.HORSEMANSHIP)
-    if "fear" in a and "artifact" not in blocker_types and "B" not in blocker_colours:
+    if _fear_blocks(a, blocker.characteristics):
         found.add(BlockingRestriction.FEAR)
-    if ("intimidate" in a and "artifact" not in blocker_types
-            and not attacker_colours & blocker_colours):
+    if _intimidate_blocks(a, attacker.characteristics, blocker.characteristics):
         found.add(BlockingRestriction.INTIMIDATE)
     if ("shadow" in a) != ("shadow" in b):
         found.add(BlockingRestriction.SHADOW)
-    if ("skulk" in a and attacker_power is not None and blocker_power is not None
-            and blocker_power > attacker_power):
+    if _skulk_blocks(attacker, blocker):
         found.add(BlockingRestriction.SKULK)
     qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
-    blocker = Characteristics.made(
-        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value,
-        changeling=blocker_changeling)
-    if _covered((*qualities, *attacker_protections), blocker):
+    if _covered((*qualities, *attacker_protections), blocker.characteristics):
         found.add(BlockingRestriction.PROTECTION)
     return frozenset(found)
 
 
-def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
-              blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
-              blocker_types: Collection[str], *,
-              attacker_protections: Iterable[ProtectionQuality] = (),
-              blocker_subtypes: Collection[str] = (), blocker_mana_value: int = 0) -> bool:
-    """Whether one creature may block another, as far as these keywords decide.
+def _fear_blocks(attacker_keywords: Collection[str], blocker: Characteristics) -> bool:
+    return "fear" in attacker_keywords and "artifact" not in blocker.types and (
+        "B" not in blocker.colours)
+
+
+def _intimidate_blocks(attacker_keywords: Collection[str], attacker: Characteristics,
+                       blocker: Characteristics) -> bool:
+    return ("intimidate" in attacker_keywords and "artifact" not in blocker.types
+            and not attacker.colours & blocker.colours)
+
+
+def _skulk_blocks(attacker: Combatant, blocker: Combatant) -> bool:
+    return ("skulk" in attacker.keywords and attacker.power is not None
+            and blocker.power is not None and blocker.power > attacker.power)
+
+
+def may_block(attacker: Combatant, blocker: Combatant, *,
+              attacker_protections: Iterable[ProtectionQuality] = ()) -> bool:
+    """Whether one creature may block another, as far as these keywords decide:
+    ``blocking_restrictions`` finds none.
 
     Rules 702.9 (flying, reach), 702.31 (horsemanship), 702.36 (fear), 702.13
-    (intimidate), 702.28 (shadow), 702.16f and j (protection) and "can't be
-    blocked". The keyword list states a protection from a colour, from each
-    colour or from everything; ``attacker_protections`` adds the ones only a
-    keyword line's fragment states (a card type, a creature type, a condition).
-    """
-    return not blocking_restrictions(
-        attacker_keywords, attacker_colours, blocker_keywords, blocker_colours, blocker_types,
-        attacker_protections=attacker_protections, blocker_subtypes=blocker_subtypes,
-        blocker_mana_value=blocker_mana_value)
+    (intimidate), 702.28 (shadow), 702.118 (skulk), 702.16f and j (protection)
+    and "can't be blocked"."""
+    return not blocking_restrictions(attacker, blocker, attacker_protections=attacker_protections)
 
 
 def landwalk_lands(selector: str, land: EntityState) -> bool | None:

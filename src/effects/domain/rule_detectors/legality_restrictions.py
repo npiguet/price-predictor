@@ -67,6 +67,7 @@ from effects.domain.records import EffectRecord
 from effects.domain.rule_outcomes import (
     BlockingRestriction,
     Characteristics,
+    Combatant,
     ProtectionQuality,
     QualityKind,
     TargetingRestriction,
@@ -149,13 +150,7 @@ def blocker_judgements(record: EffectRecord, lines: SidecarLookup | None, restri
             continue
         blocker_keywords = keywords_of(blocker)
         evasions = blocking_restrictions(
-            attacker, anchor.colors, blocker_keywords, blocker.colors,
-            {t.lower() for t in blocker.types},
-            blocker_subtypes={s.lower() for s in blocker.subtypes},
-            blocker_mana_value=blocker.mana_value,
-            attacker_power=anchor.power if anchor.pt is not None else None,
-            blocker_power=blocker.power if blocker.pt is not None else None,
-            blocker_changeling="changeling" in blocker_keywords)
+            Combatant.of(anchor, attacker), Combatant.of(blocker, blocker_keywords))
         explained = (bool(evasions) or blocker.tapped or entity_id in named
                      or _cant_block_keyword(blocker, blocker_keywords, state))
         walked = _walked(anchor, blocker, state) if restriction == LANDWALK else None

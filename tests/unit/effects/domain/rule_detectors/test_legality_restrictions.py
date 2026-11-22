@@ -26,6 +26,7 @@ from effects.domain.rule_detectors import DetectorIndex, tag_record
 from effects.domain.rule_outcomes import (
     BlockingRestriction,
     Characteristics,
+    Combatant,
     TargetingRestriction,
     blocking_restrictions,
     may_block,
@@ -135,12 +136,17 @@ def test_protection_from_red_keeps_a_red_source_out(index):
 
 
 def test_the_restriction_functions():
-    assert blocking_restrictions(["flying"], ["U"], [], ["G"], ["creature"]) == {
-        BlockingRestriction.FLYING}
-    assert not blocking_restrictions(["flying"], ["U"], ["reach"], ["G"], ["creature"])
-    assert blocking_restrictions(["shadow", "flying"], [], [], [], []) == {
+    def blue(*keywords):
+        return Combatant.made(keywords, ["U"])
+
+    def green(*keywords):
+        return Combatant.made(keywords, ["G"], ["creature"])
+
+    assert blocking_restrictions(blue("flying"), green()) == {BlockingRestriction.FLYING}
+    assert not blocking_restrictions(blue("flying"), green("reach"))
+    assert blocking_restrictions(Combatant.made(["shadow", "flying"]), Combatant.made()) == {
         BlockingRestriction.SHADOW, BlockingRestriction.FLYING}
-    assert may_block([], [], [], [], ["creature"]) is True
+    assert may_block(Combatant.made(), Combatant.made(types=["creature"])) is True
     red = Characteristics.made(["instant"], colours=["R"])
     assert targeting_restrictions(["hexproof"], source=red, opponents=True) == {
         TargetingRestriction.HEXPROOF}
@@ -215,9 +221,10 @@ def test_a_changeling_has_every_creature_type():
     goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
     assert goblins.covers(Characteristics.made(["creature"], ["shapeshifter"], changeling=True))
     assert not goblins.covers(Characteristics.made(["creature"], ["shapeshifter"]))
+    changeling = Combatant.made(["changeling"], ["U"], ["creature"], ["shapeshifter"])
     assert BlockingRestriction.PROTECTION in blocking_restrictions(
-        ["protection_from_goblin"], ["R"], ["changeling"], ["U"], ["creature"],
-        blocker_subtypes=["shapeshifter"], blocker_changeling=True)
+        Combatant.made(["protection_from_goblin"], ["R"]), changeling)
+    assert may_block(Combatant.made(), changeling, attacker_protections=(goblins,)) is False
 
 
 _PACIFISM = ProvenanceKey("cardsfolder/p/pacifism.txt", 0, "static", 0)

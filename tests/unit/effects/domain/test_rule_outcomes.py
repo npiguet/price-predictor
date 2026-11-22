@@ -9,6 +9,7 @@ import pytest
 from effects.domain.rule_outcomes import (
     PHASE_ORDER,
     Characteristics,
+    Combatant,
     EffectKind,
     ProtectionQuality,
     QualityKind,
@@ -100,7 +101,8 @@ class TestMayBlock:
         (("protection_from_blue",), (), ("G",), ("creature",), True),
     ])
     def test_the_rule(self, attacker, blocker, colours, types, expected):
-        assert may_block(attacker, ("R",), blocker, colours, types) is expected
+        assert may_block(Combatant.made(attacker, ("R",)),
+                         Combatant.made(blocker, colours, types)) is expected
 
     @pytest.mark.parametrize("protection, blocker, expected", [
         (ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"), {"subtypes": ("goblin",)}, False),
@@ -116,9 +118,10 @@ class TestMayBlock:
     def test_a_rare_protection_forbids_the_blockers_with_its_quality(
             self, protection, blocker, expected):
         assert may_block(
-            (), ("R",), (), blocker.get("colours", ("G",)), blocker.get("types", ("creature",)),
-            attacker_protections=(protection,), blocker_subtypes=blocker.get("subtypes", ()),
-            blocker_mana_value=blocker.get("mana_value", 2),
+            Combatant.made((), ("R",)),
+            Combatant.made((), blocker.get("colours", ("G",)), blocker.get("types", ("creature",)),
+                           blocker.get("subtypes", ()), blocker.get("mana_value", 2)),
+            attacker_protections=(protection,),
         ) is expected
 
     @pytest.mark.parametrize("keyword, expected", [
@@ -126,7 +129,8 @@ class TestMayBlock:
         ("protection", True),
     ])
     def test_the_keyword_list_states_everything_and_each_colour(self, keyword, expected):
-        assert may_block((keyword,), ("R",), (), ("G",), ("creature",)) is expected
+        assert may_block(Combatant.made((keyword,), ("R",)),
+                         Combatant.made((), ("G",), ("creature",))) is expected
 
 
 class TestProtectionQuality:
