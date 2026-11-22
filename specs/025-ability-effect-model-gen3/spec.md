@@ -1423,8 +1423,9 @@ and that the reporting half never enters the control score.
   out and named in the frozen set. The component's standard error, √(Σ SEᵢ²) / m over its m items,
   MUST be at most 0.05. Standard errors are computed when the rule tests and probe set are frozen,
   before any model exists, from the records and their labels alone, and at the worst case the
-  labels allow: an AUC's by Hanley–McNeil at an AUC of 0.5, so a rule with n test records of each
-  polarity has a rescaled standard error of 2·√((2n + 1) / (12n²)), which needs n ≥ 68. A grid whose
+  labels allow: an AUC's by Hanley–McNeil at an AUC of 0.5, clustered by game, so a rule whose
+  test records of each polarity come from n games has a rescaled standard error of
+  2·√((2n + 1) / (12n²)), which needs n ≥ 68 games; the records of one game count once. A grid whose
   rule outcome is the same in every cell has no error baseline; its standard error is unbounded and
   it is left out. The worst-case estimator for a grid and for an output field's explained deviance
   is settled in planning ([research.md](research.md), Decision E4). The freeze, and `build-corpus`
