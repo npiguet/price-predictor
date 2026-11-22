@@ -1,8 +1,16 @@
 """What a line's script states about amounts and costs: the value head's targets.
 
 Read from the script text whatever the encoding surface (prose has no ``$``
-parameters), summed over a chained text's segments. Two masking rules:
+parameters), summed over a chained text's segments, one row per line (a text
+two lines share is two rows). The masking rules:
 
+- **A line with no script, and a keyword line, state nothing**: every target is
+  masked (``Bushido:2`` has no ``$`` parameter to read).
+- **A chooser anywhere in the chain masks the amounts** (which option runs is
+  not the script's to say), and **a coin flip's branches mask what they
+  state** (one of them runs).
+- **A hybrid cost masks its mana targets** (``RW`` is one symbol of either
+  colour, which a colour count cannot state).
 - **A target is masked where the script states no fixed value** (``NumDmg$ X``
   depends on the board, which the head does not read). An amount no segment
   mentions is a stated zero, not a mask.
@@ -17,11 +25,22 @@ parameters), summed over a chained text's segments. Two masking rules:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import NamedTuple
 
 from effects.domain.field_types import FieldType
-from effects.domain.script_text import api_of, params, segments
+from effects.domain.provenance import KEYWORD_API_TYPE, SidecarLine
+from effects.domain.script_text import (
+    CHAIN_KEYS,
+    CHOOSER_APIS,
+    SEG,
+    SEGMENT_OPENER,
+    api_of,
+    params,
+    segments,
+)
 from effects.domain.state_snapshot import COLORS
 from price_predictor.domain.value_objects import ManaCost
 
@@ -76,76 +95,184 @@ _COST_TARGETS: tuple[str, ...] = (*_MANA_TARGETS, "cost_taps", "cost_sacrifices"
 
 _LITERAL_RE = re.compile(r"[+-]?\d+")
 _COST_GROUP_RE = re.compile(r"<[^>]*>")
+#: A shard payable with either of two colours (``RW``), with two generic mana
+#: or a colour (``2W``), or with a colour or life (``WP``): one symbol,
+#: whichever is paid, which the cost's mana targets cannot state.
+_HYBRID_SHARD = re.compile(r"2[WUBRG]|[WUBRG][WUBRGP]")
+#: The parameters naming the segments one outcome of a coin flip runs.
+_COIN_KEYS = ("HeadsSubAbility", "TailsSubAbility", "WinSubAbility", "LoseSubAbility")
 
 
 @dataclass(frozen=True, slots=True)
 class ValueTargets:
-    """One text's targets, aligned with :data:`VALUE_TARGETS`; ``values[i]``
+    """One line's targets, aligned with :data:`VALUE_TARGETS`; ``values[i]``
     is meaningful only where ``mask[i]`` is True."""
 
     values: tuple[float, ...]
     mask: tuple[bool, ...]
 
 
-@lru_cache(maxsize=None)
-def value_targets(text: str) -> ValueTargets:
-    """The value head's targets for one encoding text. Cached per text."""
-    parsed = [params(segment) for segment in segments(text)]
-    root = parsed[0] if parsed else {}
-    values = dict.fromkeys(VALUE_TARGET_NAMES, 0.0)
-    masked: set[str] = set()
-    # A charm's root states only its choices (FR-005a); its modes carry the
-    # amounts on their own option lines.
-    if api_of(root) == "Charm" or "Choices" in root:
-        masked.update(_AMOUNT_TARGETS)
-    else:
-        for found in parsed:
-            _read_amounts(found, values, masked)
-    _read_cost(root.get("Cost"), "SP" in root, values, masked)
-    return ValueTargets(
-        values=tuple(values[name] for name in VALUE_TARGET_NAMES),
-        mask=tuple(name not in masked for name in VALUE_TARGET_NAMES),
-    )
+class ValueLine(NamedTuple):
+    """The unit the value head trains on: one line. Two lines sharing an
+    encoding ``text`` (so one row of ``e``) differ by their ``script``.
+
+    ``script`` is None where the line has none; ``keyword`` marks a keyword
+    line, a ``Keyword`` script or a reminder-text fallback.
+    """
+
+    text: str
+    script: str | None
+    keyword: bool
+
+    @classmethod
+    def of(cls, text: str, line: SidecarLine | None) -> ValueLine:
+        """``text``'s line, None for a text no sidecar line renders."""
+        if line is None:
+            return cls(text, None, True)
+        return cls(text, line.script_text, line.script_api_type == KEYWORD_API_TYPE)
+
+    @property
+    def targets(self) -> ValueTargets:
+        return value_targets(self.script, keyword=self.keyword)
+
+    def order(self) -> tuple[str, str, bool]:
+        """A sort key putting a text's lines together, a missing script first."""
+        return (self.text, self.script or "", self.keyword)
 
 
-def _read_amounts(found: dict[str, str], values: dict[str, float], masked: set[str]) -> None:
-    """One segment's stated amounts into ``values``; a non-literal one, or
-    one the segment's API leaves unstated, into ``masked``."""
+class _Amounts:
+    """The targets a script states so far."""
 
-    def add(target: str, raw: str | None) -> None:
+    def __init__(self) -> None:
+        self.values = dict.fromkeys(VALUE_TARGET_NAMES, 0.0)
+        self.masked: set[str] = set()
+        #: Every amount target a segment mentioned, stated or not.
+        self.touched: set[str] = set()
+
+    def add(self, target: str, raw: str | None) -> None:
+        """``raw`` into ``target``: a literal sums, anything else masks."""
+        self.touched.add(target)
         if raw is not None and _LITERAL_RE.fullmatch(raw):
-            values[target] += int(raw)
+            self.values[target] += int(raw)
         else:
-            masked.add(target)
+            self.masked.add(target)
 
+    def mask(self, targets: Iterable[str]) -> None:
+        self.masked.update(targets)
+
+    def targets(self) -> ValueTargets:
+        return ValueTargets(
+            values=tuple(self.values[name] for name in VALUE_TARGET_NAMES),
+            mask=tuple(name not in self.masked for name in VALUE_TARGET_NAMES),
+        )
+
+
+@lru_cache(maxsize=None)
+def value_targets(script: str | None, *, keyword: bool = False) -> ValueTargets:
+    """The value head's targets for one line's script. Cached per script.
+
+    A line with no script and a keyword line state nothing, so every target is
+    masked. A chooser at any depth (a charm, a ``GenericChoice``) masks the
+    amounts, which option runs being the player's; a coin flip's branches mask
+    the amounts they state, one of them running and the sum of both stating
+    neither.
+    """
+    amounts = _Amounts()
+    if script is None or keyword:
+        amounts.mask(VALUE_TARGET_NAMES)
+        return amounts.targets()
+    parts = script.split(SEG)
+    parsed = [params(segment) for segment in segments(script)]
+    if _holds_chooser(parsed):
+        amounts.mask(_AMOUNT_TARGETS)
+    else:
+        _read_chain(parts, parsed, amounts)
+    root = parsed[0]
+    _read_cost(root.get("Cost"), "SP" in root, amounts)
+    return amounts.targets()
+
+
+def _holds_chooser(parsed: list[dict[str, str]]) -> bool:
+    """Whether the root lists choices (a charm's root states only its choices,
+    FR-005a, its modes carry the amounts on their own option lines) or any
+    segment is a chooser API."""
+    return "Choices" in parsed[0] or any(api_of(found) in CHOOSER_APIS for found in parsed)
+
+
+def _read_chain(parts: list[str], parsed: list[dict[str, str]], amounts: _Amounts) -> None:
+    """Each segment's amounts into ``amounts``; a coin flip's branches mask
+    what they state instead."""
+    branches = _coin_branches(parts, parsed)
+    for index, found in enumerate(parsed):
+        if index not in branches:
+            _read_amounts(found, amounts)
+            continue
+        branch = _Amounts()
+        _read_amounts(found, branch)
+        amounts.mask(branch.touched)
+
+
+def _coin_branches(parts: list[str], parsed: list[dict[str, str]]) -> set[int]:
+    """The indices of the segments only one outcome of a coin flip runs: those
+    the flip's ``Heads``/``Tails``/``Win``/``LoseSubAbility$`` name, and what
+    they chain to."""
+    labels = {}
+    for index, part in enumerate(parts):
+        opener = SEGMENT_OPENER.match(part)
+        if opener:
+            labels[opener.group(1)] = index
+    pending = [
+        labels[found[key]] for found in parsed for key in _COIN_KEYS
+        if found.get(key) in labels
+    ]
+    branches: set[int] = set()
+    while pending:
+        index = pending.pop()
+        if index not in branches:
+            branches.add(index)
+            pending += _chained(parsed[index], labels)
+    return branches
+
+
+def _chained(found: dict[str, str], labels: dict[str, int]) -> list[int]:
+    """The indices of the segments ``found`` chains to."""
+    return [labels[value] for key, value in found.items() if key in CHAIN_KEYS and value in labels]
+
+
+def _read_amounts(found: dict[str, str], amounts: _Amounts) -> None:
+    """One segment's stated amounts into ``amounts``; a non-literal one, or
+    one the segment's API leaves unstated, is masked."""
     for target, keys in _AMOUNT_KEYS.items():
         for key in keys:
             if key in found:
-                add(target, found[key])
+                amounts.add(target, found[key])
     api = api_of(found)
     if api in _API_AMOUNTS:
         target, key, default = _API_AMOUNTS[api]
-        add(target, found.get(key, default))
+        amounts.add(target, found.get(key, default))
     elif api in _COUNTER_UNSTATED:
-        masked.update(_COUNTER_TARGETS)
+        amounts.mask(_COUNTER_TARGETS)
 
 
-def _read_cost(
-    cost: str | None, spell: bool, values: dict[str, float], masked: set[str],
-) -> None:
-    """The root's ``Cost$`` into the cost targets; a spell's mana is masked."""
+def _read_cost(cost: str | None, spell: bool, amounts: _Amounts) -> None:
+    """The root's ``Cost$`` into the cost targets; a spell's mana, an X cost's
+    and a hybrid cost's are masked."""
     if cost is None:
-        masked.update(_COST_TARGETS)
+        amounts.mask(_COST_TARGETS)
         return
     shards = _COST_GROUP_RE.sub("", cost).split()
-    values["cost_taps"] = 1.0 if "T" in shards else 0.0
-    values["cost_sacrifices"] = 1.0 if "Sac<" in cost else 0.0
+    amounts.values["cost_taps"] = 1.0 if "T" in shards else 0.0
+    amounts.values["cost_sacrifices"] = 1.0 if "Sac<" in cost else 0.0
     mana = ManaCost.parse(" ".join(shards))
-    if spell or mana is None or mana.has_x:
-        masked.update(_MANA_TARGETS)
+    if spell or mana is None or mana.has_x or _holds_hybrid(shards):
+        amounts.mask(_MANA_TARGETS)
         return
     for target, amount in zip(_MANA_TARGETS, (
         mana.w, mana.u, mana.b, mana.r, mana.g, mana.colorless_mana,
         mana.generic_mana,
     )):
-        values[target] = float(amount)
+        amounts.values[target] = float(amount)
+
+
+def _holds_hybrid(shards: list[str]) -> bool:
+    return any(_HYBRID_SHARD.fullmatch(shard) for shard in shards)

@@ -36,6 +36,7 @@ from effects.domain.aux_heads import Head
 from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.event_schema import EventType
+from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.records import (
     ActivationPayload,
@@ -45,6 +46,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
+from effects.domain.value_targets import ValueLine
 from tests.unit.effects.builders import (
     GEN3_SIDECAR_FOLDERS,
     curated_fixture_records,
@@ -89,11 +91,24 @@ class _Batcher:
                 prepared=[object()] * len(texts), encoder_inputs=None, taxonomy_vectors=None,
             ),
             surfaces=[], inputs=None,
+            value_lines=tuple(ValueLine.of(text, self.encoded.lines.get(text)) for text in texts),
         )
 
     def draw_mlm_mask(self, inputs, mask_prob):
         self.mlm_calls += 1
         return SimpleNamespace(rows=len(self.encoded.texts))
+
+
+def _scripted(*scripts: str) -> _Batcher:
+    """A batcher over texts that are their own lines' scripts, so the value head
+    reads each as a script (a text with no line states nothing)."""
+    lines = {
+        script: SidecarLine(
+            line_index=0, line_kind="spell", provenance=(), script_text=script, prose_offset=0,
+        )
+        for script in scripts
+    }
+    return _Batcher(list(scripts), lines)
 
 
 @dataclass(frozen=True)
@@ -226,7 +241,7 @@ class TestTheHeadTerms:
         batch = _kinds(records)
         model = _model()
         hidden = torch.randn(len(batch), 6, 8)
-        batcher = _Batcher(["NumDmg$ 2 | SP$ DealDamage", "SP$ Draw | NumCards$ 1"], {})
+        batcher = _scripted("NumDmg$ 2 | SP$ DealDamage", "SP$ Draw | NumCards$ 1")
         terms = _terms(
             _Rig(monkeypatch, preparer, losses),
             _StepInputs(batch, batcher, model, hidden), training=True,
@@ -241,7 +256,7 @@ class TestTheHeadTerms:
             tmp_path, mlm_weight=0.0, api_weight=0.0, api_types=["Draw"],
         )
         batch = _kinds(records)
-        batcher = _Batcher(["SP$ Draw | NumCards$ 1"], {})
+        batcher = _scripted("SP$ Draw | NumCards$ 1")
         terms = _terms(
             _Rig(monkeypatch, preparer, losses),
             _StepInputs(batch, batcher, _model(), torch.randn(len(batch), 6, 8)),
@@ -257,7 +272,7 @@ class TestTheHeadTerms:
         terms = _terms(
             _Rig(monkeypatch, preparer, losses),
             _StepInputs(
-                batch, _Batcher(["SP$ Draw"], {}), _model(), torch.randn(len(batch), 6, 8),
+                batch, _scripted("SP$ Draw"), _model(), torch.randn(len(batch), 6, 8),
             ),
             training=False,
         )

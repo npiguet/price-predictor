@@ -69,7 +69,7 @@ from effects.domain.split import (
     CorpusSplit,
 )
 from effects.domain.surface_collation import entity_target_tensors
-from effects.domain.value_targets import value_targets
+from effects.domain.value_targets import ValueLine
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 from effects.infrastructure.torch_device import pinned
 
@@ -174,22 +174,22 @@ class ShardClosed:
     truncated: tuple[tuple[str, tuple], ...] = ()
 
 
-def _script_of(line: SidecarLine | None) -> str | None:
-    return line.script_text if line is not None else None
-
-
 def value_batch(
-    texts: Sequence[str], lines: Mapping[str, SidecarLine],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """``(values, mask)`` of the value head's targets, one row per text (FR-058).
+    lines: Sequence[ValueLine], rows: Mapping[str, int],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """``(values, mask, rows)`` of the value head's targets, one row per line
+    (FR-058): ``rows[i]`` is the row of the batch's ``e`` matrix line ``i``'s
+    text is encoded at, so two lines sharing a text read one ``e`` each toward
+    their own targets.
 
-    Read from the sidecar line's script whatever the surface, since prose
-    holds no ``$`` parameter; a text with no line reads itself.
+    Read from each line's script whatever the surface, since prose holds no
+    ``$`` parameter; a line with no script, or a keyword line, masks them all.
     """
-    rows = [value_targets(_script_of(lines.get(text)) or text) for text in texts]
+    targets = [line.targets for line in lines]
     return (
-        torch.tensor([row.values for row in rows]),
-        torch.tensor([row.mask for row in rows]),
+        torch.tensor([row.values for row in targets]),
+        torch.tensor([row.mask for row in targets]),
+        torch.tensor([rows[line.text] for line in lines], dtype=torch.long),
     )
 
 
@@ -392,7 +392,7 @@ class StepPreparer:
             return targets
         texts = batch.staged.ordered
         if Head.VALUE in heads:
-            targets[Head.VALUE] = value_batch(texts, batch.texts)
+            targets[Head.VALUE] = value_batch(batch.value_lines, batch.staged.rows)
         if Head.API in heads:
             targets[Head.API] = self._api_batch(texts, batch.texts)
         if Head.MLM in heads:
@@ -422,7 +422,7 @@ class StepPreparer:
             if cached is None:
                 api = line.script_api_type
                 found = set(line.script_param_keys)
-                for segment in segments(_script_of(line) or ""):
+                for segment in segments(line.script_text or ""):
                     found.update(params(segment))
                 cached = (
                     self._api_type_index.get(api, -1),
@@ -540,7 +540,10 @@ class StepPreparer:
 
 def stripped(batch: PreparedBatch) -> PreparedBatch:
     """A prepared batch without the host intermediates no device half reads."""
-    return replace(batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[])
+    return replace(
+        batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[],
+        value_lines=(),
+    )
 
 
 def shipped_head_targets(records, weights: list[CopyWeights]) -> HeadTargets:

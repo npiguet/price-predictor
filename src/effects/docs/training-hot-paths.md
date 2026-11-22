@@ -5,6 +5,7 @@ Six properties of the training and encoding hot paths are load-bearing, and each
 ## 1. `e` enters the head by row index, never by value
 
 - A training surface's `Slot.e` is an `int` naming a row of the batch's encoded-ability matrix; `scatter_e_rows` turns rows into vectors on the device in one gather.
+- The value head reads `e` the same way: its targets carry the matrix row each line's text sits at, and the loss gathers `matrix[rows]` on the device, so a text two lines share is read once per line without a second encoder row.
 - Reading the vectors back to the host per slot would stall once per slot and sever the gradient. The effect head's loss reaches the ability encoder through this path and no other, so the model would optimize the head against a frozen random encoder and still report a falling loss.
 
 ## 2. Every per-field number is read back once, not once per field

@@ -37,6 +37,7 @@ from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
+from effects.domain.value_targets import ValueLine
 
 #: Running-covariance decay for the noise on ``e`` (FR-056).
 NOISE_DECAY = 0.99
@@ -153,6 +154,23 @@ class EncodedBatch:
 
 
 @dataclass
+class BatchLines:
+    """The lines of one batch: its unique texts, each with the first line met,
+    and every distinct line the value head reads a row of ``e`` for."""
+
+    texts: dict[str, SidecarLine | None] = dataclasses.field(default_factory=dict)
+    _value: dict[ValueLine, None] = dataclasses.field(default_factory=dict)
+
+    def note(self, text: str, line: SidecarLine | None) -> None:
+        self.texts.setdefault(text, line)
+        self._value[ValueLine.of(text, line)] = None
+
+    def value_lines(self) -> tuple[ValueLine, ...]:
+        """The distinct lines in a fixed order, whichever was met first."""
+        return tuple(sorted(self._value, key=ValueLine.order))
+
+
+@dataclass
 class PreparedBatch:
     """The host half of one ``build``: CPU tensors and plain structures only.
 
@@ -169,6 +187,9 @@ class PreparedBatch:
     surfaces: list
     #: The variant's masks already applied.
     inputs: TrunkInputs
+    #: Each distinct line the batch's texts read, in a fixed order: the value
+    #: head's rows, each reading the ``e`` of its text's row.
+    value_lines: tuple[ValueLine, ...] = ()
 
     def pin(self) -> None:
         self.staged.pin()
@@ -417,28 +438,37 @@ class SurfaceBatcher:
                 self._overrides[key] = previous
 
     def batch_texts(self, records) -> dict[str, SidecarLine | None]:
-        """Every ability text this batch's surfaces reference, to its line:
-        the acting line of each record and every ability on every card the
-        surface lays out, command-zone objects included, since a text left out
-        reaches the model as a zero vector."""
-        texts: dict[str, SidecarLine | None] = {}
+        """Every ability text this batch's surfaces reference, to its line."""
+        return self.batch_lines(records).texts
 
-        def note(key) -> str | None:
-            text, line = self._resolve(key)
-            if text is not None:
-                texts.setdefault(text, line)
-            return text
-
+    def batch_lines(self, records) -> BatchLines:
+        """Every ability text this batch's surfaces reference: the acting line
+        of each record and every ability on every card the surface lays out,
+        command-zone objects included, since a text left out reaches the model
+        as a zero vector."""
+        found = BatchLines()
         for record in records:
             for key in acting_keys(record):
-                if note(key) is not None:
+                if self._note(found, key) is not None:
                     break
-            for entity in board_entities(record):
-                for line in slot_lines(entity, self.board_keys):
-                    if note(line.key) is not None:
-                        for mode in self.options_for(line.key):
-                            note(mode)
-        return texts
+            self._note_board(found, record)
+        return found
+
+    def _note_board(self, found: BatchLines, record) -> None:
+        """The lines of ``record``'s board, and the modes that follow each."""
+        for entity in board_entities(record):
+            for line in slot_lines(entity, self.board_keys):
+                if self._note(found, line.key) is not None:
+                    for mode in self.options_for(line.key):
+                        self._note(found, mode)
+
+    def _note(self, found: BatchLines, key) -> str | None:
+        """``key``'s text into ``found``, with its line; None for a key that
+        reads no text."""
+        text, line = self._resolve(key)
+        if text is not None:
+            found.note(text, line)
+        return text
 
     def options_for(self, key) -> tuple:
         """The keys of the charm-mode lines that follow ``key``'s line
@@ -521,7 +551,8 @@ class SurfaceBatcher:
     def prepare(self, records, strip_per_record=None) -> PreparedBatch:
         """``build``'s host half. Draws keyword expansion, then context
         dropout, from the batcher's generator, in that order."""
-        texts = self.batch_texts(records)
+        found = self.batch_lines(records)
+        texts = found.texts
         staged = self.stage(texts)
         strips = strip_per_record or [NO_STRIP] * len(records)
         builder = self.surface_builder(staged.rows)
@@ -529,7 +560,10 @@ class SurfaceBatcher:
         inputs = self._masked(collate_surfaces(
             surfaces, e_dim=self.spec.e_dim, widths=self.spec.widths,
         ))
-        return PreparedBatch(texts=texts, staged=staged, surfaces=surfaces, inputs=inputs)
+        return PreparedBatch(
+            texts=texts, staged=staged, surfaces=surfaces, inputs=inputs,
+            value_lines=found.value_lines(),
+        )
 
     def _masked(self, inputs: TrunkInputs) -> TrunkInputs:
         """The collated inputs with the variant's masks applied (FR-094),

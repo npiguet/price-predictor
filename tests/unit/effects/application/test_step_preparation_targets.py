@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from effects.application.step_preparation import value_batch
 from effects.domain.provenance import ProvenanceKey, SidecarLine
-from effects.domain.value_targets import VALUE_TARGET_NAMES
+from effects.domain.value_targets import VALUE_TARGET_NAMES, ValueLine
 
 _KEY = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
 _LINE = SidecarLine(
@@ -20,13 +20,17 @@ _LINE = SidecarLine(
 
 def test_a_prose_texts_amounts_come_from_its_lines_script():
     prose = "cardname deals 2 damage to any target."
-    values, mask = value_batch([prose], {prose: _LINE})
+    values, mask, _rows = value_batch([ValueLine.of(prose, _LINE)], {prose: 0})
     damage = VALUE_TARGET_NAMES.index("damage")
     assert bool(mask[0, damage])
     assert float(values[0, damage]) == 2.0
 
 
-def test_a_text_with_no_line_reads_itself():
+def test_a_text_with_no_line_states_nothing():
+    """It used to read itself as a script and state a zero for each amount the
+    text did not name (and the damage it did): a keyword line's reminder text
+    has no script, so it masks every target."""
     script = "SP$ DealDamage | NumDmg$ 4"
-    values, _mask = value_batch([script], {})
-    assert float(values[0, VALUE_TARGET_NAMES.index("damage")]) == 4.0
+    values, mask, _rows = value_batch([ValueLine.of(script, None)], {script: 0})
+    assert not bool(mask.any())
+    assert float(values[0, VALUE_TARGET_NAMES.index("damage")]) == 0.0

@@ -91,9 +91,11 @@ def _global_terms(model, hidden, target, mask) -> torch.Tensor:
     )
 
 
-def _value(model, matrix, values, mask) -> torch.Tensor:
+def _value(model, matrix, values, mask, rows) -> torch.Tensor:
+    """One row per line: ``rows`` names the row of ``matrix`` each reads, so a
+    text two lines share enters the head once per line, by row index."""
     return value_loss(
-        model.value_head(matrix).float(), values, mask,
+        model.value_head(matrix[rows]).float(), values, mask,
         log_dispersion=model.value_dispersion(),
     )
 
@@ -160,7 +162,7 @@ AUX_HEADS: tuple[HeadSpec, ...] = (
     HeadSpec(
         Head.VALUE, HeadInput.ENCODED, ("value_head", "value_dispersion"),
         weight_field="value_weight",
-        loss=_value,
+        loss=_value, on_device=(0, 2),
     ),
     HeadSpec(
         Head.MLM, HeadInput.MASKED_TOKENS, ("mlm_head",), weight_field="mlm_weight",
