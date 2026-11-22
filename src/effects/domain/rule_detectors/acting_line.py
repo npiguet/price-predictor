@@ -27,7 +27,7 @@ from typing import Any
 
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
-from effects.domain.records import EffectRecord
+from effects.domain.records import Candidate, EffectRecord
 from effects.domain.script_text import params, root
 from effects.domain.state_snapshot import EntityState, StateSnapshot
 
@@ -64,6 +64,44 @@ def root_params_of(line: SidecarLine | None) -> dict[str, str] | None:
 def acting_root_params(record: EffectRecord, lines: SidecarLookup | None) -> dict[str, str] | None:
     """The acting line's root-segment parameters, or None where no line is readable."""
     return root_params_of(acting_line(record, lines))
+
+
+#: What an acting ability is: its card's cast, or an activated ability.
+CANDIDATE_KINDS = frozenset({"cast", "activated"})
+
+
+def ability_kind(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> str | None:
+    """``cast`` or ``activated``; None for no key, a static or trigger, or an
+    unreadable key. A keyword's own line is an activated ability."""
+    keys = tuple(keys)
+    if not keys:
+        return None
+    key = keys[0]
+    if key.trait_kind == "keyword":
+        return "activated"
+    if key.trait_kind != "spell":
+        return None
+    line = line_of(keys, lines)
+    if line is None:
+        # A permanent's implicit cast spell, which the converter drops.
+        return "cast" if key.index_within_kind == 0 and key.option is None else None
+    found = root_params_of(line) or {}
+    return "cast" if "SP" in found else "activated" if "AB" in found else None
+
+
+def candidate_kind(candidate: Candidate, lines: SidecarLookup | None) -> str | None:
+    """:func:`ability_kind` of a playability candidate; None for a land play."""
+    return None if candidate.land_play else ability_kind(candidate.ability, lines)
+
+
+def require_candidate(family: str, params: Mapping[str, Any]) -> None:
+    """Refuse a ``candidate`` that is no kind, and a ``source_keyword`` without
+    the ``candidate`` it speaks for: the keyword is the card's, so an Aura's
+    activated or granted ability would be taken for its cast."""
+    wanted = "source_keyword" in params or "candidate" in params
+    if wanted and params.get("candidate") not in CANDIDATE_KINDS:
+        raise ValueError(f"{family}: a source_keyword is the candidate card's, so the declaration "
+                         f"names its candidate, one of {sorted(CANDIDATE_KINDS)}")
 
 
 def same_keyword(name: str | None, keyword: str) -> bool:

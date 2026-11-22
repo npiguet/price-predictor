@@ -6,7 +6,8 @@
     "303.4h: skip reason rewritten to name the CopyPermanent attach effects (Arna Kennerud, Stangg), which copy only permanents already attached.",
     "303.4i-1 (Retether): Retether chooses the object on resolution under an extra restriction, which is 303.4g (no legal object under the enchant ability and other applicable effects), not 303.4i; renamed 303.4g-2 and moved the attach choice from the variant delta into the decisions.",
     "303.4i-1: replaced with Academy Researchers, whose effect names the object the Aura enters attached to; Wild Growth versus Holy Strength.",
-    "303.4j-1: Aura Graft says 'another permanent it can enchant', so choosing Black Knight was never a legal choice and the base did not reach 303.4j; switched to Enchantment Alteration (attach to another creature, no can-enchant restriction) and made the minimal pair the identity of the only other creature."
+    "303.4j-1: Aura Graft says 'another permanent it can enchant', so choosing Black Knight was never a legal choice and the base did not reach 303.4j; switched to Enchantment Alteration (attach to another creature, no can-enchant restriction) and made the minimal pair the identity of the only other creature.",
+    "task F03, 2026-11-22: 303.4a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [
     {
@@ -350,7 +351,8 @@
         "params": {
           "bit": "has_legal_target",
           "fires_when": true,
-          "source_keyword": "Enchant"
+          "source_keyword": "Enchant",
+          "candidate": "cast"
         },
         "needs": []
       }

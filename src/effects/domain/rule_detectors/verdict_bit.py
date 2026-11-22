@@ -113,9 +113,12 @@ from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
+    CANDIDATE_KINDS,
+    candidate_kind,
     card_has_keyword,
     is_keyword_line,
     line_of,
+    require_candidate,
     root_params_of,
     script_params_match,
 )
@@ -131,9 +134,6 @@ FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "s
                      "phase_list_last", "source_tapped", "source_sick", "min_targets",
                      "some_legal_target", "stack_empty"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
-#: What a candidate is: its card's cast, or an activated ability (a land play
-#: is ``land_play``'s).
-CANDIDATE_KINDS = frozenset({"cast", "activated"})
 CHECKS = frozenset(check.value for check in PlayabilityCheck)
 
 #: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
@@ -178,23 +178,6 @@ def _holds_symbol(symbols: frozenset[str], wanted: str) -> bool:
     if wanted.lower() in ("hybrid", "monohybrid", "phyrexian"):
         return any(_symbol_class(s) == wanted.lower() for s in symbols)
     return wanted.upper() in symbols
-
-
-def candidate_kind(candidate: Candidate, lines: SidecarLookup | None) -> str | None:
-    """``cast`` or ``activated``; None for a land play or an unreadable key."""
-    if candidate.land_play or not candidate.ability:
-        return None
-    key = candidate.ability[0]
-    if key.trait_kind == "keyword":
-        return "activated"
-    if key.trait_kind != "spell":
-        return None
-    line = line_of(candidate.ability, lines)
-    if line is None:
-        # A permanent's implicit cast spell, which the converter drops.
-        return "cast" if key.index_within_kind == 0 and key.option is None else None
-    found = root_params_of(line) or {}
-    return "cast" if "SP" in found else "activated" if "AB" in found else None
 
 
 def sorcery_speed(candidate: Candidate, record: EffectRecord,
@@ -392,6 +375,7 @@ class VerdictBit:
             raise ValueError(f"verdict_bit: candidate_face is one of {sorted(CANDIDATE_FACES)}")
         if params.get("candidate", "cast") not in CANDIDATE_KINDS:
             raise ValueError(f"verdict_bit: candidate is one of {sorted(CANDIDATE_KINDS)}")
+        require_candidate(self.id, params)
         dv.check(self.id, params, {
             "fires_when": dv.boolean, "responsible_static": dv.boolean,
             "land_play": dv.boolean, "sorcery_speed": dv.boolean, "keyword": dv.keyword,

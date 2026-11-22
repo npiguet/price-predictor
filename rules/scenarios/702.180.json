@@ -1,7 +1,9 @@
 {
   "unit": "702.180",
   "verified": true,
-  "review": [],
+  "review": [
+    "task F03, 2026-11-22: 702.180a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
+  ],
   "skipped": [],
   "scenarios": [
     {
@@ -97,7 +99,8 @@
         "params": {
           "bit": "affordable",
           "fires_when": true,
-          "source_keyword": "Harmonize"
+          "source_keyword": "Harmonize",
+          "candidate": "cast"
         },
         "needs": []
       }

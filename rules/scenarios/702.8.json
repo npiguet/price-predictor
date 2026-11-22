@@ -3,7 +3,8 @@
   "verified": true,
   "review": [
     "skipped: removed 702.8b, which the triage classifies definitional (redundancy), so they need neither a scenario nor a skip.",
-    "triage/702.8.jsonl: was missing; wrote it (702.8a legality/playability, the rest definitional)."
+    "triage/702.8.jsonl: was missing; wrote it (702.8a legality/playability, the rest definitional).",
+    "task F03, 2026-11-22: 702.8a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [],
   "scenarios": [
@@ -89,7 +90,8 @@
           "bit": "failed_check",
           "check": "casting_speed",
           "fires_when": true,
-          "source_keyword": "flash"
+          "source_keyword": "flash",
+          "candidate": "cast"
         },
         "needs": [
           "failed_checks"

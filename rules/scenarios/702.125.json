@@ -2,7 +2,8 @@
   "unit": "702.125",
   "verified": true,
   "review": [
-    "702.125a-1: the only does_not_fire variant (five lands) still had undaunted applying, so nothing in it switched the rule off; added no_undaunted, a same-cost {6}{W} sorcery without undaunted that six lands cannot cast, and relabelled five_lands as other (it shows the reduction is exactly {1})."
+    "702.125a-1: the only does_not_fire variant (five lands) still had undaunted applying, so nothing in it switched the rule off; added no_undaunted, a same-cost {6}{W} sorcery without undaunted that six lands cannot cast, and relabelled five_lands as other (it shows the reduction is exactly {1}).",
+    "task F03, 2026-11-22: 702.125a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [
     {
@@ -86,7 +87,8 @@
         "params": {
           "bit": "affordable",
           "fires_when": true,
-          "source_keyword": "Undaunted"
+          "source_keyword": "Undaunted",
+          "candidate": "cast"
         },
         "needs": []
       }

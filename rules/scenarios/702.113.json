@@ -2,7 +2,8 @@
   "unit": "702.113",
   "verified": true,
   "review": [
-    "702.113b-1: decisions listed two separate casts and variant normal_cast_no_land changed two facts from the base (no Island and the cost paid); rebuilt with no land in the setup, a single {U} cast as base and the awaken-cost payment as the one-fact variant; Island dropped."
+    "702.113b-1: decisions listed two separate casts and variant normal_cast_no_land changed two facts from the base (no Island and the cost paid); rebuilt with no land in the setup, a single {U} cast as base and the awaken-cost payment as the one-fact variant; Island dropped.",
+    "task F03, 2026-11-22: 702.113b-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [],
   "scenarios": [
@@ -153,7 +154,8 @@
         "params": {
           "bit": "has_legal_target",
           "fires_when": true,
-          "source_keyword": "Awaken"
+          "source_keyword": "Awaken",
+          "candidate": "cast"
         },
         "needs": []
       }

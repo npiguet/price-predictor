@@ -1,7 +1,9 @@
 {
   "unit": "702.127",
   "verified": true,
-  "review": [],
+  "review": [
+    "task F03, 2026-11-22: 702.127a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
+  ],
   "skipped": [],
   "scenarios": [
     {
@@ -74,6 +76,7 @@
           "check": "zone",
           "fires_when": true,
           "source_keyword": "Aftermath",
+          "candidate": "cast",
           "candidate_face": "alternative"
         },
         "needs": [

@@ -1,7 +1,9 @@
 {
   "unit": "701.5",
   "verified": true,
-  "review": [],
+  "review": [
+    "task F03, 2026-11-22: 701.5a-1: the detector reads a cast spell's resolution only (ability_kind cast): it fired on every resolved half, an ability's and a trigger's included (finding 7.6)"
+  ],
   "skipped": [],
   "scenarios": [
     {
@@ -74,12 +76,13 @@
         "family": "resolution_outcome",
         "record_kind": "resolution",
         "outcome": "A cast spell leaves the stack as resolved.",
-        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a cast spell is countered.",
+        "near_miss": "A cast spell is countered.",
         "params": {
           "outcome": "resolved",
           "near": [
             "countered"
-          ]
+          ],
+          "ability_kind": "cast"
         },
         "needs": []
       }

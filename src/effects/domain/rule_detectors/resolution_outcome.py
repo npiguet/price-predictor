@@ -4,9 +4,9 @@ A stack object leaves the stack ``resolved``, ``fizzled`` (every target
 became illegal, 608.2b), ``partially_fizzled``, ``declined`` or ``countered``
 (701.6a). A rule about leaving the stack is on its ``fires`` side when the
 outcome is the one it names, and on its near miss when the outcome is one of
-``near``. The near miss is counted only where ``keyword``, ``source_keyword``
-or ``targeted`` says which stack objects the rule speaks for (``SCOPES``):
-without one, every spell and ability of the corpus that resolved would be a
+``near``. The near miss is counted only where ``keyword``, ``source_keyword``,
+``ability_kind`` or ``targeted`` says which stack objects the rule speaks for
+(``SCOPES``): without one, every spell and ability of the corpus that resolved would be a
 near miss of a counter rule.
 
 The outcome is written on the effect half (root spec § 8.14, FR-042b), and a
@@ -25,6 +25,9 @@ Parameters:
   trigger, the half that counters or resolves);
 - ``source_keyword``: the stack object's card prints this keyword (a gift
   spell): the countered object's card on a countering half;
+- ``ability_kind``: ``cast`` or ``activated``: the acting key is the card's
+  cast spell or an activated ability (``acting_line.ability_kind``), so a
+  trigger's resolution is neither;
 - ``targeted``: true to count only stack objects that had a target, so a
   fizzle rule's near miss is a targeted spell that resolved. The targets are
   read as cast (``Refs.as_cast``: ``targets_at_cast``, else ``targets``).
@@ -55,6 +58,8 @@ from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
+    CANDIDATE_KINDS,
+    ability_kind,
     acting_line,
     card_has_keyword,
     is_keyword_line,
@@ -73,28 +78,36 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
     """The stack object's outcome a record shows, or None where it shows none."""
     if record.kind is not RecordKind.RESOLUTION:
         return None
-    refs = record.state.refs
-    source = (refs.source,) if refs.source else ()
     if record.moment is Moment.ACTIVATION:
-        outcome = getattr(record.payload, "outcome", None)
-        if outcome is None:
-            return None
-        return _Observed(outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
-                         bool(refs.as_cast))
+        return _activation_observed(record)
     payload = record.payload
     if not isinstance(payload, ResolutionPayload):
         return None
-    if countered_asked:
-        countered = tuple(dict.fromkeys(
-            ref for event in payload.events for ref in countered_objects(event)))
-        if countered:
-            return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
+    countered = _countered(payload) if countered_asked else ()
+    if countered:
+        return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
     if payload.outcome is None:
         return None
     # The targets as cast (V5 #25).
-    targeted = bool(refs.as_cast)
-    return _Observed(payload.outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
-                     targeted)
+    return _stack_object(record, payload.outcome)
+
+
+def _stack_object(record: EffectRecord, outcome: ResolutionOutcome) -> _Observed:
+    """``outcome`` of the record's own stack object and its targets as cast."""
+    refs = record.state.refs
+    source = (refs.source,) if refs.source else ()
+    return _Observed(outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
+                     bool(refs.as_cast))
+
+
+def _activation_observed(record: EffectRecord) -> _Observed | None:
+    outcome = getattr(record.payload, "outcome", None)
+    return None if outcome is None else _stack_object(record, outcome)
+
+
+def _countered(payload: ResolutionPayload) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(
+        ref for event in payload.events for ref in countered_objects(event)))
 
 
 def _prints(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
@@ -110,14 +123,14 @@ def _prints(record: EffectRecord, lines: SidecarLookup | None, observed: _Observ
 
 #: The parameters that say which stack objects a rule speaks for, so which
 #: records its near miss is (``targeted`` when true).
-SCOPES = frozenset({"keyword", "source_keyword", "targeted"})
+SCOPES = frozenset({"keyword", "source_keyword", "ability_kind", "targeted"})
 
 
 @dataclass(frozen=True, slots=True)
 class ResolutionOutcomeFamily:
     id: str = "resolution_outcome"
     params: frozenset[str] = frozenset({"outcome", "near", "targeted", "source_keyword",
-                                        "keyword"})
+                                        "keyword", "ability_kind"})
     general: frozenset[str] = frozenset({"outcome", "near"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
@@ -127,6 +140,9 @@ class ResolutionOutcomeFamily:
         ResolutionOutcome(params["outcome"])
         for near in params.get("near", ["resolved"]):
             ResolutionOutcome(near)
+        if params.get("ability_kind", "cast") not in CANDIDATE_KINDS:
+            raise ValueError(
+                f"resolution_outcome: ability_kind is one of {sorted(CANDIDATE_KINDS)}")
         dv.check(self.id, params, {"targeted": dv.boolean, "source_keyword": dv.keyword,
                                    "keyword": dv.keyword})
 
@@ -148,10 +164,24 @@ class ResolutionOutcomeFamily:
 
 def _fits(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
           params: Mapping[str, Any]) -> bool:
-    """Whether the stack object is one ``targeted``, ``source_keyword`` and
-    ``keyword`` speak for, each where given."""
-    if params.get("targeted") and not observed.targeted:
-        return False
+    """Whether the stack object is one ``targeted``, ``ability_kind``,
+    ``source_keyword`` and ``keyword`` speak for, each where given."""
+    return (_targeted_fits(observed, params) and _kind_fits(record, lines, params)
+            and _keywords_fit(record, lines, observed, params))
+
+
+def _targeted_fits(observed: _Observed, params: Mapping[str, Any]) -> bool:
+    return not params.get("targeted") or observed.targeted
+
+
+def _kind_fits(record: EffectRecord, lines: SidecarLookup | None,
+               params: Mapping[str, Any]) -> bool:
+    return "ability_kind" not in params or ability_kind(
+        record.ability or (), lines) == params["ability_kind"]
+
+
+def _keywords_fit(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
+                  params: Mapping[str, Any]) -> bool:
     keyword = params.get("source_keyword")
     if keyword is not None and not _prints(record, lines, observed, keyword):
         return False

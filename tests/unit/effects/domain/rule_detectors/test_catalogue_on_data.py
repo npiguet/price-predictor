@@ -55,13 +55,6 @@ GENERAL = {
     # continuous record is one, and its other side writes no record
     "604.2-1",
 }
-#: Declarations above the share whose fix is a later task's, each with it.
-PENDING = {
-    # fires on every attacker that may attack a player: F03 judges planeswalkers only
-    "306.6-1": "F03",
-    # fires on every resolved half: F03 keeps it to cast spells
-    "701.5a-1": "F03",
-}
 
 
 def _label(record) -> str:
@@ -137,7 +130,7 @@ def test_no_side_of_a_declaration_tags_most_of_its_kind_unless_its_rule_is_the_k
         tagged):
     found = unscoped(tagged)
     print("unscoped:", found)
-    assert {sid for sid, _, _ in found} <= GENERAL | set(PENDING), found
+    assert {sid for sid, _, _ in found} <= GENERAL, found
 
 
 @pytest.mark.parametrize("sid", ["105.3-1", "113.11-1", "113.11-2", "202.2f-1", "205.1a-1",

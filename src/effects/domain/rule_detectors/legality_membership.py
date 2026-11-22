@@ -62,7 +62,9 @@ Parameters:
   ``protection`` or ``selector`` for a target), with ``quality`` (a
   protection's quality kind, ``everything``) beside ``protection``;
 - ``judged`` (``permanent`` or ``player``), ``source_keyword`` (the
-  candidate's card prints this keyword) and ``candidate_keyword`` (the
+  candidate's card prints this keyword), ``candidate`` (``cast`` or
+  ``activated``: the candidate is its card's cast or an activated ability,
+  which a ``source_keyword`` always names) and ``candidate_keyword`` (the
   candidate is this keyword's line), on ``legal_targets``;
 - ``designation``: only a judged entity holding this gen-3 designation counts
   (a suspected creature);
@@ -110,7 +112,13 @@ from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
-from effects.domain.rule_detectors.acting_line import card_has_keyword, is_keyword_line, line_of
+from effects.domain.rule_detectors.acting_line import (
+    candidate_kind,
+    card_has_keyword,
+    is_keyword_line,
+    line_of,
+    require_candidate,
+)
 from effects.domain.rule_detectors.entity_facts import (
     card_type_count,
     has_card_type,
@@ -257,6 +265,10 @@ _RESTRICTIONS = {"legal_blockers": BLOCKER_RESTRICTIONS, "legal_targets": TARGET
                  "legal_attackers": ATTACKER_RESTRICTIONS}
 
 
+#: The parameters that read the candidates of a targeting decision.
+_READS_CANDIDATES = frozenset({"restriction", "source_keyword", "candidate_keyword", "candidate"})
+
+
 def _restricted(record: EffectRecord, lines: SidecarLookup | None,
                 params: Mapping[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """``(fires, near)`` under a named restriction (``legality_restrictions``)."""
@@ -272,6 +284,8 @@ def _restricted(record: EffectRecord, lines: SidecarLookup | None,
     if "source_keyword" in params:
         candidates = [c for c in candidates
                       if card_has_keyword(c.ability, lines, params["source_keyword"])]
+    if "candidate" in params:
+        candidates = [c for c in candidates if candidate_kind(c, lines) == params["candidate"]]
     if "candidate_keyword" in params:
         candidates = [c for c in candidates if is_keyword_line(
             line_of(c.ability, lines), params["candidate_keyword"])]
@@ -323,7 +337,7 @@ class LegalityMembership:
                                         "keyword", "counter_type", "at_least", "judged_type",
                                         "min_types", "restriction", "quality", "judged",
                                         "source_keyword", "candidate_keyword", "designation",
-                                        "judged_not_type"})
+                                        "judged_not_type", "candidate"})
     general: frozenset[str] = frozenset({"list", "fires_when", "universe", "keyword",
                                          "counter_type", "at_least", "restriction",
                                          "source_keyword", "candidate_keyword"})
@@ -360,7 +374,8 @@ class LegalityMembership:
                                     or params["quality"] not in QUALITY_KINDS):
             raise ValueError(f"legality_membership: quality is one of {sorted(QUALITY_KINDS)}, "
                              "with restriction protection")
-        for name in ("judged", "source_keyword", "candidate_keyword"):
+        require_candidate(self.id, params)
+        for name in ("judged", "source_keyword", "candidate_keyword", "candidate"):
             if name in params and listed != "legal_targets":
                 raise ValueError(f"legality_membership: {name} reads legal_targets")
         if params.get("judged", "permanent") not in JUDGED:
@@ -377,7 +392,7 @@ class LegalityMembership:
         listed = params.get("list")
         if record.kind is not RecordKind.PLAYABILITY or record.subkind is not _SUBKIND_OF[listed]:
             return None
-        if "restriction" in params or "source_keyword" in params or "candidate_keyword" in params:
+        if _READS_CANDIDATES & params.keys():
             fires, near = _restricted(record, lines, params)
         else:
             fires, near = _listed(record, params)

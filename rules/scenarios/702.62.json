@@ -2,7 +2,8 @@
   "unit": "702.62",
   "verified": true,
   "review": [
-    "702.62d: triaged as decision, but it decides that cost increases (601.2f) still apply to the free cast from suspend, which decides whether the cast is possible; reclassified as legality/direct/playability and added 702.62d-1 with Thalia, Guardian of Thraben."
+    "702.62d: triaged as decision, but it decides that cost increases (601.2f) still apply to the free cast from suspend, which decides whether the cast is possible; reclassified as legality/direct/playability and added 702.62d-1 with Thalia, Guardian of Thraben.",
+    "task F03, 2026-11-22: 702.62d-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [],
   "scenarios": [
@@ -357,7 +358,8 @@
           "bit": "affordable",
           "fires_when": false,
           "responsible_static": true,
-          "source_keyword": "Suspend"
+          "source_keyword": "Suspend",
+          "candidate": "cast"
         },
         "needs": []
       }

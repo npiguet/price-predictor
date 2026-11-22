@@ -3,7 +3,8 @@
   "verified": true,
   "review": [
     "306.5d-1: second_activation said Ajani had activated -1 earlier, inconsistent with the 4 loyalty counters in the setup; delta now states an earlier activation already reflected in the shown counters.",
-    "306.2-1: base decision was ambiguous about B's response; base now has B pass, and the countered delta states B casts Counterspell instead."
+    "306.2-1: base decision was ambiguous about B's response; base now has B pass, and the countered delta states B casts Counterspell instead.",
+    "task F03, 2026-11-22: 306.6-1: the detector judges planeswalkers only (judged_type): it fired on every attacker that may attack a player, 2,114 of 2,449 attackers records (finding 7.2)"
   ],
   "skipped": [],
   "scenarios": [
@@ -528,11 +529,12 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A planeswalker is among the defenders an attacking creature may attack.",
-        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not a legal defender for the anchored attacker is outside the list.",
+        "near_miss": "A permanent that is not a legal defender for the anchored attacker is outside the list: counted for a planeswalker, which is what 306.6 speaks for.",
         "params": {
           "list": "legal_defenders",
           "fires_when": "inside",
-          "universe": "battlefield"
+          "universe": "battlefield",
+          "judged_type": "planeswalker"
         },
         "needs": [
           "legal_defenders"

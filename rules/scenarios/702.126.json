@@ -4,7 +4,8 @@
   "review": [
     "all scenarios: A's library was empty while Reverse Engineer's expected outcome draws three cards; gave A a library of five Islands.",
     "702.126b-1 (now 702.126a-2): the two_blue_sources variant changed two facts (Islands and Ornithopters); it now adds one Island only. The scenario shows improvise paying only generic mana, which rule 702.126a states, so it moved to 702.126a; 702.126b stays covered by the Thalia scenario.",
-    "702.126b-2: renumbered 702.126b-1 after the previous 702.126b-1 moved to 702.126a."
+    "702.126b-2: renumbered 702.126b-1 after the previous 702.126b-1 moved to 702.126a.",
+    "task F03, 2026-11-22: 702.126a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [],
   "scenarios": [
@@ -99,7 +100,8 @@
         "params": {
           "bit": "affordable",
           "fires_when": true,
-          "source_keyword": "Improvise"
+          "source_keyword": "Improvise",
+          "candidate": "cast"
         },
         "needs": []
       }

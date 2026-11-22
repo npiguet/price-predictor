@@ -9,7 +9,8 @@
     "603.7a-1: the end-step variant plays through B's draw step with B's library empty, so B would lose the game; gave B three Islands in library.",
     "603.7c-1: the bounced-and-recast variant changed two facts at once (a bounce, then a recast); replaced it with a one-action Cloudshift flicker, with Plains replacing the two Forests.",
     "603.9, 603.10f: removed from skipped and reclassified as out_of_scope in the triage, since their own skip reason says they cannot occur in a two-player Forge game.",
-    "603.7g: the skip reason claimed no Forge card has this shape, but dash and blitz are static abilities allowing an action that creates a delayed trigger; rewrote the reason around the fact that no reachable state changes the source or controller."
+    "603.7g: the skip reason claimed no Forge card has this shape, but dash and blitz are static abilities allowing an action that creates a delayed trigger; rewrote the reason around the fact that no reachable state changes the source or controller.",
+    "task F03, 2026-11-22: 603.6d-1: the detector reads rewrite records: a replacement's application is filed there, a resolution record never holds it, so the declaration tagged nothing (finding 7.6)"
   ],
   "skipped": [
     {
@@ -1411,7 +1412,7 @@
         "603.6d"
       ],
       "title": "'Enters tapped' is a static ability that does not use the stack, unlike an enters trigger",
-      "record_kind": "resolution",
+      "record_kind": "rewrite",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -1473,7 +1474,7 @@
       "forge_notes": "",
       "detector": {
         "family": "rewrite_event",
-        "record_kind": "resolution",
+        "record_kind": "rewrite",
         "outcome": "A permanent entering the battlefield meets its own enters-tapped / enters-with replacement and the entering event is modified in place, as part of the entering and without using the stack.",
         "near_miss": "A zone change to the battlefield meets a Moved replacement that leaves it unmodified.",
         "params": {

@@ -5,7 +5,8 @@
     "skipped 601.3f: the reason named Gonti as the only such card; Praetor's Grasp grants look-and-play too, reason reworded to cover every such card.",
     "601.2f-2: Painter's Servant asks for a color choice as it enters, which no decision fixed; swapped it for the vanilla {2} artifact creature Bronze Sable.",
     "601.3e-1: the decisions cast Giant Killer and then tried Chop Down from the same library card, which the first cast would have moved; rewrote them as one playability evaluation of both halves from the same state.",
-    "601.8-1: the scenario cast Shock while Sphere of Resistance was still on the stack, which shows only that a static ability does nothing on the stack; rebuilt it so Shock is already on the stack when Sphere is cast and resolves (Shock unaffected), against the order where Sphere resolves first (Shock unaffordable with three Mountains)."
+    "601.8-1: the scenario cast Shock while Sphere of Resistance was still on the stack, which shows only that a static ability does nothing on the stack; rebuilt it so Shock is already on the stack when Sphere is cast and resolves (Shock unaffected), against the order where Sphere resolves first (Shock unaffordable with three Mountains).",
+    "task F03, 2026-11-22: 601.3c-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
   ],
   "skipped": [
     {
@@ -1067,7 +1068,8 @@
         "params": {
           "bit": "timing",
           "fires_when": true,
-          "source_keyword": "MayFlashCost"
+          "source_keyword": "MayFlashCost",
+          "candidate": "cast"
         },
         "needs": [
           "timing"

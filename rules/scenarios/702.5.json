@@ -1,7 +1,11 @@
 {
   "unit": "702.5",
   "verified": true,
-  "review": [],
+  "review": [
+    "task F03, 2026-11-22: 702.5a-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)",
+    "task F03, 2026-11-22: 702.5a-2: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)",
+    "task F03, 2026-11-22: 702.5d-1: the detector reads candidate cast only: source_keyword is the card's, so an Aura's activated or granted ability, or was taken for the cast the rule is about (finding 7.3)"
+  ],
   "skipped": [
     {
       "id": "702.5b",
@@ -83,7 +87,8 @@
           "list": "legal_targets",
           "fires_when": "outside",
           "restriction": "selector",
-          "source_keyword": "Enchant"
+          "source_keyword": "Enchant",
+          "candidate": "cast"
         },
         "needs": []
       }
@@ -150,7 +155,8 @@
         "params": {
           "bit": "has_legal_target",
           "fires_when": false,
-          "source_keyword": "Enchant"
+          "source_keyword": "Enchant",
+          "candidate": "cast"
         },
         "needs": []
       }
@@ -228,6 +234,7 @@
           "fires_when": "inside",
           "restriction": "selector",
           "source_keyword": "Enchant",
+          "candidate": "cast",
           "judged": "player"
         },
         "needs": []
