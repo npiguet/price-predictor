@@ -23,20 +23,35 @@ def units_with_sizes(rules):
 NAMES_CACHE = RULES / ".forge-card-names.txt"  # gitignored; delete it after updating Forge
 
 
+def _declared_names(path):
+    """The names the ``Name:`` lines of one card script declare."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return [line[5:].strip() for line in f if line.startswith("Name:")]
+
+
 def card_names():
     if NAMES_CACHE.exists():
         return set(NAMES_CACHE.read_text(encoding="utf-8").splitlines())
-    names = set()
-    for p in CARDSFOLDER.rglob("*.txt"):
-        with open(p, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                if line.startswith("Name:"):
-                    names.add(line[5:].strip())
+    names = {name for p in CARDSFOLDER.rglob("*.txt") for name in _declared_names(p)}
     NAMES_CACHE.write_text("\n".join(sorted(names)) + "\n", encoding="utf-8", newline="\n")
     return names
 
 
 SCRIPTS_CACHE = RULES / ".forge-card-scripts.tsv"  # gitignored; delete it after updating Forge
+
+
+def _scripts_index():
+    """``name -> script path under the cardsfolder``, read from the cache or built and cached."""
+    if SCRIPTS_CACHE.exists():
+        return dict(line.split("\t", 1)
+                    for line in SCRIPTS_CACHE.read_text(encoding="utf-8").splitlines() if line)
+    index = {}
+    for p in sorted(CARDSFOLDER.rglob("*.txt")):
+        for name in _declared_names(p):
+            index.setdefault(name, p.relative_to(CARDSFOLDER).as_posix())
+    SCRIPTS_CACHE.write_text("".join(f"{n}\t{f}\n" for n, f in sorted(index.items())),
+                             encoding="utf-8", newline="\n")
+    return index
 
 
 def card_scripts():
@@ -45,18 +60,7 @@ def card_scripts():
     Every ``Name:`` line of a script names it, so a face of a multi-faced card
     finds the card's file. The name-to-file index is cached beside the names.
     """
-    if SCRIPTS_CACHE.exists():
-        index = dict(line.split("\t", 1)
-                     for line in SCRIPTS_CACHE.read_text(encoding="utf-8").splitlines() if line)
-    else:
-        index = {}
-        for p in sorted(CARDSFOLDER.rglob("*.txt")):
-            with open(p, encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    if line.startswith("Name:"):
-                        index.setdefault(line[5:].strip(), p.relative_to(CARDSFOLDER).as_posix())
-        SCRIPTS_CACHE.write_text("".join(f"{n}\t{f}\n" for n, f in sorted(index.items())),
-                                 encoding="utf-8", newline="\n")
+    index = _scripts_index()
 
     def script(name):
         relative = index.get(name)
