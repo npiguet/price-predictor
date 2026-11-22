@@ -14,12 +14,12 @@ import contextlib
 import logging
 import shutil
 from collections.abc import Iterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.application.build_corpus_config import BuildCorpusConfig
-from effects.application.corpus_decisions import Decisions, decide
+from effects.application.corpus_decisions import Decisions, TextJoin, decide
 from effects.application.corpus_report import (
     build_manifest,
     check_refusals,
@@ -56,6 +56,22 @@ __all__ = ["build"]
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class _Sources:
+    """What a build reads before its survey: the rules catalogue, the
+    converted trees, the holdout over them and the encoding surface."""
+
+    rules: RuleCatalogue
+    trees: ConvertedTrees
+    held_out: HeldOutCards
+    surface: Surface
+
+    @property
+    def join(self) -> TextJoin:
+        """The key-to-text join over the trees' sidecars."""
+        return TextJoin(self.trees.sidecars, self.surface)
+
+
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code:
     1, after the corpus and its manifest are written, when a rule-test
@@ -82,7 +98,7 @@ def build(config: BuildCorpusConfig) -> int:
     )
     with _unreadable_shards("nothing under --output was touched"):
         survey = _survey(config, read, rules)
-    decisions = _decide_or_refuse(config, survey, trees, surface, held_out, rules)
+    decisions = _decide_or_refuse(config, survey, _Sources(rules, trees, held_out, surface))
     _warn_on_resized_shards(config.records_dir, survey)
 
     # Before the first output shard, and only on a real build: a rebuild
@@ -152,14 +168,15 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     records_dir = config.records_dir
     manifest = store.load()
     added, removed, resized = manifest.drift(list_shards(records_dir))
-    for label, names in (("added", added), ("removed", removed), ("resized", resized)):
+    drift = (("added", added), ("removed", removed), ("resized", resized))
+    for label, names in drift:
         if names:
             logger.warning(
                 "%d shard(s) %s since this dataset was built: %s%s",
                 len(names), label, ", ".join(names[:5]),
                 ", …" if len(names) > 5 else "",
             )
-    if added or removed or resized:
+    if any(names for _, names in drift):
         logger.warning("Rebuild with `python -m effects build-corpus`.")
         return 1
     logger.info("Dataset is current against %s.", records_dir)
@@ -322,25 +339,20 @@ def _refuse_unconfigured_trees(config: BuildCorpusConfig, survey: Survey) -> Non
         "under --output was touched.")
 
 
-def _decide_or_refuse(
-    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
-    held_out: HeldOutCards, rules: RuleCatalogue,
-) -> Decisions:
+def _decide_or_refuse(config: BuildCorpusConfig, survey: Survey, sources: _Sources) -> Decisions:
     """:func:`decide`, refusing a corpus the quality rules reject, one whose
     every game was cut, or a dataset gate 1 could not be scored on."""
     _refuse_every_game_cut(config, survey)
     _refuse_unconfigured_trees(config, survey)
     check_refusals(survey.totals.refusals, survey.totals.kept)
-    decisions = decide(
-        survey, sidecars=trees.sidecars, surface=surface, config=config, rules=rules,
-    )
+    decisions = decide(survey, join=sources.join, config=config, rules=sources.rules)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "
             "cannot score gate 1 and the trainer would refuse it in its first "
             f"minute. {config.records_dir} holds {len(survey.totals.games.games)} game(s), "
             f"{len(survey.totals.games.held_out)} of which name one of the "
-            f"{len(held_out.names)} held-out card(s). Depleted and "
+            f"{len(sources.held_out.names)} held-out card(s). Depleted and "
             "full-strength shards live in sibling subdirectories of the raw "
             "corpus root: point --records-dir at the parent of both, and check "
             "that a full-strength run — pools generated without "

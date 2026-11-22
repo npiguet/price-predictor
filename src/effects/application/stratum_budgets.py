@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import Survey, SurveyedRecord
@@ -23,35 +24,59 @@ from effects.domain.strata import Stratum
 if TYPE_CHECKING:
     from effects.application.build_corpus_config import BuildCorpusConfig
 
-__all__ = ["rule_budgets", "training_supply", "validation_weights"]
+__all__ = [
+    "VALIDATION_STRATA", "BudgetPlanner", "PlacedSurvey", "training_supply",
+    "validation_weights",
+]
 
 logger = logging.getLogger(__name__)
 
 
-def training_supply(survey: Survey, strata: GameStrata) -> TrainingSupply:
+#: The validation strata, in the order each is planned and logged.
+VALIDATION_STRATA: tuple[Stratum, ...] = (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT)
+
+
+@dataclass(frozen=True, slots=True)
+class PlacedSurvey:
+    """The survey, and the strata placement put each of its games in."""
+
+    survey: Survey
+    strata: GameStrata
+
+    def trains(self, record: SurveyedRecord) -> bool:
+        """A candidate record training is planned over: in a game placement
+        trained, acting through no held-out text."""
+        return not record.held_out_text and self.strata.stratum_of(record.game) is Stratum.TRAINING
+
+    def candidates_in(self, stratum: Stratum) -> list[SurveyedRecord]:
+        """The candidate records of the games placed in ``stratum``, in survey order."""
+        return [
+            record for record in self.survey.totals.candidates
+            if self.strata.stratum_of(record.game) is stratum
+        ]
+
+
+def training_supply(placed: PlacedSurvey) -> TrainingSupply:
     """The survey's supply with the candidate games placement trained folded
     in, their legality cells folded as the survey's were."""
-    totals = survey.totals
+    totals = placed.survey.totals
     supply = TrainingSupply(totals.supply.heap_cap)
     supply.merge(totals.supply)
     for record in totals.candidates:
-        if not record.held_out_text and strata.stratum_of(record.game) is Stratum.TRAINING:
+        if placed.trains(record):
             supply.add(record.cell.resolved(totals.mode_counts), record.keys, record.record_hash)
     return supply
 
 
 def validation_weights(
-    survey: Survey, strata: GameStrata, config: BuildCorpusConfig,
+    placed: PlacedSurvey, config: BuildCorpusConfig,
 ) -> dict[Stratum, dict[str, float]]:
     """Each validation stratum's ``class_weight`` per class, which weighs it
     into the training stratum's ``--class-mix`` (FR-059a), logged beside the
     class counts they reweigh."""
     weights: dict[Stratum, dict[str, float]] = {}
-    for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
-        counts = Counter(
-            str(record.klass) for record in survey.totals.candidates
-            if strata.stratum_of(record.game) is stratum
-        )
+    for stratum in VALIDATION_STRATA:
+        counts = Counter(str(record.klass) for record in placed.candidates_in(stratum))
         weights[stratum] = validation_multipliers(
             counts, {str(k): v for k, v in config.mix().items()}, reuse_cap=config.reuse_cap,
         )
@@ -63,46 +88,61 @@ def validation_weights(
     return weights
 
 
-def rule_budgets(
-    survey: Survey, strata: GameStrata, selection: SelectionPlan, key_text: dict[Keys, str],
-    *, config: BuildCorpusConfig, budgeted: frozenset[str],
-) -> tuple[RuleBudgets, dict[Stratum, RuleBudgets]]:
+@dataclass(frozen=True, slots=True)
+class BudgetPlanner:
     """The training stratum's rule budgets over gen-2's natural share, and
     each validation stratum's over its records' one natural copy each
     (FR-059a, FR-068a): every stratum is built with the same rule budgets, a
     class's target being the records it writes before any copy is added. A
     validation class's weight in the mix is no copy: it is the rows'
     ``class_weight``."""
-    totals = survey.totals
-    mode_counts = totals.mode_counts
 
-    def natural(record: SurveyedRecord) -> int:
-        return selection.copies(record.cell.resolved(mode_counts), record.keys,
-                                record.record_hash)
+    placed: PlacedSurvey
+    key_text: dict[Keys, str]
+    config: BuildCorpusConfig
+    #: The rules the map marks ``trained`` (``RuleCatalogue.budgeted``).
+    budgeted: frozenset[str]
 
-    training = [*totals.tagged, *(
-        record for record in totals.candidates
-        if not record.held_out_text and strata.stratum_of(record.game) is Stratum.TRAINING
-        and (record.tags or record.protection)
-    )]
-    def plan(records, targets, text_natural) -> RuleBudgets:
-        return plan_rule_budgets(records, BudgetInputs(
-            class_targets=targets, budgeted=budgeted, reuse_cap=config.reuse_cap,
-            text_cap=config.text_cap, text_natural=text_natural,
-        ))
+    def plan(self, selection: SelectionPlan) -> tuple[RuleBudgets, dict[Stratum, RuleBudgets]]:
+        """The training stratum's budgets, then each validation stratum's."""
+        budgets = self.training(selection)
+        return budgets, {stratum: self.validation(stratum) for stratum in VALIDATION_STRATA}
 
-    budgets = plan(
-        _budgeted_records(training, key_text, natural), selection.targets,
-        selection.text_planned,
-    )
-    validation: dict[Stratum, RuleBudgets] = {}
-    for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
-        records = [r for r in totals.candidates if strata.stratum_of(r.game) is stratum]
-        targets, text_natural = _held_once(records, key_text)
-        validation[stratum] = plan(
-            _budgeted_records(records, key_text, _once), targets, text_natural,
+    def training(self, selection: SelectionPlan) -> RuleBudgets:
+        """Over the tagged records and the trained candidates offering a tag
+        or a protection copy, each at its natural share."""
+        totals = self.placed.survey.totals
+        mode_counts = totals.mode_counts
+
+        def natural(record: SurveyedRecord) -> int:
+            return selection.copies(record.cell.resolved(mode_counts), record.keys,
+                                    record.record_hash)
+
+        training = [*totals.tagged, *(
+            record for record in totals.candidates
+            if self.placed.trains(record) and (record.tags or record.protection)
+        )]
+        return self._planned(
+            _budgeted_records(training, self.key_text, natural), selection.targets,
+            selection.text_planned,
         )
-    return budgets, validation
+
+    def validation(self, stratum: Stratum) -> RuleBudgets:
+        """Over the stratum's candidates, each written once."""
+        records = self.placed.candidates_in(stratum)
+        targets, text_natural = _held_once(records, self.key_text)
+        return self._planned(
+            _budgeted_records(records, self.key_text, _once), targets, text_natural,
+        )
+
+    def _planned(
+        self, records: Iterable[BudgetedRecord], targets: Mapping[str, int],
+        text_natural: Mapping[str, Mapping[str, int]],
+    ) -> RuleBudgets:
+        return plan_rule_budgets(records, BudgetInputs(
+            class_targets=targets, budgeted=self.budgeted, reuse_cap=self.config.reuse_cap,
+            text_cap=self.config.text_cap, text_natural=text_natural,
+        ))
 
 
 def _once(_record: SurveyedRecord) -> int:

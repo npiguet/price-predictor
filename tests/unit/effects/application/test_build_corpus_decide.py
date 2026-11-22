@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from effects.application.build_corpus_config import BuildCorpusConfig
-from effects.application.corpus_decisions import decide
+from effects.application.corpus_decisions import TextJoin, decide
 from effects.application.corpus_survey import GameTally, RarityTally, ShardSurvey, Survey
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, TrainingSupply
@@ -140,7 +140,7 @@ def a_config(**overrides) -> BuildCorpusConfig:
 
 
 def _decide(survey, fake_sidecars, **config):
-    return decide(survey, sidecars=fake_sidecars, surface="script", config=a_config(**config))
+    return decide(survey, join=TextJoin(fake_sidecars, "script"), config=a_config(**config))
 
 
 def _written(decisions, survey, cell: Cell, keys) -> int:
