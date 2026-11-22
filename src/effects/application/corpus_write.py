@@ -181,12 +181,20 @@ class WriteWorker:
     def write(self, task: WriteTask) -> WriteResult:
         """Filter one shard into its output parts, with what reading it met."""
         ReadGaps.take(self.context.sidecars)
-        writer = _ShardWriter(self.plan, self.context, task.copies, task.surveyed, task.cut)
+        writer = _ShardWriter(self.plan, self.context, task)
         for record in self.context.records(task.shard):
             writer.observe(record)
         result = writer.finish(task.shard.part_name)
         result.reading = ReadGaps.take(self.context.sidecars)
         return result
+
+
+@dataclass(frozen=True, slots=True)
+class _Weighed:
+    """How many natural copies a record is written as, and what each weighs."""
+
+    natural: int
+    weight: float = 1.0
 
 
 _NO_ADDED: Mapping[int, tuple[str, ...]] = {}
@@ -196,13 +204,12 @@ class _ShardWriter:
     """One shard's write pass in progress: every record routed to its outputs
     and tallied, then each output written as one part."""
 
-    def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap,
-                 surveyed: int | None = None, cut: frozenset[str] = frozenset()) -> None:
+    def __init__(self, plan: WritePlan, context: WorkerContext, task: WriteTask) -> None:
         self.plan = plan
         self.context = context
-        self.copies = copies
-        self.surveyed = surveyed
-        self.cut = cut
+        self.copies = task.copies
+        self.surveyed = task.surveyed
+        self.cut = task.cut
         self.read = 0
         self.out = WriteResult()
         self.outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
@@ -210,14 +217,7 @@ class _ShardWriter:
     def observe(self, record: EffectRecord) -> None:
         """Route one record to its outputs and tally it."""
         self.read += 1
-        if self.surveyed is not None and self.read > self.surveyed:
-            self.out.strata.note(Stratum.DROPPED_UNSURVEYED, ())
-            return
-        if record.game_id in self.cut:
-            self.out.strata.note(Stratum.DROPPED_CUT, ())
-            return
-        if record.kind is RecordKind.TURN_ACTION:
-            self.out.turn_actions[str(record.subkind)] += 1
+        if self._left_out(record):
             return
         klass = self.context.admit(record, self.out.refusals)
         if klass is None:
@@ -234,6 +234,20 @@ class _ShardWriter:
         else:
             self._hold(record, stratum, keys, klass)
 
+    def _left_out(self, record: EffectRecord) -> bool:
+        """Whether ``record`` is written nowhere before admission (unsurveyed,
+        cut or ``turn_action``), counted as its reason says."""
+        if self.surveyed is not None and self.read > self.surveyed:
+            self.out.strata.note(Stratum.DROPPED_UNSURVEYED, ())
+            return True
+        if record.game_id in self.cut:
+            self.out.strata.note(Stratum.DROPPED_CUT, ())
+            return True
+        if record.kind is RecordKind.TURN_ACTION:
+            self.out.turn_actions[str(record.subkind)] += 1
+            return True
+        return False
+
     def _hold(
         self, record: EffectRecord, stratum: Stratum, keys: Keys, klass: SamplingClass,
     ) -> None:
@@ -242,7 +256,7 @@ class _ShardWriter:
         (FR-059a), and gate 1's one copy of a card-disjoint resolution acting
         through a held-out text."""
         weight = self.plan.validation_weights.get(stratum, {}).get(str(klass), 1.0)
-        natural = self._write(stratum, record, keys, natural=1, weight=weight)[0]
+        natural = self._write(stratum, record, keys, _Weighed(1, weight))[0]
         self._protection_copies(record, stratum, keys, weight=weight)
         if stratum is Stratum.CARD_DISJOINT and record.kind is RecordKind.RESOLUTION:
             text = self.context.held_out_text(keys)
@@ -264,7 +278,7 @@ class _ShardWriter:
         natural = planned_copies(
             self.plan.plans, self.plan.keyless_plans, cell, keys, self.context.hash_of(record),
         )
-        written = len(self._write(Stratum.TRAINING, record, keys, natural=natural))
+        written = len(self._write(Stratum.TRAINING, record, keys, _Weighed(natural)))
         written += self._protection_copies(record, Stratum.TRAINING, keys)
         if not written:
             out.training.dropped_by_cap[klass] += 1
@@ -277,11 +291,12 @@ class _ShardWriter:
             out.families.note(record, klass, cell, natural)
 
     def _write(
-        self, stratum: Stratum, record: EffectRecord, keys: Keys, *, natural: int,
-        weight: float = 1.0,
+        self, stratum: Stratum, record: EffectRecord, keys: Keys, weighed: _Weighed,
     ) -> list[EffectRecord]:
-        """``natural`` copies of ``record`` then its added copies, each with
-        its curation, weighing ``weight``; the copies written, natural first."""
+        """``weighed.natural`` copies of ``record`` then its added copies, each
+        with its curation, weighing ``weighed.weight``; the copies written,
+        natural first."""
+        natural, weight = weighed.natural, weighed.weight
         added = self.copies.get(record.game_id, _NO_ADDED).get(
             self.context.hash_of(record), ())
         total = natural + len(added)
