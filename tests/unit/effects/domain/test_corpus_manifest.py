@@ -264,7 +264,7 @@ def test_the_gen3_fields_hold_what_the_build_decided():
     data = json.loads(json.dumps(gen3.as_dict()))
     row = data["rules"]["effects"]["702.16e"]["fires"]
     assert row == {"available": {"forge_ai": 2}, "share": 4, "written": {"forge_ai": 4},
-                   "added": {"forge_ai": 2}, "shortfall": 0}
+                   "added": {"forge_ai": 2}, "drawn": {"forge_ai": 2}, "shortfall": 0}
     assert data["rules"]["effects"]["702.16e"]["does_not_fire"]["shortfall"] == 2
     assert data["rules"]["effects"]["510.1"]["fires"]["share"] is None
     assert data["unbudgeted_rules"] == {"510.1": {"fires": {"random_seat": 1}}}
@@ -300,7 +300,7 @@ def test_the_collection_fields_round_trip():
     from effects.domain.rule_budgets import RuleRow
 
     row = RuleRow(available={"forge_ai": 2}, share=4, written={"forge_ai": 3},
-                  added={"forge_ai": 1}, shortfall=1)
+                  added={"forge_ai": 1}, drawn={"forge_ai": 0}, shortfall=1)
     built = manifest(
         validation_rules={"card-disjoint": {"resolution-effect": {"702.2b": {"fires": row}}}},
         record_flags={"combat": {"fork": 1}},
@@ -342,3 +342,17 @@ def test_the_curated_shards_round_trip_and_leave_the_digest_alone():
     assert restored.shards["training"][1] == CuratedShard(
         name="shard-00002.jsonl.gz", records=38)
     assert listed.digest() == renamed.digest() == manifest().digest()
+
+
+def test_a_rule_row_s_drawn_count_stays_outside_the_digest():
+    """``drawn`` reports which rule each added copy was drawn for; ``added`` holds
+    the copies and decides, so changing ``drawn`` alone leaves the digest."""
+    from dataclasses import replace
+
+    built = manifest(**_gen3_fields())
+    row = built.rules["effects"]["702.16e"]["fires"]
+    moved = replace(row, drawn={"forge_ai": row.drawn.get("forge_ai", 0) + 1})
+    other = replace(built, rules={"effects": {
+        **built.rules["effects"], "702.16e": {**built.rules["effects"]["702.16e"], "fires": moved}}})
+    assert other.as_dict() != built.as_dict()
+    assert other.digest() == built.digest()

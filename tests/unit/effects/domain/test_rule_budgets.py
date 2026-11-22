@@ -155,6 +155,25 @@ def test_a_protection_copy_counts_toward_its_drawn_rule_alone():
     assert rows["702.16b"]["fires"].written == {"forge_ai": 2}
 
 
+def test_a_row_says_how_much_of_its_added_was_drawn_for_its_rule():
+    """Finding 14.2: a natural record's copy counts toward every rule the record
+    is tagged with, so 702.16e's ``added`` holds the two copies drawn for
+    702.16b on a record tagged with both, beside the one drawn for 702.16e on
+    another record. ``drawn`` is the part whose ``drawn_rule`` is the row's
+    rule: the copies written for it."""
+    other = make(1, ("702.16e", FIRES), shape=Shape(natural=1, start=10))
+    both = make(1, ("702.16b", FIRES), ("702.16e", FIRES), shape=Shape(natural=0))
+    budgets = plan(both + other, target=12, reuse_cap=2)
+    assert budgets.added("g0", 0) == ("702.16b", "702.16b")
+    assert budgets.added("g10", 10) == ("702.16e",)
+    rows = budgets.rows[KLASS]
+    assert (rows["702.16b"]["fires"].added, rows["702.16b"]["fires"].drawn) == (
+        {"forge_ai": 2}, {"forge_ai": 2})
+    assert (rows["702.16e"]["fires"].added, rows["702.16e"]["fires"].drawn) == (
+        {"forge_ai": 3}, {"forge_ai": 1})
+    assert RuleRow.from_dict(rows["702.16e"]["fires"].as_dict()) == rows["702.16e"]["fires"]
+
+
 def test_a_record_never_passes_the_reuse_cap():
     records = (make(5, ("x", FIRES), shape=Shape(natural=2))
                + make(5, ("x", NOT), shape=Shape(start=5, natural=4)))
@@ -260,7 +279,7 @@ def test_the_plan_is_a_function_of_the_records_not_their_order():
 
 def test_a_row_round_trips_through_its_dict():
     row = RuleRow(available={"forge_ai": 3}, share=5, written={"forge_ai": 4},
-                  added={"forge_ai": 1}, shortfall=1)
+                  added={"forge_ai": 1}, drawn={"forge_ai": 1}, shortfall=1)
     assert RuleRow.from_dict(row.as_dict()) == row
-    other = RuleRow(available={}, share=None, written={}, added={}, shortfall=0)
+    other = RuleRow(available={}, share=None, written={}, added={}, drawn={}, shortfall=0)
     assert RuleRow.from_dict(other.as_dict()) == other

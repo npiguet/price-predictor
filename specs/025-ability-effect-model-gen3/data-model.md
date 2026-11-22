@@ -227,6 +227,7 @@ Per class, rule and polarity, each count split by `RuleSource`:
 | `share` | the half (or, for `other` and unbudgeted rules, none), per polarity |
 | `written` | natural plus added copies |
 | `added` | the copies rule budgets added; a protection copy counts toward its drawn rule only |
+| `drawn` | the part of `added` whose `curation.drawn_rule` is this rule; the rest is a natural record's copy drawn for another rule it is tagged with. Outside the digest |
 | `shortfall` | `max(0, share − written)`, per polarity |
 
 ### CorpusManifest (extended)

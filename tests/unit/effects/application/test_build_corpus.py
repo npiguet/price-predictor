@@ -2280,6 +2280,7 @@ def test_a_real_gen3_manifest_keeps_its_digest_when_read_back(gen3_build):
     gen-3 manifest, every gen-3 field filled, reads back to the digest of the
     JSON as written, by the rule feature 023 fixed, and writes back byte for
     byte, so loading the manifest a checkpoint names never moves its digest."""
+    import copy
     import hashlib
     import json
 
@@ -2290,8 +2291,14 @@ def test_a_real_gen3_manifest_keeps_its_digest_when_read_back(gen3_build):
 
     raw = json.loads(gen3_build.manifest_path.read_text(encoding="utf-8"))
     loaded = CorpusManifest.from_dict(raw)
-    payload = {k: v for k, v in raw.items() if k not in CorpusManifest._OUTSIDE_THE_DIGEST}
+    payload = copy.deepcopy({
+        k: v for k, v in raw.items() if k not in CorpusManifest._OUTSIDE_THE_DIGEST})
     payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
+    # A rule row's ``drawn`` reports and decides nothing: outside the digest.
+    for row in (row for rules in (payload["rules"], *payload["validation_rules"].values())
+                for by_rule in rules.values() for by_polarity in by_rule.values()
+                for row in by_polarity.values()):
+        del row["drawn"]
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     assert loaded.digest() == hashlib.blake2b(
         canonical.encode("utf-8"), digest_size=16).hexdigest()

@@ -74,7 +74,11 @@ class RuleRow:
 
     ``available`` counts distinct tagged records and ``written`` their copies,
     natural and added, each by :class:`RuleSource`; ``added`` is the part of
-    ``written`` the budgets drew. ``available`` leaves out ``fork``: a probe's,
+    ``written`` the budgets drew, and ``drawn`` the part of ``added`` drawn
+    for this very rule, the copies whose ``curation.drawn_rule`` it is: a
+    natural record's copy counts toward every rule the record is tagged with,
+    so the rest of ``added`` is a copy drawn for another rule of the record.
+    ``available`` leaves out ``fork``: a probe's,
     an intervention's or a protection fork's record re-records a moment of
     its live game, so a combat counts once however many probes re-ran it,
     while every copy of such a record is written and counted in ``written``.
@@ -88,6 +92,7 @@ class RuleRow:
     share: int | None
     written: dict[str, int]
     added: dict[str, int]
+    drawn: dict[str, int]
     shortfall: int
 
     @property
@@ -100,6 +105,7 @@ class RuleRow:
             "share": self.share,
             "written": dict(sorted(self.written.items())),
             "added": dict(sorted(self.added.items())),
+            "drawn": dict(sorted(self.drawn.items())),
             "shortfall": self.shortfall,
         }
 
@@ -111,6 +117,7 @@ class RuleRow:
             share=None if share is None else int(share),
             written={k: int(v) for k, v in values["written"].items()},
             added={k: int(v) for k, v in values["added"].items()},
+            drawn={k: int(v) for k, v in values["drawn"].items()},
             shortfall=int(values["shortfall"]),
         )
 
@@ -227,6 +234,8 @@ class _ClassPlan:
     #: ``(rule, polarity, source) -> copies written``, natural then added.
     written: Counter = field(default_factory=Counter)
     added: Counter = field(default_factory=Counter)
+    #: The part of ``added`` drawn for the cell's own rule.
+    drawn_for: Counter = field(default_factory=Counter)
     #: ``(rule, polarity) -> copies written``, every source.
     totals: Counter = field(default_factory=Counter)
     #: Index into ``records`` -> drawn rule per added copy.
@@ -316,6 +325,7 @@ class _ClassPlan:
             self.written[tagged, polarity, record.source] += 1
             self.added[tagged, polarity, record.source] += 1
             self.totals[tagged, polarity] += 1
+            self.drawn_for[tagged, polarity, record.source] += tagged == rule
 
     def rows(self) -> dict[str, dict[str, RuleRow]]:
         out: dict[str, dict[str, RuleRow]] = {}
@@ -332,6 +342,7 @@ class _ClassPlan:
                 share=share,
                 written=written,
                 added=self._by_source(self.added, rule, polarity),
+                drawn=self._by_source(self.drawn_for, rule, polarity),
                 shortfall=0 if share is None else max(0, share - sum(written.values())),
             )
         return out

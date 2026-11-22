@@ -194,6 +194,19 @@ def _rule_rows(values: dict) -> dict[str, dict[str, dict[str, RuleRow]]]:
     }
 
 
+def _leave_out_drawn(payload: dict) -> None:
+    """Drop each rule row's ``drawn`` from a payload: which rule a copy was
+    drawn for reports what the budgets did and decides nothing (``added``,
+    inside the digest, holds the copies), so it never moves the digest."""
+    strata = [payload.get("rules", {}), *payload.get("validation_rules", {}).values()]
+    rows = (
+        row for rules in strata for by_rule in rules.values()
+        for by_polarity in by_rule.values() for row in by_polarity.values()
+    )
+    for row in rows:
+        row.pop("drawn", None)
+
+
 def _rule_map(values: dict) -> dict[str, RuleMapEntry]:
     return {
         rule: RuleMapEntry(rule=rule, verdict=MapVerdict(entry["verdict"]),
@@ -567,6 +580,7 @@ class CorpusManifest:
         payload = self.as_dict()
         for field_name in self._OUTSIDE_THE_DIGEST:
             payload.pop(field_name, None)
+        _leave_out_drawn(payload)
         payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
         return canonical_digest(payload).hex()
 
