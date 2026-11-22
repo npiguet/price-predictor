@@ -101,7 +101,6 @@ from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
-from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 from effects.domain.rule_outcomes import damage_lethal
 from effects.domain.state_snapshot import EntityState, normalize_counter_type
 
@@ -405,7 +404,7 @@ class SbaZoneMove:
         effect_half = (record.kind is RecordKind.RESOLUTION
                        and record.moment is Moment.RESOLUTION)
         combat = record.kind is RecordKind.COMBAT and not record.is_probe
-        if (not (effect_half or combat) or is_rescued_orphans(record)
+        if (not (effect_half or combat) or record.is_game_end_record
                 or game_ends(record)):
             return None
         touched = _touched(record)

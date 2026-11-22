@@ -8,7 +8,6 @@ import pytest
 
 from effects.domain.event_schema import Event, EventType
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 from effects.domain.rule_detectors.sba_game_loss import FAMILY
 
 
@@ -81,7 +80,7 @@ def test_a_burn_kill_s_game_end_is_in_the_next_record_so_unreadable(gen3_records
 
 def test_the_game_end_rescue_shows_no_side(gen3_records):
     """A real rescue record edited to hold the game end the collector files there."""
-    rescue = next(r for r in gen3_records if is_rescued_orphans(r))
+    rescue = next(r for r in gen3_records if r.is_game_end_record)
     won = Event(type=EventType.PLAYER_WON, subjects=("P0",))
     edited = replace(rescue, payload=replace(rescue.payload, events=(*rescue.payload.events, won)))
     assert any(e.type is EventType.PLAYER_WON for e in edited.payload.events)

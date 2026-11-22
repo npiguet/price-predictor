@@ -14,8 +14,6 @@ parameter means one thing whichever family a declaration names.
   is found through the card while the spell acts through its own line.
 - A script parameter (:func:`script_params_match`): a root-segment ``Key$``
   present, or holding a value.
-- The game-end record (:func:`is_rescued_orphans`), whose board is read
-  after its events rather than before them.
 - The acting ability's source entity (:func:`source_entities`): the record's
   ``refs.source``, else, on a record that names none (a ``continuous``
   record), the battlefield entities printed from the acting script file or,
@@ -29,26 +27,12 @@ from typing import Any
 
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
-from effects.domain.records import EffectRecord, Moment, RecordKind
+from effects.domain.records import EffectRecord
 from effects.domain.script_text import params, root
 from effects.domain.state_snapshot import EntityState, StateSnapshot
 
 #: A :func:`script_params_match` value meaning "present, whatever its value".
 ANY = "*"
-
-
-def is_rescued_orphans(record: EffectRecord) -> bool:
-    """Whether ``record`` is the collector's game-end record: an effect half
-    naming no acting line and no cost half.
-
-    It holds the game's outcome only (``player_lost``, ``player_won``) when
-    no resolution or combat record took it; every other event no record
-    held is counted as dropped. Its snapshot is the board at the game's end,
-    with the loser already gone, so no family reading the board as it stood
-    before the events can read one.
-    """
-    return (record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
-            and not record.ability and record.link_id is None)
 
 
 def line_of(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> SidecarLine | None:

@@ -40,7 +40,6 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
-from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 
 CHECKS = frozenset({"life_zero", "poison_ten"})
 _GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
@@ -96,7 +95,7 @@ class SbaGameLoss:
         effect_half = record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
         if not effect_half and record.kind is not RecordKind.COMBAT:
             return None
-        if is_rescued_orphans(record):
+        if record.is_game_end_record:
             return None
         fires, spared, observed = [], [], []
         for player in record.state.players:
