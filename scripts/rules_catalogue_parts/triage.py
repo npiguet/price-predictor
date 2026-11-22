@@ -12,19 +12,28 @@ PREMARKED_CHAPTERS = {"8": "multiplayer rules; collection plays two-player games
                       "9": "casual variant; collection plays two-player sealed games only"}
 
 
-def cmd_premark(_args):
-    """Triage chapters 8 and 9 as out_of_scope without an agent."""
+def _premarked_by_unit():
     by_unit = defaultdict(list)
     for r in load_rules():
         if r["chapter"] in PREMARKED_CHAPTERS:
             by_unit[r["unit"]].append(r)
+    return by_unit
+
+
+def _write_premarked(unit, rules):
+    with open(RULES / "triage" / f"{unit}.jsonl", "w", encoding="utf-8", newline="\n") as f:
+        for r in rules:
+            f.write(json.dumps({"id": r["id"], "category": "out_of_scope",
+                                "observability": "none", "record_kinds": [], "outcome": "",
+                                "note": PREMARKED_CHAPTERS[r["chapter"]]}) + "\n")
+
+
+def cmd_premark(_args):
+    """Triage chapters 8 and 9 as out_of_scope without an agent."""
+    by_unit = _premarked_by_unit()
     (RULES / "triage").mkdir(exist_ok=True)
     for unit, rs in by_unit.items():
-        with open(RULES / "triage" / f"{unit}.jsonl", "w", encoding="utf-8", newline="\n") as f:
-            for r in rs:
-                f.write(json.dumps({"id": r["id"], "category": "out_of_scope",
-                                    "observability": "none", "record_kinds": [], "outcome": "",
-                                    "note": PREMARKED_CHAPTERS[r["chapter"]]}) + "\n")
+        _write_premarked(unit, rs)
     print(f"premarked {len(by_unit)} units")
 
 
@@ -38,6 +47,19 @@ def wanted_rules(triage):
     return {r["id"] for r in triage if needs_scenario(r)}
 
 
+def _row_errors(row):
+    rid = row.get("id")
+    errs = []
+    if row.get("category") not in CATEGORIES:
+        errs.append(f"{rid}: category {row.get('category')!r}")
+    if row.get("observability") not in OBSERVABILITY:
+        errs.append(f"{rid}: observability {row.get('observability')!r}")
+    bad = set(row.get("record_kinds") or []) - RECORD_KINDS
+    if bad:
+        errs.append(f"{rid}: record_kinds {sorted(bad)}")
+    return errs
+
+
 def validate_triage(rows, rule_ids):
     errs = []
     seen = [r.get("id") for r in rows]
@@ -48,11 +70,5 @@ def validate_triage(rows, rule_ids):
     if extra:
         errs.append(f"unknown rules {extra}")
     for r in rows:
-        if r.get("category") not in CATEGORIES:
-            errs.append(f"{r.get('id')}: category {r.get('category')!r}")
-        if r.get("observability") not in OBSERVABILITY:
-            errs.append(f"{r.get('id')}: observability {r.get('observability')!r}")
-        bad = set(r.get("record_kinds") or []) - RECORD_KINDS
-        if bad:
-            errs.append(f"{r.get('id')}: record_kinds {sorted(bad)}")
+        errs += _row_errors(r)
     return errs
