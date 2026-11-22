@@ -1261,11 +1261,9 @@ added.
   full weight on each copy of that record.
 - A gen-2 lethality copy trains every output at full weight.
 - A record from a directed fork or from collection aimed at a rule is a natural record. It
-  carries no drawn rule of its own, and its natural copies weigh as any record's do: every
-  output at full weight under `hard`, n / d on the outputs of no drawn rule under `soft`.
-  Its `aimed_at` only excludes it from the rule tests (§ 14.4).
-- A gen-2 lethality copy is made for a record's first natural copy in a step only, never
-  for its other natural copies or its added copies.
+  carries no drawn rule of its own, and its copies within the natural share train every
+  output at full weight under both masks. Its `aimed_at` only excludes it from the rule
+  tests (§ 14.4).
 
 ## 13.2 One loss scale
 
