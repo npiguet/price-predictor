@@ -14,12 +14,13 @@ entities, both roles (research R1: the condition entities its condition
 reads and the outcome entities its outcome falls on); every other output is
 masked. ``soft``: every copy trains every output,
 outputs other than the drawn rules' weighing ``natural_share / copies``.
-Under both a natural copy of a record no copy was drawn for trains everything
-at full weight. A natural copy of an aimed record (a directed fork's, or one
-collected by ``collect-coverage`` or ``collect-variants``, ``aimed_at`` set
-whatever its value, an empty list included) trains everything at full weight; its added copies
-are masked like any other. A record with no ``curation`` (a lethality copy, a
-record no build curated) trains at full weight.
+Under ``hard`` a natural copy trains everything at full weight; under ``soft``
+it weighs as any copy does, a record no copy was drawn for at one (n = d). A
+record aimed at a rule (a directed fork's, or one collected by
+``collect-coverage`` or ``collect-variants``, ``aimed_at`` set whatever its
+value) is a record like any other here: its natural copy follows n / d, its
+added copies are masked (D15). A record with no ``curation`` (a lethality
+copy, a record no build curated) trains at full weight.
 
 A reader that weighs a validation row (the explained-deviance sample, the
 freeze's standard errors) reads a copy :func:`weighed_by_class`: its weights
@@ -106,10 +107,6 @@ def copy_weights(
     """
     curation = getattr(record, "curation", None)
     if mode is None or curation is None:
-        return FULL_WEIGHT
-    # Aimed whatever its value (FR-009): ``[]`` marks a coverage or variants
-    # record of a run naming no rule.
-    if not curation.is_added and getattr(record, "aimed_at", None) is not None:
         return FULL_WEIGHT
     full = frozenset(
         output for rule in curation.drawn_rules for output in rule_outputs.get(rule, ())

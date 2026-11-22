@@ -307,7 +307,8 @@ class StepPreparer:
             copies = self._counterfactuals(records, targets, batcher)
             records = [*records, *(copy.record for copy in copies)]
             targets = [*targets, *(copy.targets for copy in copies)]
-            # A lethality copy trains every output at full weight (FR-061).
+            # A lethality copy trains every output at full weight (FR-061),
+            # and is made for a record's first natural row alone (D15).
             weights = [*weights, *([FULL_WEIGHT] * len(copies))]
         step = self._build(records, targets, weights, fields, batcher, heads=self.heads)
         if pin:
@@ -353,10 +354,12 @@ class StepPreparer:
     def _counterfactuals(self, records, targets, batcher) -> list:
         """``--lethality-copies`` copies of each step record that qualifies
         (FR-063e), drawn before the build's own draws so a run without copies
-        draws exactly as before."""
+        draws exactly as before. Only a record's first natural row is copied:
+        its other natural rows and its added rows are not (D15)."""
         copies = []
-        for record, record_targets in zip(records, targets):
-            if not record.ability:
+        first_naturals = _first_natural_rows(records)
+        for index, (record, record_targets) in enumerate(zip(records, targets)):
+            if not record.ability or index not in first_naturals:
                 continue
             key = record.ability[0]
             line = batcher.line_of(key)
@@ -536,6 +539,20 @@ class StepPreparer:
         unresolved = dict(self.sidecars.join_gaps().unresolved - before)
         truncated, self.truncated = tuple(self.truncated), []
         yield ShardClosed(unresolved=unresolved, truncated=truncated)
+
+
+def _first_natural_rows(records: Sequence[EffectRecord]) -> frozenset[int]:
+    """The indices of each record's first natural row in a step: a natural row
+    has no drawn rule, and a record's later natural copies repeat its id (D15)."""
+    seen: set[str] = set()
+    firsts = set()
+    for index, record in enumerate(records):
+        if record.curation is not None and record.curation.is_added:
+            continue
+        if record.record_id not in seen:
+            seen.add(record.record_id)
+            firsts.add(index)
+    return frozenset(firsts)
 
 
 def stripped(batch: PreparedBatch) -> PreparedBatch:

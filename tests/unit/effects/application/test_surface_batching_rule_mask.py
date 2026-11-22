@@ -201,26 +201,29 @@ def test_a_soft_masked_record_weighs_other_outputs_n_over_d():
         assert torch.allclose(soft[row, :, columns], full[row, :, columns])
 
 
-def test_an_aimed_natural_copy_and_an_uncurated_record_train_at_full_weight():
-    """A directed fork's natural copy is a natural record like any other
-    (FR-061), and a lethality copy or uncurated record carries no curation."""
-    aimed = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=("704.5f",))
+def test_an_uncurated_record_trains_at_full_weight():
+    """A lethality copy or an uncurated record carries no curation."""
     uncurated = SimpleNamespace(curation=None, aimed_at=None)
     for mode in RuleMask:
-        assert copy_weights(aimed, mode, _RULE_OUTPUTS) is FULL_WEIGHT
         assert copy_weights(uncurated, mode, _RULE_OUTPUTS) is FULL_WEIGHT
 
 
-def test_a_natural_copy_of_a_coverage_record_aimed_at_no_rule_trains_at_full_weight():
-    """``aimed_at: []`` (a ``collect-coverage`` or ``collect-variants`` run naming
-    no rule) is aimed all the same (FR-009: whatever its value), so its
-    natural copy trains every output at full weight under both masks, as an
-    absent one does not under ``soft``."""
-    aimed = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=())
+def test_an_aimed_natural_copy_follows_n_over_d_under_soft_and_trains_fully_under_hard():
+    """D15: a directed fork's natural copy is a natural record like any other
+    (FR-061); ``aimed_at: []`` (a coverage or variants run naming no rule) is
+    aimed all the same (FR-009), and neither is exempt from the soft share."""
+    for aimed_at in (("704.5f",), ()):
+        aimed = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=aimed_at)
+        assert copy_weights(aimed, RuleMask.HARD, _RULE_OUTPUTS) is FULL_WEIGHT
+        assert copy_weights(aimed, RuleMask.SOFT, _RULE_OUTPUTS).elsewhere == 0.25
     natural = _Copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=None)
-    for mode in RuleMask:
-        assert copy_weights(aimed, mode, _RULE_OUTPUTS) is FULL_WEIGHT
     assert copy_weights(natural, RuleMask.SOFT, _RULE_OUTPUTS).elsewhere == 0.25
+
+
+def test_an_aimed_records_added_copy_is_masked_like_any_other():
+    added = _Copy(natural_share=1, copies=2, drawn_rule="702.2", drawn_rules=("702.2",),
+                  rule_entities=("E1",), aimed_at=("704.5f",))
+    assert copy_weights(added, RuleMask.HARD, _RULE_OUTPUTS).elsewhere == 0.0
 
 
 def test_the_verdict_head_takes_the_rule_mask():
