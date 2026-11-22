@@ -668,7 +668,9 @@ and that the reporting half never enters the control score.
   (`fires`, `does_not_fire`, `other`) and its entities in two roles, as research R1 defines them:
   condition entities, what the rule's condition reads, and outcome entities, where its outcome
   falls. A tag whose outcome is an absence (an `absent` declaration's `fires` side, a scoped
-  `does_not_fire` with no such event) MUST name condition entities only. Merging a rule's scenarios
+  `does_not_fire` with no such event) MUST name as its outcome entities where the outcome would
+  have fallen: the acting clause's targets as the effect half's refs block holds them, else its
+  controller. A `trigger` record's tags MUST name no outcome entity. Merging a rule's scenarios
   MUST union each role separately. The same tags MUST feed the per-rule counts, the rule budgets
   (FR-054), the rule mask (FR-061) and the rule tests (FR-073).
 - **FR-007**: Detectors MUST run over gen-3 records. A detector that needs a field the record
@@ -1448,7 +1450,10 @@ and that the reporting half never enters the control score.
   probability of the scenario's outcome for a binary or categorical output, the expected value for a
   count or delta. Its score MUST be the AUC ranking `fires` records above `does_not_fire` records,
   averaged over the rule's outputs. A rule whose test records in a stratum hold one polarity only
-  MUST be left out of that stratum's component. A rule whose detector finds no test record in a
+  MUST be left out of that stratum's component. For a rule whose effective outputs are all
+  per-entity, only test records naming an outcome entity MUST count toward n and the standard
+  error, and a rule with a polarity holding none MUST be left out and named with the reason
+  `no outcome entity`. A rule whose detector finds no test record in a
   half MUST be named in the frozen set as untested, and a rule with no effective output MUST be
   named untested in every half with that reason. A read at an entity the record gives no slot MUST
   be counted and logged, never dropped silently.

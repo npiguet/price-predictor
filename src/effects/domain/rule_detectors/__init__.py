@@ -58,7 +58,8 @@ class RuleTag:
     falls (the creature destroyed, the player gaining life, the entities a
     target legality is written at). One entity can hold both roles. A tag
     whose outcome is an absence (an ``absent`` scenario, a scoped
-    ``does_not_fire`` with no event) names condition entities only.
+    ``does_not_fire`` with no event) names as its outcome where the outcome
+    would have fallen: the acting clause's targets, else its controller.
     """
 
     rule: str

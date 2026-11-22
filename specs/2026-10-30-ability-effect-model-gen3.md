@@ -232,7 +232,8 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
     source, the object a check judges);
   - outcome entities: where the rule's outcome falls (the creature destroyed, the player
     gaining life, the cards and players a target legality is written at).
-- A tag whose outcome is an absence names condition entities only.
+- A tag whose outcome is an absence names as its outcome entities where the outcome would have
+  fallen: the acting clause's targets, else its controller.
 
 ## 5.2 Per-rule counts
 
@@ -1306,6 +1307,9 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
   outcome happens above those where it does not, averaged over the rule's outputs.
 - A rule whose test records in a stratum hold one polarity only is left out of that
   stratum's rule-test component.
+- For a rule whose effective outputs are all per-entity, only test records naming an outcome
+  entity count. A rule with a polarity holding none is left out and named, reason
+  `no outcome entity`.
 - A rule whose detector finds no test record in a half is named in the frozen set as
   untested. A rule with no effective output is named untested in every half, with that
   reason.

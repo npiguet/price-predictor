@@ -141,7 +141,11 @@ subject for, the object it happened to), and for a card a ``zone_change``
 moves out of a hand or a library, its owner too, whose cards discarded,
 drawn or milled and library events count the move. A tag whose outcome is an
 absence — an ``absent`` declaration's ``fires`` side, a scoped near miss
-holding no such event — names condition entities only.
+holding no such event — names as its outcome entities where the outcome
+would have fallen: the acting clause's targets as the effect half's refs
+block holds them, else its controller (``actor_player``), so a rule test
+reads a per-entity output on both polarities. A qualified near miss whose
+missing events place nothing names the same.
 
 Prior art: ``event_schema.EVENT_PARAMS``, the per-type parameter table every
 reader of events already trusts.
@@ -531,12 +535,13 @@ class OutcomeEvent:
             # The rule's outcome is the event's absence, so that is what is observed.
             if happened:
                 return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition, outcome)
-            return FamilyMatch(Polarity.FIRES, True, condition) if absence else None
+            return FamilyMatch(Polarity.FIRES, True, condition,
+                               _would_fall_on(record)) if absence else None
         if happened:
             return FamilyMatch(Polarity.FIRES, True, condition, outcome)
         if not scoped or not absence:
             return None
-        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition, _would_fall_on(record))
 
     @staticmethod
     def _qualified(record: EffectRecord, params: Mapping[str, Any], wanted: list[Event],
@@ -566,7 +571,7 @@ class OutcomeEvent:
         if not scoped:
             return None
         return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
-                           _outcome(record, [e for e, _ in read if e not in meeting]))
+                           _near_outcome(record, [e for e, _ in read if e not in meeting]))
 
 
 def _both(first: bool | None, second: bool | None) -> bool | None:
@@ -654,6 +659,23 @@ def _condition(record: EffectRecord) -> tuple[str, ...]:
     """The acting ability's source, its targets and its controller."""
     actor = (record.actor_player,) if record.actor_player else ()
     return tuple(dict.fromkeys((*source_ids(record), *record.state.refs.as_cast, *actor)))
+
+
+def _would_fall_on(record: EffectRecord) -> tuple[str, ...]:
+    """Where an outcome that did not happen would have fallen: the acting
+    clause's targets as the effect half's refs block holds them (those left
+    after the illegal-target check, so a target gone since names no slot),
+    else its controller."""
+    targets = record.state.refs.targets
+    if targets:
+        return tuple(dict.fromkeys(targets))
+    return (record.actor_player,) if record.actor_player else ()
+
+
+def _near_outcome(record: EffectRecord, events) -> tuple[str, ...]:
+    """A qualified near miss's outcome entities: where the events that
+    missed the qualifiers fell, else where the outcome would have fallen."""
+    return _outcome(record, events) or _would_fall_on(record)
 
 
 _OWNED_ZONES = frozenset({"hand", "library"})

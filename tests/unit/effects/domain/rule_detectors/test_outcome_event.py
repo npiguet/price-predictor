@@ -151,8 +151,10 @@ class TestAbsent:
             e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)))
         found = FAMILY.match(edited, gen3_sidecars, declared)
         assert found.polarity is Polarity.FIRES and found.observed
-        # The outcome is an absence: the tag names its condition alone.
-        assert found.outcome == () and record.actor_player in found.condition
+        # The outcome is an absence: the tag names where it would have fallen,
+        # the token maker's controller where its clause targets nothing.
+        assert record.actor_player in found.condition
+        assert found.outcome == (record.state.refs.targets or (record.actor_player,))
 
     def test_absent_needs_an_api(self, gen3_records):
         with pytest.raises(ValueError, match="needs api"):

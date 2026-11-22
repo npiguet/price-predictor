@@ -215,8 +215,10 @@ curation, the rule mask, the selection-set freeze and the rule tests.
   discarded, drew or searched, the cards and players a target legality is written at.
 - One entity may hold both roles: a creature dying to its own toughness, a legality list's member,
   a player losing to life zero.
-- A tag whose outcome is an absence names condition entities only: an `absent` scenario's `fires`
-  side, and a scoped `does_not_fire` whose record holds no event of the kind.
+- A tag whose outcome is an absence (an `absent` scenario's `fires` side, a scoped
+  `does_not_fire` whose record holds no event of the kind) names as its outcome entities where the
+  outcome would have fallen: the acting clause's targets as the effect half's refs block holds
+  them, else its controller.
 - A record that carries no per-entity target (a `trigger` record, a cost half, a rewrite that ran
   another ability) gives its tags no outcome entity a per-entity output can be read at.
 
@@ -227,7 +229,7 @@ Per family:
 | `keyword_combat` | the carrier | the subjects of the keyword's effects in gate 2's table: the creature fought, the defending player, the carrier's controller (lifelink), the carrier (indestructible) |
 | `sba_zone_move` | the judged permanent; an Aura's host too | the judged permanent |
 | `sba_game_loss` | the player | the player |
-| `outcome_event` | the acting source, its targets and controller | where the matching events are placed (subjects, or the object a subject-less copy, retarget or venture happened to), and the owner of a card moved out of a hand or a library |
+| `outcome_event` | the acting source, its targets and controller | where the matching events are placed (subjects, or the object a subject-less copy, retarget or venture happened to), and the owner of a card moved out of a hand or a library; on an absence, the acting clause's targets, else its controller |
 | `trigger_mode` | the triggering event's subjects and the trigger's source | none |
 | `verdict_bit` | the candidate's card | every card and player a target legality is written at, when the candidate targets |
 | `legality_membership` | the judged entities, and the anchor attacker | the judged entities the record writes the list's legality field at, and on a blockers record the anchor (`min_blockers`) |

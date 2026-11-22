@@ -22,6 +22,11 @@ A record carries:
   ``created_objects`` where the record supervises the created-objects head;
 - an output no shipped head carries never.
 
+A per-entity output (a per-entity field or the gate, :func:`per_entity_output`)
+is read at entities, every other at the record; a rule test of a rule whose
+effective outputs are all per-entity (:func:`read_at_entities_only`) reads
+nothing on a tag naming no outcome entity.
+
 Torch-free: the ``build-corpus`` survey workers call it.
 """
 
@@ -40,6 +45,20 @@ from effects.domain.records import EffectRecord
 from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT
 
 
+def per_entity_output(output: str) -> bool:
+    """Whether ``output`` is read at an entity: a per-entity field or the
+    affected gate, never a verdict, global or created-objects output."""
+    return output == GATE_OUTPUT or output in FIELDS_BY_NAME
+
+
+def read_at_entities_only(outputs: Iterable[str]) -> bool:
+    """Whether every one of a rule's ``outputs`` is read at an entity, so a
+    rule test reads it nowhere on a tag naming no outcome entity; False for
+    no output at all."""
+    outputs = tuple(outputs)
+    return bool(outputs) and all(per_entity_output(output) for output in outputs)
+
+
 def carried_outputs(
     record: EffectRecord, outcome: Iterable[str], outputs: Iterable[str], *,
     targets: RecordTargets | None = None,
@@ -56,7 +75,7 @@ def carried_outputs(
     verdict = global_ = None
     found: set[str] = set()
     for output in outputs:
-        if output == GATE_OUTPUT or output in FIELDS_BY_NAME:
+        if per_entity_output(output):
             if not outcome:
                 continue
             if targets is None:

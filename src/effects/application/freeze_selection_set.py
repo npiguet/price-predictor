@@ -39,6 +39,11 @@ their labels alone:
    whose detector finds no test record in a half is named untested (FR-073),
    as is, in every half, one whose tagged records carry none of the outputs
    its map entry names (the manifest's ``effective_outputs`` empty, FR-060a).
+   For a rule whose effective outputs are all per-entity, read at the tag's
+   outcome entities, only the rows naming one count toward n and the
+   standard error, and a rule with a polarity holding none is left out as
+   ``no outcome entity`` (finding 7.8); a rule with a verdict, global or
+   created-objects output keeps every row, read at the record.
    A deviance item is an output term of any shipped head — a per-entity
    field or the gate, a verdict or global field, a created-objects slot
    column or the overflow flag (``selection_set.deviance_item``), the terms
@@ -75,6 +80,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity, ScenarioCatalogue
 from effects.domain.rule_detectors import DetectorIndex, RuleTag, tag_record
+from effects.domain.rule_output_carriage import read_at_entities_only
 from effects.domain.score_scales import (
     auc_standard_error,
     component_standard_error,
@@ -91,6 +97,7 @@ from effects.domain.selection_set import (
     GRID_RECORD_CAP,
     GRID_TARGET_ERROR,
     GRIDS,
+    NO_OUTCOME_ENTITY,
     NO_READABLE_OUTPUT,
     PROBES,
     RULE_TESTS,
@@ -188,6 +195,10 @@ class RuleTestRules:
     #: Trained rules whose tagged records carry no output of their map
     #: entry (the manifest's ``effective_outputs`` empty): nothing to read.
     unreadable: frozenset[str] = frozenset()
+    #: Rules whose effective outputs are all per-entity
+    #: (``rule_output_carriage.read_at_entities_only``): a row naming no
+    #: outcome entity is read nowhere, so only rows naming one are tests.
+    entity_read: frozenset[str] = frozenset()
 
     @classmethod
     def of(cls, catalogue: ScenarioCatalogue, manifest: CorpusManifest,
@@ -201,6 +212,9 @@ class RuleTestRules:
             unreadable=frozenset(
                 rule for rule, outputs in manifest.effective_rule_outputs.items()
                 if not outputs),
+            entity_read=frozenset(
+                rule for rule, outputs in manifest.effective_rule_outputs.items()
+                if read_at_entities_only(outputs)),
         )
 
     @property
@@ -457,6 +471,7 @@ class _Assembly:
         self.probe_kinds = dict(probe_kinds)
         self.testable = sorted(rules.testable)
         self.unreadable = sorted(rules.unreadable_testable)
+        self.entity_read = rules.entity_read
         self.misses: list[FreezeMiss] = []
         self.errors: dict[str, StandardError] = {}
         self.left_out: dict[str, dict[str, dict[str, list[LeftOut]]]] = defaultdict(
@@ -502,13 +517,12 @@ class _Assembly:
             if not sides or not any(sides.values()):
                 self._leave_out(stratum, half, RULE_TESTS, rule, UNTESTED)
                 continue
-            counts = {polarity: len(sides.get(polarity, ())) for polarity in TEST_POLARITIES}
-            if min(counts.values()) == 0:
+            rows, reason = self._test_rows(rule, sides)
+            if reason is not None:
                 self.errors[item_key(stratum, half, RULE_TESTS, rule)] = None
-                self._leave_out(stratum, half, RULE_TESTS, rule, "one polarity only: " + ", ".join(
-                    f"{n} {polarity}" for polarity, n in counts.items()))
+                self._leave_out(stratum, half, RULE_TESTS, rule, reason)
                 continue
-            drawn = balanced({p: sides.get(p, []) for p in TEST_POLARITIES}, self.limits.r,
+            drawn = balanced(rows, self.limits.r,
                              seed=self.seed, salt=f"rule-test|{stratum}|{half}|{rule}",
                              key=lambda row: row.record_id)
             error = auc_standard_error(len(drawn[Polarity.FIRES]),
@@ -518,6 +532,26 @@ class _Assembly:
                 kept[rule] = {str(p): tuple(rows) for p, rows in drawn.items()}
         self.frozen_rule_tests[stratum][half] = kept
         self._check(stratum, half, RULE_TESTS, errors)
+
+    def _test_rows(self, rule: str, sides: Mapping[Polarity, list[TaggedRecord]],
+                   ) -> tuple[dict[Polarity, list[TaggedRecord]], str | None]:
+        """A rule's test rows per polarity, or why it is left out: a polarity
+        with no row, or, for a rule read at entities only, none naming an
+        outcome entity, the only rows such a rule's test reads (finding 7.8)."""
+        rows = {polarity: list(sides.get(polarity, ())) for polarity in TEST_POLARITIES}
+        counts = {polarity: len(found) for polarity, found in rows.items()}
+        if min(counts.values()) == 0:
+            return {}, "one polarity only: " + ", ".join(
+                f"{n} {polarity}" for polarity, n in counts.items())
+        if rule not in self.entity_read:
+            return rows, None
+        named = {polarity: [row for row in found if row.entities]
+                 for polarity, found in rows.items()}
+        if all(named.values()):
+            return named, None
+        return {}, f"{NO_OUTCOME_ENTITY}: " + ", ".join(
+            f"{len(named[polarity])} of {n} {polarity}" for polarity, n in counts.items()
+        ) + " name one"
 
     # ── probes ──
 

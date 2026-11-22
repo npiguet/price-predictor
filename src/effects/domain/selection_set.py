@@ -88,6 +88,11 @@ UNTESTED = "untested: its detector finds no test record in this half"
 NO_READABLE_OUTPUT = "untested: its tagged records carry no output its map entry names"
 #: Every reason a trained rule is left out untested.
 UNTESTED_REASONS = frozenset({UNTESTED, NO_READABLE_OUTPUT})
+#: Why a rule whose effective outputs are all per-entity is left out of a
+#: half: a polarity of it holds no row naming an outcome entity, where the
+#: rule test would read them (finding 7.8); the reason goes on with each
+#: polarity's rows naming one.
+NO_OUTCOME_ENTITY = "no outcome entity"
 
 T = TypeVar("T")
 
