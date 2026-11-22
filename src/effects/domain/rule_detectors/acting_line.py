@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from effects.domain.keyword_names import normalize_keyword
-from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
+from effects.domain.provenance import LineKind, ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import Candidate, EffectRecord
 from effects.domain.script_text import params, root
 from effects.domain.state_snapshot import EntityState, StateSnapshot
@@ -70,15 +70,37 @@ def acting_root_params(record: EffectRecord, lines: SidecarLookup | None) -> dic
 CANDIDATE_KINDS = frozenset({"cast", "activated"})
 
 
+#: The keywords whose alternative-cost line is no cast: a special action
+#: (suspend 702.62, foretell 702.143, plot 702.170) or an activated ability
+#: from a hand or a graveyard (unearth, ninjutsu, encore, embalm, eternalize).
+#: ``built.kind`` cannot tell them apart (every one is ``spell``), the line's
+#: kind is the converter's ``alternate cost`` for all of them.
+_NOT_A_CAST = frozenset(normalize_keyword(name) for name in (
+    "Suspend", "Foretell", "Plot", "Unearth", "Ninjutsu", "Encore", "Embalm", "Eternalize"))
+
+
+def _keyword_ability_kind(keys: tuple[ProvenanceKey, ...], lines: SidecarLookup | None) -> str:
+    """A keyword's own line: a cast where the keyword's alternative cost casts
+    the spell (awaken, bestow, flashback, harmonize, morph ...), else an
+    activated ability (equip, cycling, crew ...), the answer too where no line
+    is readable."""
+    line = line_of(keys, lines)
+    if line is None or line.line_kind != LineKind.ALTERNATE_COST:
+        return "activated"
+    name = normalize_keyword(line.keyword_display_name or "")
+    return "activated" if name in _NOT_A_CAST else "cast"
+
+
 def ability_kind(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> str | None:
     """``cast`` or ``activated``; None for no key, a static or trigger, or an
-    unreadable key. A keyword's own line is an activated ability."""
+    unreadable key. A keyword's own line is a cast when it is an alternative
+    cost that casts (:func:`_keyword_ability_kind`), else an activated ability."""
     keys = tuple(keys)
     if not keys:
         return None
     key = keys[0]
     if key.trait_kind == "keyword":
-        return "activated"
+        return _keyword_ability_kind(keys, lines)
     if key.trait_kind != "spell":
         return None
     line = line_of(keys, lines)
