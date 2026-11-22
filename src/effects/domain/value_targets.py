@@ -6,6 +6,11 @@ two lines share is two rows). The masking rules:
 
 - **A line with no script, and a keyword line, state nothing**: every target is
   masked (``Bushido:2`` has no ``$`` parameter to read).
+- **A segment the root grants adds nothing** (``Abilities$ SV3``, ``AddTrigger$``
+  and the other ``GRANT_KEYS``: Scorn Blade Berserker's backup trigger hands
+  an ``AB$ Draw`` to another creature, which is that creature's line's draw,
+  not the trigger's): the line states its own amounts, and what it grants is
+  left out, not masked, since the head predicts what a line does.
 - **A chooser anywhere in the chain masks the amounts** (which option runs is
   not the script's to say), and **a coin flip's branches mask what they
   state** (one of them runs).
@@ -35,6 +40,7 @@ from effects.domain.provenance import KEYWORD_API_TYPE, SidecarLine
 from effects.domain.script_text import (
     CHAIN_KEYS,
     CHOOSER_APIS,
+    GRANT_KEYS,
     SEG,
     SEGMENT_OPENER,
     api_of,
@@ -100,7 +106,13 @@ _COST_GROUP_RE = re.compile(r"<[^>]*>")
 #: whichever is paid, which the cost's mana targets cannot state.
 _HYBRID_SHARD = re.compile(r"2[WUBRG]|[WUBRG][WUBRGP]")
 #: The parameters naming the segments one outcome of a coin flip runs.
-_COIN_KEYS = ("HeadsSubAbility", "TailsSubAbility", "WinSubAbility", "LoseSubAbility")
+_COIN_KEYS = frozenset({"HeadsSubAbility", "TailsSubAbility", "WinSubAbility", "LoseSubAbility"})
+#: The keys that name a trait the line gives away. ``Trigger$`` on a static
+#: (an exert's "when you do, +1/+0") and ``PreventionSubAbility$`` (what a
+#: shield does when it prevents) name what the root's own effect does.
+_GRANTED = GRANT_KEYS - {"Trigger", "PreventionSubAbility"}
+#: A grant's list of labels (``SV3,SV4``, ``SV3 & SV4``).
+_LISTING = re.compile(r"\s*[,&]\s*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,60 +195,78 @@ def value_targets(script: str | None, *, keyword: bool = False) -> ValueTargets:
         return amounts.targets()
     parts = script.split(SEG)
     parsed = [params(segment) for segment in segments(script)]
-    if _holds_chooser(parsed):
+    performed = _performed(parsed, _labels(parts))
+    if _holds_chooser(parsed, performed):
         amounts.mask(_AMOUNT_TARGETS)
     else:
-        _read_chain(parts, parsed, amounts)
+        _read_chain(parts, parsed, performed, amounts)
     root = parsed[0]
     _read_cost(root.get("Cost"), "SP" in root, amounts)
     return amounts.targets()
 
 
-def _holds_chooser(parsed: list[dict[str, str]]) -> bool:
+def _holds_chooser(parsed: list[dict[str, str]], performed: list[int]) -> bool:
     """Whether the root lists choices (a charm's root states only its choices,
     FR-005a, its modes carry the amounts on their own option lines) or any
-    segment is a chooser API."""
-    return "Choices" in parsed[0] or any(api_of(found) in CHOOSER_APIS for found in parsed)
+    segment it performs is a chooser API."""
+    apis = (api_of(parsed[index]) for index in performed)
+    return "Choices" in parsed[0] or any(api in CHOOSER_APIS for api in apis)
 
 
-def _read_chain(parts: list[str], parsed: list[dict[str, str]], amounts: _Amounts) -> None:
+def _read_chain(
+    parts: list[str], parsed: list[dict[str, str]], performed: list[int], amounts: _Amounts,
+) -> None:
     """Each segment's amounts into ``amounts``; a coin flip's branches mask
-    what they state instead."""
-    branches = _coin_branches(parts, parsed)
-    for index, found in enumerate(parsed):
+    what they state instead, and a segment the root grants adds nothing."""
+    branches = _reached(parsed, _labels(parts), _COIN_KEYS)
+    for index in performed:
         if index not in branches:
-            _read_amounts(found, amounts)
+            _read_amounts(parsed[index], amounts)
             continue
         branch = _Amounts()
-        _read_amounts(found, branch)
+        _read_amounts(parsed[index], branch)
         amounts.mask(branch.touched)
 
 
-def _coin_branches(parts: list[str], parsed: list[dict[str, str]]) -> set[int]:
-    """The indices of the segments only one outcome of a coin flip runs: those
-    the flip's ``Heads``/``Tails``/``Win``/``LoseSubAbility$`` name, and what
-    they chain to."""
-    labels = {}
+def _labels(parts: list[str]) -> dict[str, int]:
+    """``SVn`` label -> index of the segment it opens."""
+    found = {}
     for index, part in enumerate(parts):
         opener = SEGMENT_OPENER.match(part)
         if opener:
-            labels[opener.group(1)] = index
-    pending = [
-        labels[found[key]] for found in parsed for key in _COIN_KEYS
-        if found.get(key) in labels
-    ]
-    branches: set[int] = set()
+            found[opener.group(1)] = index
+    return found
+
+
+def _performed(parsed: list[dict[str, str]], labels: dict[str, int]) -> list[int]:
+    """The indices of the segments the line performs itself: not those a
+    segment grants (``Abilities$ SV3`` hands an ability to a creature, whose
+    amounts are its own line's), nor what those chain to."""
+    granted = _reached(parsed, labels, _GRANTED, follow=_GRANTED)
+    return [index for index in range(len(parsed)) if index not in granted]
+
+
+def _reached(
+    parsed: list[dict[str, str]], labels: dict[str, int], keys: frozenset[str] | tuple[str, ...],
+    follow: frozenset[str] = frozenset(),
+) -> set[int]:
+    """The indices of the segments the ``keys`` parameters name, and of what
+    those chain to (``CHAIN_KEYS``, and ``follow``)."""
+    pending = [index for found in parsed for index in _named(found, keys, labels)]
+    reached: set[int] = set()
     while pending:
         index = pending.pop()
-        if index not in branches:
-            branches.add(index)
-            pending += _chained(parsed[index], labels)
-    return branches
+        if index not in reached:
+            reached.add(index)
+            pending += _named(parsed[index], CHAIN_KEYS | follow, labels)
+    return reached
 
 
-def _chained(found: dict[str, str], labels: dict[str, int]) -> list[int]:
-    """The indices of the segments ``found`` chains to."""
-    return [labels[value] for key, value in found.items() if key in CHAIN_KEYS and value in labels]
+def _named(found: dict[str, str], keys: Iterable[str], labels: dict[str, int]) -> list[int]:
+    """The indices of the segments the ``keys`` parameters of ``found`` name;
+    a value may list several (``SV3,SV4``)."""
+    values = (value for key, value in found.items() if key in keys)
+    return [labels[label] for value in values for label in _LISTING.split(value) if label in labels]
 
 
 def _read_amounts(found: dict[str, str], amounts: _Amounts) -> None:

@@ -35,7 +35,8 @@ def _sidecar_line(card: str, line_index: int) -> SidecarLine:
 
 
 #: Golden Scale Aeronaut's and Scorn Blade Berserker's backup 1: one prose text,
-#: two scripts, the second granting an ability that draws.
+#: two scripts, the second granting an ability that draws (which the trigger's
+#: own targets leave out: G13d).
 _AERONAUT = _sidecar_line("g/golden_scale_aeronaut", 4)
 _BERSERKER = _sidecar_line("s/scorn_blade_berserker", 4)
 
@@ -46,8 +47,8 @@ def test_two_lines_sharing_a_text_are_two_rows_reading_one_row_of_e():
     assert rows.tolist() == [3, 3]
     assert rows.dtype == torch.long
     assert values.shape[0] == mask.shape[0] == 2
-    assert float(values[0, _DRAWN]) == 0.0
-    assert float(values[1, _DRAWN]) == 1.0
+    assert values[0].tolist() == values[1].tolist()
+    assert float(values[1, _DRAWN]) == 0.0, "the granted draw is the granted ability's, G13d"
 
 
 def test_the_batch_keeps_each_script_a_text_has_not_the_first_met():

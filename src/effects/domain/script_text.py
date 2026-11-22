@@ -18,6 +18,19 @@ SEGMENT_OPENER = re.compile(r"^\s*(SV\d+):\s*")
 #: The parameters whose value names a chain segment (FR-002a).
 CHAIN_KEYS = frozenset({"Execute", "SubAbility", "RepeatSubAbility", "ReplaceWith"})
 
+#: The parameters whose value lists the traits (abilities, triggers, statics,
+#: replacements) the segment grants or sets up rather than performs: an
+#: ability a pump hands to a creature, a delayed trigger's own ability.
+#: Mirrors ``GrantedTraits.GRANTS``.
+GRANT_KEYS = frozenset({
+    "AddTrigger", "AddStaticAbility", "AddReplacementEffect", "AddAbility", "Abilities",
+    "Triggers", "Replacements", "staticAbilities", "StaticAbilities", "ReplacementEffects",
+    "AddTriggers", "AddAbilities", "GainTextAbilities", "AddStaticAbilities", "Trigger",
+    "TriggersWhenSpent", "PreventionSubAbility", "StaticEffect", "ExtraTurnDelayedTrigger",
+    "ExtraTurnDelayedTriggerExecute", "ExtraPhaseDelayedTrigger",
+    "ExtraPhaseDelayedTriggerExcute",
+})
+
 #: Every parameter whose value the converter renames to ``SV#`` labels, beyond
 #: the reading ``CHAIN_KEYS`` has: a source script and its sidecar differ in
 #: these values. Mirrors ``TraitScript.java`` (``SINGLE_LINK_KEYS``, the
@@ -25,7 +38,7 @@ CHAIN_KEYS = frozenset({"Execute", "SubAbility", "RepeatSubAbility", "ReplaceWit
 #: ``ResultSubAbilities$``) and ``GrantedTraits.java`` (``GRANTS``) in
 #: forge-connector. ``Choices$`` is a label list only on a chooser API, and
 #: ``ResultSubAbilities$`` holds ``range:label`` items.
-RELABELLED_KEYS = CHAIN_KEYS | frozenset({
+RELABELLED_KEYS = CHAIN_KEYS | GRANT_KEYS | frozenset({
     # AbilityFactory.additionalAbilityKeys (Execute and RepeatSubAbility are above)
     "WinSubAbility", "OtherwiseSubAbility", "BidSubAbility", "ChooseNumberSubAbility",
     "Lowest", "Highest", "NotLowest", "GuessCorrect", "GuessWrong", "MatchedAbility",
@@ -33,13 +46,6 @@ RELABELLED_KEYS = CHAIN_KEYS | frozenset({
     "TrueSubAbility", "FalseSubAbility", "ChosenPile", "UnchosenPile", "FallbackAbility",
     "ChooseSubAbility", "CantChooseSubAbility", "RegenerationAbility", "ReturnAbility",
     "GiftAbility", "VoteSubAbility", "VoteTiedAbility",
-    # GrantedTraits.GRANTS
-    "AddTrigger", "AddStaticAbility", "AddReplacementEffect", "AddAbility", "Abilities",
-    "Triggers", "Replacements", "staticAbilities", "StaticAbilities", "ReplacementEffects",
-    "AddTriggers", "AddAbilities", "GainTextAbilities", "AddStaticAbilities", "Trigger",
-    "TriggersWhenSpent", "PreventionSubAbility", "StaticEffect", "ExtraTurnDelayedTrigger",
-    "ExtraTurnDelayedTriggerExecute", "ExtraPhaseDelayedTrigger",
-    "ExtraPhaseDelayedTriggerExcute",
 })
 
 #: The chooser APIs on which ``Choices$`` lists labels (``TraitScript.CHOOSER_APIS``).
