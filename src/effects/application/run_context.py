@@ -123,7 +123,7 @@ def api_vocabularies(config: TrainEffectModelConfig) -> tuple[list[str], list[st
     return script_vocabularies(config.source_trees.folders())
 
 
-def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> PreparerSettings:
+def preparer_settings(spec: RunSpec) -> PreparerSettings:
     """What every preparer of this run is built from, here or in a worker."""
     config, facts = spec.config, spec.facts
     api_types, param_keys = api_vocabularies(config)
@@ -135,7 +135,7 @@ def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> Preparer
     return PreparerSettings(
         config=config, seed=spec.seed, split=facts.split,
         rarity=facts.rarity, api_types=tuple(api_types),
-        param_keys=tuple(param_keys), widths=dict(widths),
+        param_keys=tuple(param_keys),
         heads=training_heads(config, api_types=api_types),
         legality_mode_counts=facts.legality_mode_counts,
         rule_outputs=facts.rule_outputs,
@@ -154,14 +154,20 @@ def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
     }
 
 
-def build_run(
-    spec: RunSpec, preparer: StepPreparer, present: frozenset[str], *,
-    device: torch.device,
-) -> RunContext:
+def epoch_fields(spec: RunSpec) -> dict[int, tuple[FieldSpec, ...]]:
+    """Each epoch's field set, from the sampling classes the corpus's manifest
+    counts training records of (``CorpusFacts.trained_classes``)."""
+    curriculum = Curriculum(spec.config.curriculum_epoch)
+    return {
+        epoch: curriculum.fields_for(epoch, spec.facts.trained_classes)
+        for epoch in range(1, spec.config.epochs + 1)
+    }
+
+
+def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) -> RunContext:
     """The encoder, the model, the optimizer and both device halves, sized by
     ``preparer``."""
     config = spec.config
-    curriculum = Curriculum(config.curriculum_epoch)
     vocab_size = preparer.tokenizer.vocab_size
     widths = preparer.surface_spec.widths
     encoder_config = AbilityEncoderConfig(
@@ -222,10 +228,7 @@ def build_run(
         training_settings=training_settings(
             spec, api_types=preparer.api_types, param_keys=preparer.param_keys,
         ),
-        fields={
-            epoch: curriculum.fields_for(epoch, present)
-            for epoch in range(1, config.epochs + 1)
-        },
+        fields=epoch_fields(spec),
         stopper=ControlScoreStopper(config.patience),
         average=average,
     )

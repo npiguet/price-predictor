@@ -132,14 +132,14 @@ def test_a_batch_encodes_the_reminder_text_of_a_granted_keyword_line():
 
 
 def test_no_state_zeroes_the_line_flags_and_the_card_ids():
-    from effects.domain.effect_head_input import feature_widths
+    from effects.domain.slot_widths import layout_widths
 
     entity = EntityState(
         id="E1", name="soldier", zone="battlefield", controller="P0",
         subtypes=("human",), counters={"OIL": 2}, lines=lines_of(printed=(_ACT,)),
     )
     record = _resolution(entities=(entity,))
-    widths = feature_widths([record])
+    widths = layout_widths()
     full = _flying_batcher(widths=widths).prepare([record]).inputs
     blind = _flying_batcher(
         widths=widths, masks=BaselineMasks(zero_state=True)).prepare([record]).inputs

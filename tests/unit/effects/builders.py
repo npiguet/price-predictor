@@ -442,7 +442,7 @@ def make_preparer(
     return StepPreparer(PreparerSettings(
         config=TrainEffectModelConfig.unpathed(**settings), seed=seed, split=CorpusSplit(),
         rarity={} if rarity is None else rarity, api_types=tuple(api_types),
-        param_keys=tuple(param_keys), widths={}, heads=frozenset(),
+        param_keys=tuple(param_keys), heads=frozenset(),
     ))
 
 
@@ -684,8 +684,8 @@ def stub_validator(loop, on_score=None, controls=None) -> None:
 
 def stub_below_the_loop(monkeypatch):
     """Replace what a ``TrainingLoop`` builds beneath itself — the encoder, the
-    head, the tokenizer, the script-API vocabulary and the feature widths — so
-    ``execute`` runs over records no sidecar describes.
+    head, the tokenizer and the script-API vocabulary — so ``execute`` runs
+    over records no sidecar describes.
 
     Returns the ``(model, encoder)`` stand-ins, from :func:`one_parameter_module`.
     """
@@ -693,7 +693,6 @@ def stub_below_the_loop(monkeypatch):
 
     from effects.application import run_context, step_preparation
     from effects.application import training_loop as loop_module
-    from effects.domain.effect_head_input import SlotKind
     from effects.domain.effect_head_layout import DISPERSED_FIELDS
 
     model, encoder = one_parameter_module(), one_parameter_module()
@@ -707,10 +706,6 @@ def stub_below_the_loop(monkeypatch):
     )
     # The script-API vocabulary is read off every real sidecar; none here.
     monkeypatch.setattr(run_context, "script_vocabularies", lambda folders: ([], []))
-    monkeypatch.setattr(
-        loop_module, "feature_widths",
-        lambda records: dict.fromkeys(SlotKind, 4),
-    )
     # No record here is a real one to prepare, so no pre-pass reads them.
     from effects.domain.loss_denominators import LossDenominators
 
@@ -815,7 +810,7 @@ def fixture_training_config(corpus, out, **overrides):
 def fixture_run(corpus, records, out, **overrides):
     """A real run's context over the application conftest's ``corpus``, on
     the CPU at a tiny trunk: the encoder, model, scoring materializer and
-    preparer a training loop builds, ``records`` sizing the feature widths."""
+    preparer a training loop builds, trained on ``records``' classes."""
     from dataclasses import replace
     from unittest.mock import patch
 
@@ -823,21 +818,18 @@ def fixture_run(corpus, records, out, **overrides):
 
     from effects.application import run_context
     from effects.application.step_preparation import StepPreparer
-    from effects.domain.effect_head_input import feature_widths
     from effects.domain.effect_model import EffectModel
     from effects.domain.sampling import sampling_class
 
-    loop = make_training_loop(fixture_training_config(
-        corpus, out, prefetch_workers=0, **overrides))
-    preparer = StepPreparer(run_context.preparer_settings(
-        loop.spec, widths=feature_widths(list(records))))
+    loop = make_training_loop(
+        fixture_training_config(corpus, out, prefetch_workers=0, **overrides),
+        trained_classes=frozenset(sampling_class(r) for r in records))
+    preparer = StepPreparer(run_context.preparer_settings(loop.spec))
     tiny = lambda config: EffectModel(replace(  # noqa: E731
         config, d_model=32, n_layers=1, n_heads=2, ff_dim=64))
     with patch.object(run_context, "EffectModel", tiny):
         torch.manual_seed(0)
-        return run_context.build_run(
-            loop.spec, preparer, frozenset(sampling_class(r) for r in records),
-            device=torch.device("cpu"))
+        return run_context.build_run(loop.spec, preparer, device=torch.device("cpu"))
 
 
 def write_sidecar(sidecar, path: Path) -> None:

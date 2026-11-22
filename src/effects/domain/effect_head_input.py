@@ -1483,27 +1483,3 @@ class SurfaceBuilder:
         vector = first_text(acting_keys(record), self.lines.e_for)
         return self._zero if vector is None else vector
 
-
-def feature_widths(records) -> dict[SlotKind, int]:
-    """Each slot kind's width, measured from real records; 0 for a kind no
-    record has."""
-    probe = records[0]
-    widths = {
-        SlotKind.GLOBAL: len(global_features(probe)),
-        SlotKind.ACT: len(act_features(probe)),
-        SlotKind.PLAYER: 0,
-        SlotKind.CARD: 0,
-        SlotKind.ABILITY: ABILITY_FEATURE_WIDTH,
-    }
-    for record in records:
-        if record.state.players:
-            widths[SlotKind.PLAYER] = len(
-                player_features(record.state.players[0], record)
-            )
-        if record.state.entities:
-            widths[SlotKind.CARD] = len(
-                card_features(record.state.entities[0], record)
-            )
-        if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
-            break
-    return widths

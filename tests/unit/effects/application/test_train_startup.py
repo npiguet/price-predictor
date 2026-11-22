@@ -20,7 +20,9 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     run,
 )
-from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
+from effects.domain.effect_head_layout import PER_ENTITY_FIELDS
+from effects.domain.sampling import SAMPLING_CLASSES, SamplingClass
 from effects.domain.selection_set import (
     SelectionSet,
     SelectionSetError,
@@ -454,3 +456,57 @@ def test_a_manifest_whose_lists_the_module_covers_is_trained_on(
     corpus.save(_manifest(subtypes=("golem",), keywords=("flying", "hexproof")))
     _freeze(corpus, reports)
     assert run(config) == 0
+
+
+
+# ── the record classes the run trains (finding 15.2) ─────────────────────
+
+
+def _counted(*classes: str) -> dict[str, ClassCounts]:
+    return {name: ClassCounts(read=5, kept=5, dropped_by_cap=0, unique_texts=1)
+            for name in classes}
+
+
+def _trained_fields(loop) -> set[str]:
+    """Every field some epoch of the loop's run trains."""
+    from effects.application.run_context import epoch_fields
+
+    return {spec.name for fields in epoch_fields(loop.spec).values() for spec in fields}
+
+
+#: The fields only a ``playability-legality`` record supervises.
+_LEGALITY_ONLY = frozenset(
+    spec.name for spec in PER_ENTITY_FIELDS
+    if spec.supervised_by == {SamplingClass.PLAYABILITY_LEGALITY}
+)
+
+
+def test_a_manifest_with_no_legality_record_leaves_the_legality_fields_untrained(
+    corpus, config, started, reports, caplog,
+):
+    """The classes that fix every epoch's field set are the manifest's
+    training counts, not the validation samples' (finding 15.2): a class the
+    manifest counts no training record of trains none of the fields only it
+    supervises, and the run says so naming the manifest."""
+    others = [name for name in SAMPLING_CLASSES if name is not SamplingClass.PLAYABILITY_LEGALITY]
+    corpus.save(_manifest(per_class=_counted(*others)))
+    _freeze(corpus, reports)
+    with caplog.at_level(logging.WARNING):
+        assert run(config) == 0
+
+    assert started[-1].spec.facts.trained_classes == frozenset(others)
+    assert _LEGALITY_ONLY and not _LEGALITY_ONLY & _trained_fields(started[-1])
+    named = f"{corpus.manifest_path} counts no training record of playability-legality"
+    assert named in caplog.text
+
+
+def test_a_manifest_counting_every_class_trains_the_legality_fields(
+    corpus, config, started, reports, caplog,
+):
+    corpus.save(_manifest(per_class=_counted(*SAMPLING_CLASSES)))
+    _freeze(corpus, reports)
+    with caplog.at_level(logging.WARNING):
+        assert run(config) == 0
+
+    assert _LEGALITY_ONLY <= _trained_fields(started[-1])
+    assert "counts no training record" not in caplog.text

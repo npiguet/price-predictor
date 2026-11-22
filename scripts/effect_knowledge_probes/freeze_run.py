@@ -13,18 +13,12 @@ from effect_knowledge_probes.progress import progress
 
 
 def _deviance_reader(corpus: Path, cards_folders: tuple):
-    """The deviance port: 256 validation-sample records per stratum size the widths."""
+    """The deviance port: the corpus's targets, as a training run over it
+    scores them."""
     from effects.application.selection_deviance import TargetDevianceLosses, scoring_targets
-    from effects.infrastructure.shard_io import read_shard
 
     def deviance(manifest):
-        sample = []
-        for stratum in common.STRATA:
-            path = corpus / "validation" / "samples" / f"{stratum}.jsonl.gz"
-            if path.exists():
-                sample += [r for _, r in zip(range(256), read_shard(path))]
-        prepare = scoring_targets(corpus, manifest, cards_folders=cards_folders,
-                                  sample=sample)
+        prepare = scoring_targets(corpus, manifest, cards_folders=cards_folders)
         return TargetDevianceLosses(prepare, manifest.effective_rule_outputs)
 
     return deviance

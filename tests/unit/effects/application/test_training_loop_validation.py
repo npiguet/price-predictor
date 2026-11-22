@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import random
 
 import pytest
@@ -20,7 +19,6 @@ from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.effect_losses import LossParts
 from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import HoldoutRule
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import (
@@ -44,12 +42,10 @@ def samples(tmp_path, make_record):
     return paths
 
 
-def test_the_loop_loads_both_samples_and_the_probe(samples):
+def test_the_loop_loads_both_samples(samples):
     samples = ValidationSamples.load(samples)
     assert [r.record_id for r in samples.card_disjoint] == [f"c{i}" for i in range(5)]
     assert len(samples.game_disjoint) == 3
-    assert samples.probe and samples.probe[0].record_id == "c0"
-    assert samples.present == {"resolution-effect", "combat"}
 
 
 def test_run_refuses_to_train_without_a_corpus():
@@ -97,40 +93,6 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding(tmp_
     # cannot change what any training step sees.
     assert training.rng is stream
     assert scoring.rng is not stream
-
-
-def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
-    """The epoch's field set comes from the validation samples (FR-085).
-
-    A class the corpus trains on but that neither sample holds drops every
-    field only it supervises, for the whole run, with nothing logged.
-    """
-    paths = {"card-disjoint": tmp_path / "card-disjoint.jsonl.gz",
-             "game-disjoint": tmp_path / "game-disjoint.jsonl.gz"}
-    write_shard(paths["card-disjoint"],
-                [make_record(record_id="c0", game_id="cg")])
-    write_shard(paths["game-disjoint"],
-                [make_record(record_id="g0", game_id="gg",
-                             kind=RecordKind.COMBAT, payload=CombatPayload())])
-    loop = make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused"))
-    present = ValidationSamples.load(paths).present
-
-    with caplog.at_level(logging.WARNING):
-        loop.reporter.missing_classes(present)
-
-    assert present == {"resolution-effect", "combat"}
-    for absent in set(SAMPLING_CLASSES) - present:
-        assert absent in caplog.text
-    assert "no loss" in caplog.text
-
-
-def test_a_sample_naming_every_class_says_nothing(caplog):
-    loop = make_training_loop(TrainEffectModelConfig.unpathed(corpus="unused"))
-
-    with caplog.at_level(logging.WARNING):
-        loop.reporter.missing_classes(frozenset(SAMPLING_CLASSES))
-
-    assert caplog.text == ""
 
 
 class TestFloorCache:

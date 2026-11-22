@@ -318,11 +318,11 @@ def _gate_weight(weights, scored_entities: int) -> float:
     return min(1.0, len(weights.gate_entities) / scored_entities)
 
 
-def scoring_targets(corpus: Path, manifest, *, cards_folders: Sequence[Path] | None = None,
-                    sample: Sequence[EffectRecord] = ()) -> Callable:
+def scoring_targets(corpus: Path, manifest, *,
+                    cards_folders: Sequence[Path] | None = None) -> Callable:
     """``records -> (per-entity targets, head targets)``, a scoring step over ``corpus``,
     built as a training run over it would be, its script-API head off and no
-    rule mask applied; ``sample`` sizes the feature widths.
+    rule mask applied.
 
     It reads no keyword table: the step's targets and heads come from the
     records alone, and the table feeds only the encoder's input text, which
@@ -336,7 +336,6 @@ def scoring_targets(corpus: Path, manifest, *, cards_folders: Sequence[Path] | N
         TrainEffectModelConfig,
         with_variant_scripts,
     )
-    from effects.domain.effect_head_input import feature_widths
 
     options = {"corpus": str(corpus), "vocab_path": Path(manifest.vocab_path),
                "api_weight": 0.0,
@@ -347,7 +346,7 @@ def scoring_targets(corpus: Path, manifest, *, cards_folders: Sequence[Path] | N
     if "rule_mask" in {f.name for f in dataclass_fields(config)}:
         config = replace(config, rule_mask=None)
     spec = RunSpec(config, CorpusFacts.of(manifest), manifest.seed)
-    preparer = StepPreparer(preparer_settings(spec, widths=feature_widths(list(sample))))
+    preparer = StepPreparer(preparer_settings(spec))
 
     def prepare(records: list[EffectRecord]) -> PreparedTargets:
         step = preparer.prepare_scoring_step(records, PER_ENTITY_FIELDS)

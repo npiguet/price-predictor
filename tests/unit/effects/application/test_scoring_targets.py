@@ -26,8 +26,7 @@ def _manifest(vocab) -> CorpusManifest:
 
 def _targets(corpus, records):
     prepare = scoring_targets(
-        corpus.root, _manifest(corpus.vocab), cards_folders=GEN3_SIDECAR_FOLDERS,
-        sample=records)
+        corpus.root, _manifest(corpus.vocab), cards_folders=GEN3_SIDECAR_FOLDERS)
     return prepare(list(records[:_SCORED]))
 
 

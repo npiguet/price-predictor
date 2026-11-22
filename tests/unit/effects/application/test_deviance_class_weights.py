@@ -98,9 +98,9 @@ def chosen(records):
 
 
 @pytest.fixture(scope="module")
-def deviance_reader(corpus, chosen):
+def deviance_reader(corpus):
     prepare = scoring_targets(corpus.root, _scoring_manifest(corpus.vocab),
-                              cards_folders=GEN3_SIDECAR_FOLDERS, sample=chosen)
+                              cards_folders=GEN3_SIDECAR_FOLDERS)
     return TargetDevianceLosses(prepare, FIXTURE_RULE_OUTPUTS)
 
 

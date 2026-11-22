@@ -32,10 +32,9 @@ from effects.application.training_log import (
     format_shares,
     format_terms,
 )
-from effects.application.validation_pass import EpochScores, ValidationSamples
+from effects.application.validation_pass import EpochScores
 from effects.domain.ability_encoder import TruncationLog, log_truncation
 from effects.domain.rarity import RARITY_BUCKETS
-from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.selection_set import COMPONENTS, DEVIANCE, deviance_by_head
 
 logger = logging.getLogger(__name__)
@@ -137,20 +136,7 @@ class RunReporter:
         #: Unconverted-script lookups counted by the workers' own sidecar caches.
         self._unresolved_elsewhere: Counter[str] = Counter()
 
-    def missing_classes(self, present: frozenset[str]) -> None:
-        """Say which sampling classes the validation samples do not name: the
-        fields only those classes supervise silently drop for the whole run."""
-        missing = [name for name in SAMPLING_CLASSES if name not in present]
-        if not missing:
-            return
-        logger.warning(
-            "The corpus's validation samples name %d of the %d sampling "
-            "classes; %s are missing, so the fields only those classes "
-            "supervise carry no loss this run.",
-            len(present), len(SAMPLING_CLASSES), ", ".join(missing),
-        )
-
-    def run_start(self, seed: int, samples: ValidationSamples, *, shards: int) -> None:
+    def run_start(self, seed: int, *, shards: int) -> None:
         logger.info(
             "Seed %d (%s), %d of %d training shards per epoch, drawn across "
             "the corpus.",
@@ -159,7 +145,7 @@ class RunReporter:
             f"--seed {seed} to repeat this run",
             min(self.config.shards_per_epoch, shards), shards,
         )
-        logger.info("Classes present: %s", ", ".join(sorted(samples.present)))
+        logger.info("Classes trained: %s", ", ".join(sorted(self.facts.trained_classes)))
 
     def thin_holdout(self, warning: str | None) -> None:
         """``check_holdout``'s warning on a thin holdout, if it gave one."""

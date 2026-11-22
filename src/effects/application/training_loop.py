@@ -53,7 +53,6 @@ from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import IDENTITY_TABLE_KEY
 from effects.application.train_effect_model import (
     CorpusFacts,
-    MissingTrainingInputError,
     RunSpec,
     TrainEffectModelConfig,
     check_holdout,
@@ -66,7 +65,6 @@ from effects.application.training_schedule import (
     steps_per_shard,
 )
 from effects.application.validation_pass import ValidationSamples, Validator
-from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_head_layout import PER_ENTITY_FIELDS
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
@@ -219,13 +217,7 @@ class TrainingLoop:
 
     def execute(self) -> int:
         samples = ValidationSamples.load(self.validation_samples)
-        self.reporter.missing_classes(samples.present)
-        if not samples.probe:
-            raise MissingTrainingInputError(
-                "The corpus's validation samples hold no records, so there is "
-                "nothing to measure feature widths from."
-            )
-        self.reporter.run_start(self.spec.seed, samples, shards=len(self.training_shards))
+        self.reporter.run_start(self.spec.seed, shards=len(self.training_shards))
         # Raises on an empty card-disjoint stratum (FR-088b); the gate-1 slice
         # is the build's count, not this run's.
         self.reporter.thin_holdout(check_holdout(
@@ -233,10 +225,10 @@ class TrainingLoop:
             unique_text_records=self.spec.facts.gate_one_records,
         ))
         self._cap_cuda_memory()
-        settings = preparer_settings(self.spec, widths=feature_widths(samples.probe))
+        settings = preparer_settings(self.spec)
         run = build_run(
             self.spec, StepPreparer(settings, truncations=self.reporter.truncations),
-            samples.present, device=self.device,
+            device=self.device,
         )
         first_epoch = 1
         if self.config.resume:

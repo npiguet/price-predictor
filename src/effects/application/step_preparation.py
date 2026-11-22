@@ -38,7 +38,6 @@ from effects.domain.aux_head_targets import (
 from effects.domain.aux_heads import TRAINING_HEADS, Head
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
-from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     GLOBAL_LAYOUT,
@@ -204,7 +203,6 @@ class PreparerSettings:
     rarity: Mapping[str, int] | None
     api_types: tuple[str, ...]
     param_keys: tuple[str, ...]
-    widths: dict[SlotKind, int]
     heads: frozenset[Head]
     legality_mode_counts: Mapping[str, int] = field(default_factory=dict)
     #: The manifest's ``rule -> outputs`` (FR-060a), which the rule mask
@@ -234,7 +232,7 @@ class StepPreparer:
     ) -> None:
         self.config = settings.config
         self.seed = settings.seed
-        self.surface_spec = SurfaceSpec.for_training(settings.config, settings.widths)
+        self.surface_spec = SurfaceSpec.for_training(settings.config)
         self.split = settings.split
         self.rarity = settings.rarity
         self.legality_mode_counts = settings.legality_mode_counts

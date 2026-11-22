@@ -28,8 +28,8 @@ class EvaluationContext:
     """What every stage of one evaluation reads, gathered once.
 
     The main checkpoint is loaded on first use and kept; each record set still
-    gets a batcher of its own, since the slot widths and active fields are
-    measured from the records it scores.
+    gets a batcher of its own, and its active fields follow the classes of the
+    records it scores.
     """
 
     config: EvaluateEffectModelConfig

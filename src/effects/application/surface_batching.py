@@ -29,13 +29,13 @@ from effects.domain.effect_head_input import (
     SlotKind,
     SurfaceBuilder,
     board_entities,
-    feature_widths,
     keyword_line_fragment,
     slot_lines,
 )
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
+from effects.domain.slot_widths import layout_widths
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 from effects.domain.value_targets import ValueLine
 
@@ -303,7 +303,9 @@ class SurfaceSpec:
     slot kind's feature width, the variant's masks and the input layout.
 
     Built from the run's config in training and from the checkpoint wherever
-    a saved model runs, so the two are assembled one way.
+    a saved model runs, so the two are assembled one way; the widths are the
+    layout's (:func:`~effects.domain.slot_widths.layout_widths`) in both, a
+    loaded checkpoint's layout being this code's (``require_input_layout``).
     """
 
     e_dim: int
@@ -311,32 +313,16 @@ class SurfaceSpec:
     masks: BaselineMasks
 
     @classmethod
-    def for_training(cls, config, widths: dict[SlotKind, int]) -> SurfaceSpec:
+    def for_training(cls, config) -> SurfaceSpec:
         """A training run's, under the layout every run records."""
-        return cls(config.e_dim, dict(widths), baseline_masks(config.variant))
-
-    @classmethod
-    def for_checkpoint(cls, checkpoint, records) -> SurfaceSpec:
-        """A saved model's, each width measured from ``records``; the store has
-        already refused a checkpoint trained on another input layout."""
-        return cls(
-            checkpoint.encoder_config.e_dim, feature_widths(records),
-            baseline_masks(checkpoint.variant),
-        )
+        return cls(config.e_dim, layout_widths(), baseline_masks(config.variant))
 
     @classmethod
     def for_saved_model(cls, checkpoint) -> SurfaceSpec:
-        """A saved model's, each width the one its trunk was built with."""
-        config = checkpoint.model_config
+        """A saved model's; the store has already refused a checkpoint
+        trained on another input layout."""
         return cls(
-            checkpoint.encoder_config.e_dim,
-            {
-                SlotKind.GLOBAL: config.global_features,
-                SlotKind.ACT: config.act_features,
-                SlotKind.PLAYER: config.player_features,
-                SlotKind.CARD: config.card_features,
-                SlotKind.ABILITY: config.ability_features,
-            },
+            checkpoint.encoder_config.e_dim, layout_widths(),
             baseline_masks(checkpoint.variant),
         )
 

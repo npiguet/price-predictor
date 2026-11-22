@@ -36,8 +36,9 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
     from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
     from effects.domain.baselines import baseline_masks
-    from effects.domain.effect_head_input import SlotKind, feature_widths
+    from effects.domain.effect_head_input import SlotKind
     from effects.domain.effect_model import EffectModel, EffectModelConfig
+    from effects.domain.slot_widths import layout_widths
     from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure.effect_model_store import EffectCheckpoint, EffectModelStore
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
@@ -48,7 +49,7 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
-    widths = feature_widths(records)
+    widths = layout_widths()
     probe = make_batcher(tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
                          surface="script", e_dim=E_DIM, widths=widths,
                          device=torch.device("cpu"))

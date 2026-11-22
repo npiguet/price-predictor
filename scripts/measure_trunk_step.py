@@ -46,13 +46,13 @@ from effects.domain.effect_head_input import (
     EffectHeadInput,
     SlotKind,
     SurfaceBuilder,
-    feature_widths,
     keyword_line_fragment,
 )
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.relation_types import RELATION_TYPES
+from effects.domain.slot_widths import layout_widths
 from effects.domain.surface_collation import collate_surfaces, entity_index
 from effects.infrastructure.shard_io import read_shard
 from price_predictor.infrastructure.run_manifest import ScriptRun, run_script
@@ -203,7 +203,7 @@ def measure(records: list[EffectRecord], settings: StepSettings, *,
     if len(records) < needed:
         raise SystemExit(f"the shard holds {len(records)} records; {needed} are needed")
     records = records[:needed]
-    widths = feature_widths(records)
+    widths = layout_widths()
     surfaces = surfaces_of(records, with_relations=with_relations)
     torch.manual_seed(settings.seed)
     batches = _batches(surfaces, widths, settings)

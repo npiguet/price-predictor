@@ -20,6 +20,7 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.rule_mask import RuleMask
+from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import normalize_script_text
@@ -321,6 +322,9 @@ class CorpusFacts:
     digest: str = ""
     #: The rule map's content hash, which every checkpoint records (FR-060a).
     rule_map_digest: str = ""
+    #: The sampling classes the manifest counts training records of
+    #: (``per_class``), which fix every epoch's field set (FR-085).
+    trained_classes: frozenset[str] = frozenset(SAMPLING_CLASSES)
     #: The digest of the selection set the control score reads, which every
     #: checkpoint records and a resume compares; empty without one.
     selection_set_digest: str = ""
@@ -340,7 +344,14 @@ class CorpusFacts:
             rule_outputs=manifest.effective_rule_outputs,
             digest=manifest.digest(),
             rule_map_digest=manifest.rule_map_digest,
+            trained_classes=frozenset(
+                name for name, counts in manifest.per_class.items() if counts.kept
+            ),
         )
+
+    def untrained_classes(self) -> list[str]:
+        """The sampling classes, in report order, the run trains no record of."""
+        return [name for name in SAMPLING_CLASSES if name not in self.trained_classes]
 
     def provenance(self, config: TrainEffectModelConfig):
         """What a checkpoint of this run records about the data it saw."""
@@ -517,6 +528,7 @@ def run(config: TrainEffectModelConfig) -> int:
     selection = frozen_selection(store, manifest, Path(config.reports_dir))
     check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
+    warn_untrained_classes(facts, store.manifest_path)
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "
         "%d held-out ability text(s) on %d card(s).",
@@ -530,6 +542,18 @@ def run(config: TrainEffectModelConfig) -> int:
         config, facts=facts, training_shards=training_shards,
         validation_samples=validation_samples, selection=selection,
     ).execute()
+
+
+def warn_untrained_classes(facts: CorpusFacts, manifest_path: Path) -> None:
+    """Say which sampling classes the manifest counts no training record of:
+    the fields only those classes supervise carry no loss for the whole run."""
+    missing = facts.untrained_classes()
+    if missing:
+        logger.warning(
+            "The corpus manifest %s counts no training record of %s, so the "
+            "fields only those classes supervise carry no loss this run.",
+            manifest_path, ", ".join(missing),
+        )
 
 
 def frozen_selection(store: CorpusStore, manifest: CorpusManifest, reports_dir: Path):

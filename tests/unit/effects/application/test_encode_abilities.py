@@ -405,13 +405,8 @@ class TestAGen3Checkpoint:
             TrainEffectModelConfig,
         )
         from effects.domain.ability_encoder import AbilityEncoder
-        from effects.domain.effect_head_input import (
-            ABILITY_FEATURE_WIDTH,
-            SlotKind,
-            feature_widths,
-        )
-        from effects.infrastructure.shard_io import read_shard
-        from tests.unit.effects.builders import GEN3_RECORDS
+        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH, SlotKind
+        from effects.domain.slot_widths import layout_widths
 
         cards = tmp_path / "cardsfolder"
         (cards / "s").mkdir(parents=True)
@@ -432,7 +427,7 @@ class TestAGen3Checkpoint:
         keywords = tmp_path / "kw.json"
         keywords.write_text("{}", encoding="utf-8")
 
-        widths = feature_widths(list(read_shard(GEN3_RECORDS)))
+        widths = layout_widths()
         model_config = EffectModelConfig(
             global_features=widths[SlotKind.GLOBAL], act_features=widths[SlotKind.ACT],
             player_features=widths[SlotKind.PLAYER], card_features=widths[SlotKind.CARD],

@@ -119,16 +119,19 @@ def test_the_second_epoch_starts_in_training_mode(run):
     assert model.training
 
 
-def test_empty_validation_samples_are_refused_before_a_model_is_built(tmp_path):
-    """No record to measure feature widths from: the CLI maps it to exit 1."""
-    from effects.application.train_effect_model import MissingTrainingInputError
+def test_empty_validation_samples_are_refused_before_a_model_is_built(tmp_path, monkeypatch):
+    """An empty card-disjoint stratum leaves nothing to select a checkpoint
+    on: the CLI maps it to exit 1."""
+    from effects.application import training_loop
+    from effects.application.train_effect_model import EmptyHoldoutError
 
     samples = write_validation_samples(tmp_path, [])
     loop = make_training_loop(
         TrainEffectModelConfig.unpathed(corpus=str(tmp_path), prefetch_workers=0),
         validation_samples=samples,
     )
-    with pytest.raises(MissingTrainingInputError, match="nothing to measure feature widths"):
+    monkeypatch.setattr(training_loop, "build_run", lambda *a, **k: pytest.fail("built"))
+    with pytest.raises(EmptyHoldoutError, match="card-disjoint stratum holds no records"):
         loop.execute()
 
 

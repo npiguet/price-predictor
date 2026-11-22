@@ -36,3 +36,18 @@ def test_a_run_records_a_digest_of_every_layout_vocabulary():
     )
     for name, _ in LAYOUT_VOCABULARIES:
         assert len(settings[f"{name}_digest"]) == 64
+
+
+def test_a_run_and_a_saved_model_are_laid_out_by_the_layouts_widths():
+    """One source for the widths (finding 19.1): the trunk a run builds and
+    the batcher a loaded checkpoint runs under read the layout's, never a
+    record's."""
+    from types import SimpleNamespace
+
+    from effects.application.surface_batching import SurfaceSpec
+    from effects.application.train_effect_model import TrainEffectModelConfig
+    from effects.domain.slot_widths import layout_widths
+
+    checkpoint = SimpleNamespace(encoder_config=SimpleNamespace(e_dim=4), variant="full")
+    training = SurfaceSpec.for_training(TrainEffectModelConfig.unpathed(corpus="unused"))
+    assert training.widths == SurfaceSpec.for_saved_model(checkpoint).widths == layout_widths()

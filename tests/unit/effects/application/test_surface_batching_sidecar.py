@@ -31,13 +31,13 @@ def _prepared(variant: str):
     """One record prepared under ``variant``'s masks, through the real pipeline."""
     from effects.domain.ability_tokenizer import AbilityTokenizer
     from effects.domain.baselines import baseline_masks
-    from effects.domain.effect_head_input import feature_widths
+    from effects.domain.slot_widths import layout_widths
 
     record = _record()
     batcher = make_batcher(
         tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
         sidecars=_Sidecars(), masks=baseline_masks(variant), surface="script",
-        e_dim=4, widths=feature_widths([record]), device=torch.device("cpu"),
+        e_dim=4, widths=layout_widths(), device=torch.device("cpu"),
     )
     prepared = batcher.prepare([record])
     return prepared.surfaces[0], prepared.inputs

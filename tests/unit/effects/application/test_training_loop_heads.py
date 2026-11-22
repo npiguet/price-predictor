@@ -356,7 +356,7 @@ def _built_run(monkeypatch, **config):
         tokenizer=SimpleNamespace(vocab_size=8),
         surface_spec=SimpleNamespace(widths=dict.fromkeys(SlotKind, 4)),
         api_types=[], param_keys=[],
-    ), frozenset(), device=loop.device)
+    ), device=loop.device)
 
 
 class TestTheBatchersTheLoopBuilds:

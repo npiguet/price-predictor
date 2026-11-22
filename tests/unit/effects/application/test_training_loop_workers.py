@@ -38,7 +38,6 @@ from effects.application.step_preparation import (
 from effects.application.train_effect_model import ValidationGameInTrainingError
 from effects.application.training_schedule import Curriculum
 from effects.domain.ability_encoder import AbilityEncoder
-from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.split import (
@@ -589,7 +588,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = fixture_training_config(corpus, corpus.root / "unused")
     loop = make_training_loop(config, rarity={"x": 3})
-    settings = preparer_settings(loop.spec, widths=feature_widths(records))
+    settings = preparer_settings(loop.spec)
     assert settings.heads == frozenset({"value", "api", "mlm"})
     fields = Curriculum(config.curriculum_epoch).fields_for(
         1, frozenset(sampling_class(r) for r in records),

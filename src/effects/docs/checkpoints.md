@@ -15,7 +15,7 @@ Rules to respect when changing what a checkpoint or `resume.pt` holds, a loader,
 
 ## Loading
 
-- `application/model_loading.py` rebuilds encoder, model and batcher from a saved checkpoint, the weights read by `effect_model_store.load_weights`.
+- `application/model_loading.py` rebuilds encoder, model and batcher from a saved checkpoint, the weights read by `effect_model_store.load_weights`. The trunk is built at the widths its `model_config` records and the batcher at the layout's (`model-layout.md` § Input slots), which agree on a checkpoint trained under this layout; nothing reads a width off the records being scored. Which fields a loaded model is scored on follows the classes of those records (`model_loading.evaluation_fields`).
 - Loading is strict: a model state missing anything but the training-only heads, or carrying an unexpected key, is refused. Loaded leniently, the missing part would run at random initial weights. The encoder and model come back in eval mode.
 - The `identity` baseline's `e` comes from a free embedding table and not from the encoder, so the table rides in the checkpoint's `extra` with its texts, and the runner rebuilds it from them. Rebuilt empty, the baseline is scored on random vectors and gate 1 gets a margin nobody earned.
 - The table indexes texts exactly: one row per text the run's sidecars encode to (`ability_text.known_texts`), plus one shared row for any other text, such as a counterfactual copy's. A hashed table would let two texts share a row, which is the memorization the baseline exists to measure.

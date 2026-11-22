@@ -16,9 +16,11 @@ from effects.domain.effect_head_input import (
     PENDING_EVENT_MODES,
     ZONES,
     SlotKind,
+    act_features,
     card_features,
     card_segments,
-    feature_widths,
+    global_features,
+    player_features,
 )
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
@@ -38,6 +40,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.field_types import DIRECTIONS
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
+from effects.domain.slot_widths import layout_widths
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records
 
@@ -114,8 +117,22 @@ def test_the_global_and_player_slots_keep_their_widths():
     :data:`ZONES` and "other"; a player slot is 116, three the pending
     event's subject, defender and cause (finding 4.8)."""
     assert len(PENDING_EVENT_MODES) == 81
-    widths = feature_widths([record_from_dict(gen3_fixture_records()[0])])
+    widths = layout_widths()
     assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (226, 116)
+    assert widths[SlotKind.CARD] == 575
+
+
+def test_the_layout_widths_are_what_the_slot_builders_emit_on_real_records():
+    """The widths are constants of the layout, computed once from a blank
+    record (finding 19.1): every slot of every fixture record is as wide."""
+    widths = layout_widths()
+    for record in map(record_from_dict, gen3_fixture_records()):
+        assert len(global_features(record)) == widths[SlotKind.GLOBAL]
+        assert len(act_features(record)) == widths[SlotKind.ACT]
+        for player in record.state.players:
+            assert len(player_features(player, record)) == widths[SlotKind.PLAYER]
+        for entity in record.state.entities:
+            assert len(card_features(entity, record)) == widths[SlotKind.CARD]
 
 
 def test_the_value_head_keeps_its_slices():

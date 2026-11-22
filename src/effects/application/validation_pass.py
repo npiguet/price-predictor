@@ -41,10 +41,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Records kept aside to measure feature widths from, before any shard loads.
-PROBE_RECORDS = 64
-
-
 @dataclass(frozen=True)
 class ValidationSamples:
     """The corpus's fixed validation samples, one per stratum, read once and
@@ -52,11 +48,6 @@ class ValidationSamples:
 
     card_disjoint: list
     game_disjoint: list
-    #: Records to measure feature widths from, before any shard loads.
-    probe: list
-    #: The sampling classes the two samples hold; every epoch's field set is
-    #: built from these.
-    present: frozenset[str]
 
     @classmethod
     def load(cls, paths: Mapping[str, Path]) -> ValidationSamples:
@@ -72,14 +63,7 @@ class ValidationSamples:
                 stratum, len(records), len({r.game_id for r in records}),
                 len({sampling_class(r) for r in records}),
             )
-        return cls(
-            card_disjoint=card_disjoint,
-            game_disjoint=game_disjoint,
-            probe=card_disjoint[:PROBE_RECORDS] or game_disjoint[:PROBE_RECORDS],
-            present=frozenset(
-                sampling_class(record) for record in (*card_disjoint, *game_disjoint)
-            ),
-        )
+        return cls(card_disjoint=card_disjoint, game_disjoint=game_disjoint)
 
 
 @dataclass(frozen=True, slots=True)

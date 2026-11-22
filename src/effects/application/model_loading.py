@@ -118,20 +118,14 @@ class LoadedModel:
 
     def runnable(self, records) -> Runnable:
         return Runnable(
-            self.encoder, self.model, self._batcher(records),
-            evaluation_fields(records),
+            self.encoder, self.model, self.batcher(), evaluation_fields(records),
         )
 
     def batcher(self) -> SurfaceBatcher:
-        """A batcher laid out by the widths the checkpoint's trunk was built
-        with, for a pass whose records are not read yet (the control score's
-        cache reads its own)."""
-        return self._batcher(None)
-
-    def _batcher(self, records) -> SurfaceBatcher:
+        """A batcher of its own, laid out by the layout's widths, which a
+        loaded checkpoint's trunk was built with."""
         checkpoint = self.checkpoint
-        spec = (SurfaceSpec.for_saved_model(checkpoint) if records is None
-                else SurfaceSpec.for_checkpoint(checkpoint, records))
+        spec = SurfaceSpec.for_saved_model(checkpoint)
         return SurfaceBatcher(
             stager=TextStager.for_inference(
                 self.tokenizer, self.surface,

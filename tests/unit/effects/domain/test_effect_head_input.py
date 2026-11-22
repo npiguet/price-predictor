@@ -1084,9 +1084,9 @@ class TestTheGen3Fixture:
         return [record_from_dict(raw) for raw in gen3_fixture_records()]
 
     def test_every_slot_kind_keeps_one_width(self, records):
-        from effects.domain.effect_head_input import feature_widths
+        from effects.domain.slot_widths import layout_widths
 
-        widths = feature_widths(records)
+        widths = layout_widths()
         seen: dict = {}
         for record in records:
             for slot in _build(record).slots:
@@ -1480,12 +1480,13 @@ class TestTheGen3FixtureInTheModel:
     def test_the_fixture_runs_through_the_model(self, gen3_records):
         import torch
 
-        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH, feature_widths
+        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH
         from effects.domain.effect_model import EffectModel, EffectModelConfig
+        from effects.domain.slot_widths import layout_widths
         from effects.domain.surface_collation import collate_surfaces
 
         records = list(gen3_records.values())[:16]
-        widths = feature_widths(records)
+        widths = layout_widths()
         entity, record = records[0].state.entities[0], records[0]
         assert widths[SlotKind.CARD] == len(card_features(entity, record)) == max(
             part.stop for part in card_segments(entity, record).values())
