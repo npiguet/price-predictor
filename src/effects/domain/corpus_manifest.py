@@ -629,7 +629,7 @@ def rule_curation_fields(
     strata, the map snapshot, the survey's rule counts (the ``rule-counts.json``
     object), its ``(rule, output) -> records carrying it`` tally, which
     decides each rule's effective outputs, its one-sided conditions
-    (``corpus_curation.one_sided_conditions``) and turn-action tally, and the
+    (``condition_balance.one_sided_conditions``) and turn-action tally, and the
     subtype and keyword names it read, which are put in the head's column
     order here.
     """

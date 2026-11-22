@@ -27,7 +27,7 @@ from effects.application.stratum_budgets import (
     validation_weights,
 )
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.corpus_curation import one_sided_conditions
+from effects.domain.condition_balance import one_sided_conditions
 from effects.domain.corpus_manifest import rule_curation_fields
 from effects.domain.corpus_plan import (
     BuildCorpusError,

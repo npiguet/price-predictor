@@ -487,7 +487,7 @@ class _ConditionedStatic:
 def _conditioned_static(record, lines) -> _ConditionedStatic | None:
     """The static a record as collected carries a turn or step condition of,
     where the rule's answer for it is what Forge recorded; else None."""
-    from effects.domain.corpus_curation import turn_step_condition
+    from effects.domain.condition_balance import turn_step_condition
 
     if record.fork:
         return None

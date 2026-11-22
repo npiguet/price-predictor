@@ -12,12 +12,11 @@ from effects.domain.corpus_curation import (
     copy_plan,
     game_disjoint_draw,
     game_hash,
-    outcome_signature,
     rate_plan,
     record_hash,
-    signature_label,
     text_capacity,
 )
+from effects.domain.outcome_signature import outcome_signature, signature_label
 
 
 def copies_for_text(record_hashes, quota, text_cap, reuse_cap) -> dict[int, int]:
@@ -378,7 +377,7 @@ def _continuous(key, active):
 
 class TestConditionBalance:
     def test_a_candidates_turn_restriction_held_unless_a_timing_check_failed(self):
-        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.condition_balance import ConditionSide, turn_step_condition
 
         key = _key("kings_assassin")
         lines = _Lines({key: _KINGS_ASSASSIN})
@@ -390,14 +389,14 @@ class TestConditionBalance:
                 ConditionSide.UNMET)
 
     def test_a_candidate_with_no_turn_restriction_carries_none(self):
-        from effects.domain.corpus_curation import turn_step_condition
+        from effects.domain.condition_balance import turn_step_condition
 
         key = _key("shock")
         lines = _Lines({key: "SP$ DealDamage | NumDmg$ 2 | SorcerySpeed$ True"})
         assert turn_step_condition(_decision(key, ("casting_speed",)), lines) is None
 
     def test_a_resolved_clause_reads_its_own_segments_condition(self):
-        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.condition_balance import ConditionSide, turn_step_condition
 
         key = _key("pump_then_draw")
         lines = _Lines({key: _TURN_CLAUSE})
@@ -408,7 +407,7 @@ class TestConditionBalance:
         assert turn_step_condition(_resolution(key, []), lines) is None
 
     def test_a_listed_static_reads_its_lines_active(self):
-        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.condition_balance import ConditionSide, turn_step_condition
 
         key = _key("anthem", "static")
         lines = _Lines({key: _TURN_STATIC})
@@ -420,7 +419,7 @@ class TestConditionBalance:
         """A responsible static whose key no sidecar describes (or whose tree
         the run has no root for) is no line, never an error that stops a
         survey worker hours in."""
-        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.condition_balance import ConditionSide, turn_step_condition
         from effects.domain.records import (
             Candidate,
             FailedCheck,
@@ -446,7 +445,7 @@ class TestConditionBalance:
     def test_a_last_known_copy_of_the_static_s_host_does_not_answer_for_it(self):
         """A last-known copy (no zone) lists the lines its card had; the static
         holds or not on the card the board holds."""
-        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.condition_balance import ConditionSide, turn_step_condition
         from effects.domain.state_snapshot import CardLine
         from tests.unit.effects.builders import make_entity
 
@@ -460,7 +459,8 @@ class TestConditionBalance:
             ConditionSide.MET)
 
     def test_the_condition_joins_the_outcome_signature(self):
-        from effects.domain.corpus_curation import cell_signature, outcome_signature
+        from effects.domain.condition_balance import cell_signature
+        from effects.domain.outcome_signature import outcome_signature
         from effects.domain.sampling import SamplingClass
 
         key = _key("kings_assassin")
@@ -491,7 +491,7 @@ class TestConditionBalance:
         assert plan.keyless[met] == rate_plan(10, 6)
 
     def test_a_condition_seen_on_one_side_only_is_named(self):
-        from effects.domain.corpus_curation import (
+        from effects.domain.condition_balance import (
             ConditionSide,
             TurnStepCondition,
             condition_key,

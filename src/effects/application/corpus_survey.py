@@ -50,13 +50,8 @@ from typing import TYPE_CHECKING
 from effects.application.parallel_map import run_parallel
 from effects.application.rule_counts import RuleCounts
 from effects.domain.closed_lists import keywords_named, subtypes_named
-from effects.domain.corpus_curation import (
-    CONDITION_CLASSES,
-    condition_key,
-    game_hash,
-    record_hash,
-    turn_step_condition,
-)
+from effects.domain.condition_balance import CONDITION_CLASSES, condition_key, turn_step_condition
+from effects.domain.corpus_curation import game_hash, record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import (
     BuildCorpusError,
@@ -392,7 +387,7 @@ class ShardSurvey:
     carried: Counter[tuple[str, str]] = field(default_factory=Counter)
     #: ``turn_action`` records by subkind, written to no stratum (FR-059).
     turn_actions: Counter[str] = field(default_factory=Counter)
-    #: ``corpus_curation.condition_key`` -> kept records (FR-056).
+    #: ``condition_balance.condition_key`` -> kept records (FR-056).
     condition_counts: Counter[tuple[str, str, str]] = field(default_factory=Counter)
     #: The closed lists' names (FR-052, FR-053), read off every kept record.
     subtypes: set[str] = field(default_factory=set)
