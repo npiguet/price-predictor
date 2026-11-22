@@ -127,6 +127,15 @@ class KeyResolver:
         self._options[key] = found
         return found
 
+    def room_of(self, key: ProvenanceKey) -> str | None:
+        """The dungeon room ``key``'s line is (:attr:`SidecarLine.room`);
+        None for any other line and a key no sidecar describes."""
+        try:
+            line = self.resolve(key)[1]
+        except KeyError:
+            return None
+        return line.room if line is not None else None
+
     def board_keys(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
         """The keys a board line of ``key`` reads as slots
         (:meth:`ProvenanceSidecar.board_keys`): a saga's bare keyword key is

@@ -269,6 +269,9 @@ class _EveryLine:
     def board_keys(self, key):
         return (key,)
 
+    def room_of(self, key):
+        return None
+
 
 def _board() -> StateSnapshot:
     """A gen-3 board: card slots that list ``lines``."""

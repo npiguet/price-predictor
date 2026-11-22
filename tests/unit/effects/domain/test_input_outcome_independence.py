@@ -44,13 +44,15 @@ def _e_for(key) -> tuple[float, ...]:
 
 @dataclass(frozen=True)
 class _Lines:
-    """Every key has a line, is no keyword, has no modes and is one slot."""
+    """Every key has a line, is no keyword, has no modes, is one slot and
+    is no dungeon room."""
 
     e_for: Callable = _e_for
     has_line: Callable = lambda key: True
     keyword_of: Callable = lambda key: None
     options_for: Callable = lambda key: ()
     board_keys: Callable = lambda key: (key,)
+    room_of: Callable = lambda key: None
 
 
 def _no_verdict(candidate):

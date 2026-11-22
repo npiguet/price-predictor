@@ -978,6 +978,13 @@ def command_zone_entities(record: EffectRecord) -> tuple[EntityState, ...]:
     )
 
 
+def dungeon_room(record: EffectRecord, entity_id: str) -> str | None:
+    """The room a player is in, where ``entity_id`` is their dungeon; None
+    for any other card."""
+    return next((found.room for found in record.state.global_.dungeons
+                 if found.dungeon == entity_id), None)
+
+
 def has_card_slot(entity: EntityState) -> bool:
     """Whether a snapshot entity gets a ``[CARD]`` slot: every one but a
     library card below its library's top (root spec § 9.3).
@@ -1184,6 +1191,10 @@ class LineLookup(Protocol):
     def board_keys(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
         """The keys a board line of ``key`` reads as slots, one per line: a
         saga's bare keyword key is its chapter lines; any other key itself."""
+
+    def room_of(self, key: ProvenanceKey) -> str | None:
+        """The dungeon room the key's line is (its ``ValidRoom$``); None for
+        any other line. Asked of a dungeon's lines only."""
 
 
 #: The ``stripped`` map of a record built as collected: no entity loses a keyword.
@@ -1422,7 +1433,7 @@ class SurfaceBuilder:
             chosen_types=chosen_subtypes(entity),
             counters=counter_rows(entity),
         )]
-        for line in slot_lines(entity, self.lines.board_keys):
+        for line in self._slot_lines(entity, record):
             if not self._keeps(line, gone=gone, dropout=dropout):
                 continue
             modes = self.lines.options_for(line.key)
@@ -1439,6 +1450,19 @@ class SurfaceBuilder:
                 ))
                 keys.append(mode_key)
         return block, keys
+
+    def _slot_lines(self, entity: EntityState, record: EffectRecord) -> tuple[SlotLine, ...]:
+        """:func:`slot_lines`, a dungeon's room lines active for the room its
+        player is in only (``global.dungeons[].room``, root spec § 9.3)."""
+        lines = slot_lines(entity, self.lines.board_keys)
+        room = dungeon_room(record, entity.id)
+        if room is None:
+            return lines
+        return tuple(self._in_room(line, _name_key(room)) for line in lines)
+
+    def _in_room(self, line: SlotLine, room: str) -> SlotLine:
+        named = self.lines.room_of(line.key)
+        return line if named is None else replace(line, active=_name_key(named) == room)
 
     def _keeps(self, line: SlotLine, *, gone: frozenset[str], dropout: float) -> bool:
         """Whether one of an entity's lines gets a slot."""

@@ -455,6 +455,13 @@ class SurfaceBatcher:
             return (key,)
         return self.resolver.board_keys(key)
 
+    def room_of(self, key) -> str | None:
+        """The dungeon room ``key``'s line is (``KeyResolver.room_of``); none
+        for an overridden key or a keyword line."""
+        if key in self._overrides or keyword_line_fragment(key) is not None:
+            return None
+        return self.resolver.room_of(key)
+
     def _keys_of(self, text: str) -> list:
         """The keys resolved to ``text`` so far: how a truncation is named."""
         overridden = [key for key, (known, _) in self._overrides.items() if known == text]
@@ -579,3 +586,6 @@ class _StagedLines:
 
     def board_keys(self, key) -> tuple:
         return self.batcher.board_keys(key)
+
+    def room_of(self, key) -> str | None:
+        return self.batcher.room_of(key)

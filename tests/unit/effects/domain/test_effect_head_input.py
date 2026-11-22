@@ -81,13 +81,15 @@ def _e_for(key: ProvenanceKey):
 @dataclass(frozen=True)
 class _Lines:
     """A :class:`LineLookup` from plain callables: every key has a line, is
-    no keyword, has no modes and is one slot unless a test says otherwise."""
+    no keyword, has no modes, is one slot and no dungeon room unless a test
+    says otherwise."""
 
     e_for: Callable = _e_for
     has_line: Callable = lambda key: True
     keyword_of: Callable = lambda key: None
     options_for: Callable = lambda key: ()
     board_keys: Callable = lambda key: (key,)
+    room_of: Callable = lambda key: None
 
 
 def _flags(slot) -> dict[str, float]:

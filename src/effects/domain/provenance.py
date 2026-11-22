@@ -7,6 +7,7 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -263,6 +264,10 @@ class RoleSpan:
     role: Role
 
 
+#: A dungeon room trigger's room, up to the next parameter or segment.
+_VALID_ROOM = re.compile(r"ValidRoom\$\s*([^|\[]+)")
+
+
 @dataclass(frozen=True, slots=True)
 class SidecarLine:
     """One rendered line of a converted card, with everything that produced it.
@@ -295,6 +300,13 @@ class SidecarLine:
         if not (0 <= self.line_index < len(rendered)):
             return None
         return rendered[self.line_index][self.prose_offset:]
+
+    @property
+    def room(self) -> str | None:
+        """The dungeon room a room line is, as its ``RoomEntered`` trigger's
+        ``ValidRoom$`` names it (``Trapped Entry``); None on any other line."""
+        found = _VALID_ROOM.search(self.script_text or "")
+        return found.group(1).strip() if found else None
 
     # Two answers to "which keyword is this line", which part company on a
     # ``Keyword`` line whose script carries parameters (``Equip:2:::ReduceCost$
