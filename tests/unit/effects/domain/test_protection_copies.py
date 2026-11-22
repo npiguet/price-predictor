@@ -6,7 +6,7 @@ protection quality, and that each copy's payload, rewritten by rule 702.16, give
 from __future__ import annotations
 
 import random
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -65,19 +65,38 @@ PLAYERS = (PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0, max_la
            PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0, max_land_plays=1))
 
 
-def _creature(entity_id: str, toughness: int = 2, *, subtypes=("goblin",), colours=("R",),
-              keywords=(), **overrides) -> EntityState:
+@dataclass(frozen=True, slots=True)
+class CreatureLook:
+    """What ``_creature`` gives a creature beside its id and toughness."""
+
+    subtypes: tuple[str, ...] = ("goblin",)
+    colours: tuple[str, ...] = ("R",)
+    keywords: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SpellLook:
+    """What ``_spell`` gives a stack object beside its id."""
+
+    types: tuple[str, ...] = ("sorcery",)
+    subtypes: tuple[str, ...] = ()
+    colours: tuple[str, ...] = ("R",)
+    mana_value: int = 2
+
+
+def _creature(entity_id: str, toughness: int = 2, *, look: CreatureLook = CreatureLook(),
+              ) -> EntityState:
     return make_entity(
-        entity_id, entity_id, controller="P1", types=("creature",), subtypes=subtypes,
-        colors=colours, pt=PowerToughness(base=(2, toughness)), mana_value=2, lines=(),
-        granted_temporary=GrantedTemporary(keywords=tuple(keywords)), **overrides,
+        entity_id, entity_id, controller="P1", types=("creature",), subtypes=look.subtypes,
+        colors=look.colours, pt=PowerToughness(base=(2, toughness)), mana_value=2, lines=(),
+        granted_temporary=GrantedTemporary(keywords=tuple(look.keywords)),
     )
 
 
-def _spell(entity_id: str = "S1", *, types=("sorcery",), subtypes=(), colours=("R",),
-           mana_value: int = 2) -> EntityState:
-    return make_entity(entity_id, entity_id, zone="stack", types=types, subtypes=subtypes,
-                       colors=colours, mana_value=mana_value, lines=())
+def _spell(entity_id: str = "S1", *, look: SpellLook = SpellLook()) -> EntityState:
+    return make_entity(entity_id, entity_id, zone="stack", types=look.types,
+                       subtypes=look.subtypes, colors=look.colours,
+                       mana_value=look.mana_value, lines=())
 
 
 def _state(entities, **refs):
@@ -168,7 +187,7 @@ def _copy(record: EffectRecord, rule: str, seed: int = 0):
 
 class TestRareQualities:
     def test_a_creature_offers_its_types_creature_types_and_conditions(self):
-        found = rare_qualities(_creature("E1", subtypes=("goblin", "warrior")))
+        found = rare_qualities(_creature("E1", look=CreatureLook(subtypes=("goblin", "warrior"))))
         assert found == (
             ProtectionQuality(QualityKind.CARD_TYPE, "creature"),
             ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"),
@@ -179,8 +198,8 @@ class TestRareQualities:
         )
 
     def test_a_non_creature_offers_no_creature_type(self):
-        aura = _spell(types=("enchantment",), subtypes=("aura",), colours=("W", "U"),
-                      mana_value=4)
+        aura = _spell(look=SpellLook(
+            types=("enchantment",), subtypes=("aura",), colours=("W", "U"), mana_value=4))
         assert {q.kind for q in rare_qualities(aura)} == {
             QualityKind.CARD_TYPE, QualityKind.CONDITION}
         assert ProtectionQuality(QualityKind.CONDITION, "multicolored") in rare_qualities(aura)
@@ -359,8 +378,9 @@ class TestDamagePrevented:
         assert qualify(_sweeper(_creature("E1", 4), events=events)) == ()
 
     def test_the_quality_covers_every_source_of_the_damage(self):
-        goblin, elf = _creature("A1", subtypes=("goblin",)), _creature("A2", subtypes=("elf",))
-        blocker = _creature("B1", 6, subtypes=("wall",), colours=("W",))
+        goblin = _creature("A1", look=CreatureLook(subtypes=("goblin",)))
+        elf = _creature("A2", look=CreatureLook(subtypes=("elf",)))
+        blocker = _creature("B1", 6, look=CreatureLook(subtypes=("wall",), colours=("W",)))
         record = make_record(
             RecordKind.COMBAT, generation=3, state=_state((goblin, elf, blocker)),
             payload=CombatPayload(events=(
@@ -489,7 +509,7 @@ def _char(entity):
 
 
 def _blockers(*blockers: EntityState, must_block=()) -> EffectRecord:
-    attacker = _creature("A1", subtypes=("human",), colours=("W",))
+    attacker = _creature("A1", look=CreatureLook(subtypes=("human",), colours=("W",)))
     return make_record(
         RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS, generation=3,
         what_if=False, state=_state((attacker, *blockers)),
@@ -501,9 +521,9 @@ def _blockers(*blockers: EntityState, must_block=()) -> EffectRecord:
 
 class TestBlockIllegal:
     def test_every_blocker_with_the_quality_becomes_forbidden(self):
-        record = _blockers(_creature("B1", subtypes=("goblin",)),
-                           _creature("B2", subtypes=("elf",), colours=("G",)),
-                           _creature("B3", subtypes=("goblin",), colours=("B",)),
+        record = _blockers(_creature("B1", look=CreatureLook(subtypes=("goblin",))),
+                           _creature("B2", look=CreatureLook(subtypes=("elf",), colours=("G",))),
+                           _creature("B3", look=CreatureLook(subtypes=("goblin",), colours=("B",))),
                            must_block=("B3",))
         goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
         found = qualify(record)
@@ -522,9 +542,10 @@ class TestBlockIllegal:
     def test_a_changeling_has_every_creature_type_and_is_forbidden(self):
         """702.73a: protection from Goblins keeps a changeling from blocking,
         whatever creature types its card lists."""
-        record = _blockers(_creature("B1", subtypes=("goblin",)),
-                           _creature("B2", subtypes=("shapeshifter",), keywords=("changeling",)),
-                           _creature("B3", subtypes=("elf",)))
+        record = _blockers(_creature("B1", look=CreatureLook(subtypes=("goblin",))),
+                           _creature("B2", look=CreatureLook(
+                               subtypes=("shapeshifter",), keywords=("changeling",))),
+                           _creature("B3", look=CreatureLook(subtypes=("elf",))))
         goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
         (only,) = [replace(o, qualities=(goblins,)) for o in qualify(record)
                    if o.covered == ("B1",)]
@@ -533,7 +554,7 @@ class TestBlockIllegal:
         assert copy.record.payload.legal_blockers == ("B3",)
 
     def test_protection_from_everything_forbids_every_blocker(self):
-        record = _blockers(_creature("B1"), _creature("B2", subtypes=("elf",)))
+        record = _blockers(_creature("B1"), _creature("B2", look=CreatureLook(subtypes=("elf",))))
         copy = _copy(record, EVERYTHING_RULE)
         assert copy.record.payload.legal_blockers == ()
 
@@ -545,7 +566,7 @@ class TestBlockIllegal:
 
 
 def _aura_spell(extra=()) -> EffectRecord:
-    aura = _spell("S1", types=("enchantment",), subtypes=("aura",), colours=("B",))
+    aura = _spell("S1", look=SpellLook(types=("enchantment",), subtypes=("aura",), colours=("B",)))
     events = (
         Event(type=EventType.ATTACHED, subjects=("S1",), params={"cause": "S1"}),
         Event(type=EventType.PT_CHANGE, subjects=("E1",),
@@ -624,7 +645,8 @@ class TestDraw:
 
     def test_the_same_seed_draws_the_same_copy(self):
         """And the seed is what decides: some other seed draws another copy."""
-        record = _sweeper(_creature("E1", subtypes=("goblin", "elf")), _creature("E2"))
+        record = _sweeper(_creature("E1", look=CreatureLook(subtypes=("goblin", "elf"))),
+                          _creature("E2"))
         first, again = _copy(record, "702.16e", seed=7), _copy(record, "702.16e", seed=7)
         assert first == again
         assert any(_copy(record, "702.16e", seed=seed) != first for seed in range(8))
