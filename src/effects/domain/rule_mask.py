@@ -21,6 +21,12 @@ whatever its value, an empty list included) trains everything at full weight; it
 are masked like any other. A record with no ``curation`` (a lethality copy, a
 record no build curated) trains at full weight.
 
+A reader that weighs a validation row (the explained-deviance sample, the
+freeze's standard errors) reads a copy :func:`weighed_by_class`: its weights
+scaled by its ``curation.class_weight``, the weight that gives a validation
+stratum the training stratum's class mix (FR-059a). Training and every reader
+taking each record once read :func:`copy_weights` alone.
+
 An output is named as the map names it: a per-entity field, a verdict or
 global field, ``created_objects`` for the whole created-objects head, or
 ``gate`` for the affected gate. The training-only value, script-API and MLM
@@ -32,7 +38,7 @@ Torch-free, so the surface collation and the heads' targets read one answer.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 #: The affected gate, as the rule map names it.
@@ -56,27 +62,30 @@ class CopyWeights:
     ``full`` names the outputs that train at weight one, ``elsewhere`` is
     every other output's weight. ``gate_entities``, when set, are the only
     entities the affected gate trains on, at weight one; None trains the gate
-    on every entity at its output weight.
+    on every entity at its output weight. ``scale`` multiplies every weight:
+    a validation row's class weight where a reader weighs rows
+    (:func:`weighed_by_class`), one everywhere else.
     """
 
     elsewhere: float = 1.0
     full: frozenset[str] = frozenset()
     gate_entities: frozenset[str] | None = None
+    scale: float = 1.0
 
     def weight(self, output: str) -> float:
         """The weight of ``output`` on this copy."""
-        return 1.0 if output in self.full else self.elsewhere
+        return self.scale * (1.0 if output in self.full else self.elsewhere)
 
     def gate_weight(self, subject: str | None) -> float:
         """The affected gate's weight at one entity of this copy."""
         if self.gate_entities is None:
             return self.weight(GATE_OUTPUT)
-        return 1.0 if subject in self.gate_entities else 0.0
+        return self.scale if subject in self.gate_entities else 0.0
 
     @property
     def unmasked(self) -> bool:
-        """Whether every output trains at full weight."""
-        return self.elsewhere == 1.0 and self.gate_entities is None
+        """Whether every output trains at weight one."""
+        return self.elsewhere == 1.0 and self.gate_entities is None and self.scale == 1.0
 
 
 #: A copy every output trains at full weight.
@@ -113,3 +122,12 @@ def copy_weights(
     if share == 1.0:
         return FULL_WEIGHT
     return CopyWeights(share, full)
+
+
+def weighed_by_class(weights: CopyWeights, record) -> CopyWeights:
+    """``weights`` scaled by ``record``'s ``curation.class_weight`` (FR-059a):
+    how a reader weighing validation rows reads a copy. A record with no
+    ``curation`` weighs one."""
+    curation = getattr(record, "curation", None)
+    scale = 1.0 if curation is None else float(curation.class_weight)
+    return weights if scale == 1.0 else replace(weights, scale=weights.scale * scale)

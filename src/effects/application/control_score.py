@@ -16,7 +16,8 @@ host half of every item it holds is prepared and cached —
   the tag's outcome entities (their mean; research R1), or at the record for
   a verdict, global or created-objects output;
 - the deviance sample's copies, as scoring steps under the run's
-  ``--rule-mask``, the way validation scores its own records.
+  ``--rule-mask``, the way validation scores its own records, each copy
+  weighed by its ``class_weight`` (FR-059a).
 
 A record several items read is prepared once. The cache stays on the host,
 packed (``host_cache``: each tensor in its smallest exact form), and is
@@ -71,15 +72,17 @@ per-entity head's fields and gate (by their names), the verdict head's fields
 at ``[ACT]``, the global head's at ``[GLOBAL]`` and the created-objects
 head's slot columns and overflow flag (``<head>.<term>``,
 ``selection_set.deviance_item``). The model's loss on each is the deviance
-steps' own, weighed by the run's ``--rule-mask`` as training weighs it, and
-its constant-prediction loss the floor's over the same steps
-(``loss_floor.constant_predictor_losses``); a term whose constant loss is at
-or below ``--deviance-floor`` is left out.
+steps' own, weighed by the run's ``--rule-mask`` as training weighs it and
+by each copy's ``class_weight``, and its constant-prediction loss the
+floor's over the same steps, the constant fitted at those weights
+(``loss_floor.constant_predictor_losses``, ``weighted``); a term whose
+constant loss is at or below ``--deviance-floor`` is left out. A copy of
+class weight k reads as k repeated copies would.
 
 Only the prepared half's games and the records its items name are taken
-from a stratum, each distinct record once (a validation stratum repeats a
-record's row for every added copy, FR-068a), copies only for the deviance
-sample.
+from a stratum, each distinct record once (a validation stratum holds a
+record's row once plus once for every added copy, FR-068a), copies only for
+the deviance sample.
 
 In a training run the validator (``validation_pass.Validator.prepare``)
 builds one :class:`ControlScorer` at startup from the run's
@@ -139,7 +142,13 @@ from effects.domain.grid_edits import CellRead, TextOverride
 from effects.domain.head_decoding import HeadReading, direction_balance, expected_magnitude
 from effects.domain.loss_floor import constant_predictor_losses
 from effects.domain.probe_readouts import READOUTS, item_score
-from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT, RuleMask, copy_weights
+from effects.domain.rule_mask import (
+    CREATED_OBJECTS_OUTPUT,
+    GATE_OUTPUT,
+    RuleMask,
+    copy_weights,
+    weighed_by_class,
+)
 from effects.domain.sampling import SamplingClass
 from effects.domain.score_scales import (
     auc,
@@ -214,7 +223,8 @@ class ScoringPreparer(Protocol):
     def scoring_batcher(self) -> SurfaceBatcher: ...
 
     def prepare_scoring_step(self, records: Sequence[EffectRecord],
-                             fields: tuple[FieldSpec, ...]) -> DeviceStep: ...
+                             fields: tuple[FieldSpec, ...], *,
+                             class_weighted: bool = False) -> DeviceStep: ...
 
 
 class CheckpointPreparer:
@@ -238,9 +248,12 @@ class CheckpointPreparer:
                               rng=random.Random(f"{self.seed}:control"))
 
     def prepare_scoring_step(self, records: Sequence[EffectRecord],
-                             fields: tuple[FieldSpec, ...]) -> DeviceStep:
+                             fields: tuple[FieldSpec, ...], *,
+                             class_weighted: bool = False) -> DeviceStep:
         records = list(records)
         weights = [copy_weights(record, self.mask, self.rule_outputs) for record in records]
+        if class_weighted:
+            weights = [weighed_by_class(copy, record) for copy, record in zip(weights, records)]
         return scoring_step(records, weights, fields, self.scoring_batcher())
 
 
@@ -981,7 +994,7 @@ class ControlScorer:
                     forward, losses, collectors, device=_device_of(forward))
         if kept is not None:
             cache.floors[key] = deviance_items(
-                constant_predictor_losses(kept.sample, fields=fields))
+                constant_predictor_losses(kept.sample, fields=fields, weighted=True))
         explained = explained_deviance(parts.means(), cache.floors[key],
                                        kept=cache.kept_items, deviance_floor=self.deviance_floor)
         if not explained and self.strict:
@@ -1101,12 +1114,12 @@ def _prepare_stratum(
         if copy:
             sampled.append(record)
             if len(sampled) >= batch_size:
-                steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
+                steps.append(_deviance_step(preparer, sampled, union))
                 sampled = []
     plain.flush()
     edited.flush()
     if sampled:
-        steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
+        steps.append(_deviance_step(preparer, sampled, union))
     unplaced = plain.unplaced + edited.unplaced
     if unplaced:
         logger.info("Control score, %s %s: %d read(s) at an entity the record gives no slot, "
@@ -1174,6 +1187,13 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
         if positions:
             held.append(positions)
     return out
+
+
+def _deviance_step(preparer: ScoringPreparer, sampled: list,
+                   union: tuple[FieldSpec, ...]) -> DeviceStep:
+    """One packed scoring step of deviance-sample copies, each weighed by its
+    ``class_weight`` (FR-059a)."""
+    return pack(preparer.prepare_scoring_step(sampled, union, class_weighted=True))
 
 
 def _kept_items(selection: SelectionSet, stratum: str, mask: str, *,

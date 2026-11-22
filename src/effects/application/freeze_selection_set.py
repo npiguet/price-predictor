@@ -28,7 +28,8 @@ their labels alone:
      (``selection_set.grid_records_needed``), since each grid record is read
      once per cell in every epoch (research E2, T160).
    - The deviance sample: every copy of the half, then the
-     ``deviance_cap`` of smallest keyed hash.
+     ``deviance_cap`` of smallest keyed hash, each copy weighed by its
+     ``curation.class_weight`` (FR-059a) in its standard errors.
 3. Balance with ``r`` by a seeded draw: each rule's larger polarity to r times
    its smaller, each probe type to r times the smallest probe type that
    meets the item target (E3). The grids are edit grids, whose cells all edit
@@ -42,7 +43,11 @@ their labels alone:
    field or the gate, a verdict or global field, a created-objects slot
    column or the overflow flag (``selection_set.deviance_item``), the terms
    the loss denominators divide by — and its standard error is computed
-   under both rule-mask modes, from a :class:`DevianceLosses` reader.
+   under both rule-mask modes, from a :class:`DevianceLosses` reader:
+   ``√(Σ_g S_g²) / Σ_g S_g``, ``S_g`` summing over game g's copies the
+   constant's loss times the copy's mask weight times its class weight,
+   which is ``1/√n_eff`` for Kish's effective number of games
+   ``n_eff = (Σ_g S_g)² / Σ_g S_g²``.
 5. Every component's ``√(Σ SEᵢ²) / m`` at most ``max_component_error`` (both
    modes for the deviance component), and every grid cell holding records;
    otherwise the freeze refuses, naming stratum, half and component.

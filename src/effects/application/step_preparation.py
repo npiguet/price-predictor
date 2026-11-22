@@ -57,6 +57,7 @@ from effects.domain.rule_mask import (
     FULL_WEIGHT,
     CopyWeights,
     copy_weights,
+    weighed_by_class,
 )
 from effects.domain.sampling import (
     batches_without_replacement,
@@ -314,14 +315,20 @@ class StepPreparer:
         return step, len(copies)
 
     def prepare_scoring_step(
-        self, records: Sequence[EffectRecord], fields: tuple[FieldSpec, ...],
+        self, records: Sequence[EffectRecord], fields: tuple[FieldSpec, ...], *,
+        class_weighted: bool = False,
     ) -> DeviceStep:
         """One validation batch's host half: no augmentation, no copies, and
         only the shipped heads' targets, under the run's rule mask as training
         reads its own records (FR-068a), so the loss denominators and the
-        explained deviance weigh each output as training does."""
+        explained deviance weigh each output as training does.
+        ``class_weighted`` scales each row by its ``class_weight`` (FR-059a),
+        for the explained-deviance sample alone."""
         records = list(records)
-        return scoring_step(records, self.rule_mask(records), fields, self.scoring_batcher())
+        weights = self.rule_mask(records)
+        if class_weighted:
+            weights = [weighed_by_class(copy, record) for copy, record in zip(weights, records)]
+        return scoring_step(records, weights, fields, self.scoring_batcher())
 
     def rule_mask(self, records: Sequence[EffectRecord]) -> list[CopyWeights]:
         """Each record's weights under ``--rule-mask`` (FR-061)."""
@@ -596,8 +603,9 @@ def _record_head_rows(records, weights: list[CopyWeights], layout: RecordHeadLay
 def _created_objects_rows(records, weights: list[CopyWeights]) -> tuple | None:
     """The created-objects head's ``(targets, mask, known)`` over ``records``,
     or None where none supervises it. The rule mask (FR-061) weighs the head
-    whole: a copy weighing it zero does not supervise it, and a fractional
-    weight scales every column the record says."""
+    whole: a copy weighing it zero does not supervise it, and any other
+    weight but one (a soft share, a class weight) scales every column the
+    record says."""
     weight = [copy.weight(CREATED_OBJECTS_OUTPUT) for copy in weights]
     created = [
         supervises_created_objects(record) and share > 0
@@ -611,6 +619,6 @@ def _created_objects_rows(records, weights: list[CopyWeights]) -> tuple | None:
         for record, wanted in zip(records, created)
     ]
     known = torch.tensor([said for _, said in made])
-    if any(0 < share < 1 for share in weight):
+    if any(share not in (0.0, 1.0) for share in weight):
         known = known.float() * torch.tensor(weight).unsqueeze(-1)
     return torch.tensor([target for target, _ in made]), torch.tensor(created), known

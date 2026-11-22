@@ -15,7 +15,7 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 - The three FR-116 checks never built (matched real-vs-fork agreement, the probe-diff re-check, the role-polarity probe) report `NOT_IMPLEMENTED`, printed `[todo]`, on every run. They are not skips: the corpus holds the records they would read.
 - Every geometry check keys the cache on the checkpoint's encoding surface, so on a script checkpoint two lines sharing prose but not script stay two points.
 - A line query that resolves to nothing is named in the report as unresolved, never dropped.
-- Every breakdown and both gates read each record once. A validation stratum repeats a record's row for every added copy.
+- Every breakdown and both gates read each record once, at no class weight. A validation stratum holds a record's row once plus once for every added copy, so a reader of distinct records dedupes by `record_id`.
 - The selection set's reporting half is scored once, through the control score's own scorer. The selection halves belong to the trainer.
 
 ## The gates
@@ -55,4 +55,6 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 - Freeze it with `scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus DIR`; no checkpoint is needed. The freeze exits 1 when a half holds fewer than 300 games, a component's standard error passes 0.05 or a grid cell is empty.
 - A freeze never replaces a set already there by another: the same set again is a no-op, another exits 1 and leaves the file alone.
 - Its halves (`selection`, `reporting`) are the manifest's and are never reassigned.
+- The deviance sample is the one reader of a validation stratum that weighs its rows: each copy is weighed by its `curation.class_weight` (`rule_mask.weighed_by_class`) and every best constant is fitted at those weights (`loss_floor.constant_predictor_losses(weighted=True)`, `selection_deviance.TargetDevianceLosses`), so a row of class weight k scores as k repeated rows. Probes, grids, rule tests, the per-epoch validation loss and the gates take each record once and read no class weight; a second multiplication by it would square the class mix.
+- A deviance item's standard error is `√(Σ_g S_g²) / Σ_g S_g` (`score_scales.loss_ratio_standard_error`), `S_g` summing over game g's copies the constant's loss times the copy's rule-mask weight times its class weight: `1/√n_eff`, with `n_eff = (Σ S_g)² / Σ S_g²` Kish's effective number of games.
 - `train-effect-model` scores the selection halves each epoch and refuses a corpus with no set, or one frozen against another corpus or edited. `evaluate-effect-model` and the probes score the reporting halves.

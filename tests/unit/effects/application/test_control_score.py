@@ -241,9 +241,10 @@ class _Spy:
         batcher.prepare = recorded
         return batcher
 
-    def prepare_scoring_step(self, records, fields):
+    def prepare_scoring_step(self, records, fields, *, class_weighted=False):
         self.seen += [r.record_id for r in records]
-        return self.preparer.prepare_scoring_step(records, fields)
+        return self.preparer.prepare_scoring_step(records, fields,
+                                                  class_weighted=class_weighted)
 
 
 @pytest.fixture(scope="module")

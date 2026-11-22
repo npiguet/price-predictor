@@ -15,6 +15,11 @@ Every count and amount is scored by a negative binomial (FR-063): a mean, the
 ``exp`` of a learned log-dispersion. The variance is ``μ + μ²/θ``, so a field
 whose amounts spread wider than a Poisson's stops paying for it in its mean,
 and as ``θ → ∞`` the loss is the Poisson's.
+
+A best constant and a dispersion fit take optional ``weights``, one per
+target row: the weighted maximum-likelihood constant, which a reader weighing
+validation rows by their class weight fits (FR-059a), so a row of weight k
+fits as k repeated rows would. Without weights every row counts once.
 """
 
 from __future__ import annotations
@@ -122,11 +127,27 @@ def negative_binomial_deviance(
     return 2.0 * (ratio - (target + theta) * torch.log((target + theta) / (mean + theta)))
 
 
-def _mean(values: torch.Tensor) -> torch.Tensor:
-    """The mean, or zero where nothing was selected."""
+def _mean(values: torch.Tensor, weights: torch.Tensor | None = None) -> torch.Tensor:
+    """The mean, or with ``weights`` (one a row) the weighted mean over the
+    leading dim; zero where nothing was selected."""
     if values.numel() == 0:
         return torch.zeros(())
-    return values.float().mean()
+    if weights is None:
+        return values.float().mean()
+    rows = _row_weights(weights, values)
+    return (values.float() * rows).sum(dim=0) / rows.sum(dim=0).clamp(min=_RATE_FLOOR)
+
+
+def _row_weights(weights: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
+    """One weight a row of ``values``, broadcast over its trailing dims."""
+    rows = weights.float().reshape(-1, *([1] * (values.dim() - 1)))
+    return rows.expand_as(values)
+
+
+def _counts(classes: torch.Tensor, weights: torch.Tensor | None, minlength: int) -> torch.Tensor:
+    """How often each class occurs, each at its weight where given."""
+    flat = None if weights is None else weights.float().reshape(-1)
+    return torch.bincount(classes.long().reshape(-1), weights=flat, minlength=minlength).float()
 
 
 def _logit(rate: torch.Tensor) -> torch.Tensor:
@@ -140,15 +161,22 @@ def _log_frequencies(counts: torch.Tensor) -> torch.Tensor:
     return torch.log((counts / counts.sum()).clamp(min=_RATE_FLOOR))
 
 
-def _log_rate(magnitudes: torch.Tensor) -> torch.Tensor:
+def _log_rate(magnitudes: torch.Tensor, weights: torch.Tensor | None = None) -> torch.Tensor:
     """The log rate the count loss reads back as the mean magnitude."""
-    return torch.log(_mean(magnitudes).clamp(min=_RATE_FLOOR))
+    return torch.log(_mean(magnitudes, weights).clamp(min=_RATE_FLOOR))
 
 
-def fit_log_dispersion(target: torch.Tensor, mean: torch.Tensor) -> torch.Tensor:
+def _summed(values: torch.Tensor, weights: torch.Tensor | None) -> torch.Tensor:
+    return values.sum() if weights is None else (values * weights).sum()
+
+
+def fit_log_dispersion(
+    target: torch.Tensor, mean: torch.Tensor, weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     """The maximum-likelihood log-dispersion of counts ``target``, each under
-    its own constant ``mean`` (broadcast to it): a moment estimate, then
-    Newton steps in ``log θ`` on the likelihood, bounded as the loss reads it.
+    its own constant ``mean`` (broadcast to it), each row at its weight where
+    ``weights`` is given: a moment estimate, then Newton steps in ``log θ`` on
+    the likelihood, bounded as the loss reads it.
 
     The means stay fixed: for any ``θ`` the likelihood's best constant mean
     is the sample mean, so the joint fit is the mean, then ``θ``. Counts no
@@ -158,21 +186,22 @@ def fit_log_dispersion(target: torch.Tensor, mean: torch.Tensor) -> torch.Tensor
     mu = torch.broadcast_to(mean.double(), target.shape).reshape(-1).clamp(min=_RATE_FLOOR)
     if y.numel() == 0:
         return torch.tensor(LOG_DISPERSION_MAX)
-    excess = float(((y - mu) ** 2 - mu).sum())
+    w = None if weights is None else _row_weights(weights, target).double().reshape(-1)
+    excess = float(_summed((y - mu) ** 2 - mu, w))
     if excess <= 0.0:
         return torch.tensor(LOG_DISPERSION_MAX)
-    log_theta = torch.tensor(float((mu ** 2).sum()) / excess, dtype=torch.float64).log()
+    log_theta = torch.tensor(float(_summed(mu ** 2, w)) / excess, dtype=torch.float64).log()
     log_theta = log_theta.clamp(LOG_DISPERSION_MIN, LOG_DISPERSION_MAX)
     for _ in range(_NEWTON_STEPS):
         theta = log_theta.exp()
-        score = (
+        score = _summed(
             torch.digamma(y + theta) - torch.digamma(theta) + log_theta + 1.0
-            - torch.log(theta + mu) - (theta + y) / (theta + mu)
-        ).sum()
-        curvature = (
+            - torch.log(theta + mu) - (theta + y) / (theta + mu), w,
+        )
+        curvature = _summed(
             torch.polygamma(1, y + theta) - torch.polygamma(1, theta) + 1.0 / theta
-            - 2.0 / (theta + mu) + (theta + y) / (theta + mu) ** 2
-        ).sum()
+            - 2.0 / (theta + mu) + (theta + y) / (theta + mu) ** 2, w,
+        )
         # In log θ: d/du = θ·score, d²/du² = θ²·curvature + θ·score.
         gradient = theta * score
         hessian = theta * theta * curvature + gradient
@@ -217,9 +246,11 @@ class FieldKind(ABC):
     @abstractmethod
     def best_constant(
         self, target: torch.Tensor, *, arity: int, cap: float | None,
+        weights: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """The maximum-likelihood constant prediction under :meth:`loss`: the
-        field's columns, or a scalar for a one-column type."""
+        field's columns, or a scalar for a one-column type; each target row at
+        its weight where ``weights`` (one a row) is given."""
 
     def magnitude(self, target: torch.Tensor, *, cap: float | None) -> torch.Tensor:
         """The magnitude the count term trains on, so anything scoring that
@@ -244,8 +275,8 @@ class _Binary(FieldKind):
             prediction[..., 0], target.float(), reduction="none",
         )
 
-    def best_constant(self, target, *, arity, cap):
-        return _logit(_mean(target))
+    def best_constant(self, target, *, arity, cap, weights=None):
+        return _logit(_mean(target, weights))
 
 
 class _MultiBinary(FieldKind):
@@ -256,8 +287,10 @@ class _MultiBinary(FieldKind):
             prediction, target.float(), reduction="none",
         ).sum(-1)
 
-    def best_constant(self, target, *, arity, cap):
-        return _logit(target.float().mean(dim=0))
+    def best_constant(self, target, *, arity, cap, weights=None):
+        if weights is None:
+            return _logit(target.float().mean(dim=0))
+        return _logit(_mean(target, weights))
 
 
 class _Count(FieldKind):
@@ -269,8 +302,8 @@ class _Count(FieldKind):
             _required(log_dispersion, self),
         )
 
-    def best_constant(self, target, *, arity, cap):
-        return _log_rate(self.magnitude(target, cap=cap))
+    def best_constant(self, target, *, arity, cap, weights=None):
+        return _log_rate(self.magnitude(target, cap=cap), weights)
 
     def magnitude(self, target, *, cap):
         return counted(target.float(), cap)
@@ -294,12 +327,11 @@ class _SignedDelta(FieldKind):
             _required(log_dispersion, self),
         )
 
-    def best_constant(self, target, *, arity, cap):
-        direction = delta_direction(capped(target, cap)).reshape(-1)
-        frequencies = _log_frequencies(
-            torch.bincount(direction, minlength=len(DIRECTIONS)).float()
-        )
-        return torch.cat([frequencies, _log_rate(self.magnitude(target, cap=cap)).reshape(1)])
+    def best_constant(self, target, *, arity, cap, weights=None):
+        direction = delta_direction(capped(target, cap))
+        frequencies = _log_frequencies(_counts(direction, weights, len(DIRECTIONS)))
+        rate = _log_rate(self.magnitude(target, cap=cap), weights)
+        return torch.cat([frequencies, rate.reshape(1)])
 
     def magnitude(self, target, *, cap):
         return capped(target.float(), cap).abs()
@@ -313,10 +345,8 @@ class _Categorical(FieldKind):
             prediction.reshape(-1, arity), target.reshape(-1).long(), reduction="none",
         ).reshape(target.shape)
 
-    def best_constant(self, target, *, arity, cap):
-        return _log_frequencies(
-            torch.bincount(target.long().reshape(-1), minlength=arity).float()
-        )
+    def best_constant(self, target, *, arity, cap, weights=None):
+        return _log_frequencies(_counts(target, weights, arity))
 
 
 FIELD_KINDS: dict[FieldType, FieldKind] = {

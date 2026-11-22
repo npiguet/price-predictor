@@ -15,7 +15,10 @@ weight, and every term's loss is weighted as the run weights it (research
 T3): a target the mask drops is not in the sample, a fractional one counts
 at its weight. The constant itself is fitted over the targets the sample
 holds, unweighted; under the soft mask that puts the denominator a little
-above the weighted optimum's loss, never below it.
+above the weighted optimum's loss, never below it. ``weighted`` fits it at
+the targets' weights instead: the explained-deviance sample's, whose rows
+carry their class weight (FR-059a), so a row of class weight k fits as k
+repeated rows did.
 
 The constant is each term's maximum-likelihood one: a rate, class
 frequencies, or a mean, and for a count a negative-binomial dispersion fitted
@@ -199,7 +202,7 @@ def _supervising_rows(head: str, targets: tuple) -> tuple | None:
 
 
 def constant_predictor_losses(
-    sample: TargetSample, *, fields: tuple[FieldSpec, ...],
+    sample: TargetSample, *, fields: tuple[FieldSpec, ...], weighted: bool = False,
 ) -> HeadLosses:
     """The loss the best constant prediction reaches on ``sample``, by head
     and term, in nats per record over all its records.
@@ -208,14 +211,15 @@ def constant_predictor_losses(
     they supervise, so each floor carries the loss's masking. A term whose
     supervised targets never vary reports exactly zero: it has no floor. A
     term the sample never supervises is absent, but for the per-entity gate.
-    ``fields`` are the per-entity fields to cover.
+    ``fields`` are the per-entity fields to cover; ``weighted`` fits each
+    constant at the targets' weights.
     """
-    losses: HeadLosses = {PER_ENTITY: _per_entity_losses(sample, fields)}
+    losses: HeadLosses = {PER_ENTITY: _per_entity_losses(sample, fields, weighted)}
     for head, layout in RECORD_LAYOUTS.items():
-        found = _record_head_losses(sample, head, layout)
+        found = _record_head_losses(sample, head, layout, weighted)
         if found:
             losses[head] = found
-    created = _created_objects_losses(sample)
+    created = _created_objects_losses(sample, weighted)
     if created:
         losses[Head.CREATED_OBJECTS.value] = created
     return {head: losses[head] for head in FLOOR_HEADS if head in losses}
@@ -239,15 +243,17 @@ def _as_sample(batches: Sequence[EntityTargetBatch] | TargetSample) -> TargetSam
 
 def constant_predictor_outputs(
     batches: Sequence[EntityTargetBatch] | TargetSample, *, fields: tuple[FieldSpec, ...],
+    weighted: bool = False,
 ) -> torch.Tensor:
     """The best constant prediction for the gate and each active field: one
     ``(PER_ENTITY_WIDTH,)`` vector, each slice the maximum-likelihood constant
-    under that field's own loss."""
+    under that field's own loss, at the targets' weights where ``weighted``."""
     sample = _as_sample(batches)
     vector = torch.zeros(PER_ENTITY_WIDTH)
     # The gate is one binary column over every entity it trains on.
     vector[GATE_INDEX] = FIELD_KINDS[FieldType.BINARY].best_constant(
         sample.gate, arity=1, cap=MAGNITUDE_CAP,
+        weights=sample.gate_weights if weighted else None,
     )
     for spec in fields:
         target = sample.supervised(spec.name)
@@ -256,16 +262,19 @@ def constant_predictor_outputs(
         start, end = FIELD_SLICES[spec.name]
         vector[start:end] = FIELD_KINDS[spec.type].best_constant(
             target, arity=spec.arity, cap=MAGNITUDE_CAP,
+            weights=sample.weights(spec.name) if weighted else None,
         )
     return vector
 
 
 def constant_predictor_dispersion(
     batches: Sequence[EntityTargetBatch] | TargetSample, *, fields: tuple[FieldSpec, ...],
+    weighted: bool = False,
 ) -> torch.Tensor:
     """The constant predictor's log-dispersions, in :data:`DISPERSED_FIELDS`
-    order: each count's fitted around its constant mean (FR-063). A field the
-    sample does not score keeps the upper bound, which nothing reads."""
+    order: each count's fitted around its constant mean (FR-063), at the
+    targets' weights where ``weighted``. A field the sample does not score
+    keeps the upper bound, which nothing reads."""
     sample = _as_sample(batches)
     log_dispersion = torch.full((len(DISPERSED_FIELDS),), LOG_DISPERSION_MAX)
     for spec in fields:
@@ -273,15 +282,24 @@ def constant_predictor_dispersion(
         if target is None or not spec.type.has_magnitude:
             continue
         magnitude = FIELD_KINDS[spec.type].magnitude(target, cap=MAGNITUDE_CAP)
+        weights = sample.weights(spec.name) if weighted else None
+        centre = magnitude.mean() if weights is None else weighted_mean(magnitude, weights)
         log_dispersion[DISPERSION_INDEX[spec.name]] = fit_log_dispersion(
-            magnitude, magnitude.mean(),
+            magnitude, centre, weights,
         )
     return log_dispersion
 
 
-def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...]) -> dict[str, float]:
-    vector = constant_predictor_outputs(sample, fields=fields)
-    log_dispersion = constant_predictor_dispersion(sample, fields=fields)
+def weighted_mean(values: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
+    """The mean of ``values`` over its rows, each row at its weight (one a row)."""
+    rows = weights.double().reshape(-1, *([1] * (values.dim() - 1)))
+    return ((values.double() * rows).sum(0) / rows.sum(0).clamp(min=FLOOR_EPSILON)).float()
+
+
+def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...],
+                       weighted: bool = False) -> dict[str, float]:
+    vector = constant_predictor_outputs(sample, fields=fields, weighted=weighted)
+    log_dispersion = constant_predictor_dispersion(sample, fields=fields, weighted=weighted)
     records = max(sample.records, 1)
     gate = sample.gate
     losses = {GATE_TERM: _weighted_sum(FIELD_KINDS[FieldType.BINARY].terms(
@@ -328,52 +346,106 @@ class RecordHeadConstant:
     degenerate: frozenset[str]
 
 
-def record_head_constant(batches: Sequence[tuple], layout: RecordHeadLayout) -> RecordHeadConstant:
+def record_head_constant(batches: Sequence[tuple], layout: RecordHeadLayout, *,
+                         weighted: bool = False) -> RecordHeadConstant:
     """The maximum-likelihood constant of a per-record head over ``batches``,
     each a ``(target, mask[, …])`` of the head's: each member's rate, class
     frequencies or mean over the records setting its field, and each count's
-    dispersion fitted around that mean."""
-    masks = [_field_mask(targets[1], layout) for targets in batches]
+    dispersion fitted around that mean; where ``weighted``, each record at
+    its weight on the field, the floating mask's value."""
+    held = _HeadRows.of(batches, layout, weighted=weighted)
     outputs = torch.zeros(layout.width)
     log_dispersion = torch.full((len(layout.dispersed),), LOG_DISPERSION_MAX)
     degenerate: set[str] = set()
     supervised: set[str] = set()
     for position, spec in enumerate(layout.fields):
-        first, last = layout.target_slices[spec.name]
-        rows = [
-            targets[0][mask[:, position]][:, first:last].float()
-            for targets, mask in zip(batches, masks)
-        ]
-        wanted = torch.cat(rows) if rows else torch.zeros(0, last - first)
+        wanted, weights = held.field(position)
         if wanted.shape[0] == 0:
             continue
         supervised.add(str(spec.name))
         if _degenerate(wanted):
             degenerate.add(str(spec.name))
-        kind = FIELD_KINDS[spec.type]
-        member_width = spec.type.width(spec.arity)
-        start, _ = layout.slices[spec.name]
-        for member in range(spec.count):
-            offset = start + member * member_width
-            outputs[offset:offset + member_width] = kind.best_constant(
-                wanted[:, member], arity=spec.arity, cap=MAGNITUDE_CAP,
-            )
-        if spec.type.has_magnitude:
-            magnitude = kind.magnitude(wanted, cap=MAGNITUDE_CAP)
-            log_dispersion[layout.dispersion_index[str(spec.name)]] = fit_log_dispersion(
-                magnitude, magnitude.mean(0),
-            )
+        _fit_field(_FieldFit(outputs, log_dispersion, layout), spec, wanted, weights)
     return RecordHeadConstant(outputs, log_dispersion, frozenset(supervised),
                               frozenset(degenerate))
 
 
+@dataclass(frozen=True)
+class _HeadRows:
+    """A per-record head's batches, each one's ``(records, fields)`` mask as
+    bools and, where weighted, as weights."""
+
+    batches: Sequence[tuple]
+    layout: RecordHeadLayout
+    masks: list[torch.Tensor]
+    weights: list[torch.Tensor] | None
+
+    @classmethod
+    def of(cls, batches: Sequence[tuple], layout: RecordHeadLayout, *,
+           weighted: bool) -> _HeadRows:
+        masks = [_field_mask(targets[1], layout) for targets in batches]
+        weights = [_mask_weights(targets[1], layout) for targets in batches] if weighted else None
+        return cls(batches, layout, masks, weights)
+
+    def field(self, position: int) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """One field's targets over the records setting it, and their weights
+        (None unweighted)."""
+        first, last = self.layout.target_slices[self.layout.fields[position].name]
+        rows = [targets[0][mask[:, position]][:, first:last].float()
+                for targets, mask in zip(self.batches, self.masks)]
+        wanted = torch.cat(rows) if rows else torch.zeros(0, last - first)
+        if self.weights is None:
+            return wanted, None
+        return wanted, torch.cat([held[mask[:, position], position]
+                                  for held, mask in zip(self.weights, self.masks)])
+
+
+@dataclass(frozen=True)
+class _FieldFit:
+    """Where a per-record head's constant is written: its outputs and its
+    log-dispersions, in its layout."""
+
+    outputs: torch.Tensor
+    log_dispersion: torch.Tensor
+    layout: RecordHeadLayout
+
+
+def _fit_field(fit: _FieldFit, spec: FieldSpec, wanted: torch.Tensor,
+               weights: torch.Tensor | None) -> None:
+    """One per-record field's best constant into ``fit.outputs`` and, for a
+    count, its dispersion into ``fit.log_dispersion``."""
+    kind = FIELD_KINDS[spec.type]
+    member_width = spec.type.width(spec.arity)
+    start, _ = fit.layout.slices[spec.name]
+    for member in range(spec.count):
+        offset = start + member * member_width
+        fit.outputs[offset:offset + member_width] = kind.best_constant(
+            wanted[:, member], arity=spec.arity, cap=MAGNITUDE_CAP, weights=weights,
+        )
+    if spec.type.has_magnitude:
+        magnitude = kind.magnitude(wanted, cap=MAGNITUDE_CAP)
+        centre = magnitude.mean(0) if weights is None else weighted_mean(magnitude, weights)
+        fit.log_dispersion[fit.layout.dispersion_index[str(spec.name)]] = fit_log_dispersion(
+            magnitude, centre, weights,
+        )
+
+
+def _mask_weights(mask: torch.Tensor, layout: RecordHeadLayout) -> torch.Tensor:
+    """A per-record head's mask as ``(records, fields)`` weights: a floating
+    mask's values, one where a boolean mask is set."""
+    weights = mask.detach().cpu().float()
+    if weights.dim() == 1:
+        weights = weights.unsqueeze(-1).expand(-1, len(layout.fields))
+    return weights
+
+
 def _record_head_losses(
-    sample: TargetSample, head: str, layout: RecordHeadLayout,
+    sample: TargetSample, head: str, layout: RecordHeadLayout, weighted: bool = False,
 ) -> dict[str, float]:
     batches = sample.head_batches(head)
     if not batches:
         return {}
-    constant = record_head_constant(batches, layout)
+    constant = record_head_constant(batches, layout, weighted=weighted)
     summed = torch.zeros(len(layout.fields), dtype=torch.float64)
     for targets in batches:
         # The head's own mask, a weight per record under the rule mask.
@@ -391,16 +463,19 @@ def _record_head_losses(
 
 def record_head_record_losses(
     target: torch.Tensor, mask: torch.Tensor, layout: RecordHeadLayout,
+    weights: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
     """Each field's constant-prediction loss on each record, unweighted: the
     head's best constant over these records (:func:`record_head_constant`),
-    scored on every record that sets the field and zero elsewhere. A field
-    no record sets is absent; one whose targets never vary is all zero, as
-    its floor is (research E4's ``ℓ_i``)."""
+    each at its weight where ``weights`` (one a record) is given, scored on
+    every record that sets the field and zero elsewhere. A field no record
+    sets is absent; one whose targets never vary is all zero, as its floor
+    is (research E4's ``ℓ_i``)."""
     flags = _field_mask(mask, layout)
     if not flags.any():
         return {}
-    constant = record_head_constant([(target, flags)], layout)
+    fitted = flags if weights is None else flags.float() * weights.float().unsqueeze(-1)
+    constant = record_head_constant([(target, fitted)], layout, weighted=weights is not None)
     rows = record_head_row_terms(
         constant.outputs.expand(int(target.shape[0]), layout.width), target, flags, layout,
         log_dispersion=constant.log_dispersion,
@@ -423,7 +498,7 @@ def _field_mask(mask: torch.Tensor, layout: RecordHeadLayout) -> torch.Tensor:
 # ── the created-objects head ──
 
 
-def _created_objects_losses(sample: TargetSample) -> dict[str, float]:
+def _created_objects_losses(sample: TargetSample, weighted: bool = False) -> dict[str, float]:
     batches = [
         _created_rows(targets) for targets in sample.head_batches(Head.CREATED_OBJECTS.value)
     ]
@@ -432,7 +507,7 @@ def _created_objects_losses(sample: TargetSample) -> dict[str, float]:
         return {}
     target = torch.cat([rows[0] for rows in batches])
     known = torch.cat([rows[1] for rows in batches])
-    outputs, log_dispersion = _created_constant(target, known)
+    outputs, log_dispersion = _created_constant(target, known, weighted=weighted)
     summed = torch.zeros(len(CREATED_TERMS), dtype=torch.float64)
     for wanted, said in batches:
         summed += created_objects_terms(
@@ -458,17 +533,19 @@ def _created_objects_losses(sample: TargetSample) -> dict[str, float]:
 
 def created_objects_record_losses(
     target: torch.Tensor, mask: torch.Tensor, known: torch.Tensor | None = None,
+    weights: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
     """Each created-objects term's constant-prediction loss on each record,
     unweighted: the head's best constant over the records ``mask`` selects,
-    scored on each of them and zero elsewhere, a term summed over the slots
-    as the head's loss sums it. A term no record says is absent; one whose
-    targets never vary is all zero, as its floor is (research E4's ``ℓ_i``)."""
+    each at its weight where ``weights`` (one a record) is given, scored on
+    each of them and zero elsewhere, a term summed over the slots as the
+    head's loss sums it. A term no record says is absent; one whose targets
+    never vary is all zero, as its floor is (research E4's ``ℓ_i``)."""
     rows = _created_rows((target, mask, known))
     if rows is None:
         return {}
     wanted, said = rows
-    outputs, log_dispersion = _created_constant(wanted, said)
+    outputs, log_dispersion = _created_record_constant(wanted, said, mask, weights)
     terms = created_objects_row_terms(
         outputs.expand(int(wanted.shape[0]), CREATED_OBJECTS_WIDTH), wanted,
         known=said, log_dispersion=log_dispersion,
@@ -491,6 +568,18 @@ def created_objects_record_losses(
     return out
 
 
+def _created_record_constant(
+    wanted: torch.Tensor, said: torch.Tensor, mask: torch.Tensor, weights: torch.Tensor | None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The created-objects head's best constant over the records ``mask``
+    selects (``wanted`` and ``said`` are theirs), each at its weight where
+    ``weights`` (one a record of ``mask``) is given."""
+    if weights is None:
+        return _created_constant(wanted, said)
+    chosen = weights.float()[mask.detach().bool().cpu()].unsqueeze(-1)
+    return _created_constant(wanted, said * chosen, weighted=True)
+
+
 def _created_rows(targets: tuple) -> tuple[torch.Tensor, torch.Tensor] | None:
     """The supervising records' ``(target, known)``, or None for none."""
     target, mask = targets[0], targets[1]
@@ -502,11 +591,13 @@ def _created_rows(targets: tuple) -> tuple[torch.Tensor, torch.Tensor] | None:
 
 
 def _created_constant(
-    target: torch.Tensor, known: torch.Tensor,
+    target: torch.Tensor, known: torch.Tensor, *, weighted: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The created-objects head's best constant: each slot column's rate or
-    mean over the records that say it, the overflow flag's rate, and a
-    log-dispersion per magnitude column, shared by the slots."""
+    mean over the records that say it, each at the weight ``known`` gives
+    it, the overflow flag's rate, and a log-dispersion per magnitude column,
+    shared by the slots; where ``weighted``, the overflow rate and the
+    dispersions are fitted at ``known``'s weights too."""
     slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
     wanted = target[:, :-1].reshape(slots)
     said = known[:, :-1].reshape(slots)
@@ -525,20 +616,30 @@ def _created_constant(
             rate = mean[slot, column].reshape(1)
             kind = count if magnitudes.start <= column < magnitudes.stop else binary
             columns[slot, column] = kind.best_constant(rate, arity=1, cap=None)
-    overflow = target[:, -1][known[:, -1] > 0]
+    overflow = known[:, -1] > 0
     outputs = torch.cat([
         columns.reshape(-1),
-        binary.best_constant(overflow, arity=1, cap=None).reshape(1),
+        binary.best_constant(target[:, -1][overflow], arity=1, cap=None,
+                             weights=known[:, -1][overflow] if weighted else None).reshape(1),
     ])
+    return outputs, _created_dispersion(wanted, said, mean, weighted=weighted)
+
+
+def _created_dispersion(wanted: torch.Tensor, said: torch.Tensor, mean: torch.Tensor, *,
+                        weighted: bool) -> torch.Tensor:
+    """A log-dispersion per created-objects magnitude column, shared by the
+    slots, fitted around each slot's mean."""
     log_dispersion = torch.full((len(CREATED_DISPERSED),), LOG_DISPERSION_MAX)
-    for index, column in enumerate(range(magnitudes.start, magnitudes.stop)):
+    for index, column in enumerate(range(CREATED_MAGNITUDES.start, CREATED_MAGNITUDES.stop)):
         present = said[..., column] > 0
         if not present.any():
             continue
         values = wanted[..., column]
         means = mean[:, column].expand_as(values)
-        log_dispersion[index] = fit_log_dispersion(values[present], means[present])
-    return outputs, log_dispersion
+        log_dispersion[index] = fit_log_dispersion(
+            values[present], means[present],
+            said[..., column][present] if weighted else None)
+    return log_dispersion
 
 
 class PartsMean:

@@ -22,14 +22,17 @@ selected against the one on disk); writing the same set again leaves the file as
 2. Collect, over each half's distinct records (a record's first occurrence), probe records, grid
    records, rule-test records (detector tags; not aimed, not a fork, not interventional, not
    synthetic, not polarity `other`, not on the review list, rule `trained`, no unpatched confirmed
-   departure) and the deviance sample (every copy, the smallest keyed hashes up to 16,384 a half). A
+   departure) and the deviance sample (every copy, the smallest keyed hashes up to 16,384 a half,
+   each copy weighed by its `curation.class_weight`; FR-059a). A
    grid keeps one record a game, then the fewest records by smallest keyed hash that bring its
    worst-case standard error to 0.09, at most 512, both recorded in `settings`. The probe items come
    from the probe scripts through ports (`scripts/effect_knowledge_probes/selection.py`).
 3. Balance with r = 4 by seeded draw: rule-test polarities, probe types (against the smallest type
    that meets the item target), record-drawn grid cells.
 4. Compute each item's worst-case standard error (research Decision E4; a deviance item's under both
-   rule masks, for every shipped head's output terms). Leave out items above 0.1 and name them, a rule with one polarity only as such. Name
+   rule masks, for every shipped head's output terms, `√(Σ_g S_g²) / Σ_g S_g` with `S_g` summing over
+   game g's copies the constant's loss times the copy's mask weight times its class weight, the
+   constant fitted at the class weights). Leave out items above 0.1 and name them, a rule with one polarity only as such. Name
    every rule whose detector finds no test record in a half as `untested`, and in every half every
    rule whose manifest `effective_outputs` is empty as untested for having no output to read.
 5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05` and every grid cell non-empty; otherwise exit 1
@@ -63,8 +66,10 @@ component's items are the terms the loss denominators divide by: each per-entity
 `[GLOBAL]`, and each created-objects slot column summed over the slots plus the overflow flag (items
 named `<head>.<term>`: `verdict.can_play`, `global.turn_structure_change`, `created_objects.count`).
 A term's loss is the deviance sample's under the run's mask, the verdict and global fields weighed by
-their own output's weight and the created-objects terms by the head's; its constant loss is the
-best constant's over the same copies. The component leaves out items whose constant loss is at or
+their own output's weight and the created-objects terms by the head's, every copy also weighed by its
+`class_weight`; its constant loss is the best constant's over the same copies at the same weights,
+the constant fitted at them. A copy of class weight k scores as k repeated copies. Probes, grids and
+rule tests read no class weight. The component leaves out items whose constant loss is at or
 below `--deviance-floor`.
 
 Selection reads the selection halves each epoch, on the averaged weights, under bf16 autocast: its

@@ -153,8 +153,10 @@ def loss_ratio_standard_error(
 ) -> float:
     """An explained deviance's worst-case standard error, ``√(Σ_g S_g²) / Σ_g S_g``,
     ``S_g`` summing ``w_i·ℓ_i`` over game g's records: ``ℓ_i`` the constant
-    prediction's loss on record i and ``w_i`` its weight in the component.
-    Infinite when the records carry no weighted loss."""
+    prediction's loss on record i and ``w_i`` its weight in the component
+    (a deviance copy's rule-mask weight times its class weight). It is
+    ``1/√n_eff``, ``n_eff = (Σ_g S_g)² / Σ_g S_g²`` Kish's effective number
+    of games. Infinite when the records carry no weighted loss."""
     games, losses = list(games), list(losses)
     weights = [1.0] * len(losses) if weights is None else list(weights)
     by_game: dict[Hashable, float] = defaultdict(float)
