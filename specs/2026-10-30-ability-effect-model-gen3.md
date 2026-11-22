@@ -804,7 +804,7 @@ places:
 
 | where | inputs |
 |---|---|
-| card slot | subtypes, face state, is a copy, is a token, role (§ 9.3), pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
+| card slot | subtypes, face state, is a copy, is a token, role (§ 9.3), pending-event details, can't block and can't attack, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
 | player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit, pending-event subject |
@@ -835,6 +835,9 @@ places:
     carry, with an "other" column;
   - card slot: whether the card is its subject, and whether the card is its source;
   - player slot: whether the player is its subject.
+- A card slot reads two of Forge's hidden keywords as bits: can't block (`CARDNAME can't
+  block.`, `CARDNAME can't attack or block.`) and can't attack (`CARDNAME can't attack.`,
+  `CARDNAME can't attack or block.`). No other hidden keyword is read.
 - A rewrite record's pending event is its incoming event. Its outgoing event, result and
   replacing ability stay outputs.
 - Summoning sickness reads on a permanent on the battlefield only.

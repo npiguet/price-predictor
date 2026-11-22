@@ -85,19 +85,21 @@ def test_the_heads_keep_their_widths():
 
 
 def test_the_card_slot_keeps_its_width_and_parts():
-    """A card slot is 543 features in 18 parts. A combat record's damage
+    """A card slot is 545 features in 19 parts. A combat record's damage
     assignment is no part of it (D3): it reads the first-strike rule
     without the keyword. The role is (finding 4.7): six columns, the five
     of :data:`ENTITY_ROLES` and "other". The pending event's part is three
     columns: a pending event, the card is its subject, the card is its
-    source (finding 4.8). The width moves with the kept keyword flags and
-    the other lists the parts one-hot over."""
+    source; the hidden keywords' two: can't block, can't attack (finding
+    4.8). The width moves with the kept keyword flags and the other lists
+    the parts one-hot over."""
     record = record_from_dict(gen3_fixture_records()[0])
     entity = record.state.entities[0]
-    assert len(card_features(entity, record)) == 543
+    assert len(card_features(entity, record)) == 545
     assert list(card_segments(entity, record)) == [
         "characteristics", "face_state", "mana_cost", "printed_loyalty_defense",
-        "status", "role", "keyword_flags", "relation_to_act", "designations", "x_paid",
+        "status", "role", "keyword_flags", "hidden_keywords", "relation_to_act",
+        "designations", "x_paid",
         "chosen", "costs_paid", "history", "order_rank", "stack_extras",
         "pending_event", "command_zone", "comparable_amounts",
     ]

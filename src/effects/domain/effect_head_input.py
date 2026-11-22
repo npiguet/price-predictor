@@ -728,6 +728,22 @@ def _push_keyword_flags(out, entity: EntityState, record, masked) -> None:
     out += flags
 
 
+#: Forge's hidden keywords, as it writes them, that forbid blocking and
+#: attacking outright: every unconditional spelling the review pilots'
+#: ``granted_temporary.hidden_keywords`` carry.
+CANT_BLOCK_KEYWORDS = frozenset({"CARDNAME can't block.", "CARDNAME can't attack or block."})
+CANT_ATTACK_KEYWORDS = frozenset({"CARDNAME can't attack.", "CARDNAME can't attack or block."})
+
+
+def _push_hidden_keywords(out, entity: EntityState, record, masked) -> None:
+    """Can't block, can't attack: Forge's hidden keywords no line carries, a
+    pump's or a static's "can't block this turn", which the blocker and
+    attacker legality outputs turn on. No other hidden keyword is read."""
+    hidden = {keyword.strip() for keyword in entity.granted_temporary.hidden_keywords or ()}
+    out.append(1.0 if hidden & CANT_BLOCK_KEYWORDS else 0.0)
+    out.append(1.0 if hidden & CANT_ATTACK_KEYWORDS else 0.0)
+
+
 def _push_relation_to_act(out, entity: EntityState, record: EffectRecord, masked) -> None:
     """Its relation to the acting player, the targets and the source, then the
     turn, priority and control inputs of root spec § 9.5."""
@@ -900,6 +916,7 @@ _CARD_PARTS = (
     ("status", _push_status),
     ("role", _push_role),
     ("keyword_flags", _push_keyword_flags),
+    ("hidden_keywords", _push_hidden_keywords),
     ("relation_to_act", _push_relation_to_act),
     ("designations", _push_designations),
     ("x_paid", _push_x_paid),
