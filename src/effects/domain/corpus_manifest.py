@@ -368,6 +368,12 @@ class CorpusManifest:
     left_out_of_half: dict[str, dict[str, tuple[str, ...]]] = field(
         default_factory=dict, metadata=_reads(_nested_tuple_map),
     )
+    #: Rules some record is tagged with and no stratum writes a copy of (the
+    #: tags of refused and turn-action records sit under the ``refused``
+    #: source of ``rule_counts``): a rule the counts name that no ``rules`` row
+    #: of the training or a validation stratum writes. Sorted. Outside the
+    #: digest: it reports, it decides nothing.
+    tagged_nowhere_written: tuple[str, ...] = field(default=(), metadata=_reads(tuple))
     #: ``turn_action`` records written to no stratum, by subkind (FR-059).
     turn_action_left_out: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
@@ -528,6 +534,7 @@ class CorpusManifest:
     _OUTSIDE_THE_DIGEST = (
         "no_acting_text_scripts", "decode_off_list", "damaged_tails", "join_gaps",
         "unsupervised_events", "code_version", "sidecar_digest",
+        "tagged_nowhere_written",
     )
 
     def digest(self) -> str:

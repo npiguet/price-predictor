@@ -758,6 +758,14 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
         handle.write(gzip.compress((json.dumps(odd) + "\n").encode("utf-8") + _line(unrooted)
                                    + _line(game_end_marker(unrooted))))
 
+    # A records set naming a tree the run has no root for is refused, naming it.
+    with pytest.raises(BuildCorpusError, match="variant-scripts"):
+        a_corpus.build(tmp_path / "unrooted", keyword_definitions=definitions)
+    assert not (tmp_path / "unrooted").exists(), "nothing under --output was touched"
+    with open(a_corpus.records / "full-strength" / "run.0-extra.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress((json.dumps(odd) + "\n").encode("utf-8")
+                                   + _line(game_end_marker(unrooted))))
+
     manifest = a_corpus.build(tmp_path / "curated", keyword_definitions=definitions).load()
 
     assert manifest.record_flags["combat"]["fork"] == 1
@@ -766,9 +774,7 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
     assert manifest.keyword_definitions_digest == hashlib.sha256(b"{}").hexdigest()
     assert manifest.decode_off_list == {"global.combat_substep 'third_strike'": 1}
     bears = "cardsfolder/g/grizzly_bears.txt"
-    assert manifest.join_gaps == {
-        "unconfigured": {"variant-scripts": 1},
-        "runtime_only": {bears: 5}, "dropped": {bears: 5}}
+    assert manifest.join_gaps == {"runtime_only": {bears: 4}, "dropped": {bears: 4}}
     # The two passes ask the sidecars different numbers of times: a join gap
     # alone is no sign the corpus changed between them.
     assert "changed between the passes" not in caplog.text
@@ -816,24 +822,16 @@ def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_b
 ):
     """The selection set is found by the corpus digest: a copy of the raw
     corpus elsewhere, or a second build in the same process, must reach the
-    same one. What reading met (a damaged last member, a key of a tree with
-    no root) is recorded outside the digest, the damaged shard by its path
+    same one. What reading met (a damaged last member, a key read as no line)
+    is recorded outside the digest, the damaged shard by its path
     under --records-dir."""
     import gzip
     import shutil
-
-    from effects.domain.state_snapshot import CombatStatus
 
     good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
     with open(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", "wb") as handle:
         handle.write(gzip.compress(good))
         handle.write(gzip.compress(good)[:12] + bytes(40))
-    variant = ProvenanceKey("variant-scripts/x_variant.txt", 0, "spell", 0)
-    unrooted = _combat("g-clean-1.variant", "g-clean-1")
-    unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
-        make_entity("E0", "x variant", lines=lines_of(printed=(variant,)),
-                    combat=CombatStatus(attacking="P1")),)))
-    write_ended_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
 
     first = a_corpus.build(tmp_path / "first").load()
     again = a_corpus.build(tmp_path / "again").load()
@@ -1323,15 +1321,17 @@ def test_a_variant_text_is_capped_and_weighted_like_any_other(variant_build):
     assert script_reading(_VARIANT_TEXT) in variant_build.load().rarity
 
 
-def test_without_the_variant_tree_a_variant_text_resolves_to_nothing(
+def test_without_the_variant_tree_the_build_is_refused(
     tmp_path: Path, a_corpus_with_variants,
 ):
-    """The state this flag exists to end; pinned so the fix cannot regress."""
+    """The state this flag exists to end is refused, naming the tree, before
+    anything under ``--output`` is touched."""
     fixture, _ = a_corpus_with_variants
 
-    store = fixture.build(tmp_path / "curated")
+    with pytest.raises(BuildCorpusError, match="variant-scripts"):
+        fixture.build(tmp_path / "curated")
 
-    assert script_reading(_VARIANT_TEXT) not in store.load().rarity
+    assert not (tmp_path / "curated").exists()
 
 
 def test_the_manifest_records_the_variant_tree_it_read(a_corpus_with_variants, variant_build):

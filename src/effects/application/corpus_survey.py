@@ -119,6 +119,12 @@ class ReadConfig:
     rule_outputs: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
+#: The source a tag is counted under when its record is one no stratum can
+#: hold (a refused record, a ``turn_action`` record): a manifest-side tally
+#: beside :class:`RuleSource`'s members, which name where a held record came from.
+REFUSED_SOURCE = "refused"
+
+
 def protection_hash(record_id: str, *, seed: int) -> int:
     """The hash a record's protection copies (FR-058) are planned under: a
     second, distinct entry beside the record's own in the rule budgets."""
@@ -525,9 +531,10 @@ class _ShardSurveyor:
         )
         self.protection_rules = frozenset(config.budgeted) & PROTECTION_RULES
         self.pending: list[_PendingRecord] = []
-        #: ``(game, fork, aimed, tags)`` of every tagged record read, refused
-        #: ones included, counted once the game's source is known.
-        self.counted: list[tuple[str, bool, bool, tuple[RuleTag, ...]]] = []
+        #: ``(game, fork, aimed, tags, held)`` of every tagged record read,
+        #: counted once the game's source is known; ``held`` is False for a
+        #: record no stratum can hold, counted under ``refused`` whatever its game.
+        self.counted: list[tuple[str, bool, bool, tuple[RuleTag, ...], bool]] = []
 
     def observe(self, record: EffectRecord) -> None:
         self.out.records += 1
@@ -536,11 +543,12 @@ class _ShardSurveyor:
             self.out.cut.records += 1
             return
         self._note_game_properties(record)
-        found = self._count_tags(record)
-        if record.kind is RecordKind.TURN_ACTION:
+        turn_action = record.kind is RecordKind.TURN_ACTION
+        klass = None if turn_action else self.context.admit(record, self.out.refusals)
+        found = self._count_tags(record, held=klass is not None)
+        if turn_action:
             self.out.turn_actions[str(record.subkind)] += 1
             return
-        klass = self.context.admit(record, self.out.refusals)
         if klass is None:
             return
         self.out.kept[klass] += 1
@@ -582,14 +590,17 @@ class _ShardSurveyor:
         if record_names_held_out_card(record, self.config.read.held_out):
             games.held_out.add(game)
 
-    def _count_tags(self, record: EffectRecord) -> TagResult:
+    def _count_tags(self, record: EffectRecord, *, held: bool) -> TagResult:
+        """Tag ``record`` and count its tags; ``held`` is False for a record
+        no stratum can hold (refused, or a turn action), whose tags are
+        counted under :data:`REFUSED_SOURCE` and no natural source."""
         found = self.context.tags(record)
         counts = self.out.rule_counts
         counts.not_countable |= found.not_countable
         counts.review |= {(record.record_id, tag.scenario) for tag in found.review}
         if found.tags:
             self.counted.append((record.game_id, counts_as_fork(record),
-                                 record.aimed_at is not None, found.tags))
+                                 record.aimed_at is not None, found.tags, held))
             self._note_carried(record, found.tags)
         return found
 
@@ -676,10 +687,7 @@ class _ShardSurveyor:
 
     def finish(self) -> ShardSurvey:
         seat_games = self.out.games.random_seat
-        for game, fork, aimed, tags in self.counted:
-            source = RuleSource.of(fork=fork, aimed=aimed, random_seat_game=game in seat_games)
-            for tag in tags:
-                self.out.rule_counts.counts[tag.rule, str(tag.polarity), str(source)] += 1
+        self._count_sources(seat_games)
         # The records the tags were read on: a cut game's are not.
         self.out.rule_counts.records = self.out.records - self.out.cut.records
         candidates = self._candidate_games()
@@ -702,6 +710,15 @@ class _ShardSurveyor:
             if inventory
         ]
         return self.out
+
+    def _count_sources(self, seat_games: set[str]) -> None:
+        """Every tag read, under the source its record came from."""
+        counts = self.out.rule_counts.counts
+        for game, fork, aimed, tags, held in self.counted:
+            source = REFUSED_SOURCE if not held else str(RuleSource.of(
+                fork=fork, aimed=aimed, random_seat_game=game in seat_games))
+            for tag in tags:
+                counts[tag.rule, str(tag.polarity), source] += 1
 
     def _candidate_games(self) -> frozenset[str]:
         """Games placement may put in a validation stratum: every one naming a

@@ -1,7 +1,9 @@
 """Which records a curated corpus refuses on sight (FR-148): four rules.
 
 A resolution with no acting ability, or whose acting keys all map to no
-rendered line, is an outcome with no cause; a record with more events than
+rendered line, is an outcome with no cause, and a trigger, continuous or
+decision record whose acting keys all name no sidecar would train with no
+acting text; a record with more events than
 any single ability resolves is a whole game landed on one record; and a key
 inside a sidecar's declared range but in neither of its lists is a
 reconversion (or, a handful of times, a charm cast through Flashback, its mode
@@ -31,6 +33,14 @@ class QualityDefect(StrEnum):
     NO_ACTING_TEXT = "no-acting-text"
     UNJOINABLE_KEY = "unjoinable-key"
 
+
+#: The join answers that mean no sidecar says what the key is: the script was
+#: never converted, its tree has no root in this run, or the key is a keyword's
+#: bare key naming none of several lines. ``DROPPED`` (a design) and
+#: ``RUNTIME_ONLY`` (text the join cannot reach) are not gaps.
+NO_SIDECAR = frozenset({
+    KeyResolution.UNCONVERTED, KeyResolution.UNCONFIGURED_TREE, KeyResolution.AMBIGUOUS,
+})
 
 #: More events than this on one record is a game, not an ability; board wipes
 #: over two full boards sit under forty.
@@ -80,18 +90,27 @@ def acting_text_defect(
     the join does not reach. So does a permanent spell's implicit cast
     (:func:`is_permanent_spell`): the record of a permanent resolving is kept,
     keyed to the permanent's card by that key (FR-059), though no line
-    carries text for it. Apart from ``quality_defect`` because it needs
-    the sidecars, which ``validate-corpus`` does not have; run
-    ``unjoinable_key_defect`` first, since ``resolve`` raises on such a key.
+    carries text for it. Any other kind with acting keys (a trigger, a
+    continuous effect, a decision) is refused only where every key names no
+    sidecar at all (:data:`NO_SIDECAR`): such a record would train with no
+    acting text, and a key the join leaves textless on purpose is no gap.
+    Apart from ``quality_defect`` because it needs the sidecars, which
+    ``validate-corpus`` does not have; run ``unjoinable_key_defect`` first,
+    since ``resolve`` raises on such a key.
     """
-    if record.kind is not RecordKind.RESOLUTION or not record.ability:
-        return None
-    outcomes = {key: resolve(key) for key in record.ability}
-    if KeyResolution.LINE in outcomes.values() or KeyResolution.RUNTIME_ONLY in outcomes.values():
-        return None
-    if any(is_permanent_spell(key, outcome) for key, outcome in outcomes.items()):
-        return None
-    return QualityDefect.NO_ACTING_TEXT
+    if record.kind is RecordKind.RESOLUTION:
+        outcomes = {key: resolve(key) for key in record.ability or ()}
+        return None if not outcomes or _keeps_resolution(outcomes) else QualityDefect.NO_ACTING_TEXT
+    outcomes = {key: resolve(key) for key in acting_keys(record)}
+    if outcomes and set(outcomes.values()) <= NO_SIDECAR:
+        return QualityDefect.NO_ACTING_TEXT
+    return None
+
+
+def _keeps_resolution(outcomes: dict[ProvenanceKey, KeyResolution]) -> bool:
+    """A line or a runtime-only trait among the keys, or a permanent spell."""
+    return bool(set(outcomes.values()) & {KeyResolution.LINE, KeyResolution.RUNTIME_ONLY}) or any(
+        is_permanent_spell(key, outcome) for key, outcome in outcomes.items())
 
 
 def is_permanent_spell(key: ProvenanceKey, resolution: KeyResolution) -> bool:

@@ -450,7 +450,7 @@ def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey
     assert counts.records == survey.totals.records == GEN3_FIXTURE_RECORDS
     assert counts.counts
     assert {source for (_rule, _polarity, source) in counts.counts} == {
-        "forge_ai", "random_seat", "aimed", "fork"}
+        "forge_ai", "random_seat", "aimed", "fork", "refused"}
 
 
 def test_the_survey_s_rule_counts_are_rule_counts_own_forks_apart(gen3_survey, tmp_path):
@@ -469,7 +469,15 @@ def test_the_survey_s_rule_counts_are_rule_counts_own_forks_apart(gen3_survey, t
         rules_dir=Path("rules"), workers=1,
         sidecar_roots={"cardsfolder": GEN3_SIDECAR_FOLDERS[0],
                        "tokenscripts": GEN3_SIDECAR_FOLDERS[1]}))
-    assert survey.totals.rule_counts.counts == counted.counts
+    # ``rule-counts`` has no refusal rule: what it counts per source, the
+    # survey counts under ``refused`` for the records no stratum can hold.
+    def per_rule(counts):
+        total = Counter()
+        for (rule, polarity, _source), n in counts.items():
+            total[rule, polarity] += n
+        return total
+
+    assert per_rule(survey.totals.rule_counts.counts) == per_rule(counted.counts)
 
 
 def test_candidates_are_forge_ai_games_with_their_inventories(gen3_survey):

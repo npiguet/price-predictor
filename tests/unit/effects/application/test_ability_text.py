@@ -138,9 +138,9 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
 
 
 def test_an_unconfigured_tree_reads_as_no_text_and_is_counted(tmp_path):
-    """A variant key without ``--variant-scripts`` has no text, as pinned by
-    ``test_without_the_variant_tree_a_variant_text_resolves_to_nothing``, and
-    is counted by tree rather than swallowed: a run missing a tree's root reads
+    """A variant key without ``--variant-scripts`` has no text (a build over
+    such records is refused, ``test_without_the_variant_tree_the_build_is_refused``),
+    and is counted by tree rather than swallowed: a run missing a tree's root reads
     every text of it as none."""
     from effects.application.ability_text import text_for_key
 

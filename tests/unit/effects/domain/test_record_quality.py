@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.record_quality import (
@@ -238,3 +240,58 @@ def test_a_decision_candidate_acting_through_an_unjoinable_key_is_refused(
         ),)),
     )
     assert unjoinable_key_defect(decision, _unjoinable) == QualityDefect.UNJOINABLE_KEY
+
+
+# ── the third rule, beyond resolutions: no sidecar, no acting text ──────
+
+
+def _trigger(make_record, *keys):
+    return make_record(
+        kind=RecordKind.TRIGGER, ability=keys,
+        payload=TriggerPayload(event=_event(), fired=True),
+    )
+
+
+def _decision(make_record, *keys):
+    from effects.domain.records import (
+        Candidate,
+        PlayabilityDecisionPayload,
+        PlayabilitySubkind,
+    )
+
+    return make_record(
+        kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION, ability=None,
+        payload=PlayabilityDecisionPayload(candidates=(Candidate(
+            ability=keys, can_play=True, affordable=True, has_legal_target=True,
+        ),)),
+    )
+
+
+@pytest.mark.parametrize("answer", [
+    KeyResolution.UNCONVERTED, KeyResolution.UNCONFIGURED_TREE, KeyResolution.AMBIGUOUS,
+])
+def test_a_trigger_or_decision_whose_keys_resolve_to_no_sidecar_is_refused(
+    make_record, ability_key, answer,
+):
+    resolve = _resolver(spell=answer)
+    assert acting_text_defect(_trigger(make_record, ability_key), resolve) == (
+        QualityDefect.NO_ACTING_TEXT)
+    assert acting_text_defect(_decision(make_record, ability_key), resolve) == (
+        QualityDefect.NO_ACTING_TEXT)
+
+
+@pytest.mark.parametrize("answer", [
+    KeyResolution.LINE, KeyResolution.DROPPED, KeyResolution.RUNTIME_ONLY,
+])
+def test_a_trigger_with_text_or_a_by_design_textless_key_is_kept(
+    make_record, ability_key, answer,
+):
+    """``DROPPED`` and ``RUNTIME_ONLY`` are answers the join gives on purpose:
+    no sidecar is missing, so no record is refused for them off resolutions."""
+    assert acting_text_defect(_trigger(make_record, ability_key), _resolver(spell=answer)) is None
+
+
+def test_one_resolved_key_among_missing_ones_keeps_a_trigger(make_record, ability_key):
+    other = ProvenanceKey(ability_key.script_file, 0, "trigger", 0)
+    resolve = _resolver(spell=KeyResolution.UNCONVERTED, trigger=KeyResolution.LINE)
+    assert acting_text_defect(_trigger(make_record, ability_key, other), resolve) is None

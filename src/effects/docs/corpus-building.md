@@ -20,7 +20,7 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 - A gen-3 game whose shard holds no game-end marker was cut, and its records are incomplete. The survey and the write pass both drop it whole (`dropped-cut`), so no stratum, derived copy or selection set holds one. The manifest counts them in `cut_games`, inside the digest. A records set none of whose gen-3 games has a marker is refused before `--output` is touched.
 - A record the write pass meets past what the survey read in its shard (a raw shard grown between the passes, a collection still writing) was never surveyed nor placed. It is written to no stratum and counted as `dropped-unsurveyed`, and the build names every raw shard whose size changed.
 - Before anything under `--output` is touched, the build refuses a rules directory holding no scenario or no heads line, and a raw shard the survey cannot read whole. The rules directory is read relative to the working directory, so a build started elsewhere would tag and budget nothing.
-- What the survey's reading met without stopping (`decode_off_list`, `damaged_tails`, `join_gaps`: one count per textless join answer, `JoinGaps`), `unsupervised_events`, `code_version` and `sidecar_digest` sit outside the digest, so that neither where the raw corpus sits nor what ran before in the process moves it.
+- What the survey's reading met without stopping (`decode_off_list`, `damaged_tails`, `join_gaps`: one count per textless join answer, `JoinGaps`), `no_acting_text_scripts`, `unsupervised_events`, `code_version`, `sidecar_digest` and `tagged_nowhere_written` sit outside the digest, so that neither where the raw corpus sits nor what ran before in the process moves it.
 - `--workers` is 1 to 12 with a default of 12, never the CPU count.
 
 ## The split
@@ -38,11 +38,11 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 
 - `--holdout-permille` and `--holdout-max-carriers` must be passed with the same values to `holdout-cards`, `build-corpus`, `collect-variants` and `collect-coverage --only-cards`. A depleted corpus was composed against them and a checkpoint records them. All of them select through the one rule (`HeldOutCards`), so they agree whenever the values do.
 - `--vocab-path` decides the encoding surface the rarity table keys its texts on. Built on the other surface, the table keys every text differently while looking exactly as valid, which is why `train-effect-model --corpus` refuses a `--vocab-path` on the other one.
-- `--variant-scripts` names the perturbed-script tree. Without it a variant line resolves to no ability text, and a resolution record acting through it is refused as `no-acting-text`. Every key read as no line for want of its tree's root is counted by tree (`JoinGaps.unconfigured`).
+- `--variant-scripts` names the perturbed-script tree. A records set holding a key of a source tree the run has no root for (a variant key without `--variant-scripts`) is refused after the survey, naming the tree, before `--output` is touched (`JoinGaps.unconfigured` counts such keys by tree).
 
 ## The holdout
 
-- Membership depends on the text's own bytes (`crc32` of the normalized script text), so a Forge upgrade never reassigns an existing text. That is what lets a depleted corpus stay valid.
+- Membership depends on the text's own bytes (`crc32` of the masked template of the normalized script text) and on the carrier count (a text more cards carry than `--holdout-max-carriers` is never eligible), so a Forge upgrade never reassigns an existing text. That is what lets a depleted corpus stay valid.
 - The holdout unit is the masked template, the only unit and no flag: digit runs outside chain labels, `CARDNAME` and description values are masked, so `NumDmg$ 2` and `NumDmg$ 3` fall on one side.
 - Token scripts count as carriers, toward `--holdout-max-carriers` too.
 - The trainer recomputes the holdout over its sidecars and refuses a disagreement with the manifest.
@@ -55,10 +55,12 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 
 ## Curation
 
-- The survey reads shards keyed by provenance key, not by ability text, and one process folds keys to texts afterwards. Resolving a key needs a `SidecarCache` over tens of thousands of files, and building one per worker would cost more than the scan.
+- The survey reads shards keyed by provenance key, not by ability text, and one process folds keys to texts afterwards. Resolving a key needs a `SidecarCache` over tens of thousands of files, which each worker process builds once and reads every shard through (`converted_trees.process_sidecars`), so a sidecar is read once per process rather than once per shard.
 - Only training games' records size the class, family and text quotas and the copy plans, so the plan never counts a record the write pass routes away. The rarity table, the legality mode counts, the rule and condition counts, the closed subtype and keyword lists and the held-out texts' game counts stay whole-corpus.
 - Every selection choice is a function of the record's hash and `--seed`.
 - In an outcome signature, a zone outcome the targets leave unknown reads `unknown`, never `stayed`; the acting spell's own move off the stack is left out; and a half that did not resolve names its outcome (`fizzled`, `declined`), so a fizzle never shares a cell with a kill.
+- A record no stratum can hold (a refused record, a `turn_action` record) has its rule tags counted in the manifest's `rule_counts` under the source `refused`, never under a natural source; `refused` is a manifest-side source, not a `RuleSource` member. `tagged_nowhere_written` lists the rules the counts name that no `rules` row of the training or a validation stratum writes.
+- A resolution is refused as `no-acting-text` when every acting key maps to no line; a trigger, continuous or decision record, when every acting key resolves `UNCONVERTED`, `UNCONFIGURED_TREE` or `AMBIGUOUS` (`record_quality.NO_SIDECAR`). `DROPPED` and `RUNTIME_ONLY` keys are answers the join gives on purpose and keep such a record. The refusals are counted per sampling class.
 - A validation sample holds each `record_id` once, its natural copy where it has one, so a class's quota counts distinct records whatever the stratum's copies.
 - `--text-cap` counts every natural copy of the text in the class, of tagged and untagged records alike.
 - Each class budget is split equally over effect families, then over outcome signatures. A short family's records repeat up to `--reuse-cap` and its unused share passes on. Real legality decisions fill up to half the legality class first.

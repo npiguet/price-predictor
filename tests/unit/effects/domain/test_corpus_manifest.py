@@ -310,3 +310,13 @@ def test_the_collection_fields_round_trip():
     )
     back = CorpusManifest.from_dict(json.loads(json.dumps(built.as_dict())))
     assert back == built
+
+
+def test_the_rules_tagged_nowhere_written_round_trip_and_leave_the_digest_alone():
+    """They report what the counts name and no stratum writes; they decide
+    nothing, so the digest a checkpoint pins ignores them."""
+    plain = manifest(**_gen3_fields())
+    reported = manifest(**_gen3_fields(), tagged_nowhere_written=("104.2a", "703.4c"))
+    restored = CorpusManifest.from_dict(json.loads(json.dumps(reported.as_dict())))
+    assert restored.tagged_nowhere_written == ("104.2a", "703.4c")
+    assert reported.digest() == plain.digest()

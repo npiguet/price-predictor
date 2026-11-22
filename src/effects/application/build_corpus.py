@@ -46,7 +46,7 @@ from effects.application.corpus_write import (
     WriteTask,
     run_write_pass,
 )
-from effects.application.rule_counts import CatalogueStanding
+from effects.application.rule_counts import CatalogueStanding, rule_order
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_curation import (
@@ -463,6 +463,7 @@ def decide(
     for planned in validation.values():
         copies.update(planned.copies)
     rule_counts = totals.rule_counts.to_json(CatalogueStanding.of(rules.scenarios))
+    nowhere = tagged_nowhere_written(rule_counts, budgets, validation)
     return Decisions(
         selection=selection,
         strata=strata,
@@ -488,8 +489,23 @@ def decide(
             one_sided_conditions=one_sided_conditions(totals.condition_counts),
             turn_action_left_out=dict(totals.turn_actions),
             subtypes=totals.subtypes, keywords=totals.keywords,
-        ),
+        ) | {"tagged_nowhere_written": nowhere},
     )
+
+
+def tagged_nowhere_written(
+    rule_counts: Mapping[str, Any], budgets: RuleBudgets,
+    validation: Mapping[Stratum, RuleBudgets],
+) -> tuple[str, ...]:
+    """Rules the counts name that no stratum's rows write a copy of: tagged
+    only on records no stratum holds (refused, turn actions, a training
+    record acting through a held-out text), or on none the plan writes."""
+    written = {
+        rule for planned in (budgets, *validation.values())
+        for rows in planned.rows.values() for rule, by_polarity in rows.items()
+        if any(row.written_total for row in by_polarity.values())
+    }
+    return tuple(sorted(set(rule_counts["rules"]) - written, key=rule_order))
 
 
 def _rules_named(
@@ -918,6 +934,23 @@ def _refuse_every_game_cut(config: BuildCorpusConfig, survey: Survey) -> None:
             "the marker existed?) or no game ended before its worker was killed.")
 
 
+def _refuse_unconfigured_trees(config: BuildCorpusConfig, survey: Survey) -> None:
+    """A records set naming a source tree this run has no root for (variant
+    records without ``--variant-scripts``): its keys have no text to join, so
+    the dataset would train on records without an acting text and place their
+    games blind to a variant printing a held-out text. Nothing under
+    ``--output`` has been touched."""
+    unconfigured = survey.totals.reading.unconfigured
+    if not unconfigured:
+        return
+    named = ", ".join(f"{tree!r} ({n} key read(s))" for tree, n in sorted(unconfigured.items()))
+    raise BuildCorpusError(
+        f"{config.records_dir} holds records naming the source tree(s) {named}, "
+        "and this run has no converted root for them: pass --variant-scripts for "
+        "the variant tree, or --cards-folder for a card or token tree. Nothing "
+        "under --output was touched.")
+
+
 def _decide_or_refuse(
     config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
     held_out: HeldOutCards, rules: RuleCatalogue,
@@ -925,6 +958,7 @@ def _decide_or_refuse(
     """:func:`decide`, refusing a corpus the quality rules reject, one whose
     every game was cut, or a dataset gate 1 could not be scored on."""
     _refuse_every_game_cut(config, survey)
+    _refuse_unconfigured_trees(config, survey)
     check_refusals(survey.totals.refusals, survey.totals.kept)
     decisions = decide(
         survey, sidecars=trees.sidecars, surface=surface, config=config, rules=rules,
