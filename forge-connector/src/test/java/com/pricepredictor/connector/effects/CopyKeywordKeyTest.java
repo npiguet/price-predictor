@@ -186,6 +186,35 @@ class CopyKeywordKeyTest {
     }
 
     /**
+     * A Clone copies Moldering Karok, the opponent's Cytoshape makes Karok a
+     * copy of Grizzly Bears until end of turn, then Kiki-Jiki copies the
+     * Clone: the Clone's copiable values are Karok's (707.2), so the token
+     * is Karok, and its Lifelink and Trample join Karok's lines, printed, on
+     * the live board and on a fork of it; the Haste the copy effect added
+     * stays a granted line with no key.
+     */
+    @Test
+    void aTokenCopyOfACloneKeysToWhatTheCloneCopiedWhenThatIsNowACopyOfSomethingElse() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        ConvertedScript karoks = convertedScriptOf(karok);
+        Card clone = entersAsACopyOf(board, "Clone", "Moldering Karok");
+        board.battlefield("Grizzly Bears", board.you);
+        SpellAbility cytoshape = board.spell(board.hand("Cytoshape", board.opponent), board.opponent);
+        cytoshape.resetTargets();
+        cytoshape.getTargets().add(karok);
+        board.resolve(cytoshape, board.opponent);
+        board.game.getAction().checkStaticAbilities();
+        assertEquals("Grizzly Bears", karok.getName(), "Karok is now a copy of Grizzly Bears");
+        Card token = kikiCopies(board, clone, "Moldering Karok");
+
+        assertJoinBesideAddedHaste(board, karoks, token, KAROKS);
+
+        Card forked = tokenCopyNamed(new GameCopier(board.game).makeCopy(), "Moldering Karok");
+        assertKeyedAlike(token, forked, KAROKS);
+    }
+
+    /**
      * Kiki-Jiki copies a Clone that is copying a Vampire token (flying,
      * lifelink): the token's Flying and Lifelink join the Vampire token
      * script's lines, printed.
@@ -205,12 +234,23 @@ class CopyKeywordKeyTest {
      * {@code copied}, then Kiki-Jiki's token copy of it, the token returned.
      */
     private static Card kikiCopiesACopyOf(CharacterizationBoard board, String copier, String copied) {
+        return kikiCopies(board, entersAsACopyOf(board, copier, copied), copied);
+    }
+
+    /** A {@code copier} (a Clone) cast to copy the one creature named {@code copied}, returned. */
+    private static Card entersAsACopyOf(CharacterizationBoard board, String copier, String copied) {
         Card inHand = board.hand(copier, board.you);
         board.resolve(board.spell(inHand, board.you), board.you);
         Card clone = board.game.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> card.getId() == inHand.getId()).findFirst().orElseThrow();
         assertTrue(clone.isCloned(), "the Clone entered as a copy");
         assertEquals(copied, clone.getName());
+        return clone;
+    }
+
+    /** Kiki-Jiki's token copy of {@code clone}, which shows {@code copied}'s name, returned. */
+    private static Card kikiCopies(CharacterizationBoard board, Card clone, String copied) {
+        String copier = clone.getRules().getName();
         Card kiki = board.battlefield("Kiki-Jiki, Mirror Breaker", board.you);
         SpellAbility copy = board.ability(kiki, ApiType.CopyPermanent);
         copy.resetTargets();

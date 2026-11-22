@@ -127,6 +127,70 @@ class CloneKeywordKeyTest {
     }
 
     /**
+     * Clone A enters as a copy of Moldering Karok, the opponent's Cytoshape
+     * makes Karok a copy of Grizzly Bears until end of turn, then Clone B
+     * enters as a copy of A: A's copiable values are Karok's (707.2), so B
+     * is Karok, and its Lifelink and Trample join Karok's lines, printed,
+     * live and forked.
+     */
+    @Test
+    void aCloneOfACloneKeysToWhatTheFirstCopiedWhenThatIsNowACopyOfSomethingElse() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        ConvertedScript karoks = convertedScriptOf(karok);
+        Card cloneA = entersAsACopy(board, "Clone", karok);
+        cytoshapeIntoBears(board, karok);
+        Card cloneB = entersAsACopy(board, "Clone", cloneA);
+        assertEquals("Moldering Karok", cloneB.getName(), "B took A's copiable values");
+
+        assertJoinPrinted(board, cloneB, karoks, KAROKS);
+
+        Card forked = new GameCopier(board.game).makeCopy().findById(cloneB.getId());
+        assertKeyedAlike(cloneB, forked, KAROKS);
+    }
+
+    /**
+     * As above, then Clone C enters as a copy of B (A tapped, so the AI
+     * rates B best): C is Karok too, and its Lifelink and Trample join
+     * Karok's lines, printed.
+     */
+    @Test
+    void aCloneOfACloneOfACloneKeysToWhatTheFirstCopied() throws IOException {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        ConvertedScript karoks = convertedScriptOf(karok);
+        Card cloneA = entersAsACopy(board, "Clone", karok);
+        cytoshapeIntoBears(board, karok);
+        Card cloneB = entersAsACopy(board, "Clone", cloneA);
+        cloneA.setTapped(true); // the AI copies the creature it rates best: the untapped B
+        Card cloneC = entersAsACopy(board, "Clone", cloneB);
+        assertEquals("Moldering Karok", cloneC.getName(), "C took B's copiable values");
+
+        assertJoinPrinted(board, cloneC, karoks, KAROKS);
+    }
+
+    /**
+     * Clone A enters as a copy of Moldering Karok, the opponent's Cytoshape
+     * makes A itself a copy of Grizzly Bears, Karok and the Bears leave, then
+     * Clone B enters as a copy of A: A's copiable values are now the Bears'
+     * (707.2: as the later copy effect modified them), so B is Grizzly Bears
+     * and prints the Bears' script.
+     */
+    @Test
+    void aCloneOfACloneUnderALaterCopyEffectPrintsWhatThatEffectCopied() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card karok = board.battlefield("Moldering Karok", board.you);
+        Card cloneA = entersAsACopy(board, "Clone", karok);
+        cytoshapeIntoBears(board, cloneA);
+        board.game.getAction().exile(karok, null, null);
+        board.game.getAction().exile(copierIn(board.game, "Grizzly Bears"), null, null);
+        Card cloneB = entersAsACopy(board, "Clone", cloneA);
+        assertEquals("Grizzly Bears", cloneB.getName(), "B took A's copiable values");
+
+        assertEquals("cardsfolder/g/grizzly_bears.txt", ScriptLocator.printedScriptOf(cloneB));
+    }
+
+    /**
      * Dreamtail Heron mutates onto a Clone copying Moldering Karok: the
      * merged permanent's Lifelink and Trample, which the Clone brought, join
      * Karok's lines, and Mutate the Heron's; every keyword line is printed.
