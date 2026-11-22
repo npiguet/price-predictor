@@ -10,6 +10,7 @@ from effects.domain.corpus_manifest import (
     CuratedShard,
     FamilyRow,
     ManifestError,
+    RuleCuration,
     SourceShard,
     rule_curation_fields,
 )
@@ -231,7 +232,7 @@ def _gen3_fields(**extra_map) -> dict:
                                         Half.REPORTING: frozenset()}},
         left_out_of_half={Stratum.GAME_DISJOINT: {Half.REPORTING: ("702.16e",)}},
     )
-    return rule_curation_fields(
+    return rule_curation_fields(RuleCuration(
         budgets=budgets, strata=strata,
         rule_map={
             "702.16e": RuleMapEntry("702.16e", MapVerdict.TRAINED, ("damage_taken", "gate")),
@@ -246,7 +247,7 @@ def _gen3_fields(**extra_map) -> dict:
         turn_action_left_out={"untap": 3, "draw": 2},
         subtypes={"zombie", "plains", "not-a-subtype"},
         keywords={"toxic", "flying"},
-    )
+    ))
 
 
 def test_the_gen3_fields_round_trip_through_json():

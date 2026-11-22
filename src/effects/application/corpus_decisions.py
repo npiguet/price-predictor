@@ -28,7 +28,7 @@ from effects.application.stratum_budgets import (
 )
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.condition_balance import one_sided_conditions
-from effects.domain.corpus_manifest import rule_curation_fields
+from effects.domain.corpus_manifest import RuleCuration, rule_curation_fields
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     GameStrata,
@@ -168,7 +168,7 @@ def decide(
         validation_weights=validation_weights(placed, config),
         copies=copies,
         inventories=dict(census.inventories),
-        rule_fields=rule_curation_fields(
+        rule_fields=rule_curation_fields(RuleCuration(
             budgets=budgets, strata=strata,
             rule_map=rules.snapshot(_rules_named(rule_counts, budgets, validation)),
             rule_map_digest=rules.digest, rule_counts=rule_counts,
@@ -176,7 +176,7 @@ def decide(
             one_sided_conditions=one_sided_conditions(totals.condition_counts),
             turn_action_left_out=dict(totals.turn_actions),
             subtypes=totals.subtypes, keywords=totals.keywords,
-        ) | {"tagged_nowhere_written": nowhere},
+        )) | {"tagged_nowhere_written": nowhere},
     )
 
 

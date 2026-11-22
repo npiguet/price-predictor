@@ -7,7 +7,7 @@ can refuse a dataset rebuilt since (FR-147).
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -186,12 +186,20 @@ def _nested_tuple_map(values: dict) -> dict[str, dict[str, tuple[str, ...]]]:
     return {k: _tuple_map(inner) for k, inner in values.items()}
 
 
-def _rule_rows(values: dict) -> dict[str, dict[str, dict[str, RuleRow]]]:
+def _each_rule_row[R, S](
+    by_class: Mapping[str, Mapping[str, Mapping[str, R]]], convert: Callable[[R], S],
+) -> dict[str, dict[str, dict[str, S]]]:
+    """``class -> rule -> polarity -> row``, each row through ``convert``: the
+    one walk over a stratum's rule rows, read or written."""
     return {
-        klass: {rule: {polarity: RuleRow.from_dict(row) for polarity, row in rows.items()}
+        klass: {rule: {polarity: convert(row) for polarity, row in rows.items()}
                 for rule, rows in by_rule.items()}
-        for klass, by_rule in values.items()
+        for klass, by_rule in by_class.items()
     }
+
+
+def _rule_rows(values: dict) -> dict[str, dict[str, dict[str, RuleRow]]]:
+    return _each_rule_row(values, RuleRow.from_dict)
 
 
 def _leave_out_drawn(payload: dict) -> None:
@@ -521,19 +529,13 @@ class CorpusManifest:
             klass: {family: row.as_dict() for family, row in rows.items()}
             for klass, rows in self.families.items()
         }
-        data["rules"] = {
-            klass: {rule: {polarity: row.as_dict() for polarity, row in rows.items()}
-                    for rule, rows in by_rule.items()}
-            for klass, by_rule in self.rules.items()
-        }
+        data["rules"] = _each_rule_row(self.rules, RuleRow.as_dict)
         data["rule_map"] = {
             rule: {"verdict": str(entry.verdict), "outputs": list(entry.outputs)}
             for rule, entry in self.rule_map.items()
         }
         data["validation_rules"] = {
-            stratum: {klass: {rule: {polarity: row.as_dict() for polarity, row in rows.items()}
-                              for rule, rows in by_rule.items()}
-                      for klass, by_rule in by_class.items()}
+            stratum: _each_rule_row(by_class, RuleRow.as_dict)
             for stratum, by_class in self.validation_rules.items()
         }
         return data
@@ -610,35 +612,38 @@ def _unbudgeted_rules(
     return {rule: budgets.unbudgeted.get(rule, {}) for rule in sorted(names)}
 
 
-def rule_curation_fields(
-    *,
-    budgets: RuleBudgets,
-    strata: GameStrata,
-    rule_map: Mapping[str, RuleMapEntry],
-    rule_map_digest: str,
-    rule_counts: Mapping[str, Any],
-    carried: Mapping[tuple[str, str], int],
-    one_sided_conditions: Mapping[str, Iterable[str]],
-    turn_action_left_out: Mapping[str, int],
-    subtypes: Iterable[str],
-    keywords: Iterable[str],
-) -> dict[str, Any]:
-    """The gen-3 fields of :class:`CorpusManifest`, as keyword arguments.
+@dataclass(frozen=True, slots=True)
+class RuleCuration:
+    """What the build already holds that the manifest's gen-3 fields are built
+    from: the rule budgets, the placed strata, the map snapshot, the survey's
+    rule counts (the ``rule-counts.json`` object), its ``(rule, output) ->
+    records carrying it`` tally, which decides each rule's effective outputs,
+    its one-sided conditions (``condition_balance.one_sided_conditions``) and
+    turn-action tally, and the subtype and keyword names it read."""
 
-    Built from what the build already holds: the rule budgets, the placed
-    strata, the map snapshot, the survey's rule counts (the ``rule-counts.json``
-    object), its ``(rule, output) -> records carrying it`` tally, which
-    decides each rule's effective outputs, its one-sided conditions
-    (``condition_balance.one_sided_conditions``) and turn-action tally, and the
-    subtype and keyword names it read, which are put in the head's column
-    order here.
-    """
+    budgets: RuleBudgets
+    strata: GameStrata
+    rule_map: Mapping[str, RuleMapEntry]
+    rule_map_digest: str
+    rule_counts: Mapping[str, Any]
+    carried: Mapping[tuple[str, str], int]
+    one_sided_conditions: Mapping[str, Iterable[str]]
+    turn_action_left_out: Mapping[str, int]
+    subtypes: Iterable[str]
+    keywords: Iterable[str]
+
+
+def rule_curation_fields(curation: RuleCuration) -> dict[str, Any]:
+    """The gen-3 fields of :class:`CorpusManifest`, as keyword arguments, the
+    subtype and keyword names put in the head's column order here."""
     from effects.domain.closed_lists import ordered_keywords, ordered_subtypes
 
+    budgets, strata, rule_map = curation.budgets, curation.strata, curation.rule_map
+    carried, one_sided_conditions = curation.carried, curation.one_sided_conditions
     return {
-        "rule_counts": dict(rule_counts),
+        "rule_counts": dict(curation.rule_counts),
         "rule_map": dict(sorted(rule_map.items())),
-        "rule_map_digest": rule_map_digest,
+        "rule_map_digest": curation.rule_map_digest,
         "effective_outputs": {
             rule: tuple(o for o in entry.outputs if carried.get((rule, o), 0) > 0)
             for rule, entry in sorted(rule_map.items())
@@ -653,9 +658,9 @@ def rule_curation_fields(
             str(stratum): {str(half): tuple(rules) for half, rules in by_half.items()}
             for stratum, by_half in strata.left_out_of_half.items()
         },
-        "turn_action_left_out": dict(sorted(turn_action_left_out.items())),
-        "subtypes": ordered_subtypes(subtypes),
-        "keywords": ordered_keywords(keywords),
+        "turn_action_left_out": dict(sorted(curation.turn_action_left_out.items())),
+        "subtypes": ordered_subtypes(curation.subtypes),
+        "keywords": ordered_keywords(curation.keywords),
         "halves": {
             str(stratum): {str(half): tuple(sorted(games)) for half, games in by_half.items()}
             for stratum, by_half in strata.halves.items()
