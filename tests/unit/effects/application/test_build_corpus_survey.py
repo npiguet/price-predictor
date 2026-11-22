@@ -14,6 +14,7 @@ records for placement (research R3).
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -72,26 +73,29 @@ _SECRET = (ProvenanceKey("cardsfolder/s/secret.txt", 0, "spell", 0),)
 _GOBLIN = (ProvenanceKey("tokenscripts/goblin_secret.txt", 0, "spell", 1),)
 
 
-def a_record(
-    *,
-    game_id: str = "g1",
-    record_id: str | None = None,
-    kind: str = "resolution",
-    ability: tuple[ProvenanceKey, ...] | None = None,
-    entity_names: tuple[str, ...] = (),
-    **overrides,
-) -> EffectRecord:
-    """A real ``EffectRecord``: ``kind`` picks the discriminator and payload."""
-    record_kind = RecordKind(kind)
+@dataclass(frozen=True)
+class RecordSpec:
+    """What names a record in ``a_record``: its ids, kind and acting ability."""
+
+    game_id: str = "g1"
+    record_id: str | None = None
+    kind: str = "resolution"
+    ability: tuple[ProvenanceKey, ...] | None = None
+
+
+def a_record(spec: RecordSpec = RecordSpec(), **overrides) -> EffectRecord:
+    """A real ``EffectRecord``: ``spec.kind`` picks the discriminator and payload."""
+    record_kind = RecordKind(spec.kind)
     moment, payload = _PAYLOAD_BY_KIND[record_kind]
-    entities = tuple(make_entity(f"E-{name}", name) for name in entity_names)
-    extra = {"moment": moment, "payload": payload, **overrides}
-    if record_id is not None:
-        extra["record_id"] = record_id
-    return make_record(
-        record_kind, game_id=game_id, ability=(ability or None),
-        state=make_snapshot(entities=entities), **extra,
-    )
+    extra = {"moment": moment, "payload": payload, "state": make_snapshot(), **overrides}
+    if spec.record_id is not None:
+        extra["record_id"] = spec.record_id
+    return make_record(record_kind, game_id=spec.game_id, ability=(spec.ability or None), **extra)
+
+
+def a_state_naming(*entity_names: str):
+    """A snapshot whose entities carry ``entity_names``."""
+    return make_snapshot(entities=tuple(make_entity(f"E-{name}", name) for name in entity_names))
 
 
 def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, Path]:
@@ -142,7 +146,7 @@ _HOLDOUT = held_out_cards(
 
 def a_config(
     records_dir, *, held_out: HeldOutCards | None = None, sidecar_roots=None,
-    heap_cap: int = 200, share: float = 0.0,
+    share: float = 0.0,
 ) -> SurveyConfig:
     return SurveyConfig(
         read=ReadConfig(
@@ -151,7 +155,7 @@ def a_config(
             held_out=held_out or held_out_cards(),
             seed=42,
         ),
-        heap_cap=heap_cap,
+        heap_cap=200,
         placement=PlacementRule(
             game_disjoint_share=share, keyword_share=share, card_disjoint_text_cap=0, seed=42,
         ),
@@ -166,9 +170,9 @@ def _survey_one(tmp_path, records, **config):
 
 def test_survey_counts_records_classes_and_games(tmp_path):
     write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
-        a_record(record_id="run.0-a.0", game_id="g1", kind="rewrite"),
-        a_record(record_id="run.0-a.1", game_id="g1", kind="rewrite"),
-        a_record(record_id="run.0-a.2", game_id="g2", kind="combat", ability=()),
+        a_record(RecordSpec(record_id="run.0-a.0", game_id="g1", kind="rewrite")),
+        a_record(RecordSpec(record_id="run.0-a.1", game_id="g1", kind="rewrite")),
+        a_record(RecordSpec(record_id="run.0-a.2", game_id="g2", kind="combat", ability=())),
     ])
 
     survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
@@ -186,10 +190,14 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
     # any of its records is judged, so no quality rule can unmark its game.
     keys = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "spell", 0),)
     write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
-        a_record(record_id="run.0-a.0", game_id="g1", ability=keys,
-                 entity_names=("Soul Echo",)),
-        a_record(record_id="run.0-a.1", game_id="g2", ability=keys,
-                 entity_names=("Grizzly Bears",)),
+        a_record(
+            RecordSpec(record_id="run.0-a.0", game_id="g1", ability=keys),
+            state=a_state_naming("Soul Echo"),
+        ),
+        a_record(
+            RecordSpec(record_id="run.0-a.1", game_id="g2", ability=keys),
+            state=a_state_naming("Grizzly Bears"),
+        ),
     ])
 
     survey = run_survey(
@@ -205,9 +213,9 @@ def test_survey_counts_games_not_records_for_rarity(tmp_path):
     # One ability, three records, two games: rarity must read 2.
     keys = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "spell", 0),)
     write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
-        a_record(record_id="run.0-a.0", game_id="g1", ability=keys),
-        a_record(record_id="run.0-a.1", game_id="g1", ability=keys),
-        a_record(record_id="run.0-a.2", game_id="g2", ability=keys),
+        a_record(RecordSpec(record_id="run.0-a.0", game_id="g1", ability=keys)),
+        a_record(RecordSpec(record_id="run.0-a.1", game_id="g1", ability=keys)),
+        a_record(RecordSpec(record_id="run.0-a.2", game_id="g2", ability=keys)),
     ])
 
     survey = run_survey(
@@ -275,8 +283,8 @@ def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     from effects.domain.record_quality import QualityDefect
 
     out = _survey_one(tmp_path, [
-        a_record(record_id="clean", game_id="g1", ability=_BOLT),
-        a_record(record_id="junk", game_id="g2", ability=()),
+        a_record(RecordSpec(record_id="clean", game_id="g1", ability=_BOLT)),
+        a_record(RecordSpec(record_id="junk", game_id="g2", ability=())),
     ], sidecar_roots=converted_tree(tmp_path, *_BOLT))
 
     assert out.refusals.by_reason == {QualityDefect.NO_ABILITY: 1}
@@ -307,7 +315,10 @@ def test_a_refused_record_still_routes_its_game_to_the_card_disjoint_stratum(tmp
     rules refuse is still a game that played that card.
     """
     out = _survey_one(tmp_path, [
-        a_record(record_id="junk", game_id="g1", ability=(), entity_names=("Soul Echo",)),
+        a_record(
+            RecordSpec(record_id="junk", game_id="g1", ability=()),
+            state=a_state_naming("Soul Echo"),
+        ),
     ], held_out=held_out_cards({"soul echo"}))
 
     assert out.games.held_out == {"g1"}
@@ -333,10 +344,12 @@ def test_the_supply_counts_only_records_of_games_that_train_whatever_placement_d
     training = next(g for g in games if game_disjoint_draw(g) >= 0.5)
     held = next(g for g in games if g not in (pooled, training))
     out = _survey_one(tmp_path, [
-        a_record(record_id="t", game_id=training, kind="rewrite", ability=_BOLT),
-        a_record(record_id="d", game_id=pooled, kind="rewrite", ability=_BOLT),
-        a_record(record_id="h", game_id=held, kind="rewrite", ability=_BOLT,
-                 entity_names=("Soul Echo",)),
+        a_record(RecordSpec(record_id="t", game_id=training, kind="rewrite", ability=_BOLT)),
+        a_record(RecordSpec(record_id="d", game_id=pooled, kind="rewrite", ability=_BOLT)),
+        a_record(
+            RecordSpec(record_id="h", game_id=held, kind="rewrite", ability=_BOLT),
+            state=a_state_naming("Soul Echo"),
+        ),
     ], held_out=held_out_cards({"soul echo"}),
         sidecar_roots=converted_tree(tmp_path, *_BOLT), share=0.05)
 
@@ -353,10 +366,15 @@ def test_a_random_seat_game_trains_unless_it_names_a_held_out_card(tmp_path):
     games = [f"g{i}" for i in range(400)]
     pooled = [g for g in games if game_disjoint_draw(g) < 0.5]
     out = _survey_one(tmp_path, [
-        a_record(record_id="p", game_id=pooled[0], kind="rewrite", ability=_BOLT,
-                 random_seat=True),
-        a_record(record_id="h", game_id=pooled[1], kind="rewrite", ability=_BOLT,
-                 entity_names=("Soul Echo",), random_seat=True),
+        a_record(
+            RecordSpec(record_id="p", game_id=pooled[0], kind="rewrite", ability=_BOLT),
+            random_seat=True,
+        ),
+        a_record(
+            RecordSpec(record_id="h", game_id=pooled[1], kind="rewrite", ability=_BOLT),
+            state=a_state_naming("Soul Echo"),
+            random_seat=True,
+        ),
     ], held_out=held_out_cards({"soul echo"}),
         sidecar_roots=converted_tree(tmp_path, *_BOLT), share=0.05)
 
@@ -377,8 +395,8 @@ def test_only_a_resolution_counts_a_game_toward_its_held_out_text(tmp_path):
     """
     roots = converted_tree(tmp_path, *_SECRET, text={_SECRET[0]: _SECRET_TEXT})
     out = _survey_one(tmp_path, [
-        a_record(record_id="r", game_id="g-resolved", ability=_SECRET),
-        a_record(record_id="t", game_id="g-triggered", kind="trigger", ability=_SECRET),
+        a_record(RecordSpec(record_id="r", game_id="g-resolved", ability=_SECRET)),
+        a_record(RecordSpec(record_id="t", game_id="g-triggered", kind="trigger", ability=_SECRET)),
     ], held_out=_HOLDOUT, sidecar_roots=roots)
 
     assert out.games.held_out_text_games == {_SECRET_TEXT: {"g-resolved"}}
@@ -393,8 +411,8 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
         tmp_path, *token, *_BOLT, text={token[0]: _SECRET_TEXT},
     )
     out = _survey_one(tmp_path, [
-        a_record(record_id="v", game_id="g1", kind="rewrite", ability=token),
-        a_record(record_id="b", game_id="g1", kind="rewrite", ability=_BOLT),
+        a_record(RecordSpec(record_id="v", game_id="g1", kind="rewrite", ability=token)),
+        a_record(RecordSpec(record_id="b", game_id="g1", kind="rewrite", ability=_BOLT)),
     ], held_out=_HOLDOUT, sidecar_roots=roots)
 
     assert out.games.held_out == set()
@@ -409,9 +427,9 @@ def test_a_game_naming_a_variant_printing_a_held_out_text_is_held_out_whole(tmp_
         tmp_path, *variant, *_BOLT, text={variant[0]: _SECRET_TEXT},
     )
     out = _survey_one(tmp_path, [
-        a_record(record_id="v", game_id="g1", kind="rewrite", ability=variant),
-        a_record(record_id="b", game_id="g1", kind="rewrite", ability=_BOLT),
-        a_record(record_id="c", game_id="g2", kind="rewrite", ability=_BOLT),
+        a_record(RecordSpec(record_id="v", game_id="g1", kind="rewrite", ability=variant)),
+        a_record(RecordSpec(record_id="b", game_id="g1", kind="rewrite", ability=_BOLT)),
+        a_record(RecordSpec(record_id="c", game_id="g2", kind="rewrite", ability=_BOLT)),
     ], held_out=_HOLDOUT, sidecar_roots=roots)
 
     assert out.games.held_out == {"g1"}
@@ -547,7 +565,9 @@ class TestACutGame:
 
     @staticmethod
     def _gen3(record_id: str, game_id: str, **overrides) -> EffectRecord:
-        return a_record(record_id=record_id, game_id=game_id, kind="rewrite", **overrides)
+        return a_record(
+            RecordSpec(record_id=record_id, game_id=game_id, kind="rewrite"), **overrides
+        )
 
     def _shard(self, tmp_path, name: str, records) -> None:
         write_shard(tmp_path / name, records)

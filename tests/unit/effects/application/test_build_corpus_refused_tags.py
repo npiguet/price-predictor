@@ -19,6 +19,7 @@ from effects.domain.record_quality import QualityDefect
 from effects.domain.records import RecordKind
 from effects.domain.stratum_placement import PlacementRule
 from tests.unit.effects.application.test_build_corpus_survey import (
+    RecordSpec,
     a_config,
     a_record,
     converted_tree,
@@ -86,8 +87,8 @@ def test_a_variant_trigger_with_no_sidecar_is_refused_and_counted_by_class(tmp_p
     variant = (ProvenanceKey("variant-scripts/bear_variant_ab12.txt", 0, "trigger", 0),)
     kept = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "trigger", 0),)
     write_ended_shard(tmp_path / "run.0-a.jsonl.gz", [
-        a_record(record_id="run.0-a.0", kind="trigger", ability=variant),
-        a_record(record_id="run.0-a.1", kind="trigger", ability=kept),
+        a_record(RecordSpec(record_id="run.0-a.0", kind="trigger", ability=variant)),
+        a_record(RecordSpec(record_id="run.0-a.1", kind="trigger", ability=kept)),
     ])
     roots = converted_tree(tmp_path, *kept)
     roots["variant-scripts"] = tmp_path / "converted" / "variant-scripts"
