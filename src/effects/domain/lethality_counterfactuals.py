@@ -19,7 +19,11 @@ the rule decides:
 - an Aura or Equipment counts only on the battlefield (a last-known copy or a
   phased-out one attaches nothing).
 
-A paid X is redrawn in ``refs.x`` and in the source's ``x_paid`` together.
+A paid X (the source's ``x_paid`` equals ``refs.x``) is redrawn in ``refs.x``,
+in the source's ``x_paid`` and in the mana its ``costs_paid`` states, together.
+An X the board computes ("damage equal to the number of creatures you control")
+is not redrawn: the copy keeps the amount and moves the toughness only. A copy's
+record carries no events: its labels travel in ``Counterfactual.targets``.
 """
 
 from __future__ import annotations
@@ -88,6 +92,7 @@ class Stated(StrEnum):
 
     TEXT = "text"  # a literal in the script, edited in the copy's text
     X = "x"  # the X the caster paid, edited in the copy's references
+    COMPUTED = "computed"  # an X the board computes: the amount is kept
 
 
 def _prose_damage(effect: StatedEffect, amount: int) -> list[tuple[str, str]]:
@@ -226,21 +231,31 @@ def _kind_of(api: str | None) -> EffectKind | None:
     return None
 
 
-def _amount(kind: EffectKind, found: dict[str, str], x: int | None) -> StatedEffect | None:
+def _amount(kind: EffectKind, found: dict[str, str], x: int | None, x_stated: Stated
+            ) -> StatedEffect | None:
     """The amount one damage or shrink segment states, or None if it states none."""
     if kind is EffectKind.DAMAGE:
         raw = found.get("NumDmg")
         if raw == "X" and x is not None:
-            return StatedEffect(kind, x, Stated.X, False)
+            return StatedEffect(kind, x, x_stated, False)
         amount = _literal(raw)
         return None if amount is None else StatedEffect(kind, amount, Stated.TEXT, False)
     raw, power = found.get("NumDef"), found.get("NumAtt")
     if raw == "-X" and x is not None:
-        return StatedEffect(kind, x, Stated.X, power == "-X")
+        return StatedEffect(kind, x, x_stated, power == "-X")
     shrink = _literal(raw)
     if shrink is None or shrink >= 0:
         return None
     return StatedEffect(kind, -shrink, Stated.TEXT, power is not None and _literal(power) == shrink)
+
+
+def _x_stated(record: EffectRecord) -> Stated:
+    """:attr:`Stated.X` where the source paid the X ``refs.x`` holds, else
+    :attr:`Stated.COMPUTED`: the chain's X is some count on the board."""
+    refs = record.state.refs
+    source = record.state.entity(refs.source)
+    paid = source is not None and source.x_paid is not None and source.x_paid == refs.x
+    return Stated.X if paid else Stated.COMPUTED
 
 
 def stated_effect(line: SidecarLine, record: EffectRecord) -> StatedEffect | None:
@@ -250,13 +265,14 @@ def stated_effect(line: SidecarLine, record: EffectRecord) -> StatedEffect | Non
     or where the chain holds more than one damage or shrink segment.
     """
     found_amounts = []
+    x_stated = _x_stated(record)
     for segment in segments(line.script_text):
         found = params(segment)
         if _blocked(found):
             return None
         kind = _kind_of(api_of(found))
         if kind is not None:
-            found_amounts.append(_amount(kind, found, record.state.refs.x))
+            found_amounts.append(_amount(kind, found, record.state.refs.x, x_stated))
     if len(found_amounts) != 1 or found_amounts[0] is None:
         return None
     return found_amounts[0] if found_amounts[0].amount > 0 else None
@@ -499,17 +515,38 @@ def _with_toughness(entities: tuple[EntityState, ...], chosen: str, toughness: i
                  for entity in entities)
 
 
+def _mana_shifted(mana: dict[str, int], delta: int) -> dict[str, int]:
+    """``mana`` with its total moved by ``delta``: the record cannot say how
+    many ``{X}`` the cost has nor which colours paid them, so one ``{X}`` is
+    assumed, paid colourless when it grows and taken from the largest pools
+    first when it shrinks (never below zero)."""
+    shifted = dict(mana)
+    if delta > 0:
+        shifted["C"] = shifted.get("C", 0) + delta
+        return shifted
+    owed = -delta
+    for symbol in sorted(shifted, key=lambda name: -shifted[name]):
+        taken = min(owed, shifted[symbol])
+        shifted[symbol] -= taken
+        owed -= taken
+    return shifted
+
+
 def _with_x_paid(entities: tuple[EntityState, ...], refs, drawn: int
                  ) -> tuple[EntityState, ...]:
-    """``entities`` with the source's paid X set to ``drawn`` where it paid the
-    X the copy redraws, so the source's ``x_paid`` and ``refs.x``, both of
-    which the model reads, still agree; an X the source did not pay (an
-    ``SVar:X`` the chain names) leaves it alone."""
+    """``entities`` with the source's paid X set to ``drawn``, and its
+    ``costs_paid`` mana moved by the same difference, so what the source
+    states about its payment agrees with ``refs.x``."""
     return tuple(
-        replace(entity, x_paid=drawn)
-        if entity.id == refs.source and entity.x_paid is not None and entity.x_paid == refs.x
-        else entity
+        _paid_x_drawn(entity, drawn) if entity.id == refs.source else entity
         for entity in entities)
+
+
+def _paid_x_drawn(source: EntityState, drawn: int) -> EntityState:
+    paid = source.costs_paid
+    if paid is not None:
+        paid = replace(paid, mana=_mana_shifted(paid.mana, drawn - source.x_paid))
+    return replace(source, x_paid=drawn, costs_paid=paid)
 
 
 def _relabelled_targets(targets: dict[str, EntityTargets], qualified: Qualified, amount: int,
@@ -535,7 +572,8 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
 
     ``text`` is what the run encodes ``line`` from. A literal amount is edited
     in the text under a key of its own, a paid X in the references; where the
-    text names neither, only the toughness moves.
+    text names neither, or the X is one the board computes, only the toughness
+    moves. The copy's record carries no events: its labels are ``targets``.
     """
     low, high = DRAW_RANGE
     drawn = rng.randint(low, high)
@@ -543,9 +581,12 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
     toughness = rng.randint(low, high)
     refs = record.state.refs
     entities = _with_toughness(record.state.entities, chosen, toughness)
-    if qualified.effect.stated is Stated.X:
+    stated = qualified.effect.stated
+    if stated is Stated.X:
         edit, refs = TextEdit(drawn), replace(refs, x=drawn)
         entities = _with_x_paid(entities, record.state.refs, drawn)
+    elif stated is Stated.COMPUTED:
+        edit = TextEdit(qualified.effect.amount)
     else:
         edit = amount_edit(record, qualified.effect, line, text, drawn)
     copied = replace(
@@ -553,6 +594,7 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
         record_id=f"{record.record_id}~cf{copy}",
         ability=(edit.key,) if edit.key is not None else record.ability,
         state=replace(record.state, entities=entities, refs=refs),
+        payload=replace(record.payload, events=()),
     )
     return Counterfactual(
         record=copied,

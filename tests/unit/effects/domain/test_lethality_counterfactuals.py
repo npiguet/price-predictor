@@ -242,7 +242,8 @@ class TestQualify:
         assert _qualify(record).players == ("P1",)
 
     def test_a_paid_x_is_the_amount(self):
-        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4,
+                         source_x_paid=4)
         qualified = _qualify(record, BOLT.replace("NumDmg$ 3", "NumDmg$ X"))
         assert (qualified.effect.amount, qualified.effect.stated) == (4, "x")
 
@@ -308,14 +309,25 @@ class TestCopies:
             # Both inputs the model reads the paid X through move together.
             assert copy.record.state.entity("S1").x_paid == x
 
-    def test_an_x_the_source_did_not_pay_leaves_the_source_alone(self):
-        """``refs.x`` read from an ``SVar:X`` the chain names: the source paid
-        no X, so its ``x_paid`` stays absent."""
+    def test_an_x_the_board_computes_keeps_its_amount_in_every_copy(self):
+        """``refs.x`` from an ``SVar:X`` ("damage equal to the number of
+        creatures you control"): no copy redraws it; the toughness moves."""
         record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
-        copy = counterfactual(record, _qualify(record, text), derive_targets(record),
-                              _line(text), text, random.Random(3), 0)
-        assert copy.record.state.entity("S1").x_paid is None
+        qualified = _qualify(record, text)
+        assert qualified.effect.stated == "computed"
+        toughnesses = set()
+        for seed in range(30):
+            copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
+                                  random.Random(seed), 0)
+            assert copy.record.state.refs.x == copy.edit.amount == 4
+            assert copy.edit.key is None
+            assert copy.record.state.entity("S1").x_paid is None
+            toughness = copy.record.state.entity("E1").pt.base[1]
+            assert copy.targets["E1"].fields["damage_taken"] == 4
+            assert (copy.targets["E1"].fields.get("zone_outcome") == DIED) == (toughness <= 4)
+            toughnesses.add(toughness)
+        assert len(toughnesses) > 1
 
     def test_a_player_s_life_follows_the_amount(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
@@ -389,7 +401,9 @@ class TestThePinnedOutput:
         assert replace(
             copy.record, record_id=record.record_id, ability=record.ability,
             state=replace(state, entities=record.state.entities, refs=record.state.refs),
+            payload=record.payload,
         ) == record
+        assert copy.record.payload == replace(record.payload, events=())
         assert [replace(entity, pt=None, damage=0, x_paid=None) for entity in state.entities] == [
             replace(entity, pt=None, damage=0, x_paid=None) for entity in record.state.entities
         ]
