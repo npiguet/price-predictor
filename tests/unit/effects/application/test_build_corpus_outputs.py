@@ -21,10 +21,9 @@ from effects.domain.strata import OUTPUT_STRATA
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import iter_shards, read_shard
 from price_predictor.infrastructure.forge_classpath import project_root
-from tests.unit.effects.application.test_build_corpus import (
+from tests.unit.effects.application.build_corpus_support import (
     CorpusFixture,
     _write_corpus,
-    a_corpus_with_variants,  # noqa: F401 (a fixture)
 )
 from tests.unit.effects.application.test_build_corpus_decide import (
     REPRINT_A,
@@ -33,6 +32,9 @@ from tests.unit.effects.application.test_build_corpus_decide import (
     _decide,
     a_survey,
     fake_sidecars,  # noqa: F401 (a fixture)
+)
+from tests.unit.effects.application.test_build_corpus_variant_tree import (
+    a_corpus_with_variants,  # noqa: F401 (a fixture)
 )
 
 #: No game-disjoint draw: the stratum comes out empty.

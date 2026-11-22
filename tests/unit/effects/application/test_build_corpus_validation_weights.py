@@ -16,8 +16,8 @@ from effects.application.build_corpus import build
 from effects.domain.sampling import DEFAULT_KIND_MIX, sampling_class
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import read_records
-from tests.unit.effects.application.test_build_corpus import (
-    _NO_RULES,
+from tests.unit.effects.application.build_corpus_support import _NO_RULES
+from tests.unit.effects.application.test_build_corpus_gen3 import (
     _gen3_config,
     _gen3_records,
 )

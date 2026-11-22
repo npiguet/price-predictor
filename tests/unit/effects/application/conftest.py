@@ -3,15 +3,19 @@ corpus over them that a real training run can read."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import torch
 
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.baselines import baseline_masks
+from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 from effects.infrastructure.vocabulary_file import save_vocabulary
+from tests.unit.effects.application.build_corpus_support import CorpusFixture, _write_corpus
 from tests.unit.effects.application.geometry_checks_support import SourceRows, _write_source
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
@@ -126,3 +130,20 @@ def cache(tmp_path):
     )
     return cards, abilities
 
+
+@pytest.fixture
+def a_corpus(tmp_path: Path) -> CorpusFixture:
+    return _write_corpus(tmp_path / "source")
+
+
+@pytest.fixture(scope="module")
+def shared_corpus(tmp_path_factory) -> CorpusFixture:
+    """``a_corpus`` written once, for the tests that never add to it."""
+    return _write_corpus(tmp_path_factory.mktemp("shared") / "source")
+
+
+@pytest.fixture(scope="module")
+def default_build(tmp_path_factory, shared_corpus) -> CorpusStore:
+    """``shared_corpus`` built once under the defaults, for the tests that only
+    read what the build wrote."""
+    return shared_corpus.build(tmp_path_factory.mktemp("default-build") / "curated")

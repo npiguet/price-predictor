@@ -7,7 +7,7 @@ from dataclasses import replace
 
 from effects.domain.provenance import ProvenanceKey
 from effects.infrastructure.shard_io import read_records
-from tests.unit.effects.application.test_build_corpus import (
+from tests.unit.effects.application.build_corpus_support import (
     _HELD_OUT_TEXT,
     _SHOCK_KEY,
     _resolution,
