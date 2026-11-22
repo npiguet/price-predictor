@@ -32,14 +32,20 @@ Torch-free: the ``build-corpus`` survey workers call it.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from effects.domain.aux_head_targets import (
     global_targets,
     supervises_created_objects,
     verdict_targets,
 )
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GLOBAL_LAYOUT, VERDICT_LAYOUT
+from effects.domain.effect_head_layout import (
+    FIELDS_BY_NAME,
+    GLOBAL_LAYOUT,
+    VERDICT_LAYOUT,
+    FieldSpec,
+    RecordHeadLayout,
+)
 from effects.domain.effect_targets import RecordTargets, derive_targets
 from effects.domain.records import EffectRecord
 from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT
@@ -69,44 +75,63 @@ def carried_outputs(
     outputs = tuple(outputs)
     if not outputs:
         return frozenset()
-    outcome = tuple(outcome)
-    on_board = {e.id for e in record.state.entities} | {p.id for p in record.state.players}
-    outcome = tuple(e for e in outcome if e in on_board)
-    verdict = global_ = None
-    found: set[str] = set()
-    for output in outputs:
+    carrier = _Carrier(record, outcome, targets)
+    return frozenset(output for output in outputs if carrier.carries(output))
+
+
+class _Carrier:
+    """One record's answers to "does it carry this output for the tag": the
+    outcome entities on its board, and the targets, verdict and global rows
+    each derived once, the first time an output needs them."""
+
+    def __init__(self, record: EffectRecord, outcome: Iterable[str],
+                 targets: RecordTargets | None) -> None:
+        self.record = record
+        on_board = {e.id for e in record.state.entities} | {p.id for p in record.state.players}
+        self.outcome = tuple(e for e in tuple(outcome) if e in on_board)
+        self.targets = targets
+        self.rows: dict[Callable, tuple | bool] = {}
+
+    def carries(self, output: str) -> bool:
         if per_entity_output(output):
-            if not outcome:
-                continue
-            if targets is None:
-                targets = derive_targets(record)
-            if _entity_carries(targets, output, outcome):
-                found.add(output)
-        elif output == CREATED_OBJECTS_OUTPUT:
-            if supervises_created_objects(record):
-                found.add(output)
-        elif output in VERDICT_LAYOUT.by_name:
-            if verdict is None:
-                verdict = verdict_targets(record) or False
-            if verdict and verdict[1][VERDICT_LAYOUT.index[output]]:
-                found.add(output)
-        elif output in GLOBAL_LAYOUT.by_name:
-            if global_ is None:
-                global_ = global_targets(record) or False
-            if global_ and global_[1][GLOBAL_LAYOUT.index[output]]:
-                found.add(output)
-    return frozenset(found)
+            return self._carries_at_entities(output)
+        if output == CREATED_OBJECTS_OUTPUT:
+            return supervises_created_objects(self.record)
+        if output in VERDICT_LAYOUT.by_name:
+            return self._flagged(verdict_targets, VERDICT_LAYOUT, output)
+        if output in GLOBAL_LAYOUT.by_name:
+            return self._flagged(global_targets, GLOBAL_LAYOUT, output)
+        return False
+
+    def _carries_at_entities(self, output: str) -> bool:
+        if not self.outcome:
+            return False
+        if self.targets is None:
+            self.targets = derive_targets(self.record)
+        return _entity_carries(self.targets, output, self.outcome)
+
+    def _flagged(self, derive: Callable, layout: RecordHeadLayout, output: str) -> bool:
+        """Whether the record's row of a verdict or global head masks ``output`` in."""
+        if derive not in self.rows:
+            self.rows[derive] = derive(self.record) or False
+        row = self.rows[derive]
+        return bool(row and row[1][layout.index[output]])
 
 
 def _entity_carries(targets: RecordTargets, output: str, outcome: tuple[str, ...]) -> bool:
     if output == GATE_OUTPUT:
         return targets.gated
     spec = FIELDS_BY_NAME[output]
-    for entity in outcome:
-        entry = targets.get(entity)
-        if entry is None or (spec.gated and not entry.affected):
-            continue
-        if entry.supervised(spec) is not None:
-            return True
-    return False
+    return any(_supervised_at(targets, entity, spec) for entity in outcome)
+
+
+def _supervised_at(targets: RecordTargets, entity: str, spec: FieldSpec) -> bool:
+    entry = targets.get(entity)
+    if entry is None or _unaffected_gated(entry, spec):
+        return False
+    return entry.supervised(spec) is not None
+
+
+def _unaffected_gated(entry, spec: FieldSpec) -> bool:
+    return spec.gated and not entry.affected
 
