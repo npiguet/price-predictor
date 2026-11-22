@@ -15,6 +15,7 @@ from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.protection_copies import CopyDraw, copied, protection_copy
+from effects.domain.protection_damage import damage_opportunities
 from effects.domain.protection_model import (
     EVERYTHING_RULE,
     PROTECTION_RULES,
@@ -268,7 +269,11 @@ class TestDamagePrevented:
         is put into the graveyard. A copy that prevents both hits keeps none
         of those, and leaves the other creatures' deaths."""
         record = real["0-mwqvqdyrb9c0.240"]
-        (opportunity,) = [o for o in qualify(record) if o.protected == "E43"]
+        # E43 attacks and is blocked by both sources, so ``qualify`` offers it
+        # no copy (702.16f); the rewrite is read from the damage opportunity.
+        entities = {e.id: e for e in record.state.entities}
+        (opportunity,) = [o for o in damage_opportunities(record.payload.events, entities, ())
+                          if o.protected == "E43"]
         assert opportunity.covered == ("E27", "E22")
         quality = ProtectionQuality.everything()
         copy, named = copied(record, opportunity, quality, 0)

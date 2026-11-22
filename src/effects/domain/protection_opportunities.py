@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from effects.domain.protection_aura import aura_opportunity
+from effects.domain.protection_blocks import keeping_blocks
 from effects.domain.protection_chain import no_prevention_on_the_board, refuses_damage
 from effects.domain.protection_damage import damage_opportunities
 from effects.domain.protection_model import (
@@ -82,7 +83,8 @@ def _combat_opportunities(record: EffectRecord, payload: CombatPayload, entities
                           lines: SidecarLookup | None) -> tuple[Opportunity, ...]:
     if lines is not None and no_prevention_on_the_board(record, lines):
         return ()
-    return damage_opportunities(payload.events, entities, targets=())
+    return keeping_blocks(
+        damage_opportunities(payload.events, entities, targets=()), payload.blocks, entities)
 
 
 def _resolution_opportunities(record: EffectRecord, payload: ResolutionPayload, entities,
