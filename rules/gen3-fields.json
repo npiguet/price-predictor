@@ -72,8 +72,6 @@
   "outputs": [
     {"id": "out.resolution_outcome", "slot": "verdict head, cost halves", "shape": "categorical: resolved, fizzled, partially fizzled, countered, declined; the input flag on the acting-ability slot is removed", "source": "record", "what": "whether a spell or ability resolved or fizzled",
      "names": ["new:resolution_outcome", "record:resolution_outcome"]},
-    {"id": "out.game_lost", "slot": "player", "shape": "binary: lost the game. In a two-player game a win is the other player's loss, and a draw is both losing", "source": "record (player_removed, player_won)", "what": "a player winning or losing the game",
-     "names": ["new:game_result", "record:event:player_removed", "record:event:player_won"]},
     {"id": "out.face_after", "slot": "card", "shape": "categorical: front, back, flipped, melded, face down; supervised where a face-change event names the card or it enters", "source": "record (face_change to_state, snapshot face)", "what": "the face a card has after a face change, or as it enters",
      "names": ["new:face_change", "record:event:face_change", "record:face", "record:face_down"]},
     {"id": "out.cost_adjustment", "slot": "verdict head, decision records", "shape": "signed delta per symbol kind against in.mana_cost, like power_delta", "source": "record (cost_after_adjustment)", "what": "how much reductions and increases changed a spell's cost",
@@ -138,6 +136,7 @@
     "reason": "every rule that lists it also lists the name that fixes it (new:permanent_spell_resolution, or new:created_objects for a token's X counters)"
   },
   "dropped": [
+    {"reason": "game-ending records are not curated (D13): the game's end is learned by a game-playing agent, so no output reads the win or loss", "names": ["new:game_result", "record:event:player_removed", "record:event:player_won"]},
     {"reason": "subgames, restarts and control of another player, which the design leaves out", "names": ["new:subgame_boundary", "new:game_restart", "new:decision_controller", "new:player_control_change"]},
     {"reason": "outside a two-player game without a sideboard, or Un-set and casual mechanics: Attractions, stickers, tickets, companions, sideboards, concession, the opening hand", "names": ["new:attraction_deck", "new:attraction_lights", "new:attraction_opened", "new:attraction_visit", "new:lit_up_numbers", "new:die_roll", "new:sideboard", "new:companion_zone", "new:stickers", "new:ticket_counters", "new:ticket_delta", "new:conceded", "new:pregame_action"]},
     {"reason": "engine procedure in the middle of an action, two rules or fewer: an activation or payment in progress, a turn ending, the order of pending extra turns, effect expiry, mana emptying, event and stack order as outputs, triggers ceasing", "names": ["new:activation_in_progress", "new:payment_in_progress", "new:turn_ending_in_progress", "new:pending_extra_turns", "new:effect_duration", "new:effect_expiry", "new:mana_pool_emptied", "new:event_order", "record:event_order", "new:stack_entry", "record:event:spell_cast", "new:stack_order", "new:trigger_removed", "new:priority_holder"]},

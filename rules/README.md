@@ -97,6 +97,8 @@ change reports what the change made learnable. A run refuses, writing nothing, w
 declared detectors all read `turn_action` records has a verdict other than `recorded`: no class
 of the mixture writes those records, so no output trains on them.
 
+The rules whose outcome is the game's end (the win and loss rules of 104, 704.5a-c and the rest that name `new:game_result`, `record:event:player_removed` or `record:event:player_won`) are not trained: game-ending records are not curated (D13), those names are `dropped` in `gen3-fields.json`, and each such line's note says so. A rule that also trains a real output (118.3b, 405.3, 603.4, 608.2a) stays trained and does not list the game's end.
+
 `validate --heads` checks completeness, the enums and the gen-3 ids. Rerun the pass whenever the input layout or
 the heads change, to count what the change made learnable.
 
