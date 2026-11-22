@@ -84,7 +84,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 - A phased-out permanent and a last-known copy (role `last_known`, whatever zone it last had) are entities of the board but not `EntityState.on_battlefield`, so no attack, block, state-based or grid reading reaches them.
 - A rewrite's set-aside ability's run (`buffered_events`) is supervised on the record that holds the run. A rewrite whose incoming event is unknown supervises no outgoing event and trains no affected gate.
 - A mana record's own events beside `tapped` and `mana_produced` are the mana ability's outcomes and are supervised as any resolution's.
-- The game-end marker names nobody and derives no targets.
+- The game-end marker names nobody and derives no targets. A `player_lost`, `player_won` or `game_drawn` event derives none either: no curated record holds the game's end (`corpus-building.md` § Curation).
 - Every shipped term is divided by its loss denominator, its constant-prediction loss measured once before the first step. The denominators are stored in `resume.pt` and in every checkpoint, and a resume reuses them rather than recomputing. The loss descended is scaled, while the parts the log prints stay in nats so they compare with the floor.
 
 ## The rule mask
