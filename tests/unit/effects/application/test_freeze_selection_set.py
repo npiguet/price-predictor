@@ -133,6 +133,12 @@ def _two_halves(n: int, prefix: str = "g") -> dict:
     return {GD: {"selection": games[0::2], "reporting": games[1::2]}}
 
 
+def _halves_of_games(n: int) -> dict:
+    """Each half's ``n`` games, ``s0``… and ``r0``…"""
+    return {GD: {"selection": [f"s{i}" for i in range(n)],
+                 "reporting": [f"r{i}" for i in range(n)]}}
+
+
 def _balanced_records(halves: dict, per_game: int = 4) -> tuple[list, dict]:
     """Records of every game, each half carrying both polarities of rule ``R``."""
     records, tags = [], {}
@@ -209,8 +215,7 @@ def test_no_two_polarity_rule_in_a_half_refuses_naming_it() -> None:
 def test_three_rules_at_68_each_miss_the_component_target() -> None:
     """Story 8 acceptance 8: the smaller rules left out and named; three items
     at 0.0994 give the component 0.0574, above 0.05."""
-    halves = {GD: {"selection": [f"s{i}" for i in range(68)],
-                   "reporting": [f"r{i}" for i in range(68)]}}
+    halves = _halves_of_games(68)
     records, tags = [], {}
     sizes = {"A": 68, "B": 68, "C": 68, "small1": 20, "small2": 5}
     for half, prefix in (("selection", "s"), ("reporting", "r")):
