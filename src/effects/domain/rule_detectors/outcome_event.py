@@ -71,7 +71,10 @@ miss aside): without one, every resolution moving a creature would be a near
 miss of every rule about which creature it moved.
 
 - ``subject_in_combat``: true where the event's subject is attacking or
-  blocking in the snapshot, false where it is not;
+  blocking in the snapshot, false where it is not; a player subject (an
+  unblocked attacker's combat damage to the player it attacks, 510.1b) reads
+  false when an attacker attacks it and is unreadable otherwise, and no other
+  qualifier reads a player;
 - ``subject_is_token``: true where the event's subject is a token in the
   snapshot, false where it is a card;
 - ``controller_is_owner``: the subject's controller is (true) or is not
@@ -399,14 +402,35 @@ def subject_verdict(subjects: tuple[str, ...], state: StateSnapshot,
     wanted = {name: params[name] for name in SUBJECT_QUALIFIERS if name in params}
     if not wanted:
         return True
-    entities = [e for e in (state.entity(s) for s in subjects) if e is not None]
     verdicts = []
-    for entity in entities:
-        found = [SUBJECT_QUALIFIERS[name](entity, state, value) for name, value in wanted.items()]
-        if None in found:
-            continue
-        verdicts.append(all(found))
+    for subject in subjects:
+        found = _subject_reads(subject, state, wanted)
+        if found is not None and None not in found:
+            verdicts.append(all(found))
     return any(verdicts) if verdicts else None
+
+
+def _subject_reads(subject: str, state: StateSnapshot,
+                   wanted: Mapping[str, Any]) -> list[bool | None] | None:
+    """One subject's verdict per qualifier in ``wanted``; None where the
+    subject is no snapshot object. A player is read for ``subject_in_combat``
+    alone (:func:`_player_in_combat`); every other qualifier is unreadable."""
+    entity = state.entity(subject)
+    if entity is not None:
+        return [SUBJECT_QUALIFIERS[name](entity, state, value) for name, value in wanted.items()]
+    if not any(player.id == subject for player in state.players):
+        return None
+    return [_player_in_combat(subject, state, value) if name == "subject_in_combat" else None
+            for name, value in wanted.items()]
+
+
+def _player_in_combat(player: str, state: StateSnapshot, wanted: Any) -> bool | None:
+    """``subject_in_combat`` of a player: false for the defending player, whom
+    an attacker attacks (510.1b: an unblocked attacker's damage to it), since a
+    player is no creature in combat; unreadable for a player no attacker attacks."""
+    attacked = any(e.combat is not None and e.combat.attacking == player
+                   for e in state.entities)
+    return (not bool(wanted)) if attacked else None
 
 
 @dataclass(frozen=True, slots=True)

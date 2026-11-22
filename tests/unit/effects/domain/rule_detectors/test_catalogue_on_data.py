@@ -35,6 +35,9 @@ _MIN_KIND = 20
 GENERAL = {
     # every combat damage step deals damage equal to power (510.1a, 120.2a)
     "510.1a-1",
+    # an unblocked attacker's damage goes to the player it attacks (510.1b):
+    # every unblocked attack on a player
+    "510.1b-1",
     # combat damage to a player is life lost, unless the source has infect
     "119.2-1", "120.3a-1",
     # combat damage to a creature is marked on it, unless wither or infect
