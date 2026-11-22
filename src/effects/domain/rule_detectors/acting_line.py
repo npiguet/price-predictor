@@ -71,32 +71,44 @@ def acting_root_params(record: EffectRecord, lines: SidecarLookup | None) -> dic
 CANDIDATE_KINDS = frozenset({"cast", "activated"})
 
 
-#: The keywords whose alternative-cost line is no cast: a special action
-#: (suspend 702.62, foretell 702.143, plot 702.170) or an activated ability
-#: from a hand or a graveyard (unearth, ninjutsu, encore, embalm, eternalize).
-#: ``built.kind`` cannot tell them apart (every one is ``spell``), the line's
-#: kind is the converter's ``alternate cost`` for all of them.
-_NOT_A_CAST = frozenset(normalize_keyword(name) for name in (
-    "Suspend", "Foretell", "Plot", "Unearth", "Ninjutsu", "Encore", "Embalm", "Eternalize"))
+def _names(*keywords: str) -> frozenset[str]:
+    return frozenset(normalize_keyword(name) for name in keywords)
 
 
+#: The keywords whose line is a special action (suspend 116.2c and 702.62,
+#: foretell 116.2h and 702.143, plot 116.2k and 702.170): neither a cast nor an
+#: activated ability.
+_SPECIAL_ACTIONS = _names("Suspend", "Foretell", "Plot")
+#: The alternative-cost lines that are activated abilities from a hand or a
+#: graveyard. ``built.kind`` cannot tell them from a cast (every one is
+#: ``spell``); the line's kind is the converter's ``alternate cost`` for all.
+_ACTIVATED_FROM_ZONE = _names("Unearth", "Ninjutsu", "Encore", "Embalm", "Eternalize")
+#: The alternative-cost casts (warp 702.185a, web-slinging 702.188a) whose line
+#: the converter files as ``activated``: read by name.
+_CAST_BY_NAME = _names("Warp", "Web-slinging")
 #: The line kinds of a keyword's own line that are no cast and no activated ability.
 _NEITHER = frozenset({LineKind.TRIGGERED, LineKind.STATIC})
 
 
-def _keyword_ability_kind(keys: tuple[ProvenanceKey, ...], lines: SidecarLookup | None) -> str | None:
+def _keyword_ability_kind(keys: tuple[ProvenanceKey, ...],
+                          lines: SidecarLookup | None) -> str | None:
     """A keyword's own line: a cast where the keyword's alternative cost casts
-    the spell (awaken, bestow, flashback, harmonize, morph ...), else an
+    the spell (awaken, bestow, flashback, harmonize, morph, warp ...), else an
     activated ability (equip, cycling, crew ...), the answer too where no line
-    is readable; None for a keyword's trigger or static (ward, prowess, echo),
-    which no player casts or activates."""
+    is readable; None for a special action (suspend, foretell, plot) and for a
+    keyword's trigger or static (ward, prowess, echo), which no player casts or
+    activates. The converter's line kind is read as it is, except for the
+    keywords it files as ``activated`` that cast (:data:`_CAST_BY_NAME`)."""
     line = line_of(keys, lines)
-    if line is not None and line.line_kind in _NEITHER:
-        return None
-    if line is None or line.line_kind != LineKind.ALTERNATE_COST:
+    if line is None:
         return "activated"
     name = normalize_keyword(line.keyword_display_name or "")
-    return "activated" if name in _NOT_A_CAST else "cast"
+    if line.line_kind in _NEITHER or name in _SPECIAL_ACTIONS:
+        return None
+    if name in _CAST_BY_NAME:
+        return "cast"
+    cast = line.line_kind == LineKind.ALTERNATE_COST and name not in _ACTIVATED_FROM_ZONE
+    return "cast" if cast else "activated"
 
 
 def ability_kind(keys: Iterable[ProvenanceKey], lines: SidecarLookup | None) -> str | None:
