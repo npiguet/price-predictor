@@ -14,6 +14,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _HELD_OUT_KEY,
     _HELD_OUT_TEXT,
     _SHOCK_KEY,
+    _Card,
     _resolution,
     _rewrite,
     _write_card,
@@ -53,10 +54,9 @@ def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus)
     """A token script is a carrier, so a game it appears in is held out (G14)."""
     token_file = "tokenscripts/r_2_2_goblin_held.txt"
     token_key = ProvenanceKey(token_file, 0, "spell", 1)
-    _write_card(
-        tmp_path / "source", token_file, "Goblin Held", _HELD_OUT_TEXT,
-        index_within_kind=1,
-    )
+    _write_card(tmp_path / "source", _Card(
+        token_file, "Goblin Held", _HELD_OUT_TEXT, index_within_kind=1,
+    ))
     write_ended_shard(a_corpus.records / "full-strength" / "run.0-token.jsonl.gz", [
         replace(
             _resolution("g-token.0", "g-token", ability=(_SHOCK_KEY,)),

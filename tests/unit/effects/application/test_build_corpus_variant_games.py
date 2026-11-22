@@ -10,6 +10,7 @@ from effects.infrastructure.shard_io import read_records
 from tests.unit.effects.application.build_corpus_support import (
     _HELD_OUT_TEXT,
     _SHOCK_KEY,
+    _Card,
     _resolution,
     _write_card,
     _write_corpus,
@@ -38,8 +39,10 @@ def _game_with_variant_on_board(game: str, variant: ProvenanceKey) -> list:
 def _build(tmp_path):
     root = tmp_path / "source"
     fixture = _write_corpus(root)
-    _write_card(root, _VARIANT_FILE, "Held Variant", _HELD_OUT_TEXT)
-    _write_card(root, _OTHER_FILE, "Plain Variant", "deals 4 damage to each opponent")
+    _write_card(root, _Card(_VARIANT_FILE, "Held Variant", _HELD_OUT_TEXT))
+    _write_card(
+        root, _Card(_OTHER_FILE, "Plain Variant", "deals 4 damage to each opponent"),
+    )
     write_ended_shard(fixture.records / "full-strength" / "run.0-v.jsonl.gz", [
         *(record for n in range(_GAMES) for record in
           _game_with_variant_on_board(f"g-held-{n}", _VARIANT_KEY)),

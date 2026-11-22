@@ -6,6 +6,7 @@ import logging
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -81,7 +82,7 @@ def test_a_damaged_shard_stops_the_build_naming_it_before_anything_is_cleared(
 
 @pytest.mark.parametrize("game", ["g-late", "g-clean-1"])
 def test_records_a_shard_gains_between_the_passes_are_written_nowhere(
-    tmp_path, a_corpus, monkeypatch, caplog, game,
+    tmp_path, a_corpus, caplog, game,
 ):
     """A collection still appending under --records-dir. A new game was never
     placed and may name a held-out card; a game the survey placed has records
@@ -103,8 +104,8 @@ def test_records_a_shard_gains_between_the_passes_are_written_nowhere(
             handle.write(gzip.compress(b"".join(_line(record) for record in late)))
         return decided
 
-    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_grow)
-    store = a_corpus.build(tmp_path / "curated")
+    with patch.object(module, "_decide_or_refuse", decide_then_grow):
+        store = a_corpus.build(tmp_path / "curated")
     manifest = store.load()
     assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 3
     assert not {r.record_id for r in late} & {r.record_id for r in _written(store)}

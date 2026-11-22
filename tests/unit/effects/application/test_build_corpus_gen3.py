@@ -10,9 +10,7 @@ import pytest
 from effects.application.build_corpus import build
 from effects.application.build_corpus_config import BuildCorpusConfig
 from effects.domain.corpus_plan import BuildCorpusError
-from effects.domain.records import (
-    RecordKind,
-)
+from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.split import HoldoutRule
 from effects.domain.stratum_placement import (
     MAX_COMPONENT_ERROR,
@@ -80,20 +78,27 @@ def test_no_turn_action_record_is_written_and_each_is_counted(gen3_build):
         "game_end": GEN3_FIXTURE_GAMES, "lore_counter": 2, "phasing": 2, "untap": 8}
 
 
-def test_a_permanent_spells_resolution_records_reach_their_strata(gen3_build):
-    """Story 6 acceptance 4: the fixture's creature spells resolve through
-    their implicit cast spell, which no line carries; none is refused, and
-    each one of a placed game is written, keyed to its card."""
+def _permanent_spell_resolutions() -> list[EffectRecord]:
+    """The fixture's resolution records acting through nothing but a permanent's
+    own cast spell."""
     from effects.domain.record_quality import is_permanent_spell
-    from effects.domain.strata import OUTPUT_STRATA
     from effects.infrastructure.converted_trees import process_sidecars
     from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 
     sidecars = process_sidecars({"cardsfolder": GEN3_SIDECAR_FOLDERS[0],
                                  "tokenscripts": GEN3_SIDECAR_FOLDERS[1]})
-    spells = [r for r in read_shard(GEN3_RECORDS) if r.kind is RecordKind.RESOLUTION
-              and r.ability and all(is_permanent_spell(k, sidecars.resolution_of(k))
-                                    for k in r.ability)]
+    return [r for r in read_shard(GEN3_RECORDS) if r.kind is RecordKind.RESOLUTION
+            and r.ability and all(is_permanent_spell(k, sidecars.resolution_of(k))
+                                  for k in r.ability)]
+
+
+def test_a_permanent_spells_resolution_records_reach_their_strata(gen3_build):
+    """Story 6 acceptance 4: the fixture's creature spells resolve through
+    their implicit cast spell, which no line carries; none is refused, and
+    each one of a placed game is written, keyed to its card."""
+    from effects.domain.strata import OUTPUT_STRATA
+
+    spells = _permanent_spell_resolutions()
     assert spells
     manifest = gen3_build.load()
     assert "no-acting-text" not in manifest.quality_dropped

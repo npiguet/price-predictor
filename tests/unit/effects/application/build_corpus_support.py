@@ -153,13 +153,22 @@ _FOOD_FILE = "tokenscripts/c_a_food_sac.txt"
 _FOOD_KEY = ProvenanceKey(_FOOD_FILE, 0, "spell", 1)
 
 
-def _write_card(
-    root: Path, script_file: str, card: str, text: str, *,
-    index_within_kind: int = 0, dropped: tuple[ProvenanceKey, ...] = (),
-) -> None:
-    """A minimal converted ``.txt`` plus a sidecar whose one line carries ``text``.
+@dataclass(frozen=True, slots=True)
+class _Card:
+    """One card script to write: its file, name, rendered ``text`` and the index
+    of the key that text carries, with the ``dropped`` keys of its sidecar."""
 
-    ``dropped`` fills the sidecar's ``dropped_keys``: traits the converter
+    script_file: str
+    name: str
+    text: str
+    index_within_kind: int = 0
+    dropped: tuple[ProvenanceKey, ...] = ()
+
+
+def _write_card(root: Path, card: _Card) -> None:
+    """A minimal converted ``.txt`` plus a sidecar whose one line carries ``card.text``.
+
+    ``card.dropped`` fills the sidecar's ``dropped_keys``: traits the converter
     rendered no line for, which is what a resolution record has to act only
     through to be refused as ``no-acting-text`` (FR-148).
 
@@ -173,22 +182,22 @@ def _write_card(
     converted token lives in the flat ``tokenscripts/`` tree beside the
     letter-keyed card tree and the build reads both.
     """
-    tree, relative = script_file.split("/", 1)
+    tree, relative = card.script_file.split("/", 1)
     txt_path = root / tree / relative
     txt_path.parent.mkdir(parents=True, exist_ok=True)
-    txt_path.write_text(f"name: {card}\ntypes: creature\n", encoding="utf-8")
-    key = ProvenanceKey(script_file, 0, "spell", index_within_kind)
+    txt_path.write_text(f"name: {card.name}\ntypes: creature\n", encoding="utf-8")
+    key = ProvenanceKey(card.script_file, 0, "spell", card.index_within_kind)
     write_sidecar(
         ProvenanceSidecar(
-            card=card,
-            script_file=script_file,
+            card=card.name,
+            script_file=card.script_file,
             lines=(
                 SidecarLine(
                     line_index=999, line_kind="spell", provenance=(key,),
-                    script_text=text, prose_offset=0,
+                    script_text=card.text, prose_offset=0,
                 ),
             ),
-            dropped_keys=dropped,
+            dropped_keys=card.dropped,
         ),
         sidecar_path_for(txt_path),
     )
@@ -218,21 +227,24 @@ def _resolution(
     )
 
 
-def _combat(
-    record_id: str,
-    game_id: str,
-    *,
-    fork: bool = False,
-    mirror_of: str | None = None,
-    probed_keyword: str | None = None,
-    probed_entity: str | None = None,
-) -> EffectRecord:
+@dataclass(frozen=True, slots=True)
+class _Probe:
+    """The fork a combat record is: the record it mirrors and the keyword and
+    entity it probes."""
+
+    mirror_of: str
+    keyword: str
+    entity: str
+
+
+def _combat(record_id: str, game_id: str, *, probe: _Probe | None = None) -> EffectRecord:
     return make_record(
         RecordKind.COMBAT, record_id=record_id, game_id=game_id, timestamp=_TIMESTAMP,
-        fork=fork, fork_kind=ForkKind.PROBE if fork else None, mirror_of=mirror_of,
+        fork=probe is not None, fork_kind=ForkKind.PROBE if probe else None,
+        mirror_of=probe.mirror_of if probe else None,
         payload=CombatPayload(
-            attackers=("E0",), probed_keyword=probed_keyword,
-            probed_entity=probed_entity,
+            attackers=("E0",), probed_keyword=probe.keyword if probe else None,
+            probed_entity=probe.entity if probe else None,
         ),
     )
 
@@ -335,14 +347,14 @@ class CorpusFixture:
 
 
 def _write_corpus(root: Path) -> CorpusFixture:
-    _write_card(root, _HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT)
-    _write_card(root, _BOLT_FILE, _BOLT_CARD, _BOLT_TEXT)
-    _write_card(root, _SHOCK_FILE, _SHOCK_CARD, _SHOCK_TEXT)
-    _write_card(root, _FOOD_FILE, _FOOD_CARD, _FOOD_TEXT, index_within_kind=1)
-    _write_card(
-        root, _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT,
+    _write_card(root, _Card(_HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT))
+    _write_card(root, _Card(_BOLT_FILE, _BOLT_CARD, _BOLT_TEXT))
+    _write_card(root, _Card(_SHOCK_FILE, _SHOCK_CARD, _SHOCK_TEXT))
+    _write_card(root, _Card(_FOOD_FILE, _FOOD_CARD, _FOOD_TEXT, index_within_kind=1))
+    _write_card(root, _Card(
+        _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT,
         index_within_kind=_BEAR_KEY.index_within_kind, dropped=(_BEAR_CAST_KEY,),
-    )
+    ))
 
     shard_a = [
         # Both held-out (names Held Out Bears) *and* carries a resolvable
@@ -359,8 +371,8 @@ def _write_corpus(root: Path) -> CorpusFixture:
         _resolution("g-tainted.4", "g-tainted", ability=(_HELD_OUT_KEY,)),
         _combat("g-tainted.2", "g-tainted"),
         _combat(
-            "g-tainted.3", "g-tainted", fork=True, mirror_of="g-tainted.2",
-            probed_keyword="flying", probed_entity="E0",
+            "g-tainted.3", "g-tainted",
+            probe=_Probe(mirror_of="g-tainted.2", keyword="flying", entity="E0"),
         ),
         *(
             _resolution(f"g-clean-1.{n}", "g-clean-1", ability=(_SHOCK_KEY,))

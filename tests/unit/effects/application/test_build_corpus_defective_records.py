@@ -19,6 +19,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _BEAR_CAST_KEY,
     _BEAR_FILE,
     _BEAR_TEXT,
+    _Card,
     _tallies,
     _write_card,
 )
@@ -90,10 +91,10 @@ def test_a_dropped_key_that_is_no_permanent_spell_is_still_refused(tmp_path, a_c
             "g-clean-1.dropped", game="g-clean-1",
             ability=(ProvenanceKey(_BEAR_FILE, 0, "trigger", 0),)),
     ])
-    _write_card(
-        corpus.cards[0].parent, _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT, index_within_kind=1,
+    _write_card(corpus.cards[0].parent, _Card(
+        _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT, index_within_kind=1,
         dropped=(_BEAR_CAST_KEY, ProvenanceKey(_BEAR_FILE, 0, "trigger", 0)),
-    )
+    ))
     store = corpus.build(tmp_path / "out")
     assert store.load().quality_dropped == {QualityDefect.NO_ACTING_TEXT: 1}
 

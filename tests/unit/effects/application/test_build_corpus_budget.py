@@ -86,6 +86,33 @@ def test_the_text_cap_bounds_a_text_s_natural_and_added_copies_together(tmp_path
     assert 0 < len(bolts) <= 6
 
 
+def _assert_copies_say_how_they_were_written(
+    training: list[EffectRecord], record_id: str,
+) -> None:
+    copies = [r for r in training if r.record_id == record_id]
+    curation = copies[0].curation
+    assert len(copies) == curation.copies <= 4
+    assert sum(r.curation.drawn_rule is None for r in copies) == curation.natural_share
+    assert all(r.curation.drawn_rules == (_BUDGET_RULE,) for r in copies)
+
+
+def _assert_added_copies_are_the_budgeted_ones(added: list[EffectRecord], game: str) -> None:
+    assert {r.curation.drawn_rule for r in added} == {_BUDGET_RULE}
+    assert {r.record_id for r in added} <= {f"{game}.tagged0", f"{game}.tagged1"}
+    _assert_added_copies_read_the_damaged_creature(added)
+
+
+def _assert_added_copies_read_the_damaged_creature(added: list[EffectRecord]) -> None:
+    """The damaged creature is the outcome; the bolt's controller is read by its
+    condition."""
+    assert all(r.curation.outcome_entities == ("E0",) for r in added)
+    assert all(r.actor_player in r.curation.condition_entities for r in added)
+
+
+def _drawn_rules_of(training: list[EffectRecord], id_prefix: str) -> set[tuple[str, ...]]:
+    return {r.curation.drawn_rules for r in training if r.record_id.startswith(id_prefix)}
+
+
 def test_added_copies_carry_their_rule_and_natural_copies_none(budget_build):
     """FR-055, research T1: every copy says how it was written."""
     store, game = budget_build
@@ -94,19 +121,10 @@ def test_added_copies_carry_their_rule_and_natural_copies_none(budget_build):
     added = [r for r in training if r.curation.drawn_rule is not None]
     natural = [r for r in training if r.curation.drawn_rule is None]
     assert added and natural
-    assert {r.curation.drawn_rule for r in added} == {_BUDGET_RULE}
-    assert {r.record_id for r in added} <= {f"{game}.tagged0", f"{game}.tagged1"}
-    # The damaged creature is the outcome; the bolt's controller is read by its condition.
-    assert all(r.curation.outcome_entities == ("E0",) for r in added)
-    assert all(r.actor_player in r.curation.condition_entities for r in added)
+    _assert_added_copies_are_the_budgeted_ones(added, game)
     for record_id in {r.record_id for r in added}:
-        copies = [r for r in training if r.record_id == record_id]
-        curation = copies[0].curation
-        assert len(copies) == curation.copies <= 4
-        assert sum(r.curation.drawn_rule is None for r in copies) == curation.natural_share
-        assert all(r.curation.drawn_rules == (_BUDGET_RULE,) for r in copies)
-    assert all(r.curation.drawn_rules == () for r in training
-               if r.record_id.startswith(f"{game}.plain"))
+        _assert_copies_say_how_they_were_written(training, record_id)
+    assert _drawn_rules_of(training, f"{game}.plain") <= {()}
 
 
 def test_the_manifest_reports_the_rule_row_and_its_one_side(budget_build):

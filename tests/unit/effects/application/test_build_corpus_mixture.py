@@ -27,6 +27,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _MIX_SHARDS,
     _MIXTURE,
     CorpusFixture,
+    _Card,
     _combat,
     _resolution,
     _rewrite,
@@ -52,8 +53,8 @@ def a_mixture_corpus(tmp_path_factory) -> CorpusFixture:
     the training mixture under test.
     """
     root = tmp_path_factory.mktemp("mixture-source")
-    _write_card(root, _HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT)
-    _write_card(root, _BOLT_FILE, _BOLT_CARD, _BOLT_TEXT)
+    _write_card(root, _Card(_HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT))
+    _write_card(root, _Card(_BOLT_FILE, _BOLT_CARD, _BOLT_TEXT))
 
     records_dir = root / "records"
     for shard in range(_MIX_SHARDS):
