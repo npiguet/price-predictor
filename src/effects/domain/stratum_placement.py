@@ -157,14 +157,9 @@ def place_games(census: GameCensus, rule: PlacementRule) -> GameStrata:
                if cell[1] in TEST_POLARITIES and n > 0}
         for game, inventory in census.inventories.items() if game in candidates
     }
-    need = 2 * rule_test_records_needed(rule.max_item_error)
     card = _admit_card_disjoint(
-        census.held_out & census.games, census.held_out_text_games, inventories,
-        cap=rule.card_disjoint_text_cap, need=need, seed=rule.seed,
-    )
-    game = _game_disjoint(
-        forge_ai - census.held_out, census.keyword_combat, inventories, rule, need=need,
-    )
+        census.held_out & census.games, census.held_out_text_games, inventories, rule)
+    game = _game_disjoint(forge_ai - census.held_out, census.keyword_combat, inventories, rule)
     halves = {
         Stratum.CARD_DISJOINT: _assign_halves(card, inventories, rule),
         Stratum.GAME_DISJOINT: _assign_halves(game, inventories, rule),
@@ -197,11 +192,58 @@ def _scarcest_first(carriers: Mapping[RuleCell, list[str]],
         sum(inventories[game][cell] for game in carriers[cell]), cell))
 
 
+def _texts_of(candidates: frozenset[str],
+              text_games: Mapping[str, Iterable[str]]) -> dict[str, set[str]]:
+    """``game -> held-out texts it resolves``, over the candidate games."""
+    texts_of: dict[str, set[str]] = {}
+    for text, games in text_games.items():
+        for game in games:
+            if game in candidates:
+                texts_of.setdefault(game, set()).add(text)
+    return texts_of
+
+
+class _CardAdmission:
+    """The card-disjoint stratum as it fills: who is in, how many games each
+    held-out text has taken and how many records each cell holds."""
+
+    def __init__(self, texts_of: Mapping[str, set[str]],
+                 inventories: Mapping[str, Mapping[RuleCell, int]], cap: int) -> None:
+        self._texts_of = texts_of
+        self._inventories = inventories
+        self._cap = cap
+        self.taken: Counter[str] = Counter()
+        self.filled: Counter[RuleCell] = Counter()
+        self.admitted: set[str] = set()
+
+    def admit(self, game: str) -> None:
+        texts = self._texts_of.get(game)
+        if game in self.admitted or not texts:
+            return
+        if self._cap > 0 and any(self.taken[text] >= self._cap for text in texts):
+            return
+        self.admitted.add(game)
+        self.taken.update(texts)
+        self.filled.update(self._inventories.get(game, {}))
+
+    def fill_cell(self, cell: RuleCell, carriers: Iterable[str], need: int) -> None:
+        """Admit ``carriers`` in order until the cell holds ``need`` records."""
+        for game in carriers:
+            if self.filled[cell] >= need:
+                break
+            self.admit(game)
+
+
+def _need(rule: PlacementRule) -> int:
+    """Records a half pair needs of each cell: both halves' worth."""
+    return 2 * rule_test_records_needed(rule.max_item_error)
+
+
 def _admit_card_disjoint(
     candidates: frozenset[str],
     text_games: Mapping[str, Iterable[str]],
     inventories: Mapping[str, Mapping[RuleCell, int]],
-    *, cap: int, need: int, seed: int,
+    rule: PlacementRule,
 ) -> frozenset[str]:
     """Held-out games admitted while every held-out text they resolve is under
     cap, games carrying a short cell first (R3).
@@ -210,36 +252,17 @@ def _admit_card_disjoint(
     resolutions through a held-out text, and nothing else in the game is
     held out. Requiring every text under cap keeps the cap a true ceiling.
     """
-    texts_of: dict[str, set[str]] = {}
-    for text, games in text_games.items():
-        for game in games:
-            if game in candidates:
-                texts_of.setdefault(game, set()).add(text)
-    order = stable_order(candidates, seed)
+    need = _need(rule)
+    order = stable_order(candidates, rule.seed)
     rank = {game: i for i, game in enumerate(order)}
-    taken: Counter[str] = Counter()
-    filled: Counter[RuleCell] = Counter()
-    admitted: set[str] = set()
-
-    def admit(game: str) -> None:
-        texts = texts_of.get(game)
-        if game in admitted or not texts:
-            return
-        if cap > 0 and any(taken[text] >= cap for text in texts):
-            return
-        admitted.add(game)
-        taken.update(texts)
-        filled.update(inventories.get(game, {}))
-
+    admission = _CardAdmission(
+        _texts_of(candidates, text_games), inventories, rule.card_disjoint_text_cap)
     carriers = _carriers(inventories, candidates)
     for cell in _scarcest_first(carriers, inventories):
-        for game in sorted(carriers[cell], key=rank.__getitem__):
-            if filled[cell] >= need:
-                break
-            admit(game)
+        admission.fill_cell(cell, sorted(carriers[cell], key=rank.__getitem__), need)
     for game in order:
-        admit(game)
-    return frozenset(admitted)
+        admission.admit(game)
+    return frozenset(admission.admitted)
 
 
 def _by_game_hash(game: str) -> tuple[int, str]:
@@ -251,7 +274,6 @@ def _game_disjoint(
     keyword_combat: frozenset[str],
     inventories: Mapping[str, Mapping[RuleCell, int]],
     rule: PlacementRule,
-    *, need: int,
 ) -> frozenset[str]:
     """Gen-2's draw, then promotions from the candidate pool: per short cell,
     then until the stratum holds two halves' worth of games."""
@@ -264,6 +286,17 @@ def _game_disjoint(
          if rule.in_pool(game, keyword_combat=game in keyword_combat)),
         key=_by_game_hash,
     )
+    _promote_for_cells(placed, pool, inventories, _need(rule))
+    for game in pool:
+        if len(placed) >= 2 * rule.min_games_per_half:
+            break
+        placed.add(game)
+    return frozenset(placed)
+
+
+def _promote_for_cells(placed: set[str], pool: list[str],
+                       inventories: Mapping[str, Mapping[RuleCell, int]], need: int) -> None:
+    """Add pool games to ``placed``, scarcest cell first, until each cell holds ``need``."""
     filled: Counter[RuleCell] = Counter()
     for game in placed:
         filled.update(inventories.get(game, {}))
@@ -275,11 +308,6 @@ def _game_disjoint(
             if game not in placed:
                 placed.add(game)
                 filled.update(inventories.get(game, {}))
-    for game in pool:
-        if len(placed) >= 2 * rule.min_games_per_half:
-            break
-        placed.add(game)
-    return frozenset(placed)
 
 
 def _assign_halves(
@@ -344,28 +372,41 @@ def _move_cost(inventory: Mapping[RuleCell, int], to: Counter, source: Counter) 
     )
 
 
+def _testable_rules(inventories: Mapping[str, Mapping[RuleCell, int]]) -> list[str]:
+    """Rules holding test records of every test polarity somewhere in the corpus."""
+    seen: dict[str, set[Polarity]] = {}
+    for inventory in inventories.values():
+        for rule_id, polarity in inventory:
+            seen.setdefault(rule_id, set()).add(polarity)
+    return sorted(rule_id for rule_id, sides in seen.items()
+                  if len(sides) == len(TEST_POLARITIES))
+
+
+def _missing_rules(games: frozenset[str], testable: list[str],
+                   inventories: Mapping[str, Mapping[RuleCell, int]]) -> tuple[str, ...]:
+    """The testable rules ``games`` hold none of one test polarity of."""
+    present = {cell for game in games for cell in inventories.get(game, ())}
+    return tuple(
+        rule_id for rule_id in testable
+        if any((rule_id, polarity) not in present for polarity in TEST_POLARITIES)
+    )
+
+
 def _left_out(
     halves: Mapping[Stratum, Mapping[Half, frozenset[str]]],
     inventories: Mapping[str, Mapping[RuleCell, int]],
 ) -> dict[Stratum, dict[Half, tuple[str, ...]]]:
     """Rules with test records of both polarities in the corpus that hold none
     of one polarity in a half (FR-068a)."""
-    seen: dict[str, set[Polarity]] = {}
-    for inventory in inventories.values():
-        for rule_id, polarity in inventory:
-            seen.setdefault(rule_id, set()).add(polarity)
-    testable = sorted(rule_id for rule_id, sides in seen.items()
-                      if len(sides) == len(TEST_POLARITIES))
+    testable = _testable_rules(inventories)
+    missing = {
+        (stratum, half): _missing_rules(games, testable, inventories)
+        for stratum, by_half in halves.items() for half, games in by_half.items()
+    }
     out: dict[Stratum, dict[Half, tuple[str, ...]]] = {}
-    for stratum, by_half in halves.items():
-        for half, games in by_half.items():
-            present = {cell for game in games for cell in inventories.get(game, ())}
-            missing = tuple(
-                rule_id for rule_id in testable
-                if any((rule_id, polarity) not in present for polarity in TEST_POLARITIES)
-            )
-            if missing:
-                out.setdefault(stratum, {})[half] = missing
+    for (stratum, half), rules in missing.items():
+        if rules:
+            out.setdefault(stratum, {})[half] = rules
     return out
 
 
