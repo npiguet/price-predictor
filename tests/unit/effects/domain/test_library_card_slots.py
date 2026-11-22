@@ -94,8 +94,15 @@ def test_the_mills_stay_in_the_players_count(records):
     assert targets["P0"].fields[HeadField.CARDS_MILLED] == 3
 
 
-@pytest.mark.parametrize("record_id", [_ELFHAME_SANCTUARY, _THADA_ADEL])
-def test_a_search_stays_in_the_players_library_events(records, record_id):
-    targets = derive_targets(records[record_id])
+def test_a_named_search_stays_in_the_players_library_events(records):
+    targets = derive_targets(records[_ELFHAME_SANCTUARY])
     tutor = LIBRARY_EVENTS.index(LibraryEvent.TUTOR)
     assert targets["P1"].fields[HeadField.LIBRARY_EVENTS][tutor] == 1.0
+
+
+def test_a_search_without_its_named_mode_stays_in_the_players_shuffle(records):
+    """Thada Adel's record names no ``SearchedLibrary``: only the shuffle reads."""
+    targets = derive_targets(records[_THADA_ADEL])
+    events = targets["P1"].fields[HeadField.LIBRARY_EVENTS]
+    assert events[LIBRARY_EVENTS.index(LibraryEvent.SHUFFLE)] == 1.0
+    assert events[LIBRARY_EVENTS.index(LibraryEvent.TUTOR)] == 0.0

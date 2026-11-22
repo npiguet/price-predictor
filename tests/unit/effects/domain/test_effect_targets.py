@@ -558,28 +558,38 @@ class TestFieldNames:
 
 
 class TestEverySimpleEventType:
-    """Each event type the lookup tables handle, pinned field by field."""
+    """Each event type the lookup tables handle, pinned field by field.
+
+    The parameters are the ones the collector writes (fixture and review-pilot
+    records): ``damage_healed`` names the healed permanent and the damage the
+    clause removed, a ``zone_change`` its lower-case zones and its cause, an
+    effect card's move into the command zone no ``from_zone``, and
+    ``card_drawn`` always its ``count``. ``control_change`` is hand-written: no
+    fixture record holds one.
+    """
 
     @pytest.mark.parametrize(("event_type", "params", "expected"), [
-        (EventType.DAMAGE_DEALT, {"amount": 3}, {"damage_taken": 3.0}),
-        (EventType.DAMAGE_DEALT, {}, {"damage_taken": 0.0}),
-        (EventType.DAMAGE_HEALED, {"amount": 2}, {"damage_taken": -2.0}),
+        (EventType.DAMAGE_DEALT,
+         {"amount": 3, "combat": False, "damage_type": "normal", "cause": "E126"},
+         {"damage_taken": 3.0}),
+        (EventType.DAMAGE_HEALED, {"amount": 2, "cause": "E29"}, {"damage_taken": -2.0}),
         (EventType.LIFE_CHANGE, {"delta": -4}, {"life_delta": -4.0}),
         (EventType.POISON_CHANGE, {"delta": 1}, {"poison_delta": 1.0}),
-        (EventType.CARD_DRAWN, {}, {"cards_drawn": 1.0}),
+        (EventType.CARD_DRAWN, {"count": 1}, {"cards_drawn": 1.0}),
         (EventType.CARD_DRAWN, {"count": 3}, {"cards_drawn": 3.0}),
-        (EventType.CARD_DISCARDED, {}, {"cards_discarded": 1.0}),
-        (EventType.CARD_MILLED, {"count": 2}, {"cards_milled": 2.0}),
+        (EventType.CARD_DISCARDED, {"count": 1}, {"cards_discarded": 1.0}),
+        (EventType.CARD_MILLED, {"count": 2, "cause": "E75"}, {"cards_milled": 2.0}),
         (EventType.TAPPED, {}, {"tap_state": 1}),
         (EventType.UNTAPPED, {}, {"tap_state": 0}),
         (EventType.CONTROL_CHANGE, {}, {"control_change": 1}),
-        (EventType.ATTACHED, {}, {"attached_to_change": 1}),
-        (EventType.UNATTACHED, {}, {"attached_to_change": 1}),
+        (EventType.ATTACHED, {"attached_to": "E22", "cause": "E9"}, {"attached_to_change": 1}),
+        (EventType.UNATTACHED, {"detached_from": "E43"}, {"attached_to_change": 1}),
         (EventType.DESTROYED, {}, {"zone_outcome": ZONE_OUTCOMES.index("died")}),
         (EventType.FACE_CHANGE, {}, {"zone_outcome": ZONE_OUTCOMES.index("face_changed")}),
-        (EventType.ZONE_CHANGE, {"to_zone": "Exile"},
+        (EventType.ZONE_CHANGE,
+         {"from_zone": "battlefield", "to_zone": "exile", "cause": "E126"},
          {"zone_outcome": ZONE_OUTCOMES.index("exiled")}),
-        (EventType.ZONE_CHANGE, {"to_zone": "command"},
+        (EventType.ZONE_CHANGE, {"to_zone": "command", "cause": "E126"},
          {"zone_outcome": ZONE_OUTCOMES.index("to_command")}),
     ])
     def test_its_fields(self, event_type, params, expected):
@@ -603,7 +613,8 @@ class TestEverySimpleEventType:
     def test_heals_and_hits_on_one_entity_net(self):
         targets = derive_targets(_resolution(
             Event(type=EventType.DAMAGE_DEALT, subjects=("E1",), params={"amount": 5}),
-            Event(type=EventType.DAMAGE_HEALED, subjects=("E1",), params={"amount": 2}),
+            Event(type=EventType.DAMAGE_HEALED, subjects=("E1",),
+                  params={"amount": 2, "cause": "E29"}),
         ))
         assert targets["E1"].fields == {"damage_taken": 3.0}
 
@@ -989,13 +1000,25 @@ class TestLibraryEventExtensions:
         assert flags[LIBRARY_EVENTS.index("surveil")] == 1.0
         assert flags[LIBRARY_EVENTS.index("scry")] == 0.0
 
-    def test_a_search_then_shuffle_is_a_tutor(self):
+    def test_a_search_then_shuffle_is_a_tutor_only_by_its_named_mode(self):
+        """Elfhame Sanctuary's events, as the collector writes them."""
+        flags = derive_targets(_resolution(
+            Event(type=EventType.CARD_LOOKED_AT, subjects=("P0",),
+                  params={"from_zone": "library", "mode": "SearchedLibrary", "cause": "E138"}),
+            Event(type=EventType.ZONE_CHANGE, subjects=("E9",),
+                  params={"from_zone": "library", "to_zone": "hand", "cause": "E138"}),
+            Event(type=EventType.LIBRARY_SHUFFLED, subjects=("P0",), params={"cause": "E138"}),
+        ))["P0"].fields["library_events"]
+        assert flags[LIBRARY_EVENTS.index("tutor")] == 1.0
+        assert flags[LIBRARY_EVENTS.index("shuffle")] == 1.0
+
+    def test_a_shuffle_after_a_card_left_the_library_unnamed_is_no_tutor(self):
         flags = derive_targets(_resolution(
             Event(type=EventType.ZONE_CHANGE, subjects=("E9",),
                   params={"from_zone": "library", "to_zone": "battlefield"}),
             Event(type=EventType.LIBRARY_SHUFFLED, subjects=("P0",)),
         ))["P0"].fields["library_events"]
-        assert flags[LIBRARY_EVENTS.index("tutor")] == 1.0
+        assert flags[LIBRARY_EVENTS.index("tutor")] == 0.0
         assert flags[LIBRARY_EVENTS.index("shuffle")] == 1.0
 
     def test_a_shuffle_alone_is_no_tutor(self):

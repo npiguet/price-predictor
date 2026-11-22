@@ -48,6 +48,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.event_schema import Event, EventType, signed_delta
 from effects.domain.keyword_names import changed_keyword
+from effects.domain.lasting_change_labels import cancel_enchant_swaps, mixed_pt_durations
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
     ContinuousPayload,
@@ -592,6 +593,8 @@ class _RecordPass:
         self._zone_outcomes()
         self._library_events()
         self._base_pt()
+        mixed_pt_durations(self.by_type[EventType.PT_CHANGE], self.targets)
+        cancel_enchant_swaps(self.targets.values())
         self._copies()
         self._game_end()
         self._venture()
@@ -692,7 +695,9 @@ class _RecordPass:
         (``Scry``, ``Surveil``, or ``SearchedLibrary``: a tutor). A record
         without the mode reads it from what else happened: a scry and a
         surveil both look at and reorder cards, a surveil is the one that also
-        mills, and a shuffle after cards left the library is a search."""
+        mills. A tutor is the named mode only: a shuffle after cards left the
+        library is no evidence of a search (a mill, a draw or an exile from
+        the top shuffles too)."""
         milled = {
             subject for event in self.by_type[EventType.CARD_MILLED]
             for subject in event.subjects
@@ -702,17 +707,6 @@ class _RecordPass:
             for subject in event.subjects:
                 kind = named or (LibraryEvent.SURVEIL if subject in milled else LibraryEvent.SCRY)
                 _flag_library(self.targets[subject], kind)
-        searched = set()
-        for event in self.by_type[EventType.ZONE_CHANGE]:
-            if str(event.params.get("from_zone", "")).lower() != Zone.LIBRARY:
-                continue
-            if str(event.params.get("to_zone", "")).lower() == Zone.LIBRARY:
-                continue
-            for subject in event.subjects:
-                searched.add(self._owner(subject))
-        for player in self.shuffled:
-            if player in searched or (None in searched and player in self.targets):
-                _flag_library(self.targets[player], LibraryEvent.TUTOR)
 
     # ── base power and toughness ──
 

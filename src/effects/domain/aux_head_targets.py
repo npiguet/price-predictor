@@ -190,7 +190,7 @@ def global_targets(record: EffectRecord) -> HeadRow | None:
     day_night = DayNightChange.UNCHANGED
     for event in events_of(record):
         if event.type in _TURN_STRUCTURE:
-            counts[event.type] += float(event.params.get("count", 1) or 1)
+            counts[event.type] += _turn_structure_count(event)
         elif event.type is EventType.DAY_NIGHT_CHANGED:
             day_night = (
                 DayNightChange.BECAME_DAY if event.params.get("to") == "day"
@@ -200,6 +200,12 @@ def global_targets(record: EffectRecord) -> HeadRow | None:
     GLOBAL_LAYOUT.put(row, GlobalField.TURN_STRUCTURE_CHANGE, list(counts.values()))
     GLOBAL_LAYOUT.put(row, GlobalField.DAY_NIGHT_CHANGE, DAY_NIGHT_CHANGES.index(day_night))
     return row
+
+
+def _turn_structure_count(event) -> float:
+    """What one turn-structure event adds or skips: its ``count`` for each
+    player it names (one event names every player affected)."""
+    return float(event.params.get("count", 1) or 1) * max(len(event.subjects), 1)
 
 
 #: The turn-structure events, in ``turn_structure_change``'s member order.

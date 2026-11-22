@@ -42,7 +42,6 @@ class ZoneOutcome(StrEnum):
     TO_HAND = "to_hand"
     LIBRARY_TOP = "library_top"
     LIBRARY_BOTTOM = "library_bottom"
-    TRANSFORMED = "transformed"
     FACE_CHANGED = "face_changed"
     PHASED_OUT = "phased_out"
     BLINKED = "blinked"
@@ -530,7 +529,6 @@ class CreatedKind(StrEnum):
     """What a created-objects group is (root spec § 11.3), in column order."""
 
     TOKEN = "token"
-    EMBLEM = "emblem"
     #: An effect object Forge builds in the command zone for a lasting effect.
     EFFECT = "effect"
     #: A card made outside the game (``MakeCard``).

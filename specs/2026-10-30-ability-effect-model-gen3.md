@@ -1068,19 +1068,20 @@ The 22 outputs of `rules/gen3-fields.json`:
 
 - `zone_outcome` gains shuffled into library, to command zone, entered the battlefield
   apart from a blink, and ceased to exist. `library_bottom` is set where it applies.
-  Phasing in and phasing out are distinct outcomes.
+  Phasing in and phasing out are distinct outcomes. A card changing face is `face_changed`;
+  there is no separate transformed outcome.
 - `library_events` sets `scry` for a scry only, `surveil` for a surveil and `tutor` for a
   tutor, and gains `shuffle`.
 - Each created-objects group carries a binary for being controlled by a player other than
-  the actor, its subtypes, its counters per type, and a group kind for emblems, effect
-  objects and cards made outside the game.
+  the actor, its subtypes, its counters per type, and a group kind for effect objects (an
+  emblem is one) and cards made outside the game.
 - `keywords_gained` and `keywords_lost` cover every keyword an effect in the corpus grants
   or removes, a closed list the manifest records.
 - The subtype and keyword lists, and with them the head widths, are fixed when the lists are
   generated from the collected corpus. Until then they are generated from pilot collections:
   181 subtypes and 70 keywords.
-- With those lists the per-entity head is 1,636 columns (300 fields, 932 of the columns for
-  the 233 counter fields), each created-objects slot 286 columns (1,145 for the head), the
+- With those lists the per-entity head is 1,635 columns (300 fields, 932 of the columns for
+  the 233 counter fields), each created-objects slot 285 columns (1,141 for the head), the
   verdict head 169, the global head 7 and the value head 541.
 - Every named counter other than a keyword counter gets a signed-delta output.
 - `tap_state` is supervised on the anchor of an attackers record carrying
