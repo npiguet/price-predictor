@@ -77,7 +77,7 @@
         "family": "resolution_outcome",
         "record_kind": "resolution",
         "outcome": "A spell or ability on the stack is countered: its stack object's outcome is countered and it never resolves.",
-        "near_miss": "A spell or ability that leaves the stack by resolving.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a spell or ability that leaves the stack by resolving.",
         "params": {
           "outcome": "countered",
           "near": [
@@ -155,7 +155,7 @@
         "family": "resolution_outcome",
         "record_kind": "resolution",
         "outcome": "A spell or ability on the stack is countered: its stack object's outcome is countered and it never resolves.",
-        "near_miss": "A spell or ability that leaves the stack by resolving.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a spell or ability that leaves the stack by resolving.",
         "params": {
           "outcome": "countered",
           "near": [

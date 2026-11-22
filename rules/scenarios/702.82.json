@@ -82,7 +82,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution in which creatures are sacrificed (moved from the battlefield to the graveyard) and +1/+1 counters are put on a permanent: an entering permanent gets counters for what was sacrificed as it entered.",
-        "near_miss": "A resolution that puts +1/+1 counters with no sacrifice in the same resolution.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution that puts +1/+1 counters with no sacrifice in the same resolution.",
         "params": {
           "event": "counter_change",
           "counter_type": "P1P1",

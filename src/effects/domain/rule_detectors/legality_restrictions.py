@@ -48,7 +48,8 @@ targets). Under ``inside`` the ``fires`` side is an entity the restriction
 applies to that is inside nonetheless (an effect lifting hexproof), and the
 near miss one it applies to, outside. ``selector`` applies to every entity
 no other reason explains, and is in play everywhere; ``effect`` applies to
-the same, and is in play only there.
+the same, and is in play only there, as ``tapped`` is in play only on a
+tapped creature: neither has a near miss.
 
 A player's keywords are in no snapshot, so no keyword restriction reads a
 player.
@@ -205,7 +206,7 @@ def _blocker(restriction: str, entity_id: str, inside: bool, attacker: set[str],
              blocker_keywords: set[str], evasions, blocker: EntityState,
              explained: bool, walked: bool | None = None) -> Judgement:
     if restriction == TAPPED:
-        return Judgement(entity_id, inside, blocker.tapped, True)
+        return _tapped(entity_id, inside, blocker)
     if restriction == LANDWALK:
         walks = "landwalk" in attacker
         if walked is not None:
@@ -227,6 +228,14 @@ def _blocker(restriction: str, entity_id: str, inside: bool, attacker: set[str],
     return Judgement(entity_id, inside, rule in evasions, in_play)
 
 
+def _tapped(entity_id: str, inside: bool, creature: EntityState) -> Judgement:
+    """A tapped creature can neither attack nor block (508.1a, 509.1a), and
+    nothing lets it: the restriction is in play only where it applies, so it
+    has no near miss. An untapped creature among the legal ones says nothing
+    of the rule."""
+    return Judgement(entity_id, inside, creature.tapped, creature.tapped)
+
+
 def attacker_judgements(record: EffectRecord, lines: SidecarLookup | None,
                         restriction: str) -> list[Judgement]:
     """Each creature of an attackers record (a gen-3 record's anchor alone)
@@ -242,7 +251,7 @@ def attacker_judgements(record: EffectRecord, lines: SidecarLookup | None,
         if creature is None or (anchor is not None and entity_id != anchor):
             continue
         if restriction == TAPPED:
-            found.append(Judgement(entity_id, inside, creature.tapped, True))
+            found.append(_tapped(entity_id, inside, creature))
         else:
             sick = creature.sick
             found.append(Judgement(entity_id, inside,

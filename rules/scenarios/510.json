@@ -164,7 +164,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "An unblocked attacker's combat damage goes to the player, planeswalker or battle it attacks: a combat damage_dealt event whose subject is not attacking or blocking.",
-        "near_miss": "Every combat damage event of the step goes to a creature in combat, as when the attackers were blocked.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: every combat damage event of the step goes to a creature in combat, as when the attackers were blocked.",
         "params": {
           "event": "damage_dealt",
           "combat": true,
@@ -250,7 +250,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "A blocked attacker's combat damage is dealt to the creatures blocking it: a combat damage_dealt event whose subject is a creature in combat.",
-        "near_miss": "Combat damage in the step goes only to what is not in combat (an unblocked attacker's damage to the player, planeswalker or battle it attacks).",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: combat damage in the step goes only to what is not in combat (an unblocked attacker's damage to the player, planeswalker or battle it attacks).",
         "params": {
           "event": "damage_dealt",
           "combat": true,

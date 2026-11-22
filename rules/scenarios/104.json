@@ -569,7 +569,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "All remaining players lose at once, so the game ends as a draw: the game-end record holds a player_lost and no player_won.",
-        "near_miss": "A state-based check in which one player loses and the other remains, so the game ends with a winner, not a draw: a player_lost beside a player_won.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a state-based check in which one player loses and the other remains, so the game ends with a winner, not a draw: a player_lost beside a player_won.",
         "params": {
           "event": "player_lost",
           "without_event": "player_won"
@@ -632,7 +632,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "All remaining players lose at once, so the game ends as a draw: the game-end record holds a player_lost and no player_won.",
-        "near_miss": "A state-based check in which one player loses and the other remains, so the game ends with a winner, not a draw: a player_lost beside a player_won.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a state-based check in which one player loses and the other remains, so the game ends with a winner, not a draw: a player_lost beside a player_won.",
         "params": {
           "event": "player_lost",
           "without_event": "player_won"

@@ -449,7 +449,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A venture resolution that also completes the player's dungeon (marker on the bottommost room) so a new dungeon begins.",
-        "near_miss": "A venture that moves the marker to another room without completing a dungeon.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a venture that moves the marker to another room without completing a dungeon.",
         "params": {
           "event": "dungeon_ventured",
           "with_event": {

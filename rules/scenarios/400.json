@@ -124,7 +124,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent whose controller is not its owner leaves the battlefield and lands in its owner's zone.",
-        "near_miss": "A permanent whose controller is its owner leaves the battlefield.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent whose controller is its owner leaves the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "battlefield",

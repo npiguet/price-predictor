@@ -310,7 +310,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "Combat damage dealt to a player by a source without infect makes the player lose that much life, with no poison counters.",
-        "near_miss": "A combat damage step that changes a player's life total also gives poison counters, an infect source's damage being dealt as poison counters rather than life loss.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a combat damage step that changes a player's life total also gives poison counters, an infect source's damage being dealt as poison counters rather than life loss.",
         "params": {
           "event": "life_change",
           "with_event": {
@@ -476,7 +476,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "Damage dealt to a planeswalker removes loyalty counters: the effect half holds a loyalty counter_change beside the damage_dealt.",
-        "near_miss": "Loyalty counters change in a resolution without any damage being dealt.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: loyalty counters change in a resolution without any damage being dealt.",
         "params": {
           "event": "counter_change",
           "counter_type": "loyalty",
@@ -889,7 +889,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "Damage dealt to a battle removes defense counters: the effect half holds a defense counter_change beside the damage_dealt.",
-        "near_miss": "Defense counters change in a resolution without any damage being dealt.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: defense counters change in a resolution without any damage being dealt.",
         "params": {
           "event": "counter_change",
           "counter_type": "defense",

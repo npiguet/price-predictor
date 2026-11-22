@@ -180,7 +180,10 @@ def test_subject_type_reads_the_event_s_subject():
                          ).polarity is Polarity.FIRES
     on_land = replace(record, payload=ResolutionPayload(events=(
         Event(type=EventType.UNATTACHED, subjects=("E3",)),)))
-    assert OUTCOME.match(on_land, None, {"event": "unattached", "subject_type": "creature"}
+    declared = {"event": "unattached", "subject_type": "creature"}
+    # Unscoped, the near miss is no near miss (finding 7.1); a Pump line scopes it.
+    assert OUTCOME.match(on_land, None, declared) is None
+    assert OUTCOME.match(on_land, _Lines("SP$ Pump"), {**declared, "api": "Pump"}
                          ).polarity is Polarity.DOES_NOT_FIRE
 
 

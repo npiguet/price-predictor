@@ -19,9 +19,11 @@ shows nothing here):
   reached them, since a poison change names no creature).
 - ``poisonous``: the same situation and sides; the poison comes from a
   trigger whose resolution is another record, so the outcome is unreadable.
-- ``vigilance``: every attacking creature, ``fires`` for one carrying the
-  keyword and the near miss for one without; the outcome entity is the
-  attacker, observed untapped.
+- ``vigilance``: an attacking creature carrying the keyword, ``fires``, with
+  no near miss: an attacker without it says nothing of vigilance and is the
+  ``fires`` side of ``fires_when: absent`` (508.1f: attacking taps it), whose
+  near miss is an attacker carrying it; the outcome entity is the attacker,
+  observed untapped.
 - ``trample_over_planeswalkers``: an attacker with power attacking a
   planeswalker it is not blocked from (``defender: planeswalker``, its power
   above the planeswalker's loyalty, so there is excess to assign) or whose
@@ -193,12 +195,22 @@ def _poisonous(combat, params, keyword):
 
 
 def _vigilance(combat: _Combat, params: Mapping[str, Any], keyword: str) -> Iterator[_Finding]:
-    tapped_only = bool(params.get("tapped"))
+    if params.get("tapped"):
+        yield from _tapped_carriers(combat, keyword)
+        return
+    # An attacker without vigilance is the fires side of attacking tapping it
+    # (508.1f), and says nothing of vigilance: no near miss of the keyword.
+    judged = (True, False) if params.get("fires_when") == _ABSENT else (True,)
     for entity, _participant in combat.attackers():
         carried = keyword in combat.keywords_of(entity)
-        if not tapped_only:
+        if carried in judged:
             yield _Finding(entity.id, carried, (entity.id,), not entity.tapped)
-        elif carried and entity.tapped:
+
+
+def _tapped_carriers(combat: _Combat, keyword: str) -> Iterator[_Finding]:
+    """The carriers tapped after the declaration, observed dealing damage (506.4b)."""
+    for entity, _participant in combat.attackers():
+        if keyword in combat.keywords_of(entity) and entity.tapped:
             hit = combat.damage_from(entity.id)
             yield _Finding(entity.id, True, hit,
                            bool(hit) if entity.power >= 1 else None)

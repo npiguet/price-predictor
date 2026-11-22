@@ -88,11 +88,12 @@
         "family": "verdict_bit",
         "record_kind": "playability",
         "outcome": "A spell or non-mana ability candidate fails the split-second check while a split-second spell is on the stack.",
-        "near_miss": "Such a candidate with no split-second spell on the stack.",
+        "near_miss": "Such a candidate while the stack holds an object without split second, which it may answer.",
         "params": {
           "bit": "failed_check",
           "check": "split_second",
-          "land_play": false
+          "land_play": false,
+          "stack_empty": false
         },
         "needs": [
           "failed_checks"

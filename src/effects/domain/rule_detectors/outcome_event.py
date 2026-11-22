@@ -64,7 +64,11 @@ Parameters:
 Qualifiers. A rule stated about *which* such event happened is on its
 ``fires`` side when one of the events meets every qualifier given, and on its
 near miss when the record holds such events and none meets them (a creature
-leaving the battlefield that was not in combat):
+leaving the battlefield that was not in combat). As for the unqualified
+near miss, that is counted only when ``api``, ``keyword`` or
+``source_keyword`` names the kind of ability (``source_dies``' narrower near
+miss aside): without one, every resolution moving a creature would be a near
+miss of every rule about which creature it moved.
 
 - ``subject_in_combat``: true where the event's subject is attacking or
   blocking in the snapshot, false where it is not;
@@ -537,12 +541,10 @@ class OutcomeEvent:
             victims = _victims(record, wanted, listed)
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
                                victims) if victims else None
-        if read:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
-                               _outcome(record, [e for e, _ in read if e not in meeting]))
-        if scoped:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
-        return None
+        if not scoped:
+            return None
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
+                           _outcome(record, [e for e, _ in read if e not in meeting]))
 
 
 def _both(first: bool | None, second: bool | None) -> bool | None:

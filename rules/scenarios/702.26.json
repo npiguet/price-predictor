@@ -320,7 +320,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution's effect half phases out a creature that is attacking or blocking, which removes it from combat.",
-        "near_miss": "A resolution phases out a permanent that is neither attacking nor blocking, so no creature leaves combat.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution phases out a permanent that is neither attacking nor blocking, so no creature leaves combat.",
         "params": {
           "event": "phased",
           "out": true,

@@ -63,7 +63,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static ability whose source is on the battlefield contributes its P/T change to the permanents it affects on the stable board.",
-        "near_miss": "A static on the battlefield applies to the board and contributes no P/T change; a static whose source has left the battlefield writes no continuous record at all, so that side of the rule is not observed.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static on the battlefield applies to the board and contributes no P/T change; a static whose source has left the battlefield writes no continuous record at all, so that side of the rule is not observed.",
         "params": {
           "field": "pt"
         },

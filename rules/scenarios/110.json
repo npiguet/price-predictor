@@ -84,7 +84,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution puts a card onto the battlefield and it enters under a player who is not its owner.",
-        "near_miss": "A resolution puts a card onto the battlefield under its owner.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution puts a card onto the battlefield under its owner.",
         "params": {
           "event": "zone_change",
           "to_zone": "Battlefield",
@@ -245,7 +245,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent spell controlled by a player other than its owner resolves and the permanent enters under that controller.",
-        "near_miss": "A permanent spell controlled by its owner resolves and enters under its owner.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent spell controlled by its owner resolves and enters under its owner.",
         "params": {
           "event": "zone_change",
           "from_zone": "Stack",
@@ -380,7 +380,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution puts a permanent onto the battlefield and no tapped event accompanies it: it enters untapped.",
-        "near_miss": "A resolution puts a permanent onto the battlefield together with a tapped event: it enters tapped because the effect says so.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution puts a permanent onto the battlefield together with a tapped event: it enters tapped because the effect says so.",
         "params": {
           "event": "zone_change",
           "to_zone": "Battlefield",

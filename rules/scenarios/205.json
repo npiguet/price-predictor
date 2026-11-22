@@ -111,7 +111,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static effect sets an object's card type, replacing its existing types: it removes every card type and adds the ones it names, as Forge writes a type set (RemoveCardTypes).",
-        "near_miss": "A static applies to the board and removes no card type wholesale: it adds or removes single types, or contributes none.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static applies to the board and removes no card type wholesale: it adds or removes single types, or contributes none.",
         "params": {
           "field": "types",
           "value": "-all-card-types"

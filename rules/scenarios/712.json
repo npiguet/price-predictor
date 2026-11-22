@@ -1215,7 +1215,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A double-faced spell resolves and enters the battlefield with the face that was up on the stack: a zone_change from the stack to the battlefield whose subject is in its back-face state in the snapshot.",
-        "near_miss": "A spell resolves and enters from the stack with its front face up.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a spell resolves and enters from the stack with its front face up.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
@@ -1676,7 +1676,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent that turns to a face which is an Aura is attached (an attached event beside the face_change) rather than put into the graveyard as an unattached Aura.",
-        "near_miss": "An attached event in a record with no face_change (an Aura attached by another means).",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: an attached event in a record with no face_change (an Aura attached by another means).",
         "params": {
           "event": "attached",
           "with_event": "face_change"
@@ -1759,7 +1759,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A melded permanent leaves the battlefield for the graveyard as one permanent: a zone_change from the battlefield whose subject is in the melded face state.",
-        "near_miss": "A permanent that is not melded leaves the battlefield for the graveyard.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not melded leaves the battlefield for the graveyard.",
         "params": {
           "event": "zone_change",
           "from_zone": "battlefield",
@@ -1838,7 +1838,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A melded permanent is exiled by a resolution: a zone_change from the battlefield to exile whose subject is in the melded face state.",
-        "near_miss": "A permanent that is not melded is exiled from the battlefield.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not melded is exiled from the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "battlefield",
@@ -2093,7 +2093,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A melded permanent is destroyed as one object: a destroyed event whose subject is in the melded face state.",
-        "near_miss": "A permanent that is not melded is destroyed.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not melded is destroyed.",
         "params": {
           "event": "destroyed",
           "subject_face_state": "melded"

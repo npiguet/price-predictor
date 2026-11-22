@@ -528,7 +528,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A planeswalker is among the defenders an attacking creature may attack.",
-        "near_miss": "A permanent that is not a legal defender for the anchored attacker is outside the list.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not a legal defender for the anchored attacker is outside the list.",
         "params": {
           "list": "legal_defenders",
           "fires_when": "inside",

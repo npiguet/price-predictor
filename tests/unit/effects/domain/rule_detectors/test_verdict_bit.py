@@ -117,17 +117,17 @@ class TestCandidateFilters:
                       and printed(r))
         name = printed(record)[0]
         assert FAMILY.match(record, gen3_sidecars,
-                            {"bit": "affordable", "source_keyword": name}) is not None
+                            {"bit": "can_play", "source_keyword": name}) is not None
         assert FAMILY.match(record, gen3_sidecars,
-                            {"bit": "affordable", "source_keyword": "no such keyword"}) is None
+                            {"bit": "can_play", "source_keyword": "no such keyword"}) is None
 
     def test_the_tap_symbol_reads_off_the_lines_cost(self, by_kind, gen3_sidecars):
         record = next(r for r in _decisions(by_kind)
                       if "T" in (cost_of(r.payload.candidates[0], gen3_sidecars)[0] or ()))
         assert FAMILY.match(record, gen3_sidecars,
-                            {"bit": "affordable", "cost_symbol": "T"}) is not None
+                            {"bit": "can_play", "cost_symbol": "T"}) is not None
         assert FAMILY.match(record, gen3_sidecars,
-                            {"bit": "affordable", "cost_symbol": "Q"}) is None
+                            {"bit": "can_play", "cost_symbol": "Q"}) is None
 
     def test_a_mana_symbol_reads_off_the_adjusted_cost_whatever_the_line(self, by_kind):
         """No sidecar at all: a spell's mana cost is the candidate's own. The
@@ -139,11 +139,11 @@ class TestCandidateFilters:
         symbols, parts = cost_of(record.payload.candidates[0], None)
         assert parts is None
         hybrid = next(s for s in symbols if "/" in s)
-        assert FAMILY.match(record, None, {"bit": "affordable", "cost_symbol": hybrid})
-        assert FAMILY.match(record, None, {"bit": "affordable", "cost_symbol": "nohybrid"}) is None
+        assert FAMILY.match(record, None, {"bit": "can_play", "cost_symbol": hybrid})
+        assert FAMILY.match(record, None, {"bit": "can_play", "cost_symbol": "nohybrid"}) is None
         kind = "monohybrid" if hybrid.split("/")[0].isdigit() else "hybrid"
-        assert FAMILY.match(record, None, {"bit": "affordable", "cost_symbol": kind})
-        assert FAMILY.match(record, None, {"bit": "affordable", "cost_part": "Sac"}) is None
+        assert FAMILY.match(record, None, {"bit": "can_play", "cost_symbol": kind})
+        assert FAMILY.match(record, None, {"bit": "can_play", "cost_part": "Sac"}) is None
 
     def test_a_cost_part_reads_by_its_name(self, by_kind, gen3_sidecars):
         record, part = next(

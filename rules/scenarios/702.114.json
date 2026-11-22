@@ -65,7 +65,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A characteristic-defining static sets a permanent's color to none, making it colorless.",
-        "near_miss": "A static applies to a permanent and does not set its color to none.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static applies to a permanent and does not set its color to none.",
         "params": {
           "field": "colors",
           "value": "C"

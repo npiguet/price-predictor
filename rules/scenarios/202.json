@@ -438,7 +438,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static ability contributes a colour change (adds a colour, sets it, or makes the object colourless).",
-        "near_miss": "A static applies to the board and contributes no colour.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static applies to the board and contributes no colour.",
         "params": {
           "field": "colors"
         },

@@ -393,7 +393,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "One effect with parts in several layers grants a keyword in layer 6 to the same object whose controller or type its earlier-layer part changed.",
-        "near_miss": "An effect that applies to the board only in an earlier layer, such as a bare control change, contributes no keyword.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: an effect that applies to the board only in an earlier layer, such as a bare control change, contributes no keyword.",
         "params": {
           "field": "keywords"
         },
@@ -478,7 +478,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "An effect adds the creature type to an object in layer 4 and keeps applying to that object in later layers.",
-        "near_miss": "The effect applies to the board and adds the creature type to nothing, no object being in the set it affects in layer 4.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: the effect applies to the board and adds the creature type to nothing, no object being in the set it affects in layer 4.",
         "params": {
           "field": "types",
           "value": "Creature"
@@ -625,7 +625,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A type-changing effect adds or removes a card type or subtype in layer 4, before the effects keyed to type or subtype are applied.",
-        "near_miss": "A static applies to the board and contributes no type change, only effects of later layers.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static applies to the board and contributes no type change, only effects of later layers.",
         "params": {
           "field": "types"
         },

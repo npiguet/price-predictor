@@ -400,7 +400,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "An object returned to the battlefield from exile enters under its owner's control.",
-        "near_miss": "An object returned from exile that enters under the control of a player who does not own it.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: an object returned from exile that enters under the control of a player who does not own it.",
         "params": {
           "event": "zone_change",
           "from_zone": "exile",

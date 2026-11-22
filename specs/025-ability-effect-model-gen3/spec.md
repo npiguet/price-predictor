@@ -609,9 +609,13 @@ and that the reporting half never enters the control score.
 - **FR-002b**: Each rule's declaration MUST tell its records from every other rule's: no two
   scenarios of different rules may share one declaration (family, record kind and parameters,
   compared in normalised form: each family's defaults filled in, lists sorted, names compared
-  without case), and a test over the whole real catalogue MUST fail on one. A second test over
-  the fixtures' and goldens' records MUST list a declaration tagging most of its record kind's
-  records unless its rule is the kind's own general fact, and two scenarios of different rules,
+  without case), and a test over the whole real catalogue MUST fail on one. A near miss MUST be
+  counted only where the declaration carries a scoping parameter of its family, one naming which
+  sources, stack objects, judged entities or decisions the rule speaks for; a declaration without
+  one has no near miss, so "any record of the kind without the fact" is never one. An
+  `affordable` rule's near miss is a candidate failing no check but `cost`. A second test over
+  the fixtures' and goldens' records MUST list a declaration either of whose sides tags most of
+  its record kind's records unless its rule is the kind's own general fact, and two scenarios of different rules,
   not linked by `same_as`, tagging the same `fires` and near-miss records. A scenario stating
   the same observable fact as another (a restatement, a redundant-instances rule, a general rule
   one mechanism shows) MUST declare `{"same_as": scenario id or [ids], "reason": …}`, a list naming the scenarios whose

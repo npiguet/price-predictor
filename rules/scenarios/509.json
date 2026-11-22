@@ -70,7 +70,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A creature the defending player controls is forbidden from blocking the anchored attacker because it is tapped (a blocker must be untapped).",
-        "near_miss": "An untapped creature among the anchored attacker's legal blockers.",
+        "near_miss": "No near miss is counted: nothing lets a tapped creature block, and an untapped legal blocker says nothing of the rule.",
         "params": {
           "list": "legal_blockers",
           "fires_when": "outside",
@@ -211,7 +211,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A creature the defending player controls is listed as forbidden from blocking the anchored attacker by a static ability, such as an evasion keyword's or a 'can block only creatures with flying' restriction, so it is not a legal blocker.",
-        "near_miss": "A creature the defending player controls is listed among the legal blockers of the anchored attacker.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a creature the defending player controls is listed among the legal blockers of the anchored attacker.",
         "params": {
           "list": "legal_blockers",
           "fires_when": "outside",
@@ -357,7 +357,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A blockers legality record lists a creature a requirement makes block the anchored attacker if able.",
-        "near_miss": "A blockers legality record lists a creature that no requirement binds to block the anchor.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a blockers legality record lists a creature that no requirement binds to block the anchor.",
         "params": {
           "list": "must_block",
           "fires_when": "inside"
@@ -440,7 +440,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A blockers legality record lists a creature a requirement makes block the anchored attacker if able, the requirement obeyed as far as restrictions allow.",
-        "near_miss": "A blockers legality record lists a creature that no requirement binds to block the anchor.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a blockers legality record lists a creature that no requirement binds to block the anchor.",
         "params": {
           "list": "must_block",
           "fires_when": "inside"

@@ -75,7 +75,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static ability's contribution removes banding from a permanent, which then has no bands-with-other abilities either.",
-        "near_miss": "A static ability applies to the board and removes no banding.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static ability applies to the board and removes no banding.",
         "params": {
           "field": "keywords",
           "value": "-banding"

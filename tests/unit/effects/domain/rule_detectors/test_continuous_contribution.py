@@ -35,13 +35,19 @@ def test_a_static_granting_the_keyword_fires(by_kind):
         e.id for e in source_entities(record.state, record.ability))
 
 
-def test_the_same_static_edited_to_grant_nothing_is_the_near_miss(by_kind):
+#: A scope naming every static (its root segment's ``Mode$``), so that a
+#: test's near miss is counted (finding 7.1: an unscoped declaration has none).
+_ANY_STATIC = {"script_param": "Mode"}
+
+
+def test_the_same_static_edited_to_grant_nothing_is_the_near_miss(by_kind, gen3_sidecars):
     record = _keyword_grant(by_kind)
-    stripped = ContinuousPayload(contributions=tuple(
-        replace(c, keywords=()) for c in record.payload.contributions))
-    found = FAMILY.match(replace(record, payload=stripped), None,
-                         {"field": "keywords", "value": _GRANTED})
+    stripped = replace(record, payload=ContinuousPayload(contributions=tuple(
+        replace(c, keywords=()) for c in record.payload.contributions)))
+    declared = {"field": "keywords", "value": _GRANTED}
+    found = FAMILY.match(stripped, gen3_sidecars, {**declared, **_ANY_STATIC})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+    assert FAMILY.match(stripped, gen3_sidecars, declared) is None
 
 
 def test_a_pt_boost_fires_the_pt_field(by_kind):
@@ -52,19 +58,17 @@ def test_a_pt_boost_fires_the_pt_field(by_kind):
 
 
 def test_a_pt_set_alone_fires_value_equals(by_kind):
-    """208.2a's ``=`` asks for a set base P/T: an anthem's boost is its near
-    miss, never its ``fires`` side (V5 #17)."""
+    """208.2a's ``=`` asks for a set base P/T: an anthem's boost is never its
+    ``fires`` side (V5 #17), and no near miss either without a scope."""
     record = next(r for r in by_kind("continuous")
                   if any(c.pt_boost != (0, 0) for c in r.payload.contributions)
                   and all(c.set_pt is None for c in r.payload.contributions))
-    assert FAMILY.match(record, None, {"field": "pt", "value": "="}).polarity is (
-        Polarity.DOES_NOT_FIRE)
+    assert FAMILY.match(record, None, {"field": "pt", "value": "="}) is None
     contributions = tuple(replace(c, pt_boost=(0, 0), set_pt=(None, 3))
                           for c in record.payload.contributions)
     set_base = replace(record, payload=replace(record.payload, contributions=contributions))
     assert FAMILY.match(set_base, None, {"field": "pt", "value": "="}).polarity is Polarity.FIRES
-    assert FAMILY.match(set_base, None, {"field": "pt", "value": "+"}).polarity is (
-        Polarity.DOES_NOT_FIRE)
+    assert FAMILY.match(set_base, None, {"field": "pt", "value": "+"}) is None
     with pytest.raises(ValueError):
         FAMILY.validate({"field": "pt", "value": "flying"})
 
@@ -141,8 +145,9 @@ def test_a_counter_condition_compares_in_one_spelling():
     assert not conditioned_on_counters("Affected$ Creature.YouCtrl+counters_GE1_P1P1", "P1P1")
 
 
-def test_another_keyword_is_the_near_miss(by_kind):
-    found = FAMILY.match(_keyword_grant(by_kind), None, {"field": "keywords", "value": "flying"})
+def test_another_keyword_is_the_near_miss(by_kind, gen3_sidecars):
+    found = FAMILY.match(_keyword_grant(by_kind), gen3_sidecars,
+                         {"field": "keywords", "value": "flying", **_ANY_STATIC})
     assert found.polarity is Polarity.DOES_NOT_FIRE
 
 
@@ -169,7 +174,7 @@ def test_a_card_type_set_reads_as_every_card_type_removed(by_kind):
     record = next(r for r in by_kind("continuous") if r.payload.contributions)
     declared = {"field": "types", "value": "-all-card-types"}
     FAMILY.validate(declared)
-    assert FAMILY.match(record, None, declared).polarity is Polarity.DOES_NOT_FIRE
+    assert FAMILY.match(record, None, declared) is None  # unscoped: no near miss
     contributions = tuple(replace(c, types=("-all-card-types", "-all-land-types", "land", "forest"))
                           for c in record.payload.contributions)
     set_type = replace(record, payload=replace(record.payload, contributions=contributions))

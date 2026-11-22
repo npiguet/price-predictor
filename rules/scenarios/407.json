@@ -173,7 +173,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "An effect puts an object into the ante zone, and the object's controller is its owner (only an object's owner can ante it).",
-        "near_miss": "An object whose controller is not its owner is put into the ante zone (Forge applies no owner check, so this is where it may diverge from the rule).",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: an object whose controller is not its owner is put into the ante zone (Forge applies no owner check, so this is where it may diverge from the rule).",
         "params": {
           "event": "zone_change",
           "to_zone": "ante",

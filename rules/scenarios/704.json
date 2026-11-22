@@ -1400,7 +1400,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent that is attached and a creature becomes unattached.",
-        "near_miss": "A permanent becoming unattached that is no creature.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent becoming unattached that is no creature.",
         "params": {
           "event": "unattached",
           "subject_type": "creature"

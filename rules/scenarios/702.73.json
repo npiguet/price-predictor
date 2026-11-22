@@ -73,7 +73,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static contributes every creature type to an object, as changeling's characteristic-defining ability does.",
-        "near_miss": "A static applies to the board and contributes no all-creature-types token.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static applies to the board and contributes no all-creature-types token.",
         "params": {
           "field": "types",
           "value": "all-creature-types"

@@ -313,7 +313,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "A creature regenerates in a combat and is removed from combat.",
-        "near_miss": "A combat in which a creature regenerates and no creature is removed from combat.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a combat in which a creature regenerates and no creature is removed from combat.",
         "params": {
           "event": "regenerated",
           "with_event": "removed_from_combat"

@@ -1042,7 +1042,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A merged permanent leaves the battlefield: a zone_change from the battlefield whose subject is a merged permanent.",
-        "near_miss": "A permanent that is not merged leaves the battlefield.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not merged leaves the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "battlefield",
@@ -1128,7 +1128,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "An effect that returns the object a merged permanent became acts on every component: a zone_change from exile to the battlefield whose subject was a merged permanent in the snapshot.",
-        "near_miss": "A permanent that is not merged returns from exile to the battlefield.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent that is not merged returns from exile to the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "exile",

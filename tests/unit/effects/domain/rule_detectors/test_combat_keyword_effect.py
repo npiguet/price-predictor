@@ -139,15 +139,15 @@ def test_trample_over_planeswalkers_judges_only_the_step_it_strikes_in():
                         {"keyword": "trample_over_planeswalkers", "defender": "gone"}) is None
 
 
-def test_vigilance_sides_are_carriers_against_other_attackers():
+def test_vigilance_fires_on_its_carriers_and_has_no_near_miss():
+    """An attacker without vigilance is 508.1f's ``fires`` side, and says
+    nothing of vigilance (finding 7.1)."""
     vigilant = _creature("E1", ("vigilance",), combat=_attacking())
     plain = _creature("E2", tapped=True, combat=_attacking())
     found = FAMILY.match(_combat([vigilant, plain]), None, {"keyword": "vigilance"})
     assert (found.polarity, found.observed) == (Polarity.FIRES, True)
     assert (found.condition, found.outcome) == (("E1",), ("E1",))
-    alone = FAMILY.match(_combat([plain]), None, {"keyword": "vigilance"})
-    assert (alone.polarity, alone.observed, alone.condition) == (
-        Polarity.DOES_NOT_FIRE, False, ("E2",))
+    assert FAMILY.match(_combat([plain]), None, {"keyword": "vigilance"}) is None
 
 
 def test_vigilance_absent_puts_the_tapped_attacker_on_the_fires_side():
@@ -271,15 +271,17 @@ def test_a_probe_shows_nothing():
 # ── real gen-3 combats ──────────────────────────────────────────────────
 
 
-def test_real_vigilant_attackers_stay_untapped(gen3_combats, gen3_sidecars):
-    found = [FAMILY.match(r, gen3_sidecars, {"keyword": "vigilance"}) for r in gen3_combats]
-    fires = [f for f in found if f is not None and f.polarity is Polarity.FIRES]
-    near = [f for f in found if f is not None and f.polarity is Polarity.DOES_NOT_FIRE]
-    if not fires or not near:
+def test_real_vigilant_attackers_stay_untapped_and_the_others_tap(gen3_combats, gen3_sidecars):
+    def fires(params):
+        found = [FAMILY.match(r, gen3_sidecars, params) for r in gen3_combats]
+        return [f for f in found if f is not None and f.polarity is Polarity.FIRES]
+    vigilant = fires({"keyword": "vigilance"})
+    tapping = fires({"keyword": "vigilance", "fires_when": "absent"})
+    if not vigilant or not tapping:
         pytest.fail("the fixture holds no vigilant attacker or no other attacker")
-    assert all(f.observed for f in fires)
-    assert sum(f.observed is False for f in near) > len(near) * 0.9
-    assert all(f.condition == f.outcome for f in fires)
+    assert all(f.observed for f in vigilant)
+    assert sum(bool(f.observed) for f in tapping) > len(tapping) * 0.9
+    assert all(f.condition == f.outcome for f in vigilant)
 
 
 def test_real_regular_step_first_strikers_are_the_near_miss(gen3_combats, gen3_sidecars):

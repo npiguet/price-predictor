@@ -17,9 +17,11 @@ def _resolved(by_kind):
                 and r.state.refs.targets_at_cast)
 
 
-def test_a_resolved_spell_is_the_near_miss_of_a_fizzle_rule(by_kind):
-    found = FAMILY.match(_resolved(by_kind), None, {"outcome": "fizzled"})
+def test_a_resolved_spell_is_the_near_miss_of_a_targeted_fizzle_rule(by_kind):
+    found = FAMILY.match(_resolved(by_kind), None, {"outcome": "fizzled", "targeted": True})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+    # Unscoped, every resolution would be a near miss: none is (finding 7.1).
+    assert FAMILY.match(_resolved(by_kind), None, {"outcome": "fizzled"}) is None
 
 
 def test_the_same_spell_edited_to_fizzle_fires(by_kind):
@@ -57,7 +59,7 @@ def test_an_effect_half_carries_its_outcome(by_kind):
     found = FAMILY.match(fizzled, None, {"outcome": "fizzled", "targeted": True})
     assert found.polarity is Polarity.FIRES and found.observed
     resolved = _effect_half(by_kind, outcome=ResolutionOutcome.RESOLVED)
-    assert FAMILY.match(resolved, None, {"outcome": "fizzled"}).polarity is (
+    assert FAMILY.match(resolved, None, {"outcome": "fizzled", "targeted": True}).polarity is (
         Polarity.DOES_NOT_FIRE)
 
 
@@ -70,7 +72,8 @@ def test_a_countering_half_shows_the_countered_object(by_kind):
     found = FAMILY.match(countering, None, {"outcome": "countered"})
     assert found.polarity is Polarity.FIRES
     assert found.condition == ("E99",) and found.outcome == ("E99",)
-    near = FAMILY.match(countering, None, {"outcome": "resolved", "near": ["countered"]})
+    near = FAMILY.match(countering, None, {"outcome": "resolved", "near": ["countered"],
+                                           "targeted": True})
     assert near.polarity is Polarity.DOES_NOT_FIRE and near.outcome == ("E99",)
 
 

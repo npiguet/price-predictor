@@ -84,7 +84,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A tapped creature is no legal attacker.",
-        "near_miss": "An untapped creature among the legal attackers.",
+        "near_miss": "No near miss is counted: nothing lets a tapped creature attack, and an untapped legal attacker says nothing of the rule.",
         "params": {
           "list": "legal_attackers",
           "fires_when": "outside",
@@ -303,7 +303,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A creature under a can't-attack-unless restriction whose condition is unmet is listed as forbidden from attacking, with a static responsible.",
-        "near_miss": "The same creature with the condition met is listed among the legal attackers.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: the same creature with the condition met is listed among the legal attackers.",
         "params": {
           "list": "legal_attackers",
           "fires_when": "outside",
@@ -380,7 +380,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "An attackers legality record's anchored attacker is held by an attack requirement (it must attack if able).",
-        "near_miss": "The anchored attacker has no attack requirement applying to it.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: the anchored attacker has no attack requirement applying to it.",
         "params": {
           "list": "must_attack",
           "fires_when": "inside"

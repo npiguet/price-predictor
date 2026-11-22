@@ -1712,7 +1712,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A copy of a permanent spell resolves and enters the battlefield from the stack, becoming a token.",
-        "near_miss": "A permanent spell that is not a copy enters the battlefield from the stack as a card.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent spell that is not a copy enters the battlefield from the stack as a card.",
         "params": {
           "event": "zone_change",
           "from_zone": "Stack",

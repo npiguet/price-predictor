@@ -330,7 +330,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent enters with lore counters in a number its controller chose (read ahead): counter_change events on lore counters beside a choice_made event.",
-        "near_miss": "Lore counters put on a Saga with no choice made (the single counter a Saga without read ahead enters with).",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: lore counters put on a Saga with no choice made (the single counter a Saga without read ahead enters with).",
         "params": {
           "event": "counter_change",
           "counter_type": "lore",

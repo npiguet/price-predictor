@@ -7,7 +7,7 @@ kind ("unscoped"), and two scenarios of different rules, not linked by
 one population (over records of both sides, at least two of the fires side:
 a sample showing one rule happening once cannot tell two rules apart). Each
 is listed; a declaration that joins either list fails here until it is
-scoped, linked or added to the list below with its reason.
+scoped or linked, or, for the first, its rule is the kind's own general fact.
 """
 
 from __future__ import annotations
@@ -24,12 +24,11 @@ from effects.infrastructure.rules_catalogue_io import load_scenarios
 RULES = Path(__file__).parents[5] / "rules"
 FIXTURES = Path(__file__).parents[4] / "fixtures" / "effects"
 
-#: A declaration tagging more than this share of its record kind's records
-#: (fires and near miss together), over at least ``_MIN_KIND`` records of the
-#: kind, reads no situation of its own: a rule's condition holds on a minority
-#: of what a kind records, and the broadest legitimate conditions measured
-#: here (a combat dealing damage, any creature among the legal blockers) stay
-#: under it.
+#: A side of a declaration (its ``fires`` records, or its near-miss records)
+#: holding more than this share of its record kind's records, over at least
+#: ``_MIN_KIND`` records of the kind, reads no situation of its own: a rule's
+#: condition holds on a minority of what a kind records, and a near miss is
+#: counted only where the declaration scopes it (finding 7.1).
 UNSCOPED_SHARE = 0.5
 _MIN_KIND = 20
 #: Declarations above the share whose rule is the kind's own general fact.
@@ -43,32 +42,25 @@ GENERAL = {
     # a player losing life to combat damage is what 704.5a's check reads: its
     # near miss is every combat damage step to a player that leaves them alive
     "704.5a-2",
+    # combat damage to a creature in combat is a blocked attacker's to its
+    # blockers (510.1c): 120.3e-1's records
+    "510.1c-1",
+    # an attacking creature without vigilance taps (508.1f): every attack
+    "508.1f-1",
+    # only creatures attack, and a creature is no attack target (506.3): every
+    # attackers record leaves its noncreature permanents out, and its creatures
+    # out of the defenders
+    "506.3-1", "506.3-3",
+    # a static applies while its source is on the battlefield (604.2): every
+    # continuous record is one, and its other side writes no record
+    "604.2-1",
 }
-#: Declarations above the share because their near miss, by its declared
-#: text, is any record of the kind short of the fires side, so the two sides
-#: together cover the kind. The 2026-11-15 fixture is the first whose
-#: continuous and attackers records reach ``_MIN_KIND`` and whose effect
-#: halves carry their outcome, which is what brought each here; scoping a
-#: near miss narrower is a catalogue change, out of this list's reach.
-BROAD_NEAR_MISS = {
-    # A static that applies to the board and contributes nothing of the
-    # declared field (``continuous_contribution``).
-    "105.3-1", "113.11-1", "113.11-2", "202.2f-1", "205.1a-1", "208.2a-1", "305.7-1",
-    "604.2-1", "613.1d-1", "613.6-1", "613.6-2", "702.114a-1", "702.22b-1", "702.73a-1",
-    # A stack object that leaves the stack resolved, or countered
-    # (``resolution_outcome``): most effect halves resolve.
-    "701.5a-1", "701.6a-1", "701.6a-2",
-    # The anchored attacker judged against its record's own lists
-    # (``legality_membership``), which every attackers record holds.
-    "306.6-1", "506.3-1", "506.3-3", "508.1a-1", "508.1c-2", "508.1d-1",
-    # An attacker with or without vigilance: every attack is one or the other.
-    "508.1f-1", "702.20b-1",
-    # Combat damage to what an unblocked attacker attacks, or to a blocked
-    # one's blockers: each one's near miss is the other's fires side.
-    "510.1b-1", "510.1c-1",
-    # A non-land-play candidate that does not fail the named check
-    # (``verdict_bit``): most candidates pass the split-second check.
-    "702.61a-1",
+#: Declarations above the share whose fix is a later task's, each with it.
+PENDING = {
+    # fires on every attacker that may attack a player: F03 judges planeswalkers only
+    "306.6-1": "F03",
+    # fires on every resolved half: F03 keeps it to cast spells
+    "701.5a-1": "F03",
 }
 
 
@@ -108,14 +100,16 @@ def tagged():
     return sides, kinds, rules
 
 
-def unscoped(tagged) -> list[tuple[str, float]]:
+def unscoped(tagged) -> list[tuple[str, str, float]]:
+    """``(scenario, side, share)`` of every side above ``UNSCOPED_SHARE``."""
     sides, kinds, _ = tagged
     found = []
     for sid, polarity in sides.items():
         kind = kinds[polarity["label"]]
-        hits = polarity[Polarity.FIRES] | polarity[Polarity.DOES_NOT_FIRE]
-        if len(kind) >= _MIN_KIND and len(hits) > UNSCOPED_SHARE * len(kind):
-            found.append((sid, len(hits) / len(kind)))
+        for side in (Polarity.FIRES, Polarity.DOES_NOT_FIRE):
+            hits = polarity[side]
+            if len(kind) >= _MIN_KIND and len(hits) > UNSCOPED_SHARE * len(kind):
+                found.append((sid, side.value, len(hits) / len(kind)))
     return sorted(found)
 
 
@@ -139,10 +133,19 @@ def identical(tagged) -> list[tuple[str, str]]:
     return pairs
 
 
-def test_no_declaration_tags_most_of_its_kind_unless_its_rule_is_the_kind_s_own(tagged):
+def test_no_side_of_a_declaration_tags_most_of_its_kind_unless_its_rule_is_the_kind_s_own(
+        tagged):
     found = unscoped(tagged)
     print("unscoped:", found)
-    assert {sid for sid, _ in found} <= GENERAL | BROAD_NEAR_MISS, found
+    assert {sid for sid, _, _ in found} <= GENERAL | set(PENDING), found
+
+
+@pytest.mark.parametrize("sid", ["105.3-1", "113.11-1", "113.11-2", "202.2f-1", "205.1a-1",
+                                 "305.7-1", "702.114a-1", "702.22b-1"])
+def test_an_unscoped_static_rule_has_no_near_miss_on_a_static_that_says_nothing_of_it(
+        tagged, sid):
+    sides, _, _ = tagged
+    assert not sides.get(sid, {}).get(Polarity.DOES_NOT_FIRE)
 
 
 def test_no_two_rules_tag_the_same_records(tagged):

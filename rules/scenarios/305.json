@@ -597,7 +597,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static ability sets a land's subtype: its type contribution removes all land types (-all-land-types) beside the type it adds, taking away the land's old land types and their mana abilities.",
-        "near_miss": "A static applies to a land and only adds a land type, or contributes no type, so the land keeps its old types and abilities.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static applies to a land and only adds a land type, or contributes no type, so the land keeps its old types and abilities.",
         "params": {
           "field": "types",
           "value": "-all-land-types"

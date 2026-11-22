@@ -1348,7 +1348,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static makes opposing objects lose a keyword.",
-        "near_miss": "A static contributes no keyword removal.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static contributes no keyword removal.",
         "params": {
           "field": "keywords",
           "value": "-flying"
@@ -1419,7 +1419,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A static prevents objects from having a keyword (a removal is contributed).",
-        "near_miss": "A static contributes no keyword removal.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a static contributes no keyword removal.",
         "params": {
           "field": "keywords",
           "value": "-flying"

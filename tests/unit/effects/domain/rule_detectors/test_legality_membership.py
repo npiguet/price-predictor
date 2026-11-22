@@ -15,6 +15,11 @@ def _forbidden_block(by_kind):
     return next(r for r in by_kind("playability", "blockers") if r.payload.forbidden)
 
 
+#: A scope keeping every creature, so that a test's near miss is counted
+#: (finding 7.1: an unscoped list rule has none).
+_CREATURES = {"judged_type": "creature"}
+
+
 def _judged(found, record) -> tuple[str, ...]:
     """The judged entities: the condition entities but the anchor attacker."""
     anchor = getattr(record.payload, "anchor_attacker", None)
@@ -37,8 +42,9 @@ def test_the_same_creature_edited_into_the_legal_list_is_the_near_miss(by_kind):
     moved = tuple(f.entity for f in record.payload.forbidden)
     edited = replace(record, payload=replace(record.payload, forbidden=(),
                                              legal_blockers=moved))
-    found = FAMILY.match(edited, None, {"list": "legal_blockers"})
+    found = FAMILY.match(edited, None, {"list": "legal_blockers", **_CREATURES})
     assert found.polarity is Polarity.DOES_NOT_FIRE and _judged(found, edited) == moved
+    assert FAMILY.match(edited, None, {"list": "legal_blockers"}) is None
 
 
 def test_responsible_static_counts_only_what_a_static_forbids(by_kind):
@@ -156,11 +162,12 @@ class TestTheGen3Lists:
         found = FAMILY.match(legal, None, inside)
         assert (found.polarity, found.condition, found.outcome) == (
             Polarity.FIRES, ("E2",), ("E2",))
-        found = FAMILY.match(forbidden, None, inside)
+        found = FAMILY.match(forbidden, None, {**inside, **_CREATURES})
         assert (found.polarity, found.condition, found.outcome) == (
             Polarity.DOES_NOT_FIRE, ("E3",), ("E3",))
         outside = {"list": "legal_attackers", "responsible_static": True}
-        assert FAMILY.match(legal, None, outside).condition == ("E2",)
+        assert FAMILY.match(legal, None, {**outside, **_CREATURES}).condition == ("E2",)
+        assert FAMILY.match(legal, None, outside) is None
         assert FAMILY.match(forbidden, None, outside).polarity is Polarity.FIRES
 
     def test_a_creature_that_may_attack_nothing_lists_no_inside(self):
@@ -179,7 +186,9 @@ class TestTheGen3Lists:
 
     def test_a_creature_no_requirement_binds_is_outside_must_block(self):
         record = self._golden("blockers")[0]
-        found = FAMILY.match(record, None, {"list": "must_block", "fires_when": "inside"})
+        declared = {"list": "must_block", "fires_when": "inside"}
+        assert FAMILY.match(record, None, declared) is None
+        found = FAMILY.match(record, None, {**declared, **_CREATURES})
         assert found.polarity is Polarity.DOES_NOT_FIRE
         assert _judged(found, record) == (*record.payload.legal_blockers,
                                           *(f.entity for f in record.payload.forbidden))
@@ -276,7 +285,9 @@ class TestAnchorLists:
         # The requirement is written at the anchor.
         assert found.outcome == (anchor,)
         free = replace(record, payload=replace(record.payload, must_attack=False))
-        found = FAMILY.match(free, None, {"list": "must_attack", "fires_when": "inside"})
+        assert FAMILY.match(free, None, {"list": "must_attack", "fires_when": "inside"}) is None
+        found = FAMILY.match(free, None, {"list": "must_attack", "fires_when": "inside",
+                                          **_CREATURES})
         assert found.polarity is Polarity.DOES_NOT_FIRE and found.outcome == (anchor,)
 
     def test_must_attack_needs_its_field(self):
@@ -291,8 +302,10 @@ class TestAnchorLists:
         assert found.polarity is Polarity.FIRES
         assert found.condition == (anchor,) and found.outcome == (anchor,)
         lone = replace(record, payload=replace(record.payload, min_blockers=1))
-        assert FAMILY.match(lone, None, declared).polarity is Polarity.DOES_NOT_FIRE
-        assert FAMILY.match(menace, None, {**declared, "at_least": 3}).polarity is (
+        assert FAMILY.match(lone, None, declared) is None
+        scoped = {**declared, **_CREATURES}
+        assert FAMILY.match(lone, None, scoped).polarity is Polarity.DOES_NOT_FIRE
+        assert FAMILY.match(menace, None, {**scoped, "at_least": 3}).polarity is (
             Polarity.DOES_NOT_FIRE)
         assert FAMILY.needs(declared) == frozenset()
 
@@ -354,12 +367,13 @@ class TestAttackerRestrictions:
         return replace(record, state=replace(record.state, entities=tuple(
             replace(e, **flags) if e.id == anchor else e for e in record.state.entities)))
 
-    def test_a_tapped_creature_kept_out_fires_and_an_untapped_legal_one_is_the_near_miss(self):
+    def test_a_tapped_creature_kept_out_fires_and_an_untapped_legal_one_is_no_near_miss(self):
+        """Nothing lets a tapped creature attack: an untapped legal one says
+        nothing of 508.1a's tap condition (finding 7.1)."""
         declared = {"list": "legal_attackers", "restriction": "tapped"}
         found = FAMILY.match(self._anchor("E3", tapped=True), None, declared)
         assert (found.polarity, found.condition) == (Polarity.FIRES, ("E3",))
-        found = FAMILY.match(self._anchor("E2"), None, declared)
-        assert (found.polarity, found.condition) == (Polarity.DOES_NOT_FIRE, ("E2",))
+        assert FAMILY.match(self._anchor("E2"), None, declared) is None
 
     def test_a_kept_out_creature_neither_tapped_nor_sick_shows_no_side(self):
         for restriction in ("tapped", "sick"):

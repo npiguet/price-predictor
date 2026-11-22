@@ -74,7 +74,7 @@
         "family": "resolution_outcome",
         "record_kind": "resolution",
         "outcome": "A cast spell leaves the stack as resolved.",
-        "near_miss": "A cast spell is countered.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a cast spell is countered.",
         "params": {
           "outcome": "resolved",
           "near": [

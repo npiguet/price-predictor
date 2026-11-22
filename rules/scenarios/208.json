@@ -85,7 +85,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A characteristic-defining static sets a permanent's power and toughness outright from a stated condition.",
-        "near_miss": "The static applies to the board and contributes no set power or toughness.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: the static applies to the board and contributes no set power or toughness.",
         "params": {
           "field": "pt",
           "value": "="

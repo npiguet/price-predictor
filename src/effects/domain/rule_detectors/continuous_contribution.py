@@ -4,6 +4,9 @@ A ``continuous`` record lists, per affected entity, what the acting static
 contributes: a P/T boost, keywords, types, colours. A rule about a layer's
 effect is on its ``fires`` side when some contribution carries it, and on its
 near miss when the static applies to the board and contributes nothing of it.
+The near miss is counted only where a scoping parameter (``SCOPES``) says
+which statics the rule speaks for: without one, every static of the corpus
+contributing something else would be a near miss of every rule.
 
 Parameters:
 
@@ -178,22 +181,7 @@ class ContinuousContribution:
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        field = params.get("field")
-        if record.kind is not RecordKind.CONTINUOUS:
-            return None
-        kind = params.get("source_token_kind")
-        if kind is not None and not source_is_token_of_kind(record.state, kind, record.ability):
-            return None
-        counters = params.get("counter_condition")
-        if counters is not None:
-            line = acting_line(record, lines)
-            if not conditioned_on_counters(line.script_text if line else None, counters):
-                return None
-        if "script_param" in params and not script_params_match(
-                acting_root_params(record, lines), params["script_param"]):
-            return None
-        if "source_keyword" in params and not card_has_keyword(
-                record.ability or (), lines, params["source_keyword"]):
+        if record.kind is not RecordKind.CONTINUOUS or not _source_fits(record, lines, params):
             return None
         contributions = record.payload.contributions
         face = params.get("affected_face_state")
@@ -202,22 +190,59 @@ class ContinuousContribution:
                 record, c.entity, lambda entity: has_face_state(entity, face)))
         if not contributions:
             return None
-        carrying = tuple(dict.fromkeys(
-            c.entity for c in contributions if _carries(c, field, params.get("value"))))
-        applied = tuple(dict.fromkeys(c.entity for c in contributions))
-        designation = params.get("designation")
-        if designation is not None:
-            def holds(entity_id: str) -> bool | None:
-                return _entity_fact(record, entity_id,
-                                    lambda entity: has_designation(entity, designation))
-            applied = tuple(e for e in applied if e not in carrying and holds(e) is False)
-            carrying = tuple(e for e in carrying if holds(e))
+        carrying, applied = _sides(record, contributions, params)
         host = source_ids(record)
         if carrying:
             return FamilyMatch(Polarity.FIRES, True, host, carrying)
-        if not applied:
+        if not applied or not SCOPES & set(params):
             return None
         return FamilyMatch(Polarity.DOES_NOT_FIRE, False, host, applied)
+
+
+#: The parameters that say which statics a rule speaks for, so which records
+#: its near miss is: a static's source (its token kind, a keyword its card
+#: prints, its root segment's parameters, the counters its condition reads),
+#: or the entities its contribution reaches (a designation, a face state).
+SCOPES = frozenset({"script_param", "source_keyword", "counter_condition",
+                    "source_token_kind", "designation", "affected_face_state"})
+
+
+def _source_fits(record: EffectRecord, lines: SidecarLookup | None,
+                 params: Mapping[str, Any]) -> bool:
+    """Whether the acting static is one the declaration's source filters name."""
+    kind = params.get("source_token_kind")
+    if kind is not None and not source_is_token_of_kind(record.state, kind, record.ability):
+        return False
+    counters = params.get("counter_condition")
+    if counters is not None:
+        line = acting_line(record, lines)
+        if not conditioned_on_counters(line.script_text if line else None, counters):
+            return False
+    if "script_param" in params and not script_params_match(
+            acting_root_params(record, lines), params["script_param"]):
+        return False
+    return "source_keyword" not in params or card_has_keyword(
+        record.ability or (), lines, params["source_keyword"])
+
+
+def _sides(record: EffectRecord, contributions: tuple[Contribution, ...],
+           params: Mapping[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(carrying, applied)``: the entities a contribution carrying the
+    declared field reaches, and every entity the static applies to; under a
+    ``designation``, the carriers holding it and the others lacking it."""
+    field = params.get("field")
+    carrying = tuple(dict.fromkeys(
+        c.entity for c in contributions if _carries(c, field, params.get("value"))))
+    applied = tuple(dict.fromkeys(c.entity for c in contributions))
+    designation = params.get("designation")
+    if designation is None:
+        return carrying, applied
+
+    def holds(entity_id: str) -> bool | None:
+        return _entity_fact(record, entity_id,
+                            lambda entity: has_designation(entity, designation))
+    return (tuple(e for e in carrying if holds(e)),
+            tuple(e for e in applied if e not in carrying and holds(e) is False))
 
 
 def _entity_fact(record: EffectRecord, entity_id: str, read) -> bool | None:

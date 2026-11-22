@@ -14,6 +14,10 @@ Parameters:
 - ``fires_when``: the bit's value on the ``fires`` side, ``false`` by default;
 - ``responsible_static``: true to count only candidates a static restricts.
 
+The near miss of an ``affordable`` rule is a candidate failing no check but
+``cost`` (its ``failed_checks``): one a timing, a zone or a limit also keeps
+from being played says nothing of what its cost allows.
+
 The candidates a rule speaks for, each filter narrowing both sides:
 
 - ``land_play``: true for land-play candidates only (FR-033a), false for
@@ -69,6 +73,9 @@ The candidates a rule speaks for, each filter narrowing both sides:
   count;
 - ``some_legal_target``: the candidate's ``legal_targets`` list is (true) or
   is not (false) empty;
+- ``stack_empty``: the decision is taken with the stack empty (true) or
+  holding an object (false), read off the snapshot's ``stack_size``: split
+  second's near miss is a candidate answering a spell without it;
 - ``candidate_face``: ``front`` for a candidate acting through its card's
   first face, ``alternative`` for one acting through another (a double-faced
   card's back face, an Adventure, an Omen, a split card's second half), read
@@ -122,7 +129,7 @@ FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "s
                      "land_play", "candidate_face", "candidate", "source_type",
                      "source_designation", "sorcery_speed", "phase_list_first",
                      "phase_list_last", "source_tapped", "source_sick", "min_targets",
-                     "some_legal_target"})
+                     "some_legal_target", "stack_empty"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
 #: What a candidate is: its card's cast, or an activated ability (a land play
 #: is ``land_play``'s).
@@ -240,72 +247,100 @@ def _source(record: EffectRecord):
     return record.state.entity(source) if source else None
 
 
-def _passes(candidate: Candidate, lines: SidecarLookup | None,
-            params: Mapping[str, Any], record: EffectRecord) -> bool:
-    """Whether the candidate is one the declaration's filters speak for."""
-    if "land_play" in params and candidate.land_play is not bool(params["land_play"]):
+def _source_filters(candidate: Candidate, lines: SidecarLookup | None,
+                    params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """``source_type``, ``source_tapped``, ``source_sick`` and
+    ``source_designation``: the candidate's card as the snapshot shows it."""
+    source = _source(record)
+    if "source_type" in params and (source is None or params["source_type"].lower() not in {
+            t.lower() for t in source.types}):
         return False
-    if "candidate" in params and candidate_kind(candidate, lines) != params["candidate"]:
-        return False
-    if "source_type" in params:
-        source = _source(record)
-        if source is None or params["source_type"].lower() not in {
-                t.lower() for t in source.types}:
-            return False
     for flag in ("source_tapped", "source_sick"):
-        if flag in params:
-            source = _source(record)
-            held = None if source is None else getattr(source, flag.removeprefix("source_"))
-            if held is not bool(params[flag]):
-                return False
-    if "source_designation" in params:
-        source = _source(record)
-        if source is None or not has_designation(source, params["source_designation"]):
+        held = None if source is None else getattr(source, flag.removeprefix("source_"))
+        if flag in params and held is not bool(params[flag]):
             return False
-    if "sorcery_speed" in params and sorcery_speed(candidate, record, lines) is not bool(
-            params["sorcery_speed"]):
+    return "source_designation" not in params or (
+        source is not None and bool(has_designation(source, params["source_designation"])))
+
+
+def _phase_filters(candidate: Candidate, lines: SidecarLookup | None,
+                   params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """``phase_list_first`` and ``phase_list_last``."""
+    if "phase_list_first" not in params and "phase_list_last" not in params:
+        return True
+    listed = _phase_list(candidate, lines)
+    if listed is None:
         return False
-    if "phase_list_first" in params or "phase_list_last" in params:
-        listed = _phase_list(candidate, lines)
-        if listed is None:
-            return False
-        if "phase_list_first" in params and listed[0] != params["phase_list_first"]:
-            return False
-        if "phase_list_last" in params and listed[-1] != params["phase_list_last"]:
-            return False
+    return all(listed[index] == params[name] for name, index in (
+        ("phase_list_first", 0), ("phase_list_last", -1)) if name in params)
+
+
+def _target_filters(candidate: Candidate, lines: SidecarLookup | None,
+                    params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """``min_targets`` and ``some_legal_target``."""
     if "min_targets" in params:
         minimum = sole_clause_minimum(candidate, lines)
         if minimum is None or minimum < params["min_targets"]:
             return False
         if not candidate.has_legal_target and len(set(candidate.legal_targets)) >= minimum:
             return False  # enough legal objects: a restriction on the set decides it
-    if "some_legal_target" in params and bool(candidate.legal_targets) is not bool(
-            params["some_legal_target"]):
+    return "some_legal_target" not in params or bool(candidate.legal_targets) is bool(
+        params["some_legal_target"])
+
+
+def _line_filters(candidate: Candidate, lines: SidecarLookup | None,
+                  params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """``candidate_face``, ``keyword``, ``source_keyword`` and ``script_param``:
+    the candidate's provenance key and its line."""
+    if "candidate_face" in params and (not candidate.ability or (
+            candidate.ability[0].face != 0) != (params["candidate_face"] == "alternative")):
         return False
-    if "candidate_face" in params:
-        if not candidate.ability:
-            return False
-        alternative = candidate.ability[0].face != 0
-        if alternative != (params["candidate_face"] == "alternative"):
-            return False
     if "keyword" in params and not is_keyword_line(
             line_of(candidate.ability, lines), params["keyword"]):
         return False
     if "source_keyword" in params and not card_has_keyword(
             candidate.ability, lines, params["source_keyword"]):
         return False
-    if "script_param" in params and not script_params_match(
-            root_params_of(line_of(candidate.ability, lines)), params["script_param"]):
+    return "script_param" not in params or script_params_match(
+        root_params_of(line_of(candidate.ability, lines)), params["script_param"])
+
+
+def _cost_filters(candidate: Candidate, lines: SidecarLookup | None,
+                  params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """``cost_symbol`` and ``cost_part``."""
+    if "cost_symbol" not in params and "cost_part" not in params:
+        return True
+    symbols, parts = cost_of(candidate, lines)
+    if "cost_symbol" in params and (
+            symbols is None or not _holds_symbol(symbols, params["cost_symbol"])):
         return False
-    if "cost_symbol" in params or "cost_part" in params:
-        symbols, parts = cost_of(candidate, lines)
-        if "cost_symbol" in params and (
-                symbols is None or not _holds_symbol(symbols, params["cost_symbol"])):
-            return False
-        if "cost_part" in params and (
-                parts is None or params["cost_part"].upper() not in parts):
-            return False
-    return True
+    return "cost_part" not in params or (
+        parts is not None and params["cost_part"].upper() in parts)
+
+
+def _kind_filters(candidate: Candidate, lines: SidecarLookup | None,
+                  params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """``land_play``, ``candidate``, ``sorcery_speed`` and ``stack_empty``."""
+    if "land_play" in params and candidate.land_play is not bool(params["land_play"]):
+        return False
+    if "candidate" in params and candidate_kind(candidate, lines) != params["candidate"]:
+        return False
+    if "stack_empty" in params and (
+            record.state.global_.stack_size == 0) is not bool(params["stack_empty"]):
+        return False
+    return "sorcery_speed" not in params or sorcery_speed(
+        candidate, record, lines) is bool(params["sorcery_speed"])
+
+
+#: The filters' groups, in the order a candidate is read.
+_FILTER_GROUPS = (_kind_filters, _source_filters, _phase_filters, _target_filters,
+                  _line_filters, _cost_filters)
+
+
+def _passes(candidate: Candidate, lines: SidecarLookup | None,
+            params: Mapping[str, Any], record: EffectRecord) -> bool:
+    """Whether the candidate is one the declaration's filters speak for."""
+    return all(group(candidate, lines, params, record) for group in _FILTER_GROUPS)
 
 
 def _bit(candidate, bit: str, check: str | None) -> bool | None:
@@ -316,6 +351,16 @@ def _bit(candidate, bit: str, check: str | None) -> bool | None:
     return getattr(candidate, bit)
 
 
+def _near(candidate: Candidate, bit: str) -> bool:
+    """Whether the candidate can be a near miss of a ``bit`` rule: of an
+    ``affordable`` rule, only one failing no check but ``cost``, whose verdict
+    the cost alone decides; any candidate otherwise."""
+    if bit != "affordable":
+        return True
+    return candidate.failed_checks is not None and all(
+        failed.check == PlayabilityCheck.COST for failed in candidate.failed_checks)
+
+
 @dataclass(frozen=True, slots=True)
 class VerdictBit:
     id: str = "verdict_bit"
@@ -323,7 +368,7 @@ class VerdictBit:
         {"bit", "check", "fires_when", "responsible_static"}) | FILTERS
     general: frozenset[str] = frozenset(
         {"bit", "check", "fires_when", "keyword", "source_keyword", "cost_symbol", "cost_part",
-         "land_play", "candidate_face"})
+         "land_play", "candidate_face", "stack_empty"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")
@@ -355,7 +400,7 @@ class VerdictBit:
             "source_designation": dv.designation, "source_tapped": dv.boolean,
             "source_sick": dv.boolean, "some_legal_target": dv.boolean,
             "min_targets": dv.integer, "phase_list_first": dv.one_of(*PHASE_ORDER),
-            "phase_list_last": dv.one_of(*PHASE_ORDER)})
+            "phase_list_last": dv.one_of(*PHASE_ORDER), "stack_empty": dv.boolean})
         if "min_targets" in params and params["min_targets"] < 2:
             raise ValueError("verdict_bit: min_targets is 2 or more; a clause of one "
                              "target is any targeting clause")
@@ -375,11 +420,10 @@ class VerdictBit:
             c for c in record.payload.candidates
             if (not params.get("responsible_static") or c.responsible_static)
             and _passes(c, lines, params, record)]
-        values = [_bit(c, bit, params.get("check")) for c in candidates]
-        values = [v for v in values if v is not None]
-        if not values:
+        values = [(c, _bit(c, bit, params.get("check"))) for c in candidates]
+        fires = any(v is fires_when for _, v in values)
+        if not fires and not any(v is not None and _near(c, bit) for c, v in values):
             return None
-        fires = any(v is fires_when for v in values)
         polarity = Polarity.FIRES if fires else Polarity.DOES_NOT_FIRE
         source = record.state.refs.source
         return FamilyMatch(polarity, fires, (source,) if source else (),

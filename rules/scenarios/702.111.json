@@ -84,7 +84,7 @@
         "family": "legality_membership",
         "record_kind": "playability",
         "outcome": "A creature with menace can be blocked only by two or more creatures: its blockers record writes min_blockers of 2 or more.",
-        "near_miss": "An attacker that one creature suffices to block (min_blockers below 2).",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: an attacker that one creature suffices to block (min_blockers below 2).",
         "params": {
           "list": "min_blockers",
           "fires_when": "inside",

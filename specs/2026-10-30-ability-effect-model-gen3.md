@@ -184,6 +184,10 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
   card it uses.
 - A scenario names the record kind and observable outcome its detector looks for, and its
   contrasting variant gives the near miss the detector rejects.
+- A detector counts a near miss only where its declaration names the rule's situation through
+  a scoping parameter of its family (a source's keyword, API, token kind or script parameter,
+  a judged entity's type or keyword, a targeted stack object, a decision taken with the stack
+  holding an object). A declaration without one has a `fires` side only.
 - A variant whose operation (§ 6) is `pt`, `keyword`, `colour_type`, `counters` or
   `replace_card` carries a `script_edit`: the card it changes, as Forge names it, and the
   script lines removed from and added to that card's Forge script to make the variant's one

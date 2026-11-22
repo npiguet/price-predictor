@@ -536,7 +536,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A token moves from the battlefield to the graveyard (it then ceases to exist).",
-        "near_miss": "A card, not a token, moves from the battlefield to the graveyard and stays there.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a card, not a token, moves from the battlefield to the graveyard and stays there.",
         "params": {
           "event": "zone_change",
           "from_zone": "Battlefield",
@@ -610,7 +610,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A token moves from the battlefield to its owner's hand (it then ceases to exist).",
-        "near_miss": "A card, not a token, moves from the battlefield to hand and stays there.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a card, not a token, moves from the battlefield to hand and stays there.",
         "params": {
           "event": "zone_change",
           "from_zone": "Battlefield",
@@ -2556,7 +2556,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A copy of a permanent spell resolves and enters the battlefield from the stack (as a token) with no token_created event, because it was not created by an effect.",
-        "near_miss": "A permanent spell that is a card, not a copy, enters from the stack as a card.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a permanent spell that is a card, not a copy, enters from the stack as a card.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",

@@ -76,7 +76,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A planeswalker entering the battlefield gets loyalty counters in the same record.",
-        "near_miss": "A planeswalker entering with no loyalty counter change.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a planeswalker entering with no loyalty counter change.",
         "params": {
           "event": "counter_change",
           "counter_type": "LOYALTY",

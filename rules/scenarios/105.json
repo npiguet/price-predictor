@@ -215,7 +215,7 @@
         "family": "continuous_contribution",
         "record_kind": "continuous",
         "outcome": "A continuous effect sets an entity's colours outright (a '=' colour line), replacing every colour it had.",
-        "near_miss": "A continuous effect that applies to the board and sets no colour, such as one adding a colour in addition to the others.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a continuous effect that applies to the board and sets no colour, such as one adding a colour in addition to the others.",
         "params": {
           "field": "colors",
           "value": "="

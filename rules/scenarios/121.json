@@ -1228,7 +1228,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "Damage prevented by an effect that replaces it with card draws: the damage step holds a damage_prevented and the card_drawn events that replace it.",
-        "near_miss": "Damage is prevented with no card draws resulting.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: damage is prevented with no card draws resulting.",
         "params": {
           "event": "damage_prevented",
           "with_event": "card_drawn"

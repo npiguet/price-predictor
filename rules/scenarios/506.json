@@ -758,7 +758,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution's effect half moves an attacking or blocking creature off the battlefield, which removes it from combat.",
-        "near_miss": "A resolution moves a creature off the battlefield that is neither attacking nor blocking.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution moves a creature off the battlefield that is neither attacking nor blocking.",
         "params": {
           "event": "zone_change",
           "from_zone": "battlefield",
@@ -851,7 +851,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution's effect half changes the controller of an attacking or blocking creature, which removes it from combat.",
-        "near_miss": "A resolution changes the controller of a creature that is neither attacking nor blocking.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution changes the controller of a creature that is neither attacking nor blocking.",
         "params": {
           "event": "control_change",
           "subject_in_combat": true
@@ -928,7 +928,7 @@
         "family": "outcome_event",
         "record_kind": "combat",
         "outcome": "In a damage step a regeneration shield saves an attacking or blocking creature (a regenerated event), which removes it from combat.",
-        "near_miss": "A regenerated event on a creature that is neither attacking nor blocking.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a regenerated event on a creature that is neither attacking nor blocking.",
         "params": {
           "event": "regenerated",
           "subject_in_combat": true
@@ -1014,7 +1014,7 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A resolution's effect half phases out an attacking or blocking creature, which removes it from combat.",
-        "near_miss": "A resolution phases out a creature that is neither attacking nor blocking.",
+        "near_miss": "No near miss is counted without a scoping parameter. The contrast: a resolution phases out a creature that is neither attacking nor blocking.",
         "params": {
           "event": "phased",
           "subject_in_combat": true

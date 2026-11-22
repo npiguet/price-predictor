@@ -74,6 +74,12 @@ Parameters:
 - ``min_types``: only a judged entity with at least this many card types
   counts, on either side (an artifact creature, 205.2b).
 
+Without a ``restriction``, a near miss is counted only under one of the
+parameters that narrow the judged entities (``SCOPES``: ``keyword``,
+``counter_type``, ``judged_type``, ``judged_not_type``, ``min_types``,
+``designation``); otherwise the list's other side is every entity the rule
+says nothing of.
+
 Both roles name the judged entities, each one's own characteristics being
 what the restriction reads and its legality bit where the outcome falls; a
 blockers or defenders record's anchor attacker is a condition entity too
@@ -369,16 +375,12 @@ class LegalityMembership:
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
         listed = params.get("list")
-        fires_when = params.get("fires_when", "outside")
-        universe = params.get("universe")
         if record.kind is not RecordKind.PLAYABILITY or record.subkind is not _SUBKIND_OF[listed]:
             return None
         if "restriction" in params or "source_keyword" in params or "candidate_keyword" in params:
             fires, near = _restricted(record, lines, params)
         else:
-            inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
-                                     universe, int(params.get("at_least", 2)))
-            fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)
+            fires, near = _listed(record, params)
         keyword, counter = params.get("keyword"), params.get("counter_type")
         if keyword is not None or counter is not None:
             counter = None if counter is None else normalize_counter_type(counter)
@@ -407,6 +409,26 @@ class LegalityMembership:
                 condition, outcome = _roles(record, listed, judged)
                 return FamilyMatch(polarity, polarity is Polarity.FIRES, condition, outcome)
         return None
+
+
+#: The parameters that say which judged entities a list rule speaks for, so
+#: which of them its near miss is; a ``restriction`` decides its own
+#: (``legality_restrictions``).
+SCOPES = frozenset({"keyword", "counter_type", "judged_type", "judged_not_type", "min_types",
+                    "designation"})
+
+
+def _listed(record: EffectRecord, params: Mapping[str, Any]
+            ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(fires, near)`` by the list's inside and outside alone. The near
+    miss is counted only under a scoping parameter (``SCOPES``): without
+    one, it is every entity on the list's other side, every creature that may
+    attack for a can't-attack rule, every attacker no requirement binds."""
+    listed, fires_when = params.get("list"), params.get("fires_when", "outside")
+    inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
+                             params.get("universe"), int(params.get("at_least", 2)))
+    fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)
+    return fires, near if SCOPES & set(params) else ()
 
 
 def _roles(record: EffectRecord, listed: str, judged: tuple[str, ...]):

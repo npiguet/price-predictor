@@ -66,7 +66,7 @@
         "family": "combat_keyword_effect",
         "record_kind": "combat",
         "outcome": "An attacking creature with vigilance does not tap as it is declared as an attacker.",
-        "near_miss": "An attacking creature without vigilance, which taps as it attacks.",
+        "near_miss": "No near miss is counted: an attacking creature without vigilance, which taps as it attacks, is 508.1f-1's fires side and says nothing of vigilance.",
         "params": {
           "keyword": "vigilance"
         },

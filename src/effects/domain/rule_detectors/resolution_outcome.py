@@ -4,7 +4,10 @@ A stack object leaves the stack ``resolved``, ``fizzled`` (every target
 became illegal, 608.2b), ``partially_fizzled``, ``declined`` or ``countered``
 (701.6a). A rule about leaving the stack is on its ``fires`` side when the
 outcome is the one it names, and on its near miss when the outcome is one of
-``near``.
+``near``. The near miss is counted only where ``keyword``, ``source_keyword``
+or ``targeted`` says which stack objects the rule speaks for (``SCOPES``):
+without one, every spell and ability of the corpus that resolved would be a
+near miss of a counter rule.
 
 The outcome is written on the effect half (root spec § 8.14, FR-042b), and a
 countered object writes no effect half at all: its fate is the countering
@@ -105,6 +108,11 @@ def _prints(record: EffectRecord, lines: SidecarLookup | None, observed: _Observ
     return card_has_keyword(record.ability or (), lines, keyword)
 
 
+#: The parameters that say which stack objects a rule speaks for, so which
+#: records its near miss is (``targeted`` when true).
+SCOPES = frozenset({"keyword", "source_keyword", "targeted"})
+
+
 @dataclass(frozen=True, slots=True)
 class ResolutionOutcomeFamily:
     id: str = "resolution_outcome"
@@ -127,21 +135,28 @@ class ResolutionOutcomeFamily:
         fires = ResolutionOutcome(params["outcome"])
         near = {ResolutionOutcome(o) for o in params.get("near", ["resolved"])}
         observed = _observed(record, ResolutionOutcome.COUNTERED in near | {fires})
-        if observed is None or (params.get("targeted") and not observed.targeted):
-            return None
-        keyword = params.get("source_keyword")
-        if keyword is not None and not _prints(record, lines, observed, keyword):
-            return None
-        if "keyword" in params and not is_keyword_line(acting_line(record, lines),
-                                                       params["keyword"]):
+        if observed is None or not _fits(record, lines, observed, params):
             return None
         if observed.outcome is fires:
             return FamilyMatch(Polarity.FIRES, True, observed.condition,
                                observed.outcome_entities)
-        if observed.outcome in near:
+        if observed.outcome in near and any(params.get(name) for name in SCOPES):
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, observed.condition,
                                observed.outcome_entities)
         return None
+
+
+def _fits(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
+          params: Mapping[str, Any]) -> bool:
+    """Whether the stack object is one ``targeted``, ``source_keyword`` and
+    ``keyword`` speak for, each where given."""
+    if params.get("targeted") and not observed.targeted:
+        return False
+    keyword = params.get("source_keyword")
+    if keyword is not None and not _prints(record, lines, observed, keyword):
+        return False
+    return "keyword" not in params or is_keyword_line(acting_line(record, lines),
+                                                      params["keyword"])
 
 
 FAMILY = register(ResolutionOutcomeFamily())
