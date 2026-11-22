@@ -13,6 +13,8 @@ pilot's single-player case, with the shape widened by hand.
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from effects.domain.aux_head_targets import global_targets
@@ -78,6 +80,43 @@ class TestThePtDuration:
     def test_an_entity_with_one_duration_keeps_it(self, records):
         entry = derive_targets(records[_CHOKING_MIASMA_MIXED])["E29"]
         assert entry.fields[HeadField.PT_DURATION] == DURATIONS.index("end_of_turn")
+
+
+def _with_events(record, *extra):
+    """The fixture record with ``extra`` events appended: a real record edited."""
+    payload = dataclasses.replace(record.payload, events=(*record.payload.events, *extra))
+    return dataclasses.replace(record, payload=payload)
+
+
+def _type_change(duration: str) -> Event:
+    return Event(type=EventType.TYPE_CHANGE, subjects=("E29",), duration=duration,
+                 params={"types_added": ["Artifact"], "types_removed": []})
+
+
+def _color_change(duration: str) -> Event:
+    return Event(type=EventType.COLOR_CHANGE, subjects=("E29",), duration=duration,
+                 params={"colors": ["Black"], "colors_removed": []})
+
+
+class TestTheTypeColorDuration:
+    """Choking Miasma's E29, given type and colour changes (the fixture holds none)."""
+
+    def _entry(self, records, *extra):
+        record = _with_events(records[_CHOKING_MIASMA_MIXED], *extra)
+        return derive_targets(record)["E29"]
+
+    def test_a_type_and_a_colour_change_of_different_durations_have_none(self, records):
+        entry = self._entry(records, _type_change("end_of_turn"), _color_change("permanent"))
+        assert HeadField.TYPE_COLOR_DURATION not in entry.fields
+        assert HeadField.TYPE_COLOR_DURATION in entry.unknown
+
+    def test_two_type_changes_of_different_durations_have_none(self, records):
+        entry = self._entry(records, _type_change("end_of_turn"), _type_change("permanent"))
+        assert HeadField.TYPE_COLOR_DURATION not in entry.fields
+
+    def test_changes_of_one_duration_keep_it(self, records):
+        entry = self._entry(records, _type_change("end_of_turn"), _color_change("end_of_turn"))
+        assert entry.fields[HeadField.TYPE_COLOR_DURATION] == DURATIONS.index("end_of_turn")
 
 
 def _resolution(*events) -> object:

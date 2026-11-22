@@ -22,12 +22,25 @@ _ENCHANT = vocabulary_slot(changed_keyword("enchant"), KEYWORDS_CHANGED)
 def mixed_pt_durations(pt_changes: Iterable[Event], targets: Mapping) -> None:
     """``pt_duration`` is unknown on an entity whose ``pt_change`` events last
     for different times: its deltas are summed, one duration cannot label them."""
+    _forget_mixed(pt_changes, targets, HeadField.PT_DURATION)
+
+
+def mixed_type_color_durations(
+    type_and_color_changes: Iterable[Event], targets: Mapping,
+) -> None:
+    """``type_color_duration`` is unknown on an entity whose ``type_change`` and
+    ``color_change`` events together last for different times: one field labels
+    both kinds, and their gains and losses are merged."""
+    _forget_mixed(type_and_color_changes, targets, HeadField.TYPE_COLOR_DURATION)
+
+
+def _forget_mixed(events: Iterable[Event], targets: Mapping, name: str) -> None:
     durations: dict[str, set[str | None]] = defaultdict(set)
-    for event in pt_changes:
+    for event in events:
         for subject in event.subjects:
             durations[subject].add(event.duration)
     for subject in _mixed(durations):
-        targets[subject].forget(HeadField.PT_DURATION)
+        targets[subject].forget(name)
 
 
 def _mixed(durations: Mapping[str, set]) -> list[str]:

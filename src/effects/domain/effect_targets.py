@@ -48,7 +48,11 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.event_schema import Event, EventType, signed_delta
 from effects.domain.keyword_names import changed_keyword
-from effects.domain.lasting_change_labels import cancel_enchant_swaps, mixed_pt_durations
+from effects.domain.lasting_change_labels import (
+    cancel_enchant_swaps,
+    mixed_pt_durations,
+    mixed_type_color_durations,
+)
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
     ContinuousPayload,
@@ -593,6 +597,10 @@ class _RecordPass:
         self._library_events()
         self._base_pt()
         mixed_pt_durations(self.by_type[EventType.PT_CHANGE], self.targets)
+        mixed_type_color_durations(
+            [*self.by_type[EventType.TYPE_CHANGE], *self.by_type[EventType.COLOR_CHANGE]],
+            self.targets,
+        )
         cancel_enchant_swaps(self.targets.values())
         self._copies()
         self._venture()
