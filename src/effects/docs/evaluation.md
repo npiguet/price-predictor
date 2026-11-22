@@ -31,7 +31,7 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
   - The population is the real combats of the game-disjoint games. A probe fork or an intervention qualifies nothing.
   - A row qualifies a carrier only on damage dealt or taken in the record's own step (rule 510.4), and a phased-out creature or a last-known copy takes no part. The full qualification rules are in `domain/damage_step_keywords.py`, which the survey's keyword threshold and the `keyword_combat` detector read too.
   - The 200 counts distinct `record_id`s; agreement averages over (record, carrier) observations.
-  - Fields are read through `HeadReading`, the gate's probability times the expected value, since a field head trains only where an entity was affected.
+  - Fields are read through `HeadReading`, the gate's probability times the expected value, since a field head trains only where an entity was affected. A signed delta's expected value is its magnitude column (the mean absolute value over every scored row, zeros included) times `(P(+) − P(−)) / (P(+) + P(−))`, the sign's lean among the non-zero outcomes; the zero class is discounted once, by the magnitude.
   - Under-sampled routes the same way as wrong. Treating untested as passed is how a canary stops being one.
 - Gate 3, the collapse canaries, is pass/fail: mean pairwise cosine at most 0.5 over 10,000 random pairs, top principal component at most 30% of variance.
   - One vector per unique ability text, unique by the text on the checkpoint's encoding surface, never by the vector's bytes: one text encoded in two batches differs in float noise.

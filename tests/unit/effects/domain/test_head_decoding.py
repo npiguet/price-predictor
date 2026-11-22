@@ -120,3 +120,44 @@ class TestHeadReading:
             HeadReading(_outputs(0.0)).expected("tap_state")
         with pytest.raises(ValueError, match="damage_taken"):
             HeadReading(_outputs(0.0)).p_class("damage_taken", "died")
+
+
+class TestSignedDeltaAtTheLossOptimum:
+    """The magnitude column learns the mean absolute value over every scored
+    row, zeros included, so the decode must not discount the zero class again."""
+
+    @staticmethod
+    def _fitted_expectation(targets: list[float]) -> float:
+        from effects.domain.effect_head_layout import FIELD_SLICES
+        from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
+        from effects.domain.head_decoding import HeadReading
+
+        spec = FIELDS_BY_NAME["life_delta"]
+        kind = FIELD_KINDS[spec.type]
+        target = torch.tensor(targets)
+        scoring = FieldScoring(arity=1, cap=None, log_dispersion=torch.zeros(()))
+        columns = torch.zeros(4, requires_grad=True)
+        optimiser = torch.optim.LBFGS(
+            [columns], lr=1.0, max_iter=500, tolerance_grad=1e-10,
+            tolerance_change=1e-14, line_search_fn="strong_wolfe",
+        )
+
+        def closure():
+            optimiser.zero_grad()
+            loss = kind.loss(columns.expand(len(targets), 4), target, scoring)
+            loss.backward()
+            return loss
+
+        optimiser.step(closure)
+        vector = _outputs(20.0)
+        start, end = FIELD_SLICES["life_delta"]
+        vector[start:end] = columns.detach()
+        return float(HeadReading(vector).expected("life_delta"))
+
+    @pytest.mark.parametrize(
+        ("targets", "expected"),
+        [([0, 0, 2, 2], 1.0), ([0, 0, 0, 3], 0.75), ([0, -1, -1, -1], -0.75)],
+    )
+    def test_the_decode_is_the_mean_of_the_targets(self, targets, expected):
+        got = self._fitted_expectation([float(t) for t in targets])
+        assert got == pytest.approx(expected, abs=1e-3)

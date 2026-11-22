@@ -50,6 +50,17 @@ def direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
     )
 
 
+def nonzero_direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
+    """``(P(+) − P(−)) / (P(+) + P(−))`` of a signed delta, in ``[-1, 1]``: the
+    sign's lean among the non-zero outcomes, the zero class left out."""
+    if not spec.type.has_direction:
+        raise ValueError(f"{spec.name} is a {spec.type} field and has no direction")
+    probabilities = torch.softmax(slice_[..., SIGNED_DIRECTIONS], dim=-1)
+    positive = probabilities[..., DIRECTIONS.index(Direction.POSITIVE)]
+    negative = probabilities[..., DIRECTIONS.index(Direction.NEGATIVE)]
+    return (positive - negative) / (positive + negative).clamp_min(torch.finfo(positive.dtype).tiny)
+
+
 @dataclass(frozen=True, slots=True)
 class HeadReading:
     """One entity's per-entity output, over any leading dims, read as the rules ask.
@@ -74,14 +85,23 @@ class HeadReading:
         return value if conditional else self.p_affected * value
 
     def expected(self, field: str, *, conditional: bool = False) -> torch.Tensor:
-        """A count's expected value, or a signed delta's expected signed value."""
+        """A count's expected value, or a signed delta's expected signed value.
+
+        A signed delta's magnitude column is trained on every scored row, zeros
+        included, so ``exp(log_rate)`` already is the mean absolute value and
+        the zero class is not discounted again: the value is that mean times
+        the sign's lean among the non-zero outcomes,
+        ``(P(+) − P(−)) / (P(+) + P(−))``. It is exact when both signs share a
+        magnitude; with different magnitudes it reads their mean absolute value
+        at each sign's share.
+        """
         spec = FIELDS_BY_NAME[field]
         columns = self._columns(spec)
         if not spec.type.has_magnitude:
             raise ValueError(f"{field} is a {spec.type} field and has no expected value")
         value = expected_magnitude(spec, columns)
         if spec.type.has_direction:
-            value = direction_balance(spec, columns) * value
+            value = nonzero_direction_balance(spec, columns) * value
         return self._gated(value, conditional)
 
     def p_class(
