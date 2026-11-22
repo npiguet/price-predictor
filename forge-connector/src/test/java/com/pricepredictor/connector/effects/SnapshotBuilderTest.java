@@ -72,7 +72,7 @@ class SnapshotBuilderTest {
         assertEquals(
                 "{\"global\":G,\"players\":P,\"entities\":[E],\"links\":L,\"refs\":R,"
                         + "\"pending_event\":V,\"tiers\":[1,2,3,4]}",
-                new Snapshot("G", null, "P", List.of("E"), "L", "R", "V", false, null).render());
+                new Snapshot("G", null, "P", List.of("E"), "L", "R", "V", null).render());
     }
 
     /**
@@ -83,11 +83,11 @@ class SnapshotBuilderTest {
     @Test
     void laterRefsReplaceOnlyTheRefsBlock() {
         Snapshot castTime = new Snapshot(
-                "G", null, "P", List.of("E"), "[]", "{\"choices\":{}}", "null", false, null);
+                "G", null, "P", List.of("E"), "[]", "{\"choices\":{}}", "null", null);
         String resolved = "{\"choices\":{\"chosen_color\":\"U\"}}";
 
         assertEquals(
-                new Snapshot("G", null, "P", List.of("E"), "[]", resolved, "null", false, null),
+                new Snapshot("G", null, "P", List.of("E"), "[]", resolved, "null", null),
                 castTime.withRefs(resolved));
         assertEquals("{\"choices\":{}}", castTime.refs(),
                 "the cast-time snapshot is a value; a later reading makes a new one");

@@ -264,6 +264,6 @@ final class TriggerChannel {
                 .payload(new RecordPayload(Json.object()
                         .raw("event", event.toJson())
                         .value("fired", fired)
-                        .render(), event.type().isGameOutcome(), null));
+                        .render(), false, null));
     }
 }

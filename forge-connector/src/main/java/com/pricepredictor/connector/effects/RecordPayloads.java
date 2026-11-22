@@ -4,7 +4,6 @@ import com.google.common.base.CaseFormat;
 import com.pricepredictor.connector.json.Json;
 import forge.game.spellability.SpellAbility;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -158,6 +157,9 @@ final class RecordPayloads {
      * {@code buffered_ran} (whether Forge ran it) and
      * {@code buffered_events} (the events of its run this record took).
      *
+     * <p>A rewrite never holds the game's outcome, whatever event it replaced:
+     * the game goes on, or the record whose own events end it holds it.
+     *
      * @param buffered the ability set aside, or null when none was
      */
     static RecordPayload rewritePayload(Rewritten rewritten, Buffered buffered) {
@@ -170,25 +172,17 @@ final class RecordPayloads {
         if (rewritten.incomingUnknown()) {
             payload.value("incoming_unknown", true);
         }
-        List<EffectEvent> named = new ArrayList<>();
-        named.add(rewritten.incoming());
-        if (rewritten.outgoing() != null) {
-            named.add(rewritten.outgoing());
-        }
         if (buffered != null) {
-            named.addAll(addBuffered(payload, buffered));
+            addBuffered(payload, buffered);
         }
-        return holding(payload.render(), named);
+        return new RecordPayload(payload.render(), false, null);
     }
 
-    /** Write the buffered ability's three fields; the events of its run that were written. */
-    private static List<EffectEvent> addBuffered(
-            Json.ObjectWriter payload, Buffered buffered) {
-        List<EffectEvent> ran = happened(buffered.events());
+    /** Write the buffered ability's three fields, with the events of its run that happened. */
+    private static void addBuffered(Json.ObjectWriter payload, Buffered buffered) {
         payload.raw("buffered", ProvenanceKey.toJsonArray(buffered.keys()))
                 .value("buffered_ran", buffered.ran())
-                .raw("buffered_events", eventArray(ran));
-        return ran;
+                .raw("buffered_events", eventArray(happened(buffered.events())));
     }
 
     /**

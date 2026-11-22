@@ -250,8 +250,7 @@ public final class SnapshotBuilder {
                 globalToJson(turn, tiers, board), turn, players, entities.elements(),
                 SnapshotLinks.render(game, request, entities, notes),
                 RefsJson.render(acting.chosen() ? acting.ability() : null, request.source()),
-                pending == null ? "null" : pending.toJson(), Snapshot.isOutcome(pending),
-                libraries);
+                pending == null ? "null" : pending.toJson(), libraries);
     }
 
     /**
@@ -325,7 +324,7 @@ public final class SnapshotBuilder {
         }
         return new Snapshot(board.global(), board.turn(), board.players(), List.copyOf(entities),
                 SnapshotLinks.withTargetsNow(board.links(), game, added, acting),
-                board.refs(), board.pendingEvent(), board.pendingOutcome(), board.libraries());
+                board.refs(), board.pendingEvent(), board.libraries());
     }
 
     /** The targets as cast that ceased to exist or became new objects; none without them. */

@@ -29,8 +29,6 @@ import java.util.List;
  * @param refs         the {@code refs} block for the acting line
  * @param pendingEvent the {@code pending_event} a trait is about to handle, or
  *                     {@code null} rendered
- * @param pendingOutcome whether {@code pendingEvent} is the game's outcome
- *                     ({@code player_lost}, {@code player_won})
  * @param libraries    where every library card sat when the board was
  *                     captured, so the library cards the record's events
  *                     later name can join the entities (FR-024); null where
@@ -38,7 +36,7 @@ import java.util.List;
  */
 record Snapshot(
         String global, Integer turn, String players, List<String> entities, String links,
-        String refs, String pendingEvent, boolean pendingOutcome, LibraryCapture libraries) {
+        String refs, String pendingEvent, LibraryCapture libraries) {
 
     /**
      * The {@code state.tiers} every snapshot carries: all four, always.
@@ -52,7 +50,7 @@ record Snapshot(
     /** The same board, with its refs block replaced by a later reading. */
     Snapshot withRefs(String laterRefs) {
         return new Snapshot(global, turn, players, entities, links, laterRefs,
-                pendingEvent, pendingOutcome, libraries);
+                pendingEvent, libraries);
     }
 
     /**
@@ -63,12 +61,7 @@ record Snapshot(
      */
     Snapshot withPendingEvent(EffectEvent pending) {
         return new Snapshot(global, turn, players, entities, links, refs,
-                pending == null ? "null" : pending.toJson(), isOutcome(pending), libraries);
-    }
-
-    /** Whether {@code pending} is the game's outcome; false for none. */
-    static boolean isOutcome(EffectEvent pending) {
-        return pending != null && pending.type().isGameOutcome();
+                pending == null ? "null" : pending.toJson(), libraries);
     }
 
     /**
@@ -91,7 +84,7 @@ record Snapshot(
         List<Card> cards = named.stream().map(LibraryCapture.Slot::card).toList();
         return new Snapshot(global, turn, players, joined,
                 SnapshotLinks.withLibraryCards(links, cards),
-                refs, pendingEvent, pendingOutcome, libraries);
+                refs, pendingEvent, libraries);
     }
 
     /** The {@code entities} array as written. */
@@ -101,7 +94,7 @@ record Snapshot(
 
     /** The state as a record carries it: rendered, beside what its facts read of it. */
     RecordState state() {
-        return new RecordState(render(), turn, pendingOutcome);
+        return new RecordState(render(), turn);
     }
 
     /** The state as a record writes it, its blocks in the order the schema fixes. */

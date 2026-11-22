@@ -20,7 +20,7 @@ class RecordDedupTest {
     static EffectRecord playability(PlayabilitySubkind subkind, String payload, String state) {
         nextId++;
         return EffectRecord.playability(freshHeader(), subkind, AttributionMode.PATCHED)
-                .state(new RecordState(state, null, false)).payload(RecordPayload.withoutEvents(payload));
+                .state(new RecordState(state, null)).payload(RecordPayload.withoutEvents(payload));
     }
 
     /** The same, for a kind that names its acting line. */
@@ -29,7 +29,7 @@ class RecordDedupTest {
         nextId++;
         return new EffectRecord(freshHeader(), kind, AttributionMode.PATCHED)
                 .ability(new ProvenanceKey.Resolved(line, null))
-                .state(new RecordState(state, null, false)).payload(RecordPayload.withoutEvents(payload));
+                .state(new RecordState(state, null)).payload(RecordPayload.withoutEvents(payload));
     }
 
     /** The header of record {@code nextId}: its own id and timestamp, the one game. */

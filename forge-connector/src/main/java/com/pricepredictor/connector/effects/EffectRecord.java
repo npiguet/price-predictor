@@ -358,13 +358,14 @@ public final class EffectRecord {
     /**
      * What the shard writer's cap reads of this record: its game, the turn
      * its state was read on, its acting script, and whether it is a live
-     * record holding the game's outcome (in its events, a rewrite's pair or
-     * its state's pending event). A fork's record holding them holds the
-     * fork's outcome, not the game's.
+     * record holding the game's outcome: one whose own events end the game.
+     * A rewrite that replaced a loss or a win holds none, the game going on;
+     * a fork's record holding them holds the fork's outcome, not the game's.
      */
     RecordFacts facts() {
-        boolean outcome = state.pendingOutcome() || payload.namesOutcome();
-        return new RecordFacts(header.gameId(), state.turn(), actingScript(), forkKind == null && outcome);
+        return new RecordFacts(
+                header.gameId(), state.turn(), actingScript(),
+                forkKind == null && payload.namesOutcome());
     }
 
     /** The acting line's script file, else the line the payload names; null for neither. */
