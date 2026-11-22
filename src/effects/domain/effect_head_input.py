@@ -44,7 +44,6 @@ from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGE
 from effects.domain.provenance import ProvenanceKey, TraitKind, first_text
 from effects.domain.records import (
     CombatPayload,
-    ContinuousPayload,
     EffectRecord,
     Moment,
     PlayabilitySubkind,
@@ -557,7 +556,8 @@ def card_features(
     masked_keywords: frozenset[str] = frozenset(),
 ) -> tuple[float, ...]:
     """One entity's structured characteristics and state (root spec § 9.4);
-    ``masked_keywords`` removes keywords from its keyword flags."""
+    ``masked_keywords`` removes keywords from its keyword flags, gate 2's
+    strip (:meth:`SurfaceBuilder.build`)."""
     out: list[float] = []
     for _, push in _CARD_PARTS:
         push(out, entity, record, masked_keywords)
@@ -1241,12 +1241,11 @@ class SurfaceBuilder:
         """One record's surface.
 
         A ``decision`` record's ``[ACT]`` reads its candidate's ``e``
-        (FR-060a), and a ``continuous`` record's own keywords are hidden from
-        the keyword flags (:func:`continuous_masked_keywords`). ``stripped`` is
-        gate 2's perturbation: per-entity keywords removed from the flags *and*
-        as ability slots, the keyword's lines whether printed or granted; the
-        continuous mask must not silence a printed line of the same keyword,
-        so the two stay apart.
+        (FR-060a). A ``continuous`` record's keyword flags read its board as
+        written, which the collector writes without the record's static.
+        ``stripped`` is gate 2's perturbation: per-entity keywords removed
+        from the flags *and* as ability slots, the keyword's lines whether
+        printed or granted.
 
         A floating effect or delayed trigger that is no snapshot entity gets a
         ``[CARD]`` slot after the board's (:func:`command_zone_entities`), but
@@ -1275,22 +1274,18 @@ class SurfaceBuilder:
                 player_id=player.id,
             ))
 
-        masked = continuous_masked_keywords(record)
         source_id = record.state.refs.source
         for entity in slotted_entities(record):
-            gone = stripped.get(entity.id, frozenset())
             entity_slots.append(len(slots))
             block, keys = self._entity_block(
-                entity, record, masked=masked.get(entity.id, frozenset()) | gone,
-                gone=frozenset(overlay_keyword(keyword) for keyword in gone),
+                entity, record, stripped=stripped.get(entity.id, frozenset()),
                 dropout=self.context_dropout if entity.id != source_id else 0.0,
             )
             relations.add_card(entity, len(slots), block, keys)
             slots += block
         for entity in command_zone_entities(record):
             block, keys = self._entity_block(
-                entity, record, masked=frozenset(), gone=frozenset(),
-                dropout=self.context_dropout,
+                entity, record, stripped=frozenset(), dropout=self.context_dropout,
             )
             relations.add_card(entity, len(slots), block, keys)
             slots += block
@@ -1301,15 +1296,17 @@ class SurfaceBuilder:
 
     def _entity_block(
         self, entity: EntityState, record: EffectRecord, *,
-        masked: frozenset[str], gone: frozenset[str], dropout: float,
+        stripped: frozenset[str], dropout: float,
     ) -> tuple[list[Slot], list[ProvenanceKey | None]]:
         """One entity's ``CARD`` slot, then an ``ABILITY`` slot per line it
         keeps, each charm root followed by its mode lines; positions restart.
-        Beside the block, the key each slot reads (None for the card)."""
+        Beside the block, the key each slot reads (None for the card).
+        ``stripped`` is gate 2's strip of this entity's keywords."""
+        gone = frozenset(overlay_keyword(keyword) for keyword in stripped)
         keys: list[ProvenanceKey | None] = [None]
         block = [Slot(
             kind=SlotKind.CARD, position=0,
-            features=card_features(entity, record, masked_keywords=masked),
+            features=card_features(entity, record, masked_keywords=stripped),
             entity_id=entity.id,
             subtypes=tuple(subtype_id(subtype) for subtype in entity.subtypes),
             chosen_types=chosen_subtypes(entity),
@@ -1353,19 +1350,6 @@ class SurfaceBuilder:
             return self._zero
         vector = first_text(acting_keys(record), self.lines.e_for)
         return self._zero if vector is None else vector
-
-
-def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
-    """Keywords a ``continuous`` record's own static contributed (FR-020),
-    hidden so the input does not already contain the answer."""
-    match record.payload:
-        case ContinuousPayload(contributions=contributions):
-            return {
-                contribution.entity: frozenset(contribution.keywords)
-                for contribution in contributions
-                if contribution.keywords
-            }
-    return {}
 
 
 def feature_widths(records) -> dict[SlotKind, int]:

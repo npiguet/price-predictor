@@ -27,7 +27,6 @@ from effects.domain.effect_head_input import (
     act_features,
     card_features,
     card_segments,
-    continuous_masked_keywords,
     counter_rows,
     global_features,
     player_features,
@@ -38,8 +37,6 @@ from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     Candidate,
     CombatPayload,
-    ContinuousPayload,
-    Contribution,
     EffectRecord,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
@@ -382,25 +379,10 @@ class TestNumericEncoding:
 
 
 class TestPerKindVariations:
-    def test_a_continuous_record_masks_its_own_static_contribution(self):
-        entity = _entity(
-            "E1", granted_temporary=GrantedTemporary(keywords=("flying",)),
-        )
-        record = _record(
-            kind=RecordKind.CONTINUOUS, moment=None, ability=(_ANTHEM,),
-            state=_snapshot(entities=(entity,)),
-            payload=ContinuousPayload(contributions=(
-                Contribution(entity="E1", keywords=("flying",)),
-            )),
-        )
-        masked = continuous_masked_keywords(record)
-        assert masked == {"E1": frozenset({"flying"})}
-        with_mask = card_features(entity, record, masked_keywords=masked["E1"])
-        without = card_features(entity, record)
-        assert with_mask != without
+    """A continuous record's flags: ``test_continuous_keyword_flags.py``."""
 
     def test_masking_leaves_the_structured_features_alone(self):
-        """The static changed keywords, not the card's printed type line."""
+        """Gate 2's strip changes keywords, not the card's printed type line."""
         entity = _entity(
             "E1", granted_temporary=GrantedTemporary(keywords=("flying",)),
         )
