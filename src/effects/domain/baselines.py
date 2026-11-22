@@ -74,12 +74,22 @@ def baseline_masks(name: str) -> BaselineMasks:
         ) from None
 
 
-def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
+#: The one feature of a keyword line, which has no sidecar line: every keyless
+#: keyword line hashes alike, the keyword itself being what the baseline cannot see.
+KEYWORD_LINE_FEATURE = "keyword line"
+
+
+def taxonomy_vector(line: SidecarLine | None, e_dim: int) -> np.ndarray:
     """The ``taxonomy`` baseline's stand-in for an encoded ``e``: a
-    deterministic hash embedding of the line's API type and parameter keys."""
+    deterministic hash embedding of the line's API type and parameter keys; a
+    ``None`` line (a keyword line, which no sidecar describes) hashes the fixed
+    :data:`KEYWORD_LINE_FEATURE` alone."""
     vector = np.zeros(e_dim, dtype=np.float32)
-    features = [f"api:{line.script_api_type or ''}"]
-    features += [f"param:{key}" for key in line.script_param_keys]
+    if line is None:
+        features = [KEYWORD_LINE_FEATURE]
+    else:
+        features = [f"api:{line.script_api_type or ''}"]
+        features += [f"param:{key}" for key in line.script_param_keys]
     for feature in features:
         digest = hashlib.sha256(feature.encode("utf-8")).digest()
         index = int.from_bytes(digest[:4], "big") % e_dim

@@ -29,7 +29,7 @@ from effects.domain.ability_tokenizer import (
     Surface,
     withheld_keyword_tokens,
 )
-from effects.domain.baselines import BaselineMasks
+from effects.domain.baselines import BaselineMasks, taxonomy_vector
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import pinned
 
@@ -193,11 +193,9 @@ class TextStager:
 
 
 def _taxonomy_vectors(
-    ordered: list[str], lines: Mapping[str, SidecarLine], e_dim: int,
+    ordered: list[str], lines: Mapping[str, SidecarLine | None], e_dim: int,
 ) -> torch.Tensor:
     """The taxonomy baseline's stand-in for ``e``: the hash embedding its cache
     writes, so the trained baseline and its cache agree."""
-    from effects.domain.baselines import taxonomy_vector
-
     rows = np.stack([taxonomy_vector(lines[text], e_dim) for text in ordered])
     return torch.from_numpy(rows)

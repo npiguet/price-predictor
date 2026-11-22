@@ -103,7 +103,7 @@ How a key resolves, by case:
 - The cache directory (`encode-abilities --output-root`, a `cache` run named after the checkpoint's run) holds under `<tree>/…` one `.npz` per source file, a `float32` array `(n_lines, e_dim)` under the key `e`, row-aligned with that source's sidecar.
 - `encode-abilities` computes it once, offline; every downstream consumer reads the cache rather than the encoder.
 - `--variant` resolves the checkpoint and the output suffix together, so a baseline is never encoded with another variant's weights and never lands on the shipping cache. A variant writes `<name>.{variant}.npz` beside the shipping file.
-- The `taxonomy` variant has no encoder and emits a hash embedding into the same row layout, so every geometry check reads one file shape.
+- The `taxonomy` variant has no encoder and emits a hash embedding into the same row layout, so every geometry check reads one file shape. A keyword line has no sidecar line, so it hashes the one fixed feature `keyword line` (`KEYWORD_LINE_FEATURE`), whether it is staged for training or written to the cache.
 - The vocabulary and keyword-definition hashes are checked against the checkpoint before anything is written.
 
 ## Variant scripts

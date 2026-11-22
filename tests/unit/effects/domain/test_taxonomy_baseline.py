@@ -50,3 +50,15 @@ class TestTaxonomyBaseline:
     def test_a_source_with_no_lines_yields_an_empty_matrix(self):
         empty = ProvenanceSidecar(card="x", script_file="cardsfolder/x.txt", lines=())
         assert taxonomy_matrix(empty, E_DIM).shape == (0, E_DIM)
+
+
+class TestKeywordLineVector:
+    def test_a_keyword_line_hashes_one_fixed_feature(self):
+        from effects.domain.baselines import KEYWORD_LINE_FEATURE
+
+        assert KEYWORD_LINE_FEATURE == "keyword line"
+        first = taxonomy_vector(None, E_DIM)
+        np.testing.assert_array_equal(first, taxonomy_vector(None, E_DIM))
+        assert float(np.linalg.norm(first)) == 1.0
+        bare = SidecarLine(line_index=0, line_kind="text", provenance=(), prose_offset=0)
+        assert not np.allclose(first, taxonomy_vector(bare, E_DIM))
