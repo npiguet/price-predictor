@@ -33,9 +33,11 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
 )
+from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import PlayerState
 from effects.domain.surface_collation import entity_target_tensors
 from tests.unit.effects.builders import (
+    curated_fixture_records,
     make_entity,
     make_entity_targets,
     make_record,
@@ -181,3 +183,65 @@ class TestTheFloorReadsPresenceToo:
 
         # Two present entities, one tapped: a coin flip over two entities.
         assert floor([True, True, False, False]) == pytest.approx(2 * math.log(2))
+
+
+#: The fields whose event the collector writes on every resolution that
+#: does it, so a resolution's effect half that names an entity and no such
+#: event says 0 (finding 10.2): soulbond, mutate and a Class level are clause
+#: rules on the only APIs that do them, the blessing and a completed dungeon
+#: bus readings of the command zone.
+_SILENT_ON_EFFECT_HALVES = (
+    "paired", "merged", "class_levels_gained", "gained_city_blessing", "completed_dungeon",
+)
+#: Of those, the ones no fixture record says 1 or more for: their 1s are rare
+#: mechanics the fixture's 73 games never played.
+_NO_POSITIVE_IN_THE_FIXTURE = frozenset(_SILENT_ON_EFFECT_HALVES)
+#: The one-valued fields left without a silent value, and why: a 0 on them
+#: would contradict what Forge did on some resolution.
+_LEFT_WITHOUT_A_SILENT_VALUE = {
+    "door_unlocked": "a Room spell's entry unlocks the door cast with no UnlockDoor clause",
+    "entered_in_combat": "Dig, DigUntil, Meld, Block and a sneak cast add combatants unread",
+    "became_blocked": "a creature put onto the battlefield blocking blocks its attacker unread",
+    "abilities_gained": "a contribution's abilities are not read yet (task G09)",
+    "abilities_lost": "a contribution's abilities are not read yet (task G09)",
+}
+
+
+def _scored_values(records, name: str) -> dict[SamplingClass, set[str]]:
+    """``sampling class -> {"0", "+"}``: the values ``name`` is scored on
+    over ``records``, on the entities the gate trains."""
+    spec = FIELDS_BY_NAME[name]
+    seen: dict[SamplingClass, set[str]] = {}
+    for record in records:
+        targets = derive_targets(record)
+        for entry in targets.values():
+            value = entry.supervised(spec) if targets.gated and entry.affected else None
+            if value is not None:
+                seen.setdefault(entry.record_class, set()).add("+" if float(value) > 0 else "0")
+    return seen
+
+
+@pytest.fixture(scope="module")
+def fixture_records():
+    return curated_fixture_records()
+
+
+class TestOneValuedFieldsTakeTheirSilentZero:
+    @pytest.mark.parametrize("name", _SILENT_ON_EFFECT_HALVES)
+    def test_the_fixture_scores_both_values_or_names_the_missing_positive(
+        self, fixture_records, name,
+    ):
+        values = set().union(*_scored_values(fixture_records, name).values())
+        expected = {"0"} if name in _NO_POSITIVE_IN_THE_FIXTURE else {"0", "+"}
+        assert values == expected, f"{name} is scored on {sorted(values)} over the fixture"
+
+    @pytest.mark.parametrize("name", _SILENT_ON_EFFECT_HALVES)
+    def test_only_a_resolutions_effect_half_says_nothing_happened(self, fixture_records, name):
+        """A combat or continuous record's affected permanent is no
+        resolution the clause rule watched."""
+        classes = set(_scored_values(fixture_records, name))
+        assert classes <= {SamplingClass.RESOLUTION_EFFECT}
+
+    @pytest.mark.parametrize("name", sorted(_LEFT_WITHOUT_A_SILENT_VALUE))
+    def test_a_field_whose_rule_misses_a_case_takes_no_silent_value(self, name):
+        assert FIELDS_BY_NAME[name].silent is None, _LEFT_WITHOUT_A_SILENT_VALUE[name]

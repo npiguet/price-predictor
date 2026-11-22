@@ -95,6 +95,10 @@ _EFFECTFUL = frozenset({
 #: The effectful classes plus ``continuous``, whose contribution names every
 #: P/T, keyword, type and colour change its static makes to the entity.
 _STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
+#: A resolution's effect half alone: what a field whose event an effect
+#: API's clause rule or a command-zone reading writes says nothing about on
+#: any other record (finding 10.2).
+_EFFECT_HALVES = frozenset({SamplingClass.RESOLUTION_EFFECT})
 
 
 class HeadField(StrEnum):
@@ -388,14 +392,25 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
             classes=DESIGNATIONS),
     _sparse(HeadField.DESIGNATIONS_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
             classes=DESIGNATIONS),
-    _sparse(HeadField.CLASS_LEVELS_GAINED, FieldType.COUNT, FieldScope.PERMANENT),
+    # Class levels, soulbond pairs and merges come only from their own APIs
+    # (ClassLevelUp, Bond, Mutate), each a clause rule, so an effect half
+    # that names none of them did none.
+    _sparse(HeadField.CLASS_LEVELS_GAINED, FieldType.COUNT, FieldScope.PERMANENT,
+            supervised_by=_EFFECT_HALVES, silent=0.0),
+    # No silent value: a Room spell's entry unlocks the door cast without an
+    # UnlockDoor clause, so its door_unlocked is never written.
     _sparse(HeadField.DOOR_UNLOCKED, FieldType.BINARY, FieldScope.PERMANENT),
-    _sparse(HeadField.PAIRED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.PAIRED, FieldType.BINARY, FieldScope.PERMANENT,
+            supervised_by=_EFFECT_HALVES, silent=0.0),
     _sparse(HeadField.PROTECTOR_CHANGED, FieldType.BINARY, FieldScope.PERMANENT),
-    _sparse(HeadField.MERGED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.MERGED, FieldType.BINARY, FieldScope.PERMANENT,
+            supervised_by=_EFFECT_HALVES, silent=0.0),
     _sparse(HeadField.FACE_AFTER, FieldType.CATEGORICAL, FieldScope.PERMANENT,
             classes=FACE_STATES),
     _sparse(HeadField.REMOVED_FROM_COMBAT, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
+    # No silent value for either: a creature put onto the battlefield
+    # blocking blocks its attacker with no became_blocked, and Dig, DigUntil,
+    # Meld, Block and a sneak cast add combatants no clause rule reads.
     _sparse(HeadField.BECAME_BLOCKED, FieldType.BINARY, FieldScope.PERMANENT),
     _sparse(HeadField.ENTERED_IN_COMBAT, FieldType.BINARY, FieldScope.PERMANENT),
     _sparse(HeadField.SUBTYPES_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
@@ -406,6 +421,8 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
             classes=SUPERTYPES, supervised_by=_STATIC_CHANNELS, silent=0.0),
     _sparse(HeadField.SUPERTYPES_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
             classes=SUPERTYPES, supervised_by=_STATIC_CHANNELS, silent=0.0),
+    # A continuous record's silent 0 waits for its contributions' abilities
+    # to be read (task G09).
     _sparse(HeadField.ABILITIES_GAINED, FieldType.COUNT, FieldScope.PERMANENT),
     _sparse(HeadField.ABILITIES_LOST, FieldType.BINARY, FieldScope.PERMANENT),
     _sparse(HeadField.TEXT_CHANGED, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
@@ -418,9 +435,13 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── gen-3: players ──
     _sparse(HeadField.BECAME_MONARCH, FieldType.BINARY, FieldScope.PLAYER, silent=0.0),
     _sparse(HeadField.TOOK_INITIATIVE, FieldType.BINARY, FieldScope.PLAYER, silent=0.0),
-    _sparse(HeadField.GAINED_CITY_BLESSING, FieldType.BINARY, FieldScope.PLAYER),
+    # The blessing and a completed dungeon are read off every change of a
+    # player's command zone.
+    _sparse(HeadField.GAINED_CITY_BLESSING, FieldType.BINARY, FieldScope.PLAYER,
+            supervised_by=_EFFECT_HALVES, silent=0.0),
     _sparse(HeadField.VENTURED, FieldType.BINARY, FieldScope.PLAYER, silent=0.0),
-    _sparse(HeadField.COMPLETED_DUNGEON, FieldType.BINARY, FieldScope.PLAYER),
+    _sparse(HeadField.COMPLETED_DUNGEON, FieldType.BINARY, FieldScope.PLAYER,
+            supervised_by=_EFFECT_HALVES, silent=0.0),
     _sparse(HeadField.SPEED_GAINED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     # No silent value: a burn spell's lethal resolution holds no game-end
     # event (the game-end rescue record does), so its silence is no "lost

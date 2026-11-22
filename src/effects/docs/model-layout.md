@@ -45,4 +45,6 @@ Rules to respect when changing the input layout, the relation attention or an ou
 ## Outputs
 
 - A field takes a silent value only where the collector writes its event for every occurrence.
+- `paired`, `merged`, `class_levels_gained`, `gained_city_blessing` and `completed_dungeon` take their silent 0 on a resolution's effect half alone (`supervised_by` in `effect_head_layout.PER_ENTITY_FIELDS`): the first three come only from their own APIs' clause rules, the last two from `BusEventReader`'s command-zone reading. Without it the head sees only 1s and learns a constant.
+- `door_unlocked`, `entered_in_combat`, `became_blocked`, `abilities_gained` and `abilities_lost` have no silent value: a Room spell's entry unlocks a door with no `UnlockDoor` clause, Forge adds combatants and blocks attackers through APIs no clause rule reads, and a continuous contribution's `abilities` are not read into the two `abilities_*` fields.
 - `protector_changed` has no source, since Forge publishes nothing for it, so it never trains.
