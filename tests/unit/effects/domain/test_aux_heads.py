@@ -9,7 +9,7 @@ belongs to no card or player.
 from __future__ import annotations
 
 import functools
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import pytest
 import torch
@@ -184,16 +184,26 @@ class TestVerdictTargets:
         assert _column(row, VERDICT_LAYOUT, "trigger_fired") == ([1.0], True)
 
 
-def _decision(charged, printed, *, index=0, zone="hand", land_play=False):
-    key = ProvenanceKey("cardsfolder/l/lightning_blast.txt", 0, "spell", index)
+@dataclass(frozen=True)
+class _Where:
+    """Where a decision's candidate sits: its ability index, its source's
+    zone and whether it is a land play."""
+
+    index: int = 0
+    zone: str = "hand"
+    land_play: bool = False
+
+
+def _decision(charged, printed, where=_Where()):
+    key = ProvenanceKey("cardsfolder/l/lightning_blast.txt", 0, "spell", where.index)
     record = make_record(
         RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION,
         payload=PlayabilityDecisionPayload(candidates=(Candidate(
             ability=(key,), can_play=True, affordable=True, has_legal_target=True,
-            cost_after_adjustment={"mana": charged}, land_play=land_play,
+            cost_after_adjustment={"mana": charged}, land_play=where.land_play,
         ),)),
         state=make_snapshot(
-            entities=(make_entity("E1", "Lightning Blast", zone=zone, mana_cost=printed),),
+            entities=(make_entity("E1", "Lightning Blast", zone=where.zone, mana_cost=printed),),
             refs=Refs(source="E1"),
         ),
     )
@@ -212,12 +222,12 @@ class TestCostAdjustment:
         assert cost_adjustment(record, record.payload.candidates[0]) == [0.0] * len(MANA_SYMBOLS)
 
     @pytest.mark.parametrize("decision", [
-        {"index": 1},
-        {"zone": "battlefield"},
-        {"land_play": True},
+        _Where(index=1),
+        _Where(zone="battlefield"),
+        _Where(land_play=True),
     ], ids=["an-activated-ability", "on-the-battlefield", "a-land-play"])
     def test_only_a_cast_is_measured_against_the_printed_cost(self, decision):
-        assert cost_adjustment(*_decision("{R}", {"R": 1}, **decision)) is None
+        assert cost_adjustment(*_decision("{R}", {"R": 1}, decision)) is None
 
     def test_mana_symbols_reads_forge_costs(self):
         assert mana_symbols("{2}{R}") == {"generic": 2, "R": 1}
