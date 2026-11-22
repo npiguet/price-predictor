@@ -39,7 +39,11 @@ from typing import Protocol
 from effects.domain.event_schema import Event, EventType, signed_delta
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
-from effects.domain.keyword_names import normalize_keyword, overlay_keyword
+from effects.domain.keyword_names import (
+    normalize_keyword,
+    overlay_keyword,
+    overlay_keyword_set,
+)
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey, TraitKind, first_text
 from effects.domain.records import (
@@ -446,6 +450,10 @@ class EffectHeadInput:
     entity_slots: tuple[int, ...] = field(default_factory=tuple)
     #: ``(from slot, to slot, relation type)`` triples over ``slots`` (root spec § 10.1).
     relations: tuple[tuple[int, int, int], ...] = field(default_factory=tuple)
+    #: The entities whose strip left a stripped keyword's statement in place:
+    #: an ability slot that states it beside other keywords stays (gate 2
+    #: leaves such a carrier unqualified).
+    unremovable: tuple[str, ...] = field(default_factory=tuple)
 
 
 #: The kinds a model input can be: every kind but ``turn_action``, which no
@@ -1092,8 +1100,10 @@ class SlotLine:
     line flags (root spec § 9.2)."""
 
     key: ProvenanceKey
-    #: The keyword the line is, where the record says (a gen-3 keyword line).
-    keyword: str | None = None
+    #: The keywords the slot states, in the overlay's spelling: the keyword a
+    #: gen-3 keyword line is, every one of them where several lines share the
+    #: key (a static granting two keywords).
+    keywords: frozenset[str] = frozenset()
     #: In force: its face is up, its static's condition holds.
     active: bool = True
     #: Not printed on the card.
@@ -1118,7 +1128,7 @@ class SlotLine:
         cast_with = max((n for n in (self.cast_with, other.cast_with) if n is not None),
                         default=None)
         return SlotLine(
-            key=self.key, keyword=self.keyword or other.keyword,
+            key=self.key, keywords=self.keywords | other.keywords,
             active=self.active or other.active, granted=self.granted and other.granted,
             grant=self.grant if self.grant == other.grant else None, cast_with=cast_with,
             chosen=tuple(dict.fromkeys((*self.chosen, *other.chosen))),
@@ -1175,8 +1185,9 @@ def _gen3_slot_lines(lines: tuple[CardLine, ...]) -> Iterator[SlotLine]:
         key = _slot_key(line)
         if key is not None:
             yield SlotLine(
-                key, keyword=line.keyword, active=line.in_force, granted=line.granted,
-                grant=line.grant, cast_with=line.cast_with, chosen=line.chosen or (),
+                key, keywords=overlay_keyword_set(line.keyword), active=line.in_force,
+                granted=line.granted, grant=line.grant, cast_with=line.cast_with,
+                chosen=line.chosen or (),
             )
 
 
@@ -1193,17 +1204,13 @@ def _slot_key(line: CardLine) -> ProvenanceKey | None:
 def _keyword_counter_lines(entity: EntityState,
                            merged: dict[ProvenanceKey, SlotLine]) -> Iterator[SlotLine]:
     """A keyword line per keyword counter whose keyword no line carries."""
-    carried = {overlay_keyword(line.keyword) for line in merged.values() if line.keyword}
+    carried = set().union(*(line.keywords for line in merged.values()))
     for name, count in entity.counters.items():
         keyword = normalize_keyword(name)
-        if _is_keyword_counter_on(keyword, count) and keyword not in carried:
+        if count > 0 and keyword in _KEYWORD_COUNTERS - carried:
             carried.add(keyword)
-            yield SlotLine(keyword_line_key(name), keyword=keyword, granted=True,
-                           grant=LineGrant.COUNTER.value)
-
-
-def _is_keyword_counter_on(keyword: str, count: int) -> bool:
-    return count > 0 and keyword in _KEYWORD_COUNTERS
+            yield SlotLine(keyword_line_key(name), keywords=overlay_keyword_set(keyword),
+                           granted=True, grant=LineGrant.COUNTER.value)
 
 
 def ability_features(line: SlotLine, *, chosen: bool = False) -> tuple[float, ...]:
@@ -1440,6 +1447,7 @@ class SurfaceBuilder:
         ]
         relations = _SlotRelations()
         entity_slots: list[int] = []
+        unremovable: list[str] = []
         for player in record.state.players:
             entity_slots.append(len(slots))
             relations.subjects[player.id] = len(slots)
@@ -1452,30 +1460,32 @@ class SurfaceBuilder:
         source_id = record.state.refs.source
         for entity in slotted_entities(record):
             entity_slots.append(len(slots))
-            block, keys = self._entity_block(
+            block, keys, unremoved = self._entity_block(
                 entity, record, stripped=stripped.get(entity.id, frozenset()),
                 dropout=self.context_dropout if entity.id != source_id else 0.0,
             )
+            unremovable += [entity.id] * unremoved
             relations.add_card(entity, len(slots), block, keys)
             slots += block
         for entity in command_zone_entities(record):
-            block, keys = self._entity_block(
+            block, keys, _ = self._entity_block(
                 entity, record, stripped=frozenset(), dropout=self.context_dropout,
             )
             relations.add_card(entity, len(slots), block, keys)
             slots += block
         return EffectHeadInput(
             slots=tuple(slots), entity_slots=tuple(entity_slots),
-            relations=relations.build(record),
+            relations=relations.build(record), unremovable=tuple(unremovable),
         )
 
     def _entity_block(
         self, entity: EntityState, record: EffectRecord, *,
         stripped: frozenset[str], dropout: float,
-    ) -> tuple[list[Slot], list[ProvenanceKey | None]]:
+    ) -> tuple[list[Slot], list[ProvenanceKey | None], bool]:
         """One entity's ``CARD`` slot, then an ``ABILITY`` slot per line it
         keeps, each charm root followed by its mode lines; positions restart.
-        Beside the block, the key each slot reads (None for the card).
+        Beside the block, the key each slot reads (None for the card) and
+        whether the strip left a stripped keyword's statement in a kept slot.
         ``stripped`` is gate 2's strip of this entity's keywords."""
         gone = frozenset(overlay_keyword(keyword) for keyword in stripped)
         keys: list[ProvenanceKey | None] = [None]
@@ -1487,28 +1497,39 @@ class SurfaceBuilder:
             chosen_types=chosen_subtypes(entity),
             counters=counter_rows(entity),
         )]
-        for line in self._slot_lines(entity, record):
-            if not self._keeps(line, gone=gone, dropout=dropout):
-                continue
-            modes = self.lines.options_for(line.key)
-            for mode_key, option in ((line.key, False), *((mode, True) for mode in modes)):
-                resolved = self.lines.e_for(mode_key)
-                block.append(Slot(
-                    kind=SlotKind.ABILITY, position=len(block),
-                    features=ability_features(
-                        line, chosen=option and mode_key.option in line.chosen),
-                    # Explicitly against None: row 0 is a valid matrix row and
-                    # ``or`` would read it as a miss.
-                    e=self._zero if resolved is None else resolved,
-                    entity_id=entity.id, option=option,
-                ))
-                keys.append(mode_key)
-        return block, keys
+        kept = [line for line in self._slot_lines(entity, record)
+                if self._keeps(line, gone=gone, dropout=dropout)]
+        for line in kept:
+            for slot, key in self._line_slots(line, entity.id, len(block)):
+                block.append(slot)
+                keys.append(key)
+        return block, keys, any(line.keywords & gone for line in kept)
+
+    def _line_slots(
+        self, line: SlotLine, entity_id: str, first: int,
+    ) -> Iterator[tuple[Slot, ProvenanceKey]]:
+        """A line's ``ABILITY`` slot, then one per charm mode, each with its key."""
+        modes = self.lines.options_for(line.key)
+        options = ((line.key, False), *((mode, True) for mode in modes))
+        for position, (mode_key, option) in enumerate(options, first):
+            resolved = self.lines.e_for(mode_key)
+            yield Slot(
+                kind=SlotKind.ABILITY, position=position,
+                features=ability_features(
+                    line, chosen=option and mode_key.option in line.chosen),
+                # Explicitly against None: row 0 is a valid matrix row and
+                # ``or`` would read it as a miss.
+                e=self._zero if resolved is None else resolved,
+                entity_id=entity_id, option=option,
+            ), mode_key
 
     def _slot_lines(self, entity: EntityState, record: EffectRecord) -> tuple[SlotLine, ...]:
         """:func:`slot_lines`, a dungeon's room lines active for the room its
         player is in only (``global.dungeons[].room``, root spec § 9.3)."""
-        lines = slot_lines(entity, self.lines.board_keys)
+        lines = tuple(
+            replace(line, keywords=line.keywords or overlay_keyword_set(
+                self.lines.keyword_of(line.key)))
+            for line in slot_lines(entity, self.lines.board_keys))
         room = dungeon_room(record, entity.id)
         if room is None:
             return lines
@@ -1522,12 +1543,10 @@ class SurfaceBuilder:
         """Whether one of an entity's lines gets a slot."""
         if not self.lines.has_line(line.key):
             return False
-        if gone:
-            keyword = line.keyword or self.lines.keyword_of(line.key)
-            if keyword is not None and overlay_keyword(keyword) in gone:
-                # Dropped rather than zeroed: a zero token still says an
-                # ability is here.
-                return False
+        if line.keywords and line.keywords <= gone:
+            # Dropped rather than zeroed: a zero token still says an ability
+            # is here.
+            return False
         return not (dropout > 0.0 and self.rng.random() < dropout)
 
     def _act_vector(self, record: EffectRecord):

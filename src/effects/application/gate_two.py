@@ -86,9 +86,16 @@ class KeywordScore:
     #: ``effect label -> (agreeing, scored)``.
     per_field: dict[str, FieldAgreement] = field(default_factory=dict)
     observations: int = 0
+    #: Perturbations left unqualified: the carrier's keyword shares an ability
+    #: slot with other keywords, so no strip removes its statement.
+    unqualified: int = 0
     #: The record ids ``qualifying`` has counted, so a record observed once
     #: per carrier counts once.
     counted: set[str] = field(default_factory=set, init=False, repr=False, compare=False)
+
+    def refuse(self) -> None:
+        """Count one perturbation the strip could not make."""
+        self.unqualified += 1
 
     def add(self, record_id: str, agreed: bool, per_effect: dict[str, bool]) -> None:
         """Fold in one observation of record ``record_id``."""
@@ -232,7 +239,10 @@ def _score_chunk(
     The twin strips the row's keyword from its carrier in both places the
     input states it (root spec § 9.6, research M5): the kept flag is cleared
     and every line of the keyword is dropped, printed or granted, so the
-    carrier is left with no line of it (``SurfaceBuilder.build``).
+    carrier is left with no line of it (``SurfaceBuilder.build``). A carrier
+    whose keyword shares an ability slot with others keeps the slot's
+    statement, so the twin differs by more than the keyword's absence: that
+    observation is counted unqualified, not scored.
     """
     built = [observation.record for observation in chunk] * 2
     strips = [NO_STRIP] * len(chunk) + [
@@ -243,6 +253,9 @@ def _score_chunk(
 
     for offset, (record, row, participant) in enumerate(chunk):
         twin = len(chunk) + offset
+        if participant.carrier.id in surfaces[twin].unremovable:
+            scores[row.keyword].refuse()
+            continue
         agreed, per_effect = score_observation(
             row, participant,
             _subject_vectors(surfaces[offset], outputs[offset], row, participant),
@@ -302,9 +315,17 @@ def evaluate_keyword(row: DamageStepKeyword, score: KeywordScore) -> KeywordVerd
         )
     return KeywordVerdict(
         row.keyword, qualifying, agreement, routed_to_probe=routed,
-        reason=reason + _render_per_field(score.per_field),
-        observations=observations,
+        reason=reason + _render_per_field(score.per_field) + _render_unqualified(score),
+        observations=observations, unqualified=score.unqualified,
     )
+
+
+def _render_unqualified(score: KeywordScore) -> str:
+    """The tail naming the carriers the strip could not qualify, or nothing."""
+    if not score.unqualified:
+        return ""
+    return (f"; {score.unqualified} carriers unqualified: the keyword's statement "
+            f"is shared with other keywords")
 
 
 def _render_per_field(per_field: dict[str, FieldAgreement]) -> str:

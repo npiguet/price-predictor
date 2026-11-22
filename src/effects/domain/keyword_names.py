@@ -79,6 +79,11 @@ def overlay_keyword(raw: str) -> str:
     return IMPLIED_KEYWORDS.get(name, name)
 
 
+def overlay_keyword_set(raw: str | None) -> frozenset[str]:
+    """``{overlay_keyword(raw)}``; empty for no keyword."""
+    return frozenset() if raw is None else frozenset({overlay_keyword(raw)})
+
+
 def with_implied(names: set[str]) -> set[str]:
     """``names`` (normalized) with every keyword one of them implies added
     (:data:`IMPLIED_KEYWORDS`): a reader asking whether a creature has trample

@@ -90,6 +90,9 @@ class KeywordVerdict:
     routed_to_probe: bool
     reason: str
     observations: int = 0
+    #: Perturbations left out because the strip could not remove the keyword's
+    #: statement (it is shared with other keywords).
+    unqualified: int = 0
 
     @property
     def passed(self) -> bool:
