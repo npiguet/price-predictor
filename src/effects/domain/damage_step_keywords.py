@@ -15,7 +15,9 @@ step is unknown is read as if every creature struck in it. Damage reaches a
 creature only where no protection of its prevents it (702.16e), and a
 blocked attacker whose blockers all left deals none unless it has trample,
 which then assigns it all to the player (509.1h, 510.1c, 702.19e). A
-phased-out creature and a last-known copy take no part in a combat. A row's
+phased-out creature and a last-known copy take no part in a combat, and a
+combat whose own changes end the game is no observation at all: Forge
+destroys no creature once the game is over (decision D13). A row's
 ``qualifies`` is derived from its effects, so the counter that decides
 "under-sampled" and the scorer that decides "agrees" read one population
 (FR-122). Evasion keywords are absent:
@@ -32,6 +34,7 @@ from effects.domain.effect_head_layout import HeadField, ZoneOutcome, counter_fi
 from effects.domain.keyword_names import with_implied
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import RecordKind
+from effects.domain.rule_detectors.sba_board import game_ends
 from effects.domain.rule_outcomes import (
     Characteristics,
     ProtectionQuality,
@@ -637,8 +640,8 @@ def qualifying_observations(
     record, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
 ) -> list[tuple[DamageStepKeyword, CombatParticipant]]:
     """Every ``(row, carrier)`` in one combat record the gate can observe, by
-    the row's own ``qualifies``."""
-    if record.kind is not RecordKind.COMBAT:
+    the row's own ``qualifies``, in a combat that does not end the game."""
+    if not _shows_its_combat(record):
         return []
     found: list[tuple[DamageStepKeyword, CombatParticipant]] = []
     wanted = {row.keyword for row in rows}
@@ -660,6 +663,15 @@ def qualifying_observations(
             if row.qualifies(participant, keywords_of):
                 found.append((row, participant))
     return found
+
+
+def _shows_its_combat(record) -> bool:
+    """Whether the record is a combat whose changes do not end the game
+    (``sba_board.game_ends``, the test ``sba_zone_move`` reads). Forge's
+    state-based check returns at the game's end before it destroys any
+    creature, so a combat that ends the game shows no creature death and is
+    no observation, nor is a probe of one (decision D13)."""
+    return record.kind is RecordKind.COMBAT and not game_ends(record)
 
 
 def _memoized(keywords_of: KeywordsOf) -> KeywordsOf:

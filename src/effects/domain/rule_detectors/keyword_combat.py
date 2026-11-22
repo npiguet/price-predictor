@@ -40,6 +40,7 @@ from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors.keyword_outcomes import effect_happened
 from effects.domain.rule_detectors.keyword_reading import KeywordReading
+from effects.domain.rule_detectors.sba_board import game_ends
 
 _ROWS = {row.keyword: row for row in DAMAGE_STEP_KEYWORDS}
 
@@ -58,7 +59,7 @@ class KeywordCombatMatcher:
         return cls(keyword, _ROWS[keyword])
 
     def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
-        if record.kind is not RecordKind.COMBAT:
+        if not _read_combat(record):
             return None
         if record.is_probe:
             return self._stripped(record)
@@ -112,6 +113,13 @@ class KeywordCombat(EventlessFamily):
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
         return self.compile(params)(record, lines)
+
+
+def _read_combat(record: EffectRecord) -> bool:
+    """A combat, real or probe, whose changes do not end the game
+    (``sba_board.game_ends``): Forge destroys no creature in a combat that
+    ends the game, so neither side shows what the keyword did (decision D13)."""
+    return record.kind is RecordKind.COMBAT and not game_ends(record)
 
 
 def _happened(record: EffectRecord, row: DamageStepKeyword, found, keywords_of: KeywordsOf) -> bool:

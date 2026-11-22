@@ -8,10 +8,14 @@ import pytest
 
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.keyword_combat import FAMILY
+from effects.domain.rule_detectors.sba_board import game_ends
 
 
 def test_a_deathtouch_probe_is_the_near_miss_naming_its_carrier(by_kind, gen3_sidecars):
-    probe = next(r for r in by_kind("combat") if r.payload.probed_keyword == "deathtouch")
+    """One whose combat does not end the game: a probe of one that does is
+    tagged nothing (``test_keyword_combat_game_end.py``)."""
+    probe = next(r for r in by_kind("combat")
+                 if r.payload.probed_keyword == "deathtouch" and not game_ends(r))
     found = FAMILY.match(probe, gen3_sidecars, {"keyword": "deathtouch"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
     assert found.condition == (probe.payload.probed_entity,)

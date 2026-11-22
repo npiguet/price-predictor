@@ -148,14 +148,15 @@ def grid_block(record, keywords_of: KeywordsOf, blocks: str) -> tuple[str, str] 
     ``one``: exactly one attacker is blocked, by exactly one blocker blocking
     nothing else. ``several``: two or more blocked attackers, each blocked by
     one creature blocking it alone; the pair is the one whose attacker comes
-    first in id order. Either way the record covers the regular damage step,
-    and every pair qualifies as :func:`_clean_pair` says.
+    first in id order. Either way the record is a live game's combat that
+    does not end the game (:func:`_real_combat`), it covers the regular
+    damage step, and every pair qualifies as :func:`_clean_pair` says.
     """
     from effects.domain.effect_targets import derive_targets
-    from effects.domain.records import CombatPayload, RecordKind
+    from effects.domain.records import CombatPayload
     from effects.domain.state_snapshot import CombatSubstep
 
-    if record.kind is not RecordKind.COMBAT or record.fork or record.interventional:
+    if not _real_combat(record):
         return None
     if record.state.global_.combat_substep != CombatSubstep.REGULAR:
         return None
@@ -174,6 +175,20 @@ def grid_block(record, keywords_of: KeywordsOf, blocks: str) -> tuple[str, str] 
         return None
     attacker_id, (blocker_id,) = blocked[0]
     return attacker_id, blocker_id
+
+
+def _real_combat(record) -> bool:
+    """A live game's combat whose changes do not end the game
+    (``sba_board.game_ends``, the test ``sba_zone_move`` reads): Forge's
+    state-based check returns at the game's end before it destroys any
+    creature, so the outcome such a combat shows is not the rule's
+    (decision D13)."""
+    from effects.domain.records import RecordKind
+    from effects.domain.rule_detectors.sba_board import game_ends
+
+    if record.kind is not RecordKind.COMBAT or record.fork:
+        return False
+    return not (record.interventional or game_ends(record))
 
 
 def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: KeywordsOf,
