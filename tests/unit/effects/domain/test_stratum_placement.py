@@ -15,8 +15,8 @@ from effects.domain.stratum_placement import (
     PlacementRule,
     place_games,
     rule_test_eligible,
+    rule_test_games_needed,
     rule_test_misses,
-    rule_test_records_needed,
 )
 from tests.unit.effects.builders import make_record
 
@@ -63,8 +63,8 @@ def polarities_in(strata, inventories, stratum, half, rule_id) -> set:
     }
 
 
-def test_the_default_test_record_target_is_hanley_mcneils_68():
-    assert rule_test_records_needed() == 68
+def test_the_default_test_game_target_is_hanley_mcneils_68():
+    assert rule_test_games_needed() == 68
 
 
 def test_both_polarities_land_in_both_halves_of_both_strata():
@@ -187,28 +187,34 @@ def test_rule_test_records_are_natural_observed_tags():
 # ── what build-corpus can already tell of the precision target (E5) ─────
 
 
-def _two_halves(selection: dict, reporting: dict):
+def _halves(selection: dict[str, dict], reporting: dict[str, dict]):
+    """Two game-disjoint halves holding the given games' inventories."""
     strata = GameStrata(
-        card_disjoint=frozenset(), game_disjoint=frozenset({"a", "b"}),
-        held_out=frozenset(), surveyed=frozenset({"a", "b"}),
+        card_disjoint=frozenset(), game_disjoint=frozenset(selection) | frozenset(reporting),
+        held_out=frozenset(), surveyed=frozenset(selection) | frozenset(reporting),
         halves={Stratum.GAME_DISJOINT: {
-            Half.SELECTION: frozenset({"a"}), Half.REPORTING: frozenset({"b"})}},
+            Half.SELECTION: frozenset(selection), Half.REPORTING: frozenset(reporting)}},
     )
-    return strata, {"a": selection, "b": reporting}
+    return strata, {**selection, **reporting}
+
+
+def _games(prefix: str, games: int, records: int = 1) -> dict[str, dict]:
+    """``games`` games each holding ``records`` records of both polarities of ``r``."""
+    return {f"{prefix}{i}": {("r", FIRES): records, ("r", NOT): records} for i in range(games)}
+
+
+def _misses(selection, reporting, component=0.1):
+    strata, inventories = _halves(selection, reporting)
+    return rule_test_misses(strata, inventories, rule(
+        max_item_error=0.1, max_component_error=component))
 
 
 def test_a_half_whose_rule_tests_meet_the_targets_is_no_miss():
-    strata, inventories = _two_halves(
-        {("r", FIRES): 68, ("r", NOT): 68}, {("r", FIRES): 68, ("r", NOT): 68})
-    assert rule_test_misses(strata, inventories, rule(max_item_error=0.1,
-                                                     max_component_error=0.1)) == []
+    assert _misses(_games("a", 68), _games("b", 68)) == []
 
 
 def test_a_half_with_no_rule_to_test_misses_and_is_named():
-    strata, inventories = _two_halves(
-        {("r", FIRES): 68, ("r", NOT): 68}, {("r", FIRES): 3, ("r", NOT): 3})
-    misses = rule_test_misses(strata, inventories, rule(max_item_error=0.1,
-                                                        max_component_error=0.1))
+    misses = _misses(_games("a", 68), _games("b", 3))
     assert [(m.stratum, m.half, m.items) for m in misses] == [
         (Stratum.GAME_DISJOINT, Half.REPORTING, 0)]
     assert "game-disjoint reporting: rule tests" in misses[0].describe(0.05)
@@ -217,9 +223,32 @@ def test_a_half_with_no_rule_to_test_misses_and_is_named():
 def test_one_rule_alone_misses_the_default_component_target():
     """√(SE²) / 1 = SE, so one rule at 0.0994 misses 0.05: a component needs
     several rules before it is that precise."""
-    strata, inventories = _two_halves(
-        {("r", FIRES): 68, ("r", NOT): 68}, {("r", FIRES): 68, ("r", NOT): 68})
-    misses = rule_test_misses(strata, inventories, rule(max_item_error=0.1,
-                                                        max_component_error=0.05))
+    misses = _misses(_games("a", 68), _games("b", 68), component=0.05)
     assert [m.items for m in misses] == [1, 1]
     assert misses[0].standard_error == pytest.approx(0.0994, abs=1e-4)
+
+
+def test_68_records_of_each_polarity_from_ten_games_are_planned_short():
+    """The freeze clusters by game, so ten games count as ten, not 70 records."""
+    misses = _misses(_games("a", 10, records=7), _games("b", 68))
+    assert [(m.half, m.items) for m in misses] == [(Half.SELECTION, 0)]
+
+
+def test_a_game_holding_a_cell_counts_once_however_many_records_it_has():
+    assert _misses(_games("a", 68, records=5), _games("b", 68)) == []
+
+
+def test_the_games_of_a_polarity_are_counted_apart():
+    """68 games hold ``fires``, only 10 hold ``does_not_fire``: its side limits it."""
+    selection = {f"a{i}": {("r", FIRES): 1, **({("r", NOT): 7} if i < 10 else {})}
+                 for i in range(68)}
+    assert [m.half for m in _misses(selection, _games("b", 68))] == [Half.SELECTION]
+
+
+def test_a_short_cell_promotes_as_many_games_as_the_test_needs_not_records():
+    """A need of 8 games is not met by one game holding 10 records."""
+    pool = ids_drawn(0.01, 0.1)
+    inventories = {game: {("y", FIRES): 10} for game in pool}
+    strata = place_games(census(inventories), rule(max_item_error=0.5, min_games_per_half=0))
+    assert rule_test_games_needed(0.5) == 4
+    assert len(strata.game_disjoint & set(pool)) >= 8

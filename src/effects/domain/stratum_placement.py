@@ -12,11 +12,11 @@ two Forge AIs played.
   stratum admits games naming a held-out card, random-seat games included
   (FR-059); any other random-seat game trains.
 - Card-disjoint: the text holdout fixes the candidate games. Games carrying a
-  (rule, polarity) still short of its test records are admitted first, the
+  (rule, polarity) still short of its test games are admitted first, the
   scarcest cell first, then every other candidate in seeded order, all under
   the per-text cap and only while the game resolves a held-out text.
 - Game-disjoint: gen-2's crc32 draw places the base set. For each
-  (rule, polarity) short of its test records, unplaced games of the candidate
+  (rule, polarity) short of its test games, unplaced games of the candidate
   pool carrying it are promoted, smallest game hash first, and then games of
   the pool until the stratum holds enough games for both halves.
 - Halves: within each stratum, games in seeded order each join the half that
@@ -66,11 +66,12 @@ MAX_COMPONENT_ERROR = 0.05
 POOL_FACTOR = 10.0
 
 
-def rule_test_records_needed(max_item_error: float = MAX_ITEM_ERROR) -> int:
-    """Records of each polarity a rule test needs in a half: the smallest n
-    whose worst-case rescaled standard error with n records each side,
+def rule_test_games_needed(max_item_error: float = MAX_ITEM_ERROR) -> int:
+    """Games of each polarity a rule test needs in a half: the smallest n
+    whose worst-case rescaled standard error with n games each side,
     ``2·√((2n + 1) / (12n²))``, is at most ``max_item_error`` (FR-068b): 68
-    at 0.1."""
+    at 0.1. The freeze clusters a rule test's error by game (E4), so a game
+    counts once however many records of the cell it holds."""
     n = 1
     while auc_standard_error(n, n) > max_item_error:
         n += 1
@@ -203,7 +204,7 @@ def _texts_of(candidates: frozenset[str],
 
 class _CardAdmission:
     """The card-disjoint stratum as it fills: who is in, how many games each
-    held-out text has taken and how many records each cell holds."""
+    held-out text has taken and how many games hold each cell."""
 
     def __init__(self, texts_of: Mapping[str, set[str]],
                  inventories: Mapping[str, Mapping[RuleCell, int]], cap: int) -> None:
@@ -222,10 +223,10 @@ class _CardAdmission:
             return
         self.admitted.add(game)
         self.taken.update(texts)
-        self.filled.update(self._inventories.get(game, {}))
+        self.filled.update(self._inventories.get(game, {}).keys())
 
     def fill_cell(self, cell: RuleCell, carriers: Iterable[str], need: int) -> None:
-        """Admit ``carriers`` in order until the cell holds ``need`` records."""
+        """Admit ``carriers`` in order until the cell holds ``need`` games."""
         for game in carriers:
             if self.filled[cell] >= need:
                 break
@@ -233,8 +234,8 @@ class _CardAdmission:
 
 
 def _need(rule: PlacementRule) -> int:
-    """Records a half pair needs of each cell: both halves' worth."""
-    return 2 * rule_test_records_needed(rule.max_item_error)
+    """Games a half pair needs to hold of each cell: both halves' worth."""
+    return 2 * rule_test_games_needed(rule.max_item_error)
 
 
 def _admit_card_disjoint(
@@ -294,10 +295,10 @@ def _game_disjoint(
 
 def _promote_for_cells(placed: set[str], pool: list[str],
                        inventories: Mapping[str, Mapping[RuleCell, int]], need: int) -> None:
-    """Add pool games to ``placed``, scarcest cell first, until each cell holds ``need``."""
+    """Add pool games to ``placed``, scarcest cell first, until ``need`` games hold each cell."""
     filled: Counter[RuleCell] = Counter()
     for game in placed:
-        filled.update(inventories.get(game, {}))
+        filled.update(inventories.get(game, {}).keys())
     carriers = _carriers(inventories, pool)
     for cell in _scarcest_first(carriers, inventories):
         for game in carriers[cell]:
@@ -305,7 +306,7 @@ def _promote_for_cells(placed: set[str], pool: list[str],
                 break
             if game not in placed:
                 placed.add(game)
-                filled.update(inventories.get(game, {}))
+                filled.update(inventories.get(game, {}).keys())
 
 
 def _assign_halves(
@@ -434,21 +435,24 @@ def rule_test_misses(
 ) -> list[PrecisionMiss]:
     """Every half whose rule-test component misses its precision target.
 
-    A rule enters a half's component when its test's standard error
-    (``score_scales.auc_standard_error``) is at most ``max_item_error``; the
+    A rule enters a half's component when its test's standard error, with
+    each polarity's n the games of the half holding it
+    (``score_scales.auc_standard_error``: the freeze clusters by game), is at most
+    ``max_item_error``; the
     component's (``score_scales.component_standard_error``),
     ``√(Σ SEᵢ²) / m`` over its m rules, must be at most
     ``max_component_error``, and a half where no rule enters misses it. The
-    counts are every rule-test-eligible record, before the freeze subsamples
-    a polarity: the freeze can only raise a standard error, so a half missing
-    here misses there too.
+    counts are every game holding a rule-test-eligible record, before the
+    freeze subsamples a polarity: the freeze's games are a subset of these, so
+    it can only raise a standard error, and a half missing here misses there
+    too.
     """
     misses: list[PrecisionMiss] = []
     for stratum, by_half in sorted(strata.halves.items()):
         for half in Half:
             counts: Counter[RuleCell] = Counter()
             for game in by_half.get(half, ()):
-                counts.update(inventories.get(game, {}))
+                counts.update(inventories.get(game, {}).keys())
             rules = sorted({rule_id for rule_id, _ in counts})
             errors = [
                 error for error in (

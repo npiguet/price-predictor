@@ -35,7 +35,7 @@ Rules to respect when running or changing `build-corpus` or `holdout-cards`, or 
 - The card-disjoint stratum holds at most `--card-disjoint-text-cap` games per held-out text. A game counts toward a text only through a resolution record acting through it, the only kind gate 1 scores, and a held-out game resolving no held-out text is dropped rather than trained on. This keeps every held-out text weighing comparably in gate 1 and in checkpoint selection.
 - No evaluator resolves a probe's `mirror_of` within a stratum.
 - A build that would produce a dataset gate 1 cannot be scored on (an empty holdout, an empty card-disjoint stratum) writes nothing and exits non-zero. So does one asking for a validation sample (`--validation-sample` above 0) whose game-disjoint stratum is empty, which would leave the sample the trainer validates on empty; both are refused in `_decide_or_refuse`, before anything under `--output` is touched.
-- After writing, the build exits 1 when a half's rule-test component misses its precision target. The corpus is still read after that exit. Only the rule tests are judged here; probes, grids and explained deviance wait for the selection-set freeze. The thresholds are config fields with no flag, so a test can lower them.
+- After writing, the build exits 1 when a half's rule-test component misses its precision target. The corpus is still read after that exit. A rule's test counts the distinct games of the half holding each polarity, as the freeze does, not records. Only the rule tests are judged here; probes, grids and explained deviance wait for the selection-set freeze. The thresholds are config fields with no flag, so a test can lower them.
 
 ## Flags that must agree across commands
 
