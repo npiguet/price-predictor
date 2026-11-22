@@ -291,7 +291,7 @@ card-disjoint stratum; every other run keeps the held-out cards out. `$variants`
 by every variant run (a variant is reused by its digest). Every reader given `$gen3\records` walks
 every run under it.
 
-The steered round runs last, on counts of everything collected before it (FR-058c). Every
+The steered round runs last, on counts of everything collected before it (FR-058c); `--steer-floor` counts every source of the counts, fork records included. Every
 collecting command takes the same three decision-sampling rates (FR-059a).
 
 Each collecting command's run directory is its `--effect-records`: the `match-outcomes` runs keep

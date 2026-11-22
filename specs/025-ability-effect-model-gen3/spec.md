@@ -1225,7 +1225,7 @@ and that the reporting half never enters the control score.
 - **FR-058c**: The steered round MUST read `--rule-counts PATH` (required; gen-3 counts of the
   corpus being collected) and find the short pairs: a rule the map marks `trained` with a declared
   detector, and a polarity (`fires`, `does_not_fire`) with fewer than `--steer-floor` (default 100)
-  records over all sources; a rule no record tags is short in both. Its carriers MUST be the cards
+  records over all sources, fork included; a rule no record tags is short in both. Its carriers MUST be the cards
   the rule's scenarios name and the cards `rule-counts` lists as its carriers, held-out and
   multi-faced cards excepted. Each carrier MUST get the `script_edit` of every scenario variant of
   the pair's rule and polarity that names it, and near-miss shifts (one numeric shift or selector

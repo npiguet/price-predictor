@@ -170,7 +170,9 @@ class ShortPair:
 
 def pair_records(counts: Mapping, rule: str, polarity: Polarity) -> int:
     """A (rule, polarity)'s records over every source in a ``rule-counts``
-    document's ``rules`` section; zero for a rule it omits."""
+    document's ``rules`` section, ``fork`` included by decision (a combat
+    counts once per probe toward ``--steer-floor``); zero for a rule it
+    omits."""
     sides = counts.get("rules", {}).get(rule, {})
     return sum(sides.get(str(polarity), {}).values())
 

@@ -722,7 +722,7 @@ Steered round
   `rule-counts` over its own shards.
 - A short pair is a rule the rules-to-fields map marks `trained` (§ 7) with a declared
   detector, and a polarity, `fires` or `does_not_fire`, with fewer than `--steer-floor`
-  records over every source of § 5.2. A rule no record tags is short in both
+  records over every source of § 5.2, fork included. A rule no record tags is short in both
   polarities.
 - A pair's carriers are the cards its rule's scenarios name, and the cards whose lines are
   condition entities of the rule's tags in the counted records, as `rule-counts` lists them
