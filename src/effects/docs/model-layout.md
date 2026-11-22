@@ -16,6 +16,7 @@ Rules to respect when changing the input layout, the relation attention or an ou
 ## Input slots
 
 - `slot_lines` is the one list of a card's ability slots, read by both the batcher and the surface builder. `board_entities` is the one card list.
+- A library card below its library's top gets no slot, and `derive_targets` writes it no target (`has_card_slot`; only order rank 0 is the top). The snapshot holds such a card only because the record's own events draw, mill or search for it, so its slot would hand the head the outcome. Its player's counts and library events keep what happened to it.
 - A keyword keeps a card-level flag only where a Forge card-script selector or engine check names it. Every keyword is also read through its line's reminder text, a line with no key through `keyword-line/<fragment>`.
 - A face that is not up gives inactive slots.
 - The input reads targets as cast (`Refs.as_cast`: `targets_at_cast`, else `targets`) for `[ACT]`'s target count, every "targeted" bit and `[ACT]`'s `targets` relations. Reading `targets` on an effect half would hand the model the fizzle it is to predict. On a record without `targets_at_cast` the fallback still leaks it. The input reads an entity's `stack_extras` as written; on an effect half the acting item's entity carries them as cast (`record-format.md`). Records collected before 2026-11-18 hold them after the check and leak the fizzle through them.

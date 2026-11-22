@@ -24,6 +24,7 @@ from effects.domain.effect_head_input import (
     DESIGNATIONS,
     FACE_STATES,
     SUPERTYPES,
+    has_card_slot,
     vocabulary_slot,
 )
 from effects.domain.effect_head_layout import (
@@ -249,7 +250,17 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
         _RecordPass(record, events, slot, targets).run()
     _apply_playability(record, slot)
     _apply_continuous(record, slot)
+    _drop_slotless(record, targets)
     return targets
+
+
+def _drop_slotless(record: EffectRecord, targets: RecordTargets) -> None:
+    """A snapshot entity with no ``[CARD]`` slot, a library card below the
+    top, trains no gate and no field; its player's draw, mill and library
+    events stay (:func:`effect_head_input.has_card_slot`)."""
+    for entity in record.state.entities:
+        if not has_card_slot(entity):
+            targets.pop(entity.id, None)
 
 
 def _outcome_partly_unknown(record: EffectRecord) -> bool:

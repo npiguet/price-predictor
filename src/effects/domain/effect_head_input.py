@@ -16,8 +16,8 @@ ids rather than features, each id a learned row in ``effect_model.py``:
 subtypes, chosen creature types (the subtypes' rows) and named counters (a
 row per counter type, scaled by the count).
 
-The board's cards include the gen-3 snapshot's extras (library cards, cards
-exiled with a permanent, a mutated permanent's components, the pending
+The board's cards include the gen-3 snapshot's extras (each library's top card,
+cards exiled with a permanent, a mutated permanent's components, the pending
 event's last known subject) and, after them, a command-zone card per floating
 effect or delayed trigger the snapshot lists no entity for, whose ability
 slots are the source lines that made it (root spec § 9.3). Every link between
@@ -64,6 +64,7 @@ from effects.domain.state_snapshot import (
     CommandZoneObject,
     DayNight,
     EffectDuration,
+    EntityRole,
     EntityState,
     FaceState,
     LineGrant,
@@ -900,10 +901,28 @@ def command_zone_entities(record: EffectRecord) -> tuple[EntityState, ...]:
     )
 
 
+def has_card_slot(entity: EntityState) -> bool:
+    """Whether a snapshot entity gets a ``[CARD]`` slot: every one but a
+    library card below its library's top (root spec § 9.3).
+
+    The snapshot holds such a card because the record's own events draw,
+    mill or search for it, so its slot would show the head the outcome it
+    predicts; its player's counts keep what happened to it. Only order rank 0
+    is the top: a library card without a rank is not known to be.
+    """
+    return entity.role != EntityRole.LIBRARY_CARD or entity.order_rank == 0
+
+
+def slotted_entities(record: EffectRecord) -> tuple[EntityState, ...]:
+    """The snapshot's entities that get a ``[CARD]`` slot, in board order."""
+    return tuple(entity for entity in record.state.entities if has_card_slot(entity))
+
+
 def board_entities(record: EffectRecord) -> tuple[EntityState, ...]:
     """Every card the surface gives a ``[CARD]`` slot: the snapshot's
-    entities, then :func:`command_zone_entities`."""
-    return (*record.state.entities, *command_zone_entities(record))
+    entities but a library card below the top (:func:`has_card_slot`), then
+    :func:`command_zone_entities`."""
+    return (*slotted_entities(record), *command_zone_entities(record))
 
 
 # ── the ability slots ─────────────────────────────────────────────────────
@@ -1258,7 +1277,7 @@ class SurfaceBuilder:
 
         masked = continuous_masked_keywords(record)
         source_id = record.state.refs.source
-        for entity in record.state.entities:
+        for entity in slotted_entities(record):
             gone = stripped.get(entity.id, frozenset())
             entity_slots.append(len(slots))
             block, keys = self._entity_block(

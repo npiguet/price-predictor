@@ -1335,12 +1335,13 @@ class TestCommandZoneSlots:
         surface = _build(record)
         assert _linked(surface, _subject_slot(surface, a), _subject_slot(surface, b), family)
 
-    def test_a_library_card_reads_its_position_as_order_rank(self, gen3_records):
+    def test_a_librarys_top_card_reads_order_rank_zero(self, gen3_records):
+        """A card below the top gets no slot (``test_library_card_slots.py``)."""
         record, entity = next(
             (record, entity) for record in gen3_records.values()
             for entity in record.state.entities
-            if entity.role == "library_card" and entity.order_rank)
-        assert _card_part(entity, record, "order_rank")[:2] == (1.0, float(entity.order_rank))
+            if entity.role == "library_card" and entity.order_rank == 0)
+        assert _card_part(entity, record, "order_rank")[:2] == (1.0, 0.0)
         surface = _build(record)
         assert _subject_slot(surface, entity.id) in surface.entity_slots
 

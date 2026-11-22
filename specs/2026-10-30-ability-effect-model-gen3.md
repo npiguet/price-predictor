@@ -783,7 +783,11 @@ The ability encoder, `e` and the trunk are each 256 wide.
   are lines, the current room flagged active.
 - The pending event's subject as it last existed gets a card slot, linked to the subject by
   `last known state of`.
-- The library cards of § 8.4 get card slots, with their library position as order rank.
+- A library's top card gets a card slot, with order rank 0. A library card without an
+  order rank reads as below the top.
+- A library card below the top, which the snapshot holds only where the record's events
+  name it, gets no card slot and no per-entity target. Its draw, mill or search reaches the
+  targets only through its player's counts and library events.
 - The cards exiled with a permanent and the components of a mutated permanent get card
   slots.
 
@@ -799,7 +803,7 @@ places:
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
 | player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit |
 | global slot | day or night |
-| command-zone and library card slots | floating effects, dungeons, library cards an effect touches |
+| command-zone and library card slots | floating effects, dungeons, each library's top card |
 | acting-ability slot | die results and coin flips |
 
 - Amounts are scalars as raw plus log1p, with a thermometer where the model compares
