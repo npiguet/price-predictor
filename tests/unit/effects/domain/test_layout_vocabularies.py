@@ -12,6 +12,7 @@ import pytest
 
 from effects.domain.effect_head_input import (
     COMBAT_SUBSTEPS,
+    ENTITY_ROLES,
     ZONES,
     card_features,
     card_segments,
@@ -40,6 +41,7 @@ from tests.unit.effects.builders import gen3_fixture_records
 _PINNED = [
     (COMBAT_SUBSTEPS, ("first_strike", "regular")),
     (ZONES, ("battlefield", "stack", "hand", "graveyard", "library", "exile", "command")),
+    (ENTITY_ROLES, ("tier", "library_card", "exiled_with", "mutate_component", "last_known")),
     (DURATIONS, ("instant", "end_of_turn", "permanent")),
     (LIBRARY_EVENTS, ("scry", "surveil", "tutor", "reveal", "reorder", "shuffle")),
     (ZONE_OUTCOMES, (
@@ -80,16 +82,17 @@ def test_the_heads_keep_their_widths():
 
 
 def test_the_card_slot_keeps_its_width_and_parts():
-    """A card slot is 536 features in 17 parts. A combat record's damage
+    """A card slot is 542 features in 18 parts. A combat record's damage
     assignment is no part of it (D3): it reads the first-strike rule
-    without the keyword. The width moves with the kept keyword flags and
-    the other lists the parts one-hot over."""
+    without the keyword. The role is (finding 4.7): six columns, the five
+    of :data:`ENTITY_ROLES` and "other". The width moves with the kept
+    keyword flags and the other lists the parts one-hot over."""
     record = record_from_dict(gen3_fixture_records()[0])
     entity = record.state.entities[0]
-    assert len(card_features(entity, record)) == 536
+    assert len(card_features(entity, record)) == 542
     assert list(card_segments(entity, record)) == [
         "characteristics", "face_state", "mana_cost", "printed_loyalty_defense",
-        "status", "keyword_flags", "relation_to_act", "designations", "x_paid",
+        "status", "role", "keyword_flags", "relation_to_act", "designations", "x_paid",
         "chosen", "costs_paid", "history", "order_rank", "stack_extras",
         "pending_event", "command_zone", "comparable_amounts",
     ]

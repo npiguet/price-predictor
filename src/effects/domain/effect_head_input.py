@@ -47,6 +47,7 @@ from effects.domain.records import (
     Moment,
     PlayabilitySubkind,
     RecordKind,
+    ResolutionPayload,
     acting_keys,
 )
 from effects.domain.relation_types import (
@@ -60,6 +61,7 @@ from effects.domain.state_snapshot import (
     CardLine,
     CombatSubstep,
     CommandZoneObject,
+    CostsPaid,
     DayNight,
     EffectDuration,
     EntityRole,
@@ -121,6 +123,11 @@ THIS_TURN_COUNTERS: tuple[str, ...] = (
 #: A gen-3 player's turn and game counts (``in.history``), in record order.
 TURN_COUNTS: tuple[str, ...] = tuple(TurnCounts.__dataclass_fields__)
 FACE_STATES: tuple[str, ...] = tuple(face.value for face in FaceState)
+#: A card slot's role (``in.role``): an entity of the four inclusion tiers, a
+#: command-zone card among them, is ``tier``; a gen-3 extra is its
+#: :class:`EntityRole`, in the enum's order.
+TIER_ROLE = "tier"
+ENTITY_ROLES: tuple[str, ...] = (TIER_ROLE, *(role.value for role in EntityRole))
 #: Day, night, or neither (the snapshot's null).
 DAY_NIGHT: tuple[str, ...] = (DayNight.DAY.value, DayNight.NIGHT.value, "neither")
 #: A command-zone object's duration, over the three values the collector buckets.
@@ -630,16 +637,25 @@ def _push_printed_loyalty_defense(out, entity: EntityState, record, masked) -> N
 
 
 def _push_status(out, entity: EntityState, record, masked) -> None:
-    """Zone, tapped, summoning sick, marked damage, combat."""
+    """Zone, tapped, summoning sick, marked damage, combat. Summoning sickness
+    reads on a permanent only (:attr:`EntityState.on_battlefield`): Forge
+    writes it in every zone, where it would say "is a creature card"."""
     out += _one_hot(entity.zone, ZONES)
     out.append(1.0 if entity.tapped else 0.0)
-    out.append(1.0 if entity.sick else 0.0)
+    out.append(1.0 if entity.sick and entity.on_battlefield else 0.0)
     _push_scalar(out, entity.damage)
     combat = entity.combat
     out.append(1.0 if combat and combat.attacking else 0.0)
     out.append(1.0 if combat and combat.blocking else 0.0)
     out.append(1.0 if combat and combat.became_blocked else 0.0)
     _push_scalar(out, len(combat.blocked_by) if combat else 0)
+
+
+def _push_role(out, entity: EntityState, record, masked) -> None:
+    """Why the entity is in the snapshot, over :data:`ENTITY_ROLES`
+    (``in.role``). A last-known copy keeps the zone it last had, so without
+    its role one with zone ``battlefield`` reads as a permanent."""
+    out += _one_hot(entity.role or TIER_ROLE, ENTITY_ROLES)
 
 
 def keywords_of(entity: EntityState) -> set[str]:
@@ -674,7 +690,7 @@ def _push_relation_to_act(out, entity: EntityState, record: EffectRecord, masked
     state = record.state
     g = state.global_
     out.append(1.0 if entity.controller == record.actor_player else 0.0)
-    out.append(1.0 if state.refs.targets_entity(entity) else 0.0)
+    out.append(1.0 if state.targets_card(entity.id) else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
     out.append(1.0 if entity.controller == g.active else 0.0)
     out.append(1.0 if entity.controller == g.priority else 0.0)
@@ -736,10 +752,20 @@ def chosen_subtypes(entity: EntityState) -> tuple[int, ...]:
     )
 
 
+def _paid_for(entity: EntityState, record: EffectRecord) -> CostsPaid | None:
+    """What paid for the card, as the input reads it: nothing for the acting
+    source on an effect half. A forced resolution skips the payment, so there
+    "paid no mana" would tell a forced half from a live one (D16)."""
+    if isinstance(record.payload, ResolutionPayload) and entity.id == record.state.refs.source:
+        return None
+    return entity.costs_paid
+
+
 def _push_costs_paid(out, entity: EntityState, record, masked) -> None:
     """The mana spent per colour, the zone cast from and the mana rider, after
-    a flag for having been cast (``in.costs_paid``)."""
-    paid = entity.costs_paid
+    a flag for having been cast (``in.costs_paid``); all zero for the acting
+    source on an effect half (:func:`_paid_for`)."""
+    paid = _paid_for(entity, record)
     out.append(0.0 if paid is None else 1.0)
     mana = paid.mana if paid is not None else {}
     for color in COLORS:
@@ -825,6 +851,7 @@ _CARD_PARTS = (
     ("mana_cost", _push_mana_cost),
     ("printed_loyalty_defense", _push_printed_loyalty_defense),
     ("status", _push_status),
+    ("role", _push_role),
     ("keyword_flags", _push_keyword_flags),
     ("relation_to_act", _push_relation_to_act),
     ("designations", _push_designations),
@@ -1122,10 +1149,13 @@ class _SlotRelations:
     reader builds four families itself: ``line_of`` (each ability slot to its
     card), ``line_of_the_same_card`` (each pair of one card's ability slots),
     ``mode_of`` (a charm's mode slots to their root) and ``has_the_same_name``
-    (each pair of cards whose names match, and a card that chose a name to
-    each card of that name). The rest are the record's ``links``. ``[ACT]``
-    reads ``targets`` to the acting ability's targets and ``source_of`` from
-    its source, as the target and source flags do (root spec § 10.4).
+    (each pair of cards whose names match but a last-known copy and its own
+    card, and a card that chose a name to each card of that name). The rest
+    are the record's ``links``. ``[ACT]`` reads ``targets`` to the cards and
+    players the acting ability targets itself and ``source_of`` from its
+    source, as the target and source flags do (root spec § 10.4): no
+    ``targets`` to a permanent whose ability on the stack is the target
+    (:meth:`StateSnapshot.targets_card`).
 
     A link end that is a line reads that line's slot; where the line has no
     slot (context dropout, gate 2's strip, a key with no rendered line) it
@@ -1140,6 +1170,8 @@ class _SlotRelations:
         self._lines: dict[tuple[str, ProvenanceKey], int] = {}
         self._named: dict[str, list[int]] = {}
         self._chosen_names: list[tuple[int, tuple[str, ...]]] = []
+        #: A last-known copy's slot to its card's id (``L<id>`` to ``E<id>``).
+        self._copies: dict[int, str] = {}
         self._triples: dict[tuple[int, int, int], None] = {}
 
     def link(self, a: int | None, b: int | None, family: str,
@@ -1150,10 +1182,13 @@ class _SlotRelations:
         self._triples[(a, b, forward)] = None
         self._triples[(b, a, reverse)] = None
 
-    def _pairs(self, rows: list[int], family: str) -> None:
+    def _pairs(self, rows: list[int], family: str,
+               apart: frozenset[tuple[int, int]] = frozenset()) -> None:
+        """Every pair of ``rows`` but those ``apart`` names."""
         for i, a in enumerate(rows):
             for b in rows[i + 1:]:
-                self.link(a, b, family)
+                if (a, b) not in apart:
+                    self.link(a, b, family)
 
     def add_card(self, entity: EntityState, start: int, block: list[Slot],
                  keys: list[ProvenanceKey | None]) -> None:
@@ -1172,11 +1207,18 @@ class _SlotRelations:
                 root = at
             lines.append(at)
         self._pairs(lines, "line_of_the_same_card")
+        self._note_names(entity, start)
+
+    def _note_names(self, entity: EntityState, start: int) -> None:
+        """What :meth:`_name_relations` reads of the card at slot ``start``:
+        its name, the names it chose, and whether it is a last-known copy."""
         # A face-down card's name would be its real face's: it has none here.
         if entity.name and face_state_of(entity) != FaceState.FACE_DOWN:
             self._named.setdefault(_name_key(entity.name), []).append(start)
         if entity.chosen is not None and entity.chosen.names:
             self._chosen_names.append((start, entity.chosen.names))
+        if entity.is_last_known and entity.id.startswith("L"):
+            self._copies[start] = "E" + entity.id[1:]
 
     def _end(self, end) -> int | None:
         if isinstance(end, LineRef):
@@ -1185,23 +1227,41 @@ class _SlotRelations:
         return self.subjects.get(end)
 
     def build(self, record: EffectRecord) -> tuple[tuple[int, int, int], ...]:
+        self._name_relations()
+        for found in record.state.links:
+            index = (found.index or 0) if found.type == "targets" else None
+            self.link(self._end(found.from_), self._end(found.to), found.type, index)
+        if record.has_act_line:
+            self._act_relations(record.state)
+        return tuple(self._triples)
+
+    def _copy_pairs(self) -> frozenset[tuple[int, int]]:
+        """Each last-known copy's slot with its card's, both ways: a copy is
+        its card as it last existed, not another card of its name."""
+        pairs = set()
+        for copy, card_id in self._copies.items():
+            card = self.subjects.get(card_id)
+            pairs |= {(copy, card), (card, copy)}
+        return frozenset(pairs)
+
+    def _name_relations(self) -> None:
+        apart = self._copy_pairs()
         for rows in self._named.values():
-            self._pairs(rows, "has_the_same_name")
+            self._pairs(rows, "has_the_same_name", apart)
         for chooser, names in self._chosen_names:
             for name in names:
                 for at in self._named.get(_name_key(name), ()):
                     self.link(chooser, at, "has_the_same_name")
-        state = record.state
-        for found in state.links:
-            index = (found.index or 0) if found.type == "targets" else None
-            self.link(self._end(found.from_), self._end(found.to), found.type, index)
-        if record.has_act_line:
-            refs = state.refs
-            for index, target in enumerate(refs.as_cast):
+
+    def _act_relations(self, state) -> None:
+        """``[ACT]``'s ``targets`` to what it targets itself, as cast, each at
+        its position, and ``source_of`` from its source."""
+        refs = state.refs
+        for index, target in enumerate(refs.as_cast):
+            if state.targets_card(target):
                 self.link(ACT_SLOT, self.subjects.get(target), "targets", index)
-            if refs.source is not None:
-                self.link(self.subjects.get(refs.source), ACT_SLOT, "source_of")
-        return tuple(self._triples)
+        if refs.source is not None:
+            self.link(self.subjects.get(refs.source), ACT_SLOT, "source_of")
 
 
 class SurfaceBuilder:

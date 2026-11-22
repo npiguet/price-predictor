@@ -77,7 +77,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 - A `life_change` or `counter_change` whose provenance `mode` names a loss (`event_schema.LOSS_MODES`, pinned to Forge's enums by a test) is a negative delta whatever sign its amount carries.
 - Damage dealt as -1/-1 counters (wither or infect to a creature) adds nothing to `damage_taken`: the record's own `counter_change` adds the counters. A `deathtouch` hit matched by such a counter change is taken back out too, because Forge reports a deathtouch source with wither or infect as `deathtouch`.
 - Three events name no output column and are counted per record in `RecordTargets.unsupervised`, their subjects affected and nothing else written: a hidden-keyword `keyword_change`, a `name_change` and a `mana_cost_change`. Supervising the last two needs a layout change.
-- A phased-out permanent is an entity of the board but not `EntityState.on_battlefield`, so no attack, block, state-based or grid reading reaches it.
+- A phased-out permanent and a last-known copy (role `last_known`, whatever zone it last had) are entities of the board but not `EntityState.on_battlefield`, so no attack, block, state-based or grid reading reaches them.
 - A rewrite's set-aside ability's run (`buffered_events`) is supervised on the record that holds the run. A rewrite whose incoming event is unknown supervises no outgoing event and trains no affected gate.
 - A mana record's own events beside `tapped` and `mana_produced` are the mana ability's outcomes and are supervised as any resolution's.
 - The game-end marker names nobody and derives no targets.

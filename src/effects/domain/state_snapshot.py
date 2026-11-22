@@ -604,10 +604,17 @@ class EntityState:
         return "phased_out" in self.designations
 
     @property
+    def is_last_known(self) -> bool:
+        """Whether the entity is a card as it last existed (role
+        ``last_known``), not the game's object now."""
+        return self.role == EntityRole.LAST_KNOWN
+
+    @property
     def on_battlefield(self) -> bool:
-        """Whether the card is a permanent the rules see: on the battlefield
-        and not phased out, which no rule, attack, block or effect reaches."""
-        return self.zone == Zone.BATTLEFIELD and not self.phased_out
+        """Whether the card is a permanent the rules see: on the battlefield,
+        not phased out, which no rule, attack, block or effect reaches, and
+        no last-known copy, which keeps the zone it last had."""
+        return self.zone == Zone.BATTLEFIELD and not (self.phased_out or self.is_last_known)
 
     def with_total_toughness(self, toughness: int) -> EntityState:
         """This entity at total toughness ``toughness`` with no marked damage.
@@ -682,14 +689,6 @@ class Refs:
         the fallback still leaks it."""
         return self.targets_at_cast if self.targets_at_cast is not None else self.targets
 
-    def targets_entity(self, entity: EntityState) -> bool:
-        """Whether the acting item targets this card itself, as cast: a ref
-        :attr:`targets_on_stack` names is the spell or ability on the stack,
-        so a permanent whose ability is targeted is not itself targeted."""
-        if entity.id not in self.as_cast:
-            return False
-        return entity.id not in (self.targets_on_stack or ()) or entity.zone == Zone.STACK
-
 
 @dataclass(frozen=True, slots=True)
 class RandomResults:
@@ -710,6 +709,11 @@ class LineRef:
 
 #: A link end: an entity or player ref (``E``, ``P``, ``L``, ``F``, ``D``) or a line.
 LinkEnd = str | LineRef
+
+
+def end_ref(end: LinkEnd) -> str:
+    """The ref a link end names: its own, or a line's card's."""
+    return end.entity if isinstance(end, LineRef) else end
 
 
 @dataclass(frozen=True, slots=True)
@@ -757,3 +761,33 @@ class StateSnapshot:
             if candidate.id == entity_id:
                 return candidate
         return None
+
+    def targets_card(self, ref: str) -> bool:
+        """Whether the acting item targets the card or player ``ref`` itself,
+        as cast (:attr:`Refs.as_cast`).
+
+        A ref :attr:`Refs.targets_on_stack` names is a spell or an ability on
+        the stack, by its card. The acting item's ``targets`` link to it says
+        which: one ending at the card is the spell, on the stack or gone from
+        it since; one ending at a line is the ability, and its permanent is
+        not itself targeted. Without such a link, a card on the stack is the
+        spell and one elsewhere an ability's.
+        """
+        refs = self.refs
+        if ref not in refs.as_cast:
+            return False
+        if ref not in (refs.targets_on_stack or ()):
+            return True
+        ends = self._acting_target_ends(ref)
+        if ends:
+            return any(isinstance(end, str) for end in ends)
+        found = self.entity(ref)
+        return found is not None and found.zone == Zone.STACK
+
+    def _acting_target_ends(self, ref: str) -> tuple[LinkEnd, ...]:
+        """Where the acting item's ``targets`` links to ``ref`` end."""
+        source = self.refs.source
+        return tuple(
+            link.to for link in self.links
+            if link.type == "targets" and end_ref(link.from_) == source and end_ref(link.to) == ref
+        )

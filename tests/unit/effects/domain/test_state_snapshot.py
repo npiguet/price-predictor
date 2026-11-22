@@ -465,6 +465,15 @@ class TestTheGen3FixtureRead:
         roles = {e.role for state in states for e in state.entities}
         assert roles == {None, *EntityRole}
 
+    def test_a_last_known_copy_on_the_battlefield_is_no_permanent(self):
+        """Aven Heartstabber's dies trigger: its copy L7 keeps zone
+        ``battlefield``, but no rule, attack or block reaches it (finding 4.7)."""
+        copies = [e for state in self._states() for e in state.entities
+                  if e.role == EntityRole.LAST_KNOWN and e.zone == "battlefield"]
+        assert [e.id for e in copies] == ["L7"]
+        assert not copies[0].on_battlefield
+        assert replace(copies[0], role=None).on_battlefield
+
     def test_a_face_down_card_reads_its_real_face(self):
         face_down = [e for state in self._states() for e in state.entities
                      if e.face_state == FaceState.FACE_DOWN and e.role is None]

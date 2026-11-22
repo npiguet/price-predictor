@@ -791,6 +791,11 @@ The ability encoder, `e` and the trunk are each 256 wide.
   targets only through its player's counts and library events.
 - The cards exiled with a permanent and the components of a mutated permanent get card
   slots.
+- A card slot carries its entity's role, one-hot over tier entity, library card, exiled
+  with, mutate component and last known. A command-zone card read from a floating effect
+  or a delayed trigger is a tier entity.
+- A last-known copy is no permanent, whatever zone it last had: no rule, attack or block
+  reaches it, and its summoning sickness reads unset.
 
 ## 9.4 New inputs
 
@@ -799,7 +804,7 @@ places:
 
 | where | inputs |
 |---|---|
-| card slot | subtypes, face state, is a copy, is a token, pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
+| card slot | subtypes, face state, is a copy, is a token, role (§ 9.3), pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
 | player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit |
@@ -824,6 +829,10 @@ places:
   assignment states which creatures deal damage in the step, so a first-strike step would
   show who has first strike without the keyword. Who attacks and who blocks is read from
   the snapshot's combat status and the `attacks` and `blocks` relations.
+- Summoning sickness reads on a permanent on the battlefield only.
+- The acting source's costs paid read as not cast on an effect half: a forced resolution
+  pays no cost, so the payment would tell a forced half from a live one. A cost half and
+  every other card read theirs.
 - Subtypes, is a copy, is a token, and the same-name, attached-to, attacks and targets
   relations read what the snapshot already records. Face state and pending-event details
   read it in part, and § 8.4 adds the rest.
@@ -926,7 +935,8 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
 - Cost history, such as devour, delve, convoke, emerge and exploit, is a count on the
   card, not a relation.
 - Two slots whose names match are related by `has the same name`, and so are a slot and
-  a name chosen earlier that it matches. No name embedding is learned.
+  a name chosen earlier that it matches. A last-known copy and its own card are not. No
+  name embedding is learned.
 - An entry of Forge's remembered list is a link only when it outlives its resolution: the
   entry is a card or a player, and the snapshot is taken while no ability of the
   remembering card is on the stack or resolving.
@@ -968,7 +978,7 @@ feature unless the relation carries everything it says.
 | attacker became blocked | blocks | kept: it stays set after every blocker has left, when no relation is left |
 | number of blockers | blocks | kept: a count |
 | card is attached | attached to | replaced by the relation |
-| card or player is a target of the acting ability | targets, from `[ACT]` | kept |
+| card or player is a target of the acting ability | targets, from `[ACT]` | kept: set, and the relation read, for a card targeted itself, a spell on the stack or gone from it since included; a permanent whose ability on the stack is the target is not targeted itself |
 | card is the acting ability's source | source of | kept |
 | controller is the acting player | controls, from each player slot | kept |
 | stack object's number of targets, divided amounts and up-to counts | targets, from the stack object | kept: counts and amounts |
