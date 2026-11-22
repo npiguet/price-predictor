@@ -116,17 +116,20 @@ class TargetSample:
         self._gate.append(entity.gate.detach().cpu()[gate_scored])
         self._gate_weights.append(_weights_at(entity.gate_weights(), gate_scored))
         for name, values in entity.fields.values.items():
-            scored = entity.scored(name)
-            selected = values.detach().cpu()[scored]
-            if selected.numel():
-                self._fields.setdefault(name, []).append(selected)
-                self._field_weights.setdefault(name, []).append(
-                    _weights_at(entity.field_weights(name), scored),
-                )
+            self._add_field(entity, name, values)
         for head, targets in (heads or {}).items():
             compact = _supervising_rows(str(head), targets)
             if compact is not None:
                 self._heads.setdefault(str(head), []).append(compact)
+
+    def _add_field(self, entity: EntityTargetBatch, name: str, values: torch.Tensor) -> None:
+        scored = entity.scored(name)
+        selected = values.detach().cpu()[scored]
+        if selected.numel():
+            self._fields.setdefault(name, []).append(selected)
+            self._field_weights.setdefault(name, []).append(
+                _weights_at(entity.field_weights(name), scored),
+            )
 
     @classmethod
     def of(cls, batches: Sequence[EntityTargetBatch]) -> TargetSample:
@@ -196,9 +199,14 @@ def _supervising_rows(head: str, targets: tuple) -> tuple | None:
     cut = tuple(
         None if part is None else part.detach().cpu()[rows] for part in targets
     )
-    if head == Head.CREATED_OBJECTS.value and (len(cut) < 3 or cut[2] is None):
+    if head == Head.CREATED_OBJECTS.value and _lacks_known(cut):
         cut = (cut[0], cut[1], torch.ones_like(cut[0]))
     return cut
+
+
+def _lacks_known(cut: tuple) -> bool:
+    """Whether a created-objects tuple carries no ``known`` part."""
+    return len(cut) < 3 or cut[2] is None
 
 
 def constant_predictor_losses(
@@ -499,10 +507,7 @@ def _field_mask(mask: torch.Tensor, layout: RecordHeadLayout) -> torch.Tensor:
 
 
 def _created_objects_losses(sample: TargetSample, weighted: bool = False) -> dict[str, float]:
-    batches = [
-        _created_rows(targets) for targets in sample.head_batches(Head.CREATED_OBJECTS.value)
-    ]
-    batches = [rows for rows in batches if rows is not None]
+    batches = _created_batches(sample)
     if not batches:
         return {}
     target = torch.cat([rows[0] for rows in batches])
@@ -515,20 +520,32 @@ def _created_objects_losses(sample: TargetSample, weighted: bool = False) -> dic
             known=said, log_dispersion=log_dispersion,
         ).double()
     records = max(sample.records, 1)
-    slot_known = known[:, :-1].reshape(-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
-    slot_target = target[:, :-1].reshape(-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
     losses = {}
     for column, name in enumerate(CREATED_TERMS):
-        if column < CREATED_SLOT_WIDTH:
-            said = slot_known[..., column] > 0
-            values = slot_target[..., column][said]
-        else:
-            said = known[:, -1] > 0
-            values = target[:, -1][said]
+        values = _column_values(target, known, column)
         if values.numel() == 0:
             continue
         losses[name] = 0.0 if _degenerate(values) else float(summed[column]) / records
     return losses
+
+
+def _created_batches(sample: TargetSample) -> list[tuple[torch.Tensor, torch.Tensor]]:
+    """Each created-objects batch's supervising ``(target, known)``, the
+    batches supervising none left out."""
+    batches = [
+        _created_rows(targets) for targets in sample.head_batches(Head.CREATED_OBJECTS.value)
+    ]
+    return [rows for rows in batches if rows is not None]
+
+
+def _column_values(target: torch.Tensor, known: torch.Tensor, column: int) -> torch.Tensor:
+    """The targets one created-objects term is said at: a slot column over
+    every slot of every record, or the overflow flag."""
+    if column < CREATED_SLOT_WIDTH:
+        slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
+        said = known[:, :-1].reshape(slots)[..., column] > 0
+        return target[:, :-1].reshape(slots)[..., column][said]
+    return target[:, -1][known[:, -1] > 0]
 
 
 def created_objects_record_losses(
@@ -551,14 +568,9 @@ def created_objects_record_losses(
         known=said, log_dispersion=log_dispersion,
     ).double()
     selected = mask.detach().bool().cpu().nonzero()[:, 0]
-    slot_known = said[:, :-1].reshape(-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
-    slot_target = wanted[:, :-1].reshape(-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
     out = {}
     for column, name in enumerate(CREATED_TERMS):
-        if column < CREATED_SLOT_WIDTH:
-            values = slot_target[..., column][slot_known[..., column] > 0]
-        else:
-            values = wanted[:, -1][said[:, -1] > 0]
+        values = _column_values(wanted, said, column)
         if values.numel() == 0:
             continue
         per_record = torch.zeros(int(target.shape[0]), dtype=torch.float64)
