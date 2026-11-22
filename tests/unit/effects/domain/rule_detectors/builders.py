@@ -25,3 +25,8 @@ def declaration(family: str, kind: str, needs=(), **params) -> DetectorDeclarati
 
 def catalogue(*scenarios: Scenario) -> ScenarioCatalogue:
     return ScenarioCatalogue(tuple(scenarios))
+
+
+def effect_halves(by_kind):
+    """The resolution records that are the effect half (not the activation)."""
+    return [r for r in by_kind("resolution") if r.moment.value == "resolution"]

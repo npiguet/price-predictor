@@ -1,4 +1,4 @@
-"""``outcome_event`` on real gen-3 effect halves."""
+"""``outcome_event`` on real gen-3 effect halves: parameters, tokens, keywords and roles."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from effects.domain.rule_detectors.outcome_event import (
     source_is_token_of_kind,
     token_kind_of,
 )
+from tests.unit.effects.domain.rule_detectors.builders import effect_halves
 
 PREDEFINED = {"treasure", "food", "clue", "blood", "map", "gold", "powerstone", "shard",
               "incubator", "junk"}
@@ -161,6 +162,22 @@ class TestAbsent:
             FAMILY.validate({"event": "token_created", "absent": True})
 
 
+def _predefined_kinds(source):
+    """The predefined token kinds among the entity's subtypes, when it is a token."""
+    if not source.token_script_id:
+        return set()
+    return {s.lower() for s in source.subtypes} & PREDEFINED
+
+
+def _predefined_token_source(gen3_records):
+    """A resolution whose source is a predefined token, and that token's kind."""
+    return next(
+        (r, sorted(_predefined_kinds(source))[0])
+        for r in gen3_records if r.kind.value == "resolution" and r.moment.value == "resolution"
+        for source in r.state.entities
+        if source.id == r.state.refs.source and _predefined_kinds(source))
+
+
 class TestTokenKinds:
     def test_a_predefined_token_made_shows_by_its_kind(self, gen3_records):
         record, kind = next(
@@ -178,13 +195,7 @@ class TestTokenKinds:
             FAMILY.validate({"event": "zone_change", "token_kind": "Food"})
 
     def test_an_ability_of_a_predefined_token_shows_by_its_source(self, gen3_records):
-        record, kind = next(
-            (r, sorted({s.lower() for s in source.subtypes} & PREDEFINED)[0])
-            for r in gen3_records if r.kind.value == "resolution"
-            and r.moment.value == "resolution"
-            for source in r.state.entities
-            if source.id == r.state.refs.source and source.token_script_id
-            and {s.lower() for s in source.subtypes} & PREDEFINED)
+        record, kind = _predefined_token_source(gen3_records)
         event = next(e for e in record.payload.listed_events()).type.value
         assert source_is_token_of_kind(record.state, kind)
         assert FAMILY.match(record, None, {"event": event, "source_token_kind": kind}) is not None
@@ -192,14 +203,10 @@ class TestTokenKinds:
                                            "source_token_kind": "nonesuch"}) is None
 
 
-def _effect_halves(by_kind):
-    return [r for r in by_kind("resolution") if r.moment.value == "resolution"]
-
-
 class TestKeyword:
     @staticmethod
     def _keyword_resolution(by_kind, sidecars):
-        return next(r for r in _effect_halves(by_kind) if r.payload.events
+        return next(r for r in effect_halves(by_kind) if r.payload.events
                     and acting_line(r, sidecars) is not None
                     and acting_line(r, sidecars).keyword_display_name)
 
@@ -248,7 +255,7 @@ class TestKeyword:
 class TestScriptParam:
     @staticmethod
     def _with_param(by_kind, sidecars):
-        for record in _effect_halves(by_kind):
+        for record in effect_halves(by_kind):
             found = acting_root_params(record, sidecars) or {}
             name = next((k for k in found if k not in ("SP", "AB", "DB") and found[k]), None)
             if record.payload.events and name:
@@ -271,215 +278,6 @@ class TestScriptParam:
             FAMILY.validate({"event": event, "script_param": ["a"]})
 
 
-def _on_its_api(record, lines, declared):
-    """``declared`` scoped to ``record``'s own acting API, the scope a
-    qualifier's near miss needs (finding 7.1)."""
-    api = acting_api(record, lines)
-    assert api is not None
-    return {**declared, "api": api}
-
-
-def _in_combat(record, subject):
-    entity = record.state.entity(subject)
-    return entity is not None and entity.combat is not None and bool(
-        entity.combat.attacking or entity.combat.blocking)
-
-
-class TestQualifiers:
-    def test_a_creature_leaving_combat_fires_and_one_out_of_combat_is_the_near_miss(
-            self, by_kind, gen3_sidecars):
-        record = next(r for r in _effect_halves(by_kind) for e in r.payload.events
-                      if e.type is EventType.ZONE_CHANGE
-                      and e.params.get("from_zone") == "battlefield"
-                      and any(_in_combat(r, s) for s in e.subjects))
-        declared = {"event": "zone_change", "from_zone": "battlefield",
-                    "subject_in_combat": True}
-        found = FAMILY.match(record, None, declared)
-        assert found.polarity is Polarity.FIRES and found.observed
-        assert any(_in_combat(record, s) for s in found.entities)
-        out_of_combat = replace(record, state=replace(record.state, entities=tuple(
-            replace(e, combat=None) for e in record.state.entities)))
-        assert FAMILY.match(out_of_combat, None, declared) is None
-        found = FAMILY.match(out_of_combat, gen3_sidecars,
-                             _on_its_api(record, gen3_sidecars, declared))
-        assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
-
-    def test_a_token_subject_reads_off_the_snapshot(self, by_kind, gen3_sidecars):
-        """No fixture effect half acts on a token, so the subject of a real
-        move is edited into one."""
-        record, subject = _leaving(by_kind)
-        declared = {"event": "zone_change", "from_zone": "battlefield",
-                    "subject_is_token": True}
-        token = replace(record, state=replace(record.state, entities=tuple(
-            replace(e, token_script_id="g_1_1_wolf") if e.id == subject else e
-            for e in record.state.entities)))
-        assert FAMILY.match(token, None, declared).polarity is Polarity.FIRES
-        carded = replace(record, state=replace(record.state, entities=tuple(
-            replace(e, token_script_id=None) for e in record.state.entities)))
-        assert FAMILY.match(carded, gen3_sidecars, _on_its_api(
-            record, gen3_sidecars, declared)).polarity is Polarity.DOES_NOT_FIRE
-
-    def test_another_event_in_the_record_is_with_or_without(self, by_kind, gen3_sidecars):
-        record = next(r for r in _effect_halves(by_kind)
-                      if len({e.type for e in r.payload.events}) >= 2
-                      and acting_api(r, gen3_sidecars))
-        first, other = list(dict.fromkeys(e.type.value for e in record.payload.events))[:2]
-        missing = next(t.value for t in EventType
-                       if t not in {e.type for e in record.payload.events})
-        sides = {
-            ("with_event", other): Polarity.FIRES,
-            ("without_event", other): Polarity.DOES_NOT_FIRE,
-            ("with_event", missing): Polarity.DOES_NOT_FIRE,
-            ("without_event", missing): Polarity.FIRES,
-        }
-        for (name, value), polarity in sides.items():
-            found = FAMILY.match(record, gen3_sidecars, _on_its_api(
-                record, gen3_sidecars, {"event": first, name: value}))
-            assert found.polarity is polarity, (name, value)
-
-    def test_controller_is_owner_needs_the_gen3_owner(self):
-        assert FAMILY.needs({"event": "zone_change", "controller_is_owner": False}) == {"owner"}
-        assert FAMILY.needs({"event": "zone_change"}) == frozenset()
-
-    def test_a_qualifier_and_absent_are_refused_together(self, gen3_records):
-        with pytest.raises(ValueError, match="qualifier"):
-            FAMILY.validate({"event": "zone_change", "api": "Draw",
-                                                 "absent": True, "subject_is_token": True})
-
-
-def _is_creature(record, entity_id) -> bool:
-    entity = record.state.entity(entity_id)
-    return entity is not None and "creature" in {t.lower() for t in entity.types}
-
-
-class TestSourceDies:
-    """``source_dies`` reads whether a damage event's source dies in the same
-    record (510.2: a creature dying in a combat damage step still dealt its
-    damage there), on a real combat record, which names the source as the
-    event's ``source`` and ``cause`` both. Its near miss is a first striker's
-    victim: a creature with power above 0 dealt damage in the first-strike
-    step, dying there having dealt none. A step in which no such creature
-    dies, a 0-power creature dying, and a creature dying in the regular step
-    having dealt none there are neither side."""
-
-    DECLARED = {"event": "damage_dealt", "combat": True, "source_dies": True}
-
-    @staticmethod
-    def _combat(by_kind):
-        """A real combat record holding combat damage to a creature, and its
-        damage events, the first one dealt to that creature."""
-        for record in by_kind("combat"):
-            dealt = [e for e in record.payload.events if e.type is EventType.DAMAGE_DEALT
-                     and e.params.get("combat") and e.params.get("cause")]
-            dealt.sort(key=lambda e: not _is_creature(record, e.subjects[0]))
-            if dealt and _is_creature(record, dealt[0].subjects[0]):
-                return record, dealt
-        pytest.fail("no combat record in the fixture deals combat damage to a creature")
-
-    @staticmethod
-    def _events(record, events):
-        return replace(record, payload=replace(record.payload, events=tuple(events)))
-
-    @staticmethod
-    def _dies(subject):
-        return Event(type=EventType.ZONE_CHANGE, subjects=(subject,),
-                     params={"from_zone": "battlefield", "to_zone": "graveyard"})
-
-    @staticmethod
-    def _in_step(record, step, victim=None, power=None):
-        """``record`` as taken in damage step ``step``, ``victim``'s base power
-        set to ``power`` when given."""
-        state = replace(record.state, global_=replace(record.state.global_, combat_substep=step))
-        if victim is not None:
-            entities = tuple(
-                replace(e, pt=replace(e.pt, base=(power - e.pt.boosts[0] - e.pt.counters[0],
-                                                  e.pt.base[1])))
-                if e.id == victim else e for e in state.entities)
-            state = replace(state, entities=entities)
-        return replace(record, state=state)
-
-    def _struck(self, by_kind, step, power=2):
-        """A real combat record's striker dealing its damage and living, the
-        creature it kills, of power ``power``, having dealt none, in ``step``."""
-        record, dealt = self._combat(by_kind)
-        striker = dealt[0]
-        victim = striker.subjects[0]
-        assert victim != striker.params["cause"]
-        struck = self._events(record, (striker, self._dies(victim)))
-        return self._in_step(struck, step, victim, power), victim
-
-    def test_a_source_that_dies_in_the_step_fires(self, by_kind):
-        record, dealt = self._combat(by_kind)
-        source = dealt[0].params["cause"]
-        traded = self._events(record, (*dealt, self._dies(source)))
-        found = FAMILY.match(traded, None, self.DECLARED)
-        assert found.polarity is Polarity.FIRES and found.observed
-
-    def test_a_first_strikers_victim_is_the_near_miss(self, by_kind):
-        """The first-strike step: the striker deals its damage and lives, the
-        creature it kills had damage to deal and dealt none."""
-        struck_first, victim = self._struck(by_kind, "first_strike")
-        found = FAMILY.match(struck_first, None, self.DECLARED)
-        assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
-        assert victim in found.outcome
-
-    def test_a_victim_dying_in_the_regular_step_is_neither_side(self, by_kind):
-        """A first striker killed in the regular step dealt its damage in the
-        first-strike step's record, so this one shows it dealing none; a
-        creature without first strike dying there is no first striker's victim."""
-        struck, _victim = self._struck(by_kind, "regular")
-        assert FAMILY.match(struck, None, self.DECLARED) is None
-
-    def test_a_zero_power_victim_is_neither_side(self, by_kind):
-        """A 0-power creature dealt no damage because it had none to deal."""
-        struck_first, _victim = self._struck(by_kind, "first_strike", power=0)
-        assert FAMILY.match(struck_first, None, self.DECLARED) is None
-
-    def test_a_record_naming_no_step_shows_no_victim(self, by_kind):
-        struck, _victim = self._struck(by_kind, None)
-        assert FAMILY.match(struck, None, self.DECLARED) is None
-
-    def test_a_damage_step_in_which_no_creature_dies_is_neither_side(self, by_kind):
-        """An ordinary unblocked attack, or a block both creatures survive:
-        no creature dies, so nothing shows whether the damage was dealt at once."""
-        record, dealt = self._combat(by_kind)
-        assert FAMILY.match(self._events(record, dealt), None, self.DECLARED) is None
-
-    def test_a_creature_dying_that_was_dealt_no_damage_there_is_neither_side(self, by_kind):
-        record, dealt = self._combat(by_kind)
-        bystander = next(e.id for e in record.state.entities
-                         if "creature" in {t.lower() for t in e.types}
-                         and all(e.id not in d.subjects and e.id != d.params["cause"]
-                                 for d in dealt))
-        died = self._events(record, (*dealt, self._dies(bystander)))
-        assert FAMILY.match(died, None, self.DECLARED) is None
-
-    def test_false_flips_the_sides(self, by_kind):
-        record, dealt = self._combat(by_kind)
-        striker = dealt[0]
-        declared = {**self.DECLARED, "source_dies": False}
-        died = self._events(record, (striker, self._dies(striker.params["cause"])))
-        # A combat has no acting line to scope the near miss by (finding 7.1).
-        assert FAMILY.match(died, None, declared) is None
-        assert FAMILY.match(self._events(record, (striker,)), None,
-                            declared).polarity is Polarity.FIRES
-
-    def test_the_source_is_read_before_the_cause(self, by_kind):
-        record, dealt = self._combat(by_kind)
-        named = [replace(e, params={**e.params, "source": e.params["cause"], "cause": "E0"})
-                 for e in dealt]
-        traded = self._events(record, (*named, self._dies(dealt[0].params["cause"])))
-        assert FAMILY.match(traded, None, self.DECLARED).polarity is Polarity.FIRES
-
-    def test_it_reads_an_event_that_names_a_source_only(self):
-        FAMILY.validate({"event": "damage_prevented", "source_dies": True})
-        with pytest.raises(ValueError, match="source_dies"):
-            FAMILY.validate({"event": "zone_change", "source_dies": True})
-        with pytest.raises(ValueError, match="qualifier"):
-            FAMILY.validate({"event": "damage_dealt", "api": "DealDamage", "absent": True,
-                             "source_dies": True})
-
-
 def test_a_combat_records_events_show_too(by_kind):
     record = next(r for r in by_kind("combat") if not r.fork and any(
         e.type is EventType.DAMAGE_DEALT for e in r.payload.events))
@@ -493,83 +291,28 @@ def test_a_combat_records_events_show_too(by_kind):
     assert FAMILY.match(probe, None, {"event": "damage_dealt"}).polarity is Polarity.FIRES
 
 
-class TestT036Shapes:
-    """The shapes where a declaration named an event the record writes another way."""
+def _chained_apis(record, sidecars):
+    """The root API and the first other API of the acting line's chain, or None."""
+    from effects.domain.script_text import api_of, params, segments
 
-    def test_a_counter_type_compares_in_one_spelling(self, gen3_records):
-        """A record may write ``+1/+1`` or ``P1P1``. The fixture's counter
-        changes are loyalty and level, so a real one is edited to each spelling."""
-        record = next(r for r in gen3_records if r.kind.value == "resolution"
-                      and r.moment.value == "resolution" and any(
-                          e.type is EventType.COUNTER_CHANGE for e in r.payload.events))
-        for written in ("+1/+1", "P1P1"):
-            events = tuple(
-                replace(e, params={**e.params, "counter_type": written})
-                if e.type is EventType.COUNTER_CHANGE else e for e in record.payload.events)
-            edited = replace(record, payload=replace(record.payload, events=events))
-            for spelled in ("+1/+1", "P1P1", "p1p1"):
-                found = FAMILY.match(edited, None, {"event": "counter_change",
-                                                    "counter_type": spelled})
-                assert found.polarity is Polarity.FIRES, (written, spelled)
-
-    def _self_move(self, by_kind):
-        """A real effect half moving its own source off the battlefield (a
-        sacrifice), edited to hold another event beside it (a Saga's last
-        chapter, then its sacrifice)."""
-        for record in _effect_halves(by_kind):
-            source = record.state.refs.source
-            for event in record.payload.events:
-                if (event.type is EventType.ZONE_CHANGE and source in event.subjects
-                        and event.params.get("from_zone") == "battlefield"):
-                    beside = Event(type=EventType.LIFE_CHANGE, subjects=("P0",),
-                                   params={"delta": 1})
-                    edited = replace(record, payload=replace(
-                        record.payload, events=(*record.payload.events, beside)))
-                    return edited, event
-        pytest.fail("no effect half in the fixture moves its own source")
-
-    def test_a_move_of_the_source_itself_is_what_subject_is_source_reads(
-            self, by_kind, gen3_sidecars):
-        record, event = self._self_move(by_kind)
-        declared = {"event": "zone_change", "from_zone": "battlefield",
-                    "subject_is_source": True}
-        found = FAMILY.match(record, None, declared)
-        assert found.polarity is Polarity.FIRES and record.state.refs.source in found.entities
-        elsewhere = replace(record, state=replace(record.state, refs=replace(
-            record.state.refs, source="E0")))
-        assert FAMILY.match(elsewhere, gen3_sidecars, _on_its_api(
-            record, gen3_sidecars, declared)).polarity is Polarity.DOES_NOT_FIRE
-
-    def test_with_event_takes_the_event_s_filters(self, by_kind, gen3_sidecars):
-        record, event = self._self_move(by_kind)
-        other = next(e for e in record.payload.events if e is not event)
-        to_zone = event.params.get("to_zone")
-        declared = {"event": other.type.value,
-                    "with_event": {"event": "zone_change", "from_zone": "battlefield",
-                                   "to_zone": to_zone}}
-        assert FAMILY.match(record, None, declared).polarity is Polarity.FIRES
-        declared["with_event"] = {**declared["with_event"], "to_zone": "nowhere"}
-        assert FAMILY.match(record, gen3_sidecars, _on_its_api(
-            record, gen3_sidecars, declared)).polarity is Polarity.DOES_NOT_FIRE
-        with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.validate({"event": other.type.value,
-                                        "with_event": {"event": "zone_change", "amount": 1}})
+    line = acting_line(record, sidecars)
+    if not record.payload.events or line is None:
+        return None
+    if not line.script_text:
+        return None
+    apis = [api_of(params(s)) for s in segments(line.script_text)]
+    sub = next((a for a in apis[1:] if a and a != apis[0]), None)
+    return (apis[0], sub) if apis[0] and sub else None
 
 
 class TestApiInChain:
     @staticmethod
     def _chained(by_kind, sidecars):
         """An effect half whose acting line chains a sub-ability of another API."""
-        from effects.domain.script_text import api_of, params, segments
-
-        for record in _effect_halves(by_kind):
-            line = acting_line(record, sidecars)
-            if line is None or not line.script_text or not record.payload.events:
-                continue
-            apis = [api_of(params(s)) for s in segments(line.script_text)]
-            sub = next((a for a in apis[1:] if a and a != apis[0]), None)
-            if apis[0] and sub:
-                return record, apis[0], sub, record.payload.events[0].type.value
+        for record in effect_halves(by_kind):
+            chain = _chained_apis(record, sidecars)
+            if chain is not None:
+                return record, *chain, record.payload.events[0].type.value
         raise AssertionError("no effect half acting through a chained script")
 
     def test_a_sub_ability_s_api_is_read_only_when_asked_for(self, by_kind, gen3_sidecars):
@@ -627,78 +370,6 @@ class TestEntityRoles:
         assert found.polarity is Polarity.FIRES and found.outcome == ("E7",)
 
 
-def _leaving(by_kind):
-    """An effect half moving a snapshot permanent off the battlefield, and that permanent."""
-    return next((r, s) for r in _effect_halves(by_kind) for e in r.payload.events
-                if e.type is EventType.ZONE_CHANGE
-                and e.params.get("from_zone") == "battlefield"
-                for s in e.subjects if r.state.entity(s) is not None)
-
-
-def _with_subject(record, subject, **changes):
-    """``record`` with its entity ``subject`` changed."""
-    return replace(record, state=replace(record.state, entities=tuple(
-        replace(e, **changes) if e.id == subject else e
-        for e in record.state.entities)))
-
-
-class TestGen3SubjectQualifiers:
-    """A melded, merged, copied or designated subject (T030 follow-up)."""
-
-    _MOVE = {"event": "zone_change", "from_zone": "battlefield"}
-
-    def test_a_melded_subject_fires_and_a_front_one_is_the_near_miss(
-            self, by_kind, gen3_sidecars):
-        record, subject = _leaving(by_kind)
-        declared = {**self._MOVE, "subject_face_state": "melded"}
-        found = FAMILY.match(_with_subject(record, subject, face_state="melded"), None, declared)
-        assert found.polarity is Polarity.FIRES and subject in found.outcome
-        found = FAMILY.match(_with_subject(record, subject, face_state="front"), gen3_sidecars,
-                             _on_its_api(record, gen3_sidecars, declared))
-        assert found.polarity is Polarity.DOES_NOT_FIRE
-
-    def test_a_designation_is_read_off_the_gen3_subject(self, by_kind, gen3_sidecars):
-        record, subject = _leaving(by_kind)
-        declared = {**self._MOVE, "subject_designation": "unearthed"}
-        held = _with_subject(record, subject, designations=("unearthed",))
-        assert FAMILY.match(held, None, declared).polarity is Polarity.FIRES
-        lacking = _with_subject(record, subject, designations=())
-        assert FAMILY.match(lacking, gen3_sidecars, _on_its_api(
-            record, gen3_sidecars, declared)).polarity is Polarity.DOES_NOT_FIRE
-
-    def test_a_merged_subject_is_one_a_merged_with_link_reaches(self, by_kind, gen3_sidecars):
-        from effects.domain.state_snapshot import Link
-
-        record, subject = _leaving(by_kind)
-        declared = {**self._MOVE, "subject_merged": True}
-        merged = replace(record, state=replace(record.state, links=(
-            Link(from_="E999999", to=subject, type="merged_with"),)))
-        assert FAMILY.match(merged, None, declared).polarity is Polarity.FIRES
-        alone = replace(record, state=replace(record.state, links=()))
-        assert FAMILY.match(alone, gen3_sidecars, _on_its_api(
-            record, gen3_sidecars, declared)).polarity is Polarity.DOES_NOT_FIRE
-
-    def test_a_copy_names_its_copy_source(self, by_kind, gen3_sidecars):
-        record, subject = _leaving(by_kind)
-        declared = {**self._MOVE, "subject_is_copy": True}
-        copied = replace(record, state=replace(record.state, entities=tuple(
-            replace(e, copy_source="E1") if e.id == subject else replace(e, copy_source=None)
-            for e in record.state.entities)))
-        assert FAMILY.match(copied, None, declared).polarity is Polarity.FIRES
-        uncopied = replace(copied, state=replace(copied.state, entities=tuple(
-            replace(e, copy_source=None) for e in copied.state.entities)))
-        assert FAMILY.match(uncopied, gen3_sidecars, _on_its_api(
-            record, gen3_sidecars, declared)).polarity is Polarity.DOES_NOT_FIRE
-
-    def test_each_needs_its_gen3_field(self):
-        assert FAMILY.needs({"event": "zone_change", "subject_face_state": "melded"}) == {
-            "face_state"}
-        assert FAMILY.needs({"event": "zone_change", "subject_designation": "x"}) == {
-            "designations"}
-        assert FAMILY.needs({"event": "zone_change", "subject_merged": True}) == {"links"}
-        assert FAMILY.needs({"event": "zone_change", "subject_is_copy": True}) == frozenset()
-
-
 class TestChainParam:
     """A parameter on any segment of the acting line's chain (T030 follow-up)."""
 
@@ -706,7 +377,7 @@ class TestChainParam:
         from effects.domain.script_text import params, segments
 
         record, below = next(
-            (r, name) for r in _effect_halves(by_kind) if r.payload.events
+            (r, name) for r in effect_halves(by_kind) if r.payload.events
             for line in [acting_line(r, gen3_sidecars)]
             if line is not None and line.script_text and len(segments(line.script_text)) > 1
             for name in params(segments(line.script_text)[1])
