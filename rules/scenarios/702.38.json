@@ -1,7 +1,9 @@
 {
   "unit": "702.38",
   "verified": true,
-  "review": [],
+  "review": [
+    "task FR1, 2026-11-22: 702.38a-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
+  ],
   "skipped": [
     {
       "id": "702.38b",
@@ -85,7 +87,8 @@
         "params": {
           "event": "counter_change",
           "counter_type": "+1/+1",
-          "source_keyword": "Amplify"
+          "source_keyword": "Amplify",
+          "candidate": "cast"
         },
         "needs": []
       }

@@ -45,6 +45,13 @@ Parameters:
   counters keyword (amplify, modular, sunburst, bloodthirst, graft) works in
   the permanent spell's resolution, whose acting line is the implicit spell,
   no keyword's; it restricts both sides too;
+- ``candidate`` (``cast`` or ``activated``, as ``acting_line.ability_kind``
+  reads the acting key): the acting ability is its card's cast or an
+  activated ability. ``source_keyword`` is the card's, so a declaration about
+  the cast of a card with the keyword names it, or an Equip activation, a
+  granted static or a trigger of the card would be read for the cast; the
+  damage rules of wither and infect (any line of the card deals damage) name
+  none;
 - ``script_param``: the acting line's root segment holds this parameter, a
   name (``Monstrosity``, for ``Monstrosity$ True``) or a name -> value map
   (``{"Mode": "TurnFaceUp"}``, ``"*"`` for any value), which tells apart the
@@ -194,6 +201,7 @@ __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_N
 _CHECKS = {
     **EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
     "api": dv.each(dv.api), "keyword": dv.keyword, "source_keyword": dv.keyword,
+    "candidate": dv.one_of("cast", "activated"),
     "source_token_kind": dv.token_kind, "token_kind": dv.token_kind, "min_count": dv.integer,
     "absent": dv.boolean, "api_in_chain": dv.boolean, "script_param": dv.script_param,
     "chain_param": dv.script_param, "source_type": dv.card_type,

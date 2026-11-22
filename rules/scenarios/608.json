@@ -8,7 +8,8 @@
     "608.2j-2: was a Doom Blade targeting-legality check (601.2c/115, not an effect, so not 608.2j); rewrote it as a Hellfire resolution, the rule's own 'destroy all nonblack creatures' case, with Edgewalker spared versus Grizzly Bears destroyed.",
     "608.2k: the skip claimed only exotic cards reach it and that it adds nothing beyond 608.2h; both false (a Theros god losing devotion while blocked by Wall of Tears is the rule's own example). Removed the skip and added 608.2k-1.",
     "608.2p: the skip claimed Forge has no 'when an ability resolves' trigger; Forge has Mode$ AbilityResolves (Narci, Fable Singer; Tom Bombadil; Tyvar the Bellicose). Removed the skip and added 608.2p-1 with Narci and History of Benalia.",
-    "608.3b-1 listed 608.3c, for which the Aura entering attached (its does_not_fire base) is the rule's outcome; 608.3c moved to 608.3c-1 with the polarities flipped."
+    "608.3b-1 listed 608.3c, for which the Aura entering attached (its does_not_fire base) is the rule's outcome; 608.3c moved to 608.3c-1 with the polarities flipped.",
+    "task FR1, 2026-11-22: 608.3c-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [
     {
@@ -1417,6 +1418,7 @@
         "params": {
           "event": "attached",
           "source_keyword": "Enchant",
+          "candidate": "cast",
           "subject_is_source": true
         },
         "needs": []

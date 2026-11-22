@@ -2,7 +2,9 @@
   "unit": "702.88",
   "verified": true,
   "review": [
-    "702.88a-3: added; no scenario exercised rebound's 'if this spell was cast from your hand' condition. A Staggershock cast from exile through cascade goes to the graveyard, one cast from hand is exiled."
+    "702.88a-3: added; no scenario exercised rebound's 'if this spell was cast from your hand' condition. A Staggershock cast from exile through cascade goes to the graveyard, one cast from hand is exiled.",
+    "task FR1, 2026-11-22: 702.88a-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)",
+    "task FR1, 2026-11-22: 702.88a-3: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -81,7 +83,8 @@
           "event": "zone_change",
           "from_zone": "stack",
           "to_zone": "exile",
-          "source_keyword": "Rebound"
+          "source_keyword": "Rebound",
+          "candidate": "cast"
         },
         "needs": []
       }
@@ -229,7 +232,8 @@
           "event": "zone_change",
           "from_zone": "stack",
           "to_zone": "exile",
-          "source_keyword": "Rebound"
+          "source_keyword": "Rebound",
+          "candidate": "cast"
         },
         "needs": []
       }

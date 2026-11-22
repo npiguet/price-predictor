@@ -21,6 +21,7 @@ from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionO
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch
 from effects.domain.rule_detectors.acting_line import (
+    ability_kind,
     acting_line,
     apis_of,
     card_has_keyword,
@@ -60,7 +61,8 @@ from effects.domain.script_text import params as params_of
 EVENT_QUALIFIERS = frozenset({"source_dies"})
 QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | RECORD_QUALIFIERS | EVENT_QUALIFIERS
 #: The parameters that read the acting line or its source.
-LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "script_param", "chain_param",
+LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "candidate", "script_param",
+                         "chain_param",
                          "source_token_kind", "source_type", "acting_face",
                          "target_face_state"})
 #: Record filters read off the acting source and its targets (D4).
@@ -68,7 +70,7 @@ SOURCE_FILTERS = frozenset({"source_type", "acting_face", "target_face_state",
                             "half_outcome"})
 #: The family's own parameters; every other one is an event filter.
 OWN_PARAMS = frozenset({"event", "min_count", "api", "api_in_chain", "keyword",
-                        "source_keyword", "script_param", "chain_param", "absent",
+                        "source_keyword", "candidate", "script_param", "chain_param", "absent",
                         "token_kind", "source_token_kind"}) | QUALIFIERS | SOURCE_FILTERS
 #: The parameters naming the kind of ability, which scope a near miss.
 SCOPES = ("api", "keyword", "source_keyword")
@@ -181,6 +183,13 @@ def _source_keyword(wanted: str, record: EffectRecord, lines: SidecarLookup | No
     return card_has_keyword(record.ability or (), lines, wanted)
 
 
+def _candidate(wanted: str, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+    """The acting ability is its card's cast (``cast``) or an activated ability
+    (``activated``), as ``acting_line.ability_kind`` reads it: ``source_keyword``
+    is the card's, so without this every line of the card would speak."""
+    return ability_kind(record.ability or (), lines) == wanted
+
+
 def _source_token_kind(wanted: str, record: EffectRecord, lines: SidecarLookup | None) -> bool:
     return source_is_token_of_kind(record.state, wanted, record.ability)
 
@@ -224,6 +233,7 @@ def _acting_line_of(params: Mapping[str, Any]) -> RecordTest:
 _RECORD_TESTS = (
     (lambda params: bool(_line_tests_of(params)), _acting_line_of),
     (_named("source_keyword"), lambda params: partial(_source_keyword, params["source_keyword"])),
+    (_named("candidate"), lambda params: partial(_candidate, params["candidate"])),
     (_named("source_token_kind"),
      lambda params: partial(_source_token_kind, params["source_token_kind"])),
     (_given("source_type"), lambda params: partial(_source_type, params["source_type"].lower())),
@@ -338,7 +348,7 @@ class Qualified:
         if len(meeting) >= self.min_count:
             return FamilyMatch(Polarity.FIRES, True, condition_entities(record),
                                outcome_entities(record, meeting))
-        if not found.absence:
+        if not found.absence or not found.wanted:
             return None
         return self._near_side(record, found, [e for e, _ in read if e not in meeting])
 

@@ -1,7 +1,10 @@
 {
   "unit": "702.34",
   "verified": true,
-  "review": [],
+  "review": [
+    "task FR1, 2026-11-22: 702.34a-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)",
+    "task FR1, 2026-11-22: 702.34a-2: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
+  ],
   "skipped": [],
   "scenarios": [
     {
@@ -74,7 +77,8 @@
           "event": "zone_change",
           "from_zone": "stack",
           "to_zone": "exile",
-          "source_keyword": "Flashback"
+          "source_keyword": "Flashback",
+          "candidate": "cast"
         },
         "needs": []
       }
@@ -159,7 +163,8 @@
           "from_zone": "stack",
           "to_zone": "exile",
           "api": "Counter",
-          "source_keyword": "Flashback"
+          "source_keyword": "Flashback",
+          "candidate": "cast"
         },
         "needs": []
       }

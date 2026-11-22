@@ -2,7 +2,8 @@
   "unit": "702.131",
   "verified": true,
   "review": [
-    "702.131d: skip reason was false (an entering token can both raise the count to ten and meet a power-conditioned enters trigger); removed the skip and added 702.131d-1 with Illustrious Wanderglyph's Gnome and Garruk's Packleader."
+    "702.131d: skip reason was false (an entering token can both raise the count to ten and meet a power-conditioned enters trigger); removed the skip and added 702.131d-1 with Illustrious Wanderglyph's Gnome and Garruk's Packleader.",
+    "task FR1, 2026-11-22: 702.131a-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -91,7 +92,8 @@
           "event": "state_flag_change",
           "flag": "city_blessing",
           "value": true,
-          "source_keyword": "Ascend"
+          "source_keyword": "Ascend",
+          "candidate": "cast"
         },
         "needs": []
       }

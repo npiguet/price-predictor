@@ -2,7 +2,8 @@
   "unit": "702.133",
   "verified": true,
   "review": [
-    "702.133a-1: variant one_island only tested ordinary mana payment, not what jump-start decides; dropped it."
+    "702.133a-1: variant one_island only tested ordinary mana payment, not what jump-start decides; dropped it.",
+    "task FR1, 2026-11-22: 702.133a-2: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -172,7 +173,8 @@
           "event": "zone_change",
           "from_zone": "stack",
           "to_zone": "exile",
-          "source_keyword": "Jump-start"
+          "source_keyword": "Jump-start",
+          "candidate": "cast"
         },
         "needs": []
       }

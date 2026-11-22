@@ -8,7 +8,8 @@
     "301.5c-3: the does_not_fire variant moved Bonesplitter to Centaur Courser but kept Shock on Grizzly Bears, yet expected Courser to have 2 damage marked; changed the delta to Shock targeting Centaur Courser so the equipped creature stays and the expected outcome holds.",
     "301.5e-1: added a forge_note that Forge may leave Bonesplitter in the graveyard instead of returning it unattached.",
     "301.7a-1: removed an unobservable, inaccurate clause ('cannot be dealt damage as a creature') from the base expected.",
-    "301.5b-1: no one-fact change makes a cast Equipment enter attached; recorded in forge_notes that the contrast lives in 301.5e-1, and left the scenario without a does_not_fire variant."
+    "301.5b-1: no one-fact change makes a cast Equipment enter attached; recorded in forge_notes that the contrast lives in 301.5e-1, and left the scenario without a does_not_fire variant.",
+    "task FR1, 2026-11-22: 301.5b-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -340,6 +341,7 @@
           "event": "zone_change",
           "to_zone": "battlefield",
           "source_keyword": "Equip",
+          "candidate": "cast",
           "without_event": "attached"
         },
         "needs": []

@@ -2,7 +2,8 @@
   "unit": "702.43",
   "verified": true,
   "review": [
-    "702.43b: the skip claimed no Forge creature can have two instances of modular, but Blaster, Combat DJ grants modular 1 to Arcbound Worker, which already has it. Removed the skip and added scenario 702.43b-1."
+    "702.43b: the skip claimed no Forge creature can have two instances of modular, but Blaster, Combat DJ grants modular 1 to Arcbound Worker, which already has it. Removed the skip and added scenario 702.43b-1.",
+    "task FR1, 2026-11-22: 702.43a-2: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -192,7 +193,8 @@
         "params": {
           "event": "counter_change",
           "counter_type": "+1/+1",
-          "source_keyword": "Modular"
+          "source_keyword": "Modular",
+          "candidate": "cast"
         },
         "needs": []
       }

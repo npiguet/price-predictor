@@ -2,7 +2,8 @@
   "unit": "702.54",
   "verified": true,
   "review": [
-    "702.54c: skip reason was false (Bloodlord of Vaasgoth grants a second bloodthirst instance to a Vampire spell); replaced the skip with scenario 702.54c-1."
+    "702.54c: skip reason was false (Bloodlord of Vaasgoth grants a second bloodthirst instance to a Vampire spell); replaced the skip with scenario 702.54c-1.",
+    "task FR1, 2026-11-22: 702.54a-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -88,7 +89,8 @@
         "params": {
           "event": "counter_change",
           "counter_type": "+1/+1",
-          "source_keyword": "Bloodthirst"
+          "source_keyword": "Bloodthirst",
+          "candidate": "cast"
         },
         "needs": []
       }

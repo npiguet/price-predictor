@@ -15,6 +15,7 @@ fixture record.
 from __future__ import annotations
 
 from effects.domain.rule_catalogue import Polarity
+from effects.domain.rule_detectors.outcome_entities import outcome_entities
 from effects.domain.rule_detectors.outcome_event import FAMILY as OUTCOME
 from effects.domain.rule_detectors.outcome_event import acting_api
 from effects.domain.rule_detectors.resolution_outcome import FAMILY as RESOLUTION
@@ -32,6 +33,11 @@ def _effect_half(by_kind, sidecars, *, targeted: bool):
                 and acting_api(r, sidecars) is not None
                 and bool(r.state.refs.targets) == targeted
                 and not any(e.type.value == "token_created" for e in r.payload.events))
+
+
+def _is_card(record, entity_id) -> bool:
+    entity = record.state.entity(entity_id)
+    return entity is not None and entity.token_script_id is None
 
 
 def _no_token(record, sidecars, **params):
@@ -60,13 +66,30 @@ def test_an_absent_declaration_s_fires_side_names_the_acting_clause_s_targets(
     assert found.outcome == record.state.refs.targets
 
 
-def test_a_qualified_near_miss_with_no_such_event_names_its_controller(
+def test_a_qualified_near_miss_names_where_the_events_that_missed_fell(
+        by_kind, gen3_sidecars):
+    """A card's ``zone_change`` read for ``subject_is_token``: the event happened and
+    fails the qualifier, so the near miss names where it fell (task FR1: a qualified
+    near miss needs an event of the declared type; without one it is no near miss)."""
+    record = next(r for r in by_kind("resolution")
+                  if r.moment.value == "resolution" and r.mode.value == "patched"
+                  and acting_api(r, gen3_sidecars) is not None
+                  and any(e.type.value == "zone_change" and outcome_entities(r, [e])
+                          and all(_is_card(r, s) for s in e.subjects) for e in r.payload.events))
+    params = {"event": "zone_change", "api": acting_api(record, gen3_sidecars),
+              "subject_is_token": True}
+    found = OUTCOME.match(record, gen3_sidecars, params)
+    assert found.polarity is DOES_NOT_FIRE
+    missed = [e for e in record.payload.events if e.type.value == "zone_change"
+              and e.subjects and all(_is_card(record, s) for s in e.subjects)]
+    assert found.outcome == outcome_entities(record, missed)
+
+
+def test_a_qualified_declaration_finds_no_near_miss_on_a_record_without_its_event(
         by_kind, gen3_sidecars):
     record = _effect_half(by_kind, gen3_sidecars, targeted=False)
     params = _no_token(record, gen3_sidecars, subject_is_token=True)
-    found = OUTCOME.match(record, gen3_sidecars, params)
-    assert found.polarity is DOES_NOT_FIRE
-    assert found.outcome == (record.actor_player,)
+    assert OUTCOME.match(record, gen3_sidecars, params) is None
 
 
 def test_a_resolution_outcome_near_miss_names_the_stack_object(by_kind):

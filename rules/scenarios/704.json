@@ -10,7 +10,8 @@
     "704.5t: triage marked it out_of_scope though venture cards and dungeons are playable in a Forge two-player game; reclassified as mechanical/needs_new_fields and added scenario 704.5t-1.",
     "704.5v: the skip reason was wrong, since countering the Siege's defeat trigger isolates the graveyard branch; replaced the skip with scenario 704.5v-1 (Lightning Bolt then Stifle).",
     "704.5y: the skip reason was wrong, since gaining control of a Siege makes its protector illegal in a two-player game; replaced the skip with scenario 704.5y-1 (Confiscate) and set the triage record kind to playability.",
-    "704.5x: skip reason reworded to the actual reason (protector assigned on entry, no effect makes a permanent become a battle)."
+    "704.5x: skip reason reworded to the actual reason (protector assigned on entry, no effect makes a permanent become a battle).",
+    "task FR1, 2026-11-22: 704.5aa-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [
     {
@@ -1758,7 +1759,8 @@
         "near_miss": "A resolution of such a permanent leaves its controller's speed unchanged, the player having speed already.",
         "params": {
           "event": "speed_changed",
-          "source_keyword": "Start your engines"
+          "source_keyword": "Start your engines",
+          "candidate": "cast"
         },
         "needs": []
       }

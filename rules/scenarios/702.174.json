@@ -3,7 +3,10 @@
   "verified": true,
   "review": [
     "702.174e-1: expected outcomes said only Grizzly Bears gains hexproof and indestructible, but Dawn's Truce affects every permanent A controls; rewrote both expected outcomes to include the Plains.",
-    "702.174g-1: both libraries were empty while play continued through B's turns, so B would lose drawing from an empty library (704.5b) before the extra turn could be observed; gave A two Plains and B three Islands in library and added Island to cards."
+    "702.174g-1: both libraries were empty while play continued through B's turns, so B would lose drawing from an empty library (704.5b) before the extra turn could be observed; gave A two Plains and B three Islands in library and added Island to cards.",
+    "task FR1, 2026-11-22: 702.174a-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)",
+    "task FR1, 2026-11-22: 702.174e-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)",
+    "task FR1, 2026-11-22: 702.174h-1: the detector reads candidate cast only: source_keyword is the card's, so an Equip or Enchant activation, a granted static or a trigger of the card was read for the cast the rule is about (finding 7.3, CPC1 D-1)"
   ],
   "skipped": [],
   "scenarios": [
@@ -79,7 +82,8 @@
         "params": {
           "event": "token_created",
           "token_kind": "Food",
-          "source_keyword": "Gift"
+          "source_keyword": "Gift",
+          "candidate": "cast"
         },
         "needs": []
       }
@@ -447,7 +451,8 @@
         "near_miss": "A gift spell resolving and drawing no card.",
         "params": {
           "event": "card_drawn",
-          "source_keyword": "Gift"
+          "source_keyword": "Gift",
+          "candidate": "cast"
         },
         "needs": []
       }
@@ -684,7 +689,8 @@
         "params": {
           "event": "token_created",
           "token_kind": "Treasure",
-          "source_keyword": "Gift"
+          "source_keyword": "Gift",
+          "candidate": "cast"
         },
         "needs": []
       }
