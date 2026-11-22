@@ -5,7 +5,8 @@
     "104.2b-1: A's library was empty, so the one_short variant would end with A losing in the draw step; added a Plains to A's library.",
     "104.3e-1: Phage the Untouchable costs {3}{B}{B}{B}{B} (seven mana), not six; A now has seven Swamps and the cast_from_hand variant taps seven.",
     "104.4c-1: the draw is a separate 'when you remove the last counter' trigger, not part of the upkeep trigger's resolution; added that step to decisions and expected, and noted Forge folds it into one resolution. Added a Plains to A's library so the two_counters variant does not end with A decking.",
-    "104.6-1: both libraries were empty, so per 727.3 both players would lose in the new game's first upkeep after drawing seven from a short library; notes now give each player a 40-card library, and the base expected says Grizzly Bears enters just before the first untap step (727.4)."
+    "104.6-1: both libraries were empty, so per 727.3 both players would lose in the new game's first upkeep after drawing seven from a short library; notes now give each player a 40-card library, and the base expected says Grizzly Bears enters just before the first untap step (727.4).",
+    "104.2a-2 (added by task F04, 2026-11-22): checked against 104.2a, 704.5a and Hill Giant's script (a vanilla 3/3); no change."
   ],
   "skipped": [
     {
