@@ -139,7 +139,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.field_types import FieldType
 from effects.domain.grid_edits import CellRead, TextOverride
-from effects.domain.head_decoding import HeadReading, direction_balance, expected_magnitude
+from effects.domain.head_decoding import HeadReading, expected_magnitude, nonzero_direction_balance
 from effects.domain.loss_floor import constant_predictor_losses
 from effects.domain.probe_readouts import READOUTS, item_score
 from effects.domain.rule_mask import (
@@ -516,7 +516,7 @@ class _RecordFieldDecoder(_Decoder):
             return torch.sigmoid(members[..., 0])
         value = expected_magnitude(_Magnitude(spec.type), members)
         if spec.type.has_direction:
-            value = direction_balance(_Magnitude(spec.type), members) * value
+            value = nonzero_direction_balance(_Magnitude(spec.type), members) * value
         return value.sum(-1, keepdim=True)
 
     def record_indicators(self, record):

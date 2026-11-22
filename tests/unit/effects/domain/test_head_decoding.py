@@ -9,11 +9,12 @@ import torch
 
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, PER_ENTITY_WIDTH
 from effects.domain.head_decoding import (
-    direction_balance,
     expected_magnitude,
     field_outputs,
     magnitude_log_rate,
+    nonzero_direction_balance,
 )
+from tests.unit.effects.domain.signed_delta_fit_support import OPTIMUM_TARGETS, fitted_columns
 
 
 def test_a_count_s_magnitude_is_its_only_column():
@@ -31,10 +32,10 @@ def test_a_signed_delta_s_magnitude_is_its_last_column():
     assert float(expected_magnitude(spec, slice_)) == pytest.approx(5.0)
 
 
-def test_direction_balance_is_positive_minus_negative():
+def test_nonzero_direction_balance_is_positive_minus_negative():
     spec = FIELDS_BY_NAME["life_delta"]
     slice_ = torch.tensor([-10.0, -10.0, 10.0, 0.0])
-    assert float(direction_balance(spec, slice_)) == pytest.approx(1.0, abs=1e-6)
+    assert float(nonzero_direction_balance(spec, slice_)) == pytest.approx(1.0, abs=1e-6)
 
 
 def test_decoding_works_over_leading_dimensions():
@@ -48,7 +49,7 @@ def test_a_field_without_a_magnitude_is_refused():
     with pytest.raises(ValueError, match="no magnitude"):
         magnitude_log_rate(spec, torch.zeros(spec.width))
     with pytest.raises(ValueError, match="no direction"):
-        direction_balance(spec, torch.zeros(spec.width))
+        nonzero_direction_balance(spec, torch.zeros(spec.width))
 
 
 # ── HeadReading: one entity's output, read the way the head was trained ────
@@ -129,34 +130,16 @@ class TestSignedDeltaAtTheLossOptimum:
     @staticmethod
     def _fitted_expectation(targets: list[float]) -> float:
         from effects.domain.effect_head_layout import FIELD_SLICES
-        from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
         from effects.domain.head_decoding import HeadReading
 
-        spec = FIELDS_BY_NAME["life_delta"]
-        kind = FIELD_KINDS[spec.type]
-        target = torch.tensor(targets)
-        scoring = FieldScoring(arity=1, cap=None, log_dispersion=torch.zeros(()))
-        columns = torch.zeros(4, requires_grad=True)
-        optimiser = torch.optim.LBFGS(
-            [columns], lr=1.0, max_iter=500, tolerance_grad=1e-10,
-            tolerance_change=1e-14, line_search_fn="strong_wolfe",
-        )
-
-        def closure():
-            optimiser.zero_grad()
-            loss = kind.loss(columns.expand(len(targets), 4), target, scoring)
-            loss.backward()
-            return loss
-
-        optimiser.step(closure)
         vector = _outputs(20.0)
         start, end = FIELD_SLICES["life_delta"]
-        vector[start:end] = columns.detach()
+        vector[start:end] = fitted_columns(targets)
         return float(HeadReading(vector).expected("life_delta"))
 
     @pytest.mark.parametrize(
         ("targets", "expected"),
-        [([0, 0, 2, 2], 1.0), ([0, 0, 0, 3], 0.75), ([0, -1, -1, -1], -0.75)],
+        OPTIMUM_TARGETS,
     )
     def test_the_decode_is_the_mean_of_the_targets(self, targets, expected):
         got = self._fitted_expectation([float(t) for t in targets])

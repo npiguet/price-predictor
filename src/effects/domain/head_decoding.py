@@ -39,17 +39,6 @@ def expected_magnitude(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
     return torch.exp(magnitude_log_rate(spec, slice_))
 
 
-def direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
-    """``P(positive) − P(negative)`` of a signed delta, in ``[-1, 1]``."""
-    if not spec.type.has_direction:
-        raise ValueError(f"{spec.name} is a {spec.type} field and has no direction")
-    probabilities = torch.softmax(slice_[..., SIGNED_DIRECTIONS], dim=-1)
-    return (
-        probabilities[..., DIRECTIONS.index(Direction.POSITIVE)]
-        - probabilities[..., DIRECTIONS.index(Direction.NEGATIVE)]
-    )
-
-
 def nonzero_direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
     """``(P(+) − P(−)) / (P(+) + P(−))`` of a signed delta, in ``[-1, 1]``: the
     sign's lean among the non-zero outcomes, the zero class left out."""
