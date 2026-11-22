@@ -1081,22 +1081,32 @@ def has_detector(scenario):
 #: intervention's or a protection fork's record re-records a moment of its
 #: live game, a combat once per probe (F01).
 FORK_SOURCE = "fork"
+#: The sources the list is decided from: the natural records alone. A
+#: directed fork's records (``aimed``) are the forks' own, so a rule whose
+#: side only they show would read as covered, leave the list and stop the
+#: forks that make them (F15).
+DECIDING_SOURCES = frozenset({"forge_ai", "random_seat"})
 
 
-def side_records(by_source):
-    """One side's records over every source but ``fork``."""
-    return sum(n for source, n in by_source.items() if source != FORK_SOURCE)
+def side_records(by_source, sources=None):
+    """One side's records over ``sources``; every source but ``fork`` where None."""
+    return sum(n for source, n in by_source.items() if _summed(source, sources))
 
 
-def rule_counts(counts, rule, scenarios):
-    """``(fires, does_not_fire)`` over every source but ``fork``, or None
-    where the counts cannot speak for the rule. The counts list only rules
-    some record tagged, so a rule they omit has none of either when a
-    detector of its tags records; one not countable, declared ``none``, or
-    with no detector is not shown by them at all."""
+def _summed(source, sources):
+    return source != FORK_SOURCE if sources is None else source in sources
+
+
+def rule_counts(counts, rule, scenarios, sources=None):
+    """``(fires, does_not_fire)`` over ``sources`` (every source but ``fork``
+    where None), or None where the counts cannot speak for the rule. The
+    counts list only rules some record tagged, so a rule they omit has none
+    of either when a detector of its tags records; one not countable,
+    declared ``none``, or with no detector is not shown by them at all."""
     found = counts["rules"].get(rule)
     if found is not None:
-        return (side_records(found.get(FIRES, {})), side_records(found.get(DOES_NOT_FIRE, {})))
+        return (side_records(found.get(FIRES, {}), sources),
+                side_records(found.get(DOES_NOT_FIRE, {}), sources))
     if rule in counts["not_countable"] or rule in counts["none"]:
         return None
     return (0, 0) if any(has_detector(s) for s in scenarios) else None
@@ -1137,23 +1147,26 @@ def counted_sides(variants):
 
 
 def directed_rules(counts, by_rule, sides):
-    """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
-    variants, by_counts, sides}``; ``by_counts`` is False for a rule listed only
-    as one of ``ALWAYS_DIRECTED``; ``sides`` are the counted polarities of the
-    rule's registered variants, ``sides`` being ``registered_sides``. A rule of
+    """The rules FR-014b enables, in unit order: ``rule -> {counts, natural,
+    lacking, variants, by_counts, sides}``; ``counts`` are over every source
+    but ``fork``, ``natural`` over ``DECIDING_SOURCES``, which decide
+    ``lacking``; ``by_counts`` is False for a rule listed only as one of
+    ``ALWAYS_DIRECTED``; ``sides`` are the counted polarities of the rule's
+    registered variants, ``sides`` being ``registered_sides``. A rule of
     ``NOT_DIRECTED`` or one no variant is registered for is never listed."""
     out = {}
     for rule, scenarios in by_rule.items():
         if rule in NOT_DIRECTED or not sides.get(rule):
             continue
-        found = rule_counts(counts, rule, scenarios)
-        lacking = lacking_polarities(*found) if found is not None else set()
+        natural = rule_counts(counts, rule, scenarios, DECIDING_SOURCES)
+        lacking = lacking_polarities(*natural) if natural is not None else set()
         by_counts = bool(lacking)
         if not by_counts and rule not in ALWAYS_DIRECTED:
             continue
         variants = forkable_variants(scenarios, lacking, sides[rule])
         if variants:
-            out[rule] = {"counts": found, "lacking": lacking, "variants": variants,
+            out[rule] = {"counts": rule_counts(counts, rule, scenarios), "natural": natural,
+                         "lacking": lacking, "variants": variants,
                          "by_counts": by_counts, "sides": counted_sides(sides[rule])}
     return dict(sorted(out.items(), key=lambda item: (unit_sort_key(rule_unit(item[0])),
                                                       rule_sort_key(item[0]))))
@@ -1271,7 +1284,7 @@ def cmd_directed_rules(args):
     (rules_dir / "coverage-wording-cards.txt").write_text(
         "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
     for rule, row in chosen.items():
-        fires, does_not_fire = row["counts"] if row["counts"] is not None else ("?", "?")
+        fires, does_not_fire = row["natural"] if row["natural"] is not None else ("?", "?")
         why = ", ".join(sorted(({"rare"} if FIRES in row["lacking"] else set())
                                | ({"one-sided"} if DOES_NOT_FIRE in row["lacking"] else set())))
         print(f"{rule:12s} fires {fires:>9} does_not_fire {does_not_fire:>9}  {why or 'always'}")

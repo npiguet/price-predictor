@@ -40,7 +40,7 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 - A tag whose outcome is an absence names condition entities only. A `trigger` record's tags name no outcome entity, because the trigger's effect arrives as its resolution's record.
 - The hard rule mask's gate trains at both roles. A rule test reads at the outcome entities.
 - A tag whose `observed` disagrees with its polarity goes on the review list and is never a rule-test record.
-- `RuleSource` (`random_seat`, `forge_ai`, `aimed`, `fork`) is decided per record. `fork` is a probe's, an intervention's or a protection fork's record (`FORK_SOURCE_ORIGINS`), even one carrying `aimed_at`; it re-records a moment of its live game, so `directed-rules` and the budgets' `available` leave it out, or a combat would count once per probe.
+- `RuleSource` (`random_seat`, `forge_ai`, `aimed`, `fork`) is decided per record. `fork` is a probe's, an intervention's or a protection fork's record (`FORK_SOURCE_ORIGINS`), even one carrying `aimed_at`; it re-records a moment of its live game, so `directed-rules` and the budgets' `available` leave it out, or a combat would count once per probe. `directed-rules` decides the list from `forge_ai` and `random_seat` alone (`DECIDING_SOURCES` in `scripts/rules_catalogue.py`): counting the directed forks' own `aimed` records would take a rule off the list that makes them.
 
 ## `rule-counts`
 

@@ -820,7 +820,8 @@ and that the reporting half never enters the control score.
   rule's probability, which follows its counts under the directed-fork probability rule), and for every rule that gen-2's
   per-rule counts (`rule-counts` over the gen-2 shards; the part the list is decided from is checked
   in as `rules/directed-fork-counts.json`) show with fewer than 100 `fires` records
-  over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
+  over the natural sources (`forge_ai`, `random_seat`; `aimed` and `fork` records are left out), or
+  with no `does_not_fire` record there, and that has a non-base variant classified
   into an operation after the rerun of FR-003, except the rules of `NOT_DIRECTED`: 104.2a, 500.11,
   701.12d and 702.62d, whose forks no detector can tell from their live games; 121.4, 122.1g,
   703.4m and 701.42c, which restate 704.5b, 704.5v, 510.2 and 701.42b (704.5b and 510.2 listed in

@@ -244,6 +244,9 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
 - The counts a decision reads leave out fork records, so a combat re-run by its probes counts
   once: the directed-fork list (§ 6) and the records available to a rule in the rule budgets
   (§ 12.1). Fork records still train and are still written to the strata.
+- The directed-fork list is decided from the two natural sources alone. Aimed records are left
+  out of that decision too, because a directed fork's records would otherwise take its rule off
+  the list that makes them.
 - The corpus manifest of every gen-3 build carries the same per-rule counts.
 
 ## 5.3 Sources of rule records
