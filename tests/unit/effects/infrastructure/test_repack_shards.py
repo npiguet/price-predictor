@@ -177,14 +177,9 @@ def test_the_deal_is_the_in_memory_deal(tmp_path, runs, monkeypatch, groups):
     hundreds of files to get there.
     """
     monkeypatch.setattr(shard_io, "_GROUPS", groups)
-    seed, count = 7, 32
+    seed = 7
     lines = [line for part in runs for line in iter_shard_lines(part)]
-    expected: dict[int, list[str]] = defaultdict(list)
-    for line in lines:
-        game = parse_record_line(line)["game_id"]
-        expected[record_hash(game, seed=seed) % count].append(line)
-    for index, bucket in expected.items():
-        random.Random(f"{seed}:{index}").shuffle(bucket)
+    expected = _expected_deal(lines, seed=seed, count=32)
 
     written = repack_shards(
         runs, tmp_path / "out", shard_records=10, seed=seed, records=len(lines),
@@ -196,6 +191,18 @@ def test_the_deal_is_the_in_memory_deal(tmp_path, runs, monkeypatch, groups):
     assert [list(iter_shard_lines(p)) for p in written] == [
         expected[index] for index in sorted(expected)
     ]
+
+
+def _expected_deal(lines: list[str], *, seed: int, count: int) -> dict[int, list[str]]:
+    """Every line to ``hash(game_id) % count``, each bucket shuffled under
+    ``seed:index``."""
+    expected: dict[int, list[str]] = defaultdict(list)
+    for line in lines:
+        game = parse_record_line(line)["game_id"]
+        expected[record_hash(game, seed=seed) % count].append(line)
+    for index, bucket in expected.items():
+        random.Random(f"{seed}:{index}").shuffle(bucket)
+    return expected
 
 
 def test_no_parts_writes_nothing(tmp_path):
