@@ -668,9 +668,10 @@ and that the reporting half never enters the control score.
   [--variant-scripts DIR] [--rules-dir DIR] [--workers N]` (the middle three for the sidecars and
   catalogue the detectors read, defaulting as `build-corpus` does and to `rules`; `--cards-folder`
   repeatable, as on `build-corpus`; `--workers` the parallel shard readers) MUST count, per
-  rule, the records of each polarity, split into three sources: natural records of random-seat
-  games, natural records of games between two Forge AIs, and aimed records (those carrying
-  `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` and print them. It reads gen-3 records only and refuses a set
+  rule, the records of each polarity, split into four sources: natural records of random-seat
+  games, natural records of games between two Forge AIs, aimed records (those carrying
+  `aimed_at`, FR-009a, whatever their game), and fork records (a damage-step probe's, an
+  intervention's or a protection fork's, by `origin`, whatever their game and `aimed_at`). It MUST write them to `--output` and print them. It reads gen-3 records only and refuses a set
   of an older generation with exit 1. Beside the counts it MUST list the rules a
   taggable declaration speaks for that no record tags (`declared_zero`), the untaggable scenarios
   with their reasons (FR-002c) and the `same_as` scenarios with the scenarios and rules they are
@@ -1228,7 +1229,8 @@ and that the reporting half never enters the control score.
   script lines removed and added to make the variant's fact. `rules_catalogue.py validate` MUST
   refuse one whose card has no Forge script or whose removed line is not in it. `rule-counts` MUST
   write, per rule, its carriers: the script files of its tags' condition entities' cards, with the
-  lines its tags act through and their record counts.
+  lines its tags act through and their record counts; on a `playability` record, the candidate's
+  own card with its line, and a judged card only through the keyword line the detector names.
 - **FR-058g**: `collect-coverage` and `collect-variants` MUST exit 1 at startup without a holdout
   source (`--exclude-cards`, `--split-from` or `--training-corpus`); the steered round MUST exit 1
   without `--rule-counts` or on counts of gen-2 records. Both MUST exit 1 when they play rounds and
@@ -1287,9 +1289,9 @@ and that the reporting half never enters the control score.
   drops none: over the classes it holds, the class most over its share is written once a record,
   and each other class is repeated toward its share, at most `--reuse-cap` times a record; a
   class the mix omits is written once a record.
-- **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, three sources), per class
-  and rule the records available, share, written and shortfall, each split by polarity and by the
-  same three sources, for the training stratum and for each validation stratum, the one-sided conditions
+- **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, four sources), per class
+  and rule the records available (fork records left out), share, written and shortfall, each split
+  by polarity and by the same sources, for the training stratum and for each validation stratum, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
   and keyword lists of FR-052/FR-053; per class, the kept records collected as forks,
   interventions, directed forks, aimed or degraded, and the resolutions acting only through

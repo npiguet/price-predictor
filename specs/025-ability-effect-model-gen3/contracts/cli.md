@@ -78,7 +78,7 @@ and the count: 0 when every side has reached the count, 1 when a side has none, 
 | `--workers N` | 12, as `build-corpus` | parallel shard readers, 1 to 12 (exit 2, usage); never the CPU count |
 
 Prints one line per rule, grouped by unit: `fires` and `does_not_fire` counts, each split
-`random_seat / forge_ai / aimed`; then the rules declared `none` with their reasons, the rules not
+`random_seat / forge_ai / aimed / fork`; then the rules declared `none` with their reasons, the rules not
 countable on the records' generation, and the size of the review list; before them the rules
 declared with zero records, the untaggable scenarios with their reasons and the `same_as` scenarios
 with what they are counted under. The counts file lists a rule no record tags under

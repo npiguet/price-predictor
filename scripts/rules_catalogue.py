@@ -1077,15 +1077,26 @@ def has_detector(scenario):
     return declaration.get("family") in families()
 
 
+#: The source of ``rule-counts`` no count here sums: a probe's, an
+#: intervention's or a protection fork's record re-records a moment of its
+#: live game, a combat once per probe (F01).
+FORK_SOURCE = "fork"
+
+
+def side_records(by_source):
+    """One side's records over every source but ``fork``."""
+    return sum(n for source, n in by_source.items() if source != FORK_SOURCE)
+
+
 def rule_counts(counts, rule, scenarios):
-    """``(fires, does_not_fire)`` over all sources, or None where the counts
-    cannot speak for the rule. The counts list only rules some record tagged,
-    so a rule they omit has none of either when a detector of its tags
-    records; one not countable, declared ``none``, or with no detector is
-    not shown by them at all."""
+    """``(fires, does_not_fire)`` over every source but ``fork``, or None
+    where the counts cannot speak for the rule. The counts list only rules
+    some record tagged, so a rule they omit has none of either when a
+    detector of its tags records; one not countable, declared ``none``, or
+    with no detector is not shown by them at all."""
     found = counts["rules"].get(rule)
     if found is not None:
-        return (sum(found.get(FIRES, {}).values()), sum(found.get(DOES_NOT_FIRE, {}).values()))
+        return (side_records(found.get(FIRES, {})), side_records(found.get(DOES_NOT_FIRE, {})))
     if rule in counts["not_countable"] or rule in counts["none"]:
         return None
     return (0, 0) if any(has_detector(s) for s in scenarios) else None

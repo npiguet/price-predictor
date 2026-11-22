@@ -69,10 +69,14 @@ class RuleRow:
 
     ``available`` counts distinct tagged records and ``written`` their copies,
     natural and added, each by :class:`RuleSource`; ``added`` is the part of
-    ``written`` the budgets drew. ``share`` is the polarity's half, None on
-    ``other`` and on an unbudgeted rule, which draw none; ``shortfall`` is
-    ``max(0, share - written)``, zero where ``share`` is None. A half is filled
-    from every source alike, so ``share`` and ``shortfall`` are not split.
+    ``written`` the budgets drew. ``available`` leaves out ``fork``: a probe's,
+    an intervention's or a protection fork's record re-records a moment of
+    its live game, so a combat counts once however many probes re-ran it,
+    while every copy of such a record is written and counted in ``written``.
+    ``share`` is the polarity's half, None on ``other`` and on an unbudgeted
+    rule, which draw none; ``shortfall`` is ``max(0, share - written)``, zero
+    where ``share`` is None. A half is filled from every source alike, so
+    ``share`` and ``shortfall`` are not split.
     """
 
     available: dict[str, int]
@@ -121,7 +125,8 @@ class RuleBudgets:
     #: ``class -> budgeted rules whose halves stay unequal`` (FR-054a).
     one_sided: dict[str, tuple[str, ...]]
     #: ``rule -> polarity -> source -> distinct tagged records`` over every
-    #: class, for each tagged rule the map does not mark ``trained`` (FR-054).
+    #: class, ``fork`` left out as in ``RuleRow.available``, for each tagged
+    #: rule the map does not mark ``trained`` (FR-054).
     unbudgeted: dict[str, dict[str, dict[str, int]]]
 
     def added(self, game: str, record_hash: int) -> tuple[str, ...]:
@@ -166,26 +171,35 @@ def plan_rule_budgets(
             text_natural=dict((text_natural or {}).get(klass, {})),
         )
         plan.fill()
-        for index, drawn in plan.drawn.items():
-            record = plan.records[index]
-            copies.setdefault(record.game, {})[record.record_hash] = tuple(drawn)
+        _add_copies(copies, plan)
         rows[klass] = plan.rows()
         if plan.rules:
             shares[klass] = plan.share
         sided = plan.one_sided()
         if sided:
             one_sided[klass] = sided
-        for (rule, polarity, source), n in plan.available.items():
-            if rule not in budgeted:
-                unbudgeted[rule][polarity][source] += n
+        for (rule, polarity, source), n in plan.unbudgeted_available():
+            unbudgeted[rule][polarity][source] += n
     return RuleBudgets(
         copies=copies, rows=rows, shares=shares, one_sided=one_sided,
-        unbudgeted={
-            rule: {str(p): dict(sorted(by_source.items()))
-                   for p, by_source in sorted(by_polarity.items())}
-            for rule, by_polarity in sorted(unbudgeted.items())
-        },
+        unbudgeted=_sorted_counts(unbudgeted),
     )
+
+
+def _add_copies(copies: dict[str, dict[int, tuple[str, ...]]], plan: _ClassPlan) -> None:
+    """Each of the class's records with an added copy, under its game."""
+    for index, drawn in plan.drawn.items():
+        record = plan.records[index]
+        copies.setdefault(record.game, {})[record.record_hash] = tuple(drawn)
+
+
+def _sorted_counts(by_rule: Mapping[str, Mapping]) -> dict[str, dict[str, dict[str, int]]]:
+    """``rule -> polarity -> source -> records``, each level sorted."""
+    return {
+        rule: {str(p): dict(sorted(by_source.items()))
+               for p, by_source in sorted(by_polarity.items())}
+        for rule, by_polarity in sorted(by_rule.items())
+    }
 
 
 @dataclass(slots=True)
@@ -202,7 +216,7 @@ class _ClassPlan:
     #: Budgeted rules tagged in the class, sorted.
     rules: tuple[str, ...] = ()
     share: int = 0
-    #: ``(rule, polarity, source) -> distinct tagged records``.
+    #: ``(rule, polarity, source) -> distinct tagged records``, ``fork`` left out.
     available: Counter = field(default_factory=Counter)
     #: ``(rule, polarity, source) -> copies written``, natural then added.
     written: Counter = field(default_factory=Counter)
@@ -219,8 +233,10 @@ class _ClassPlan:
         }))
         self.share = self.target // len(self.rules) if self.rules else 0
         for record in self.records:
+            # A fork's record adds a zero, so its cell still gets a row.
+            counted = record.source is not RuleSource.FORK
             for rule, polarity in record.tags:
-                self.available[rule, polarity, record.source] += 1
+                self.available[rule, polarity, record.source] += counted
                 self.written[rule, polarity, record.source] += record.natural
                 self.totals[rule, polarity] += record.natural
 
@@ -318,6 +334,12 @@ class _ClassPlan:
             str(source): counts[rule, polarity, source]
             for source in RuleSource if counts[rule, polarity, source]
         }
+
+    def unbudgeted_available(self) -> list[tuple[tuple[str, Polarity, RuleSource], int]]:
+        """``((rule, polarity, source), records)`` of each rule not budgeted,
+        the counts above zero only (a fork's record adds none)."""
+        return [(cell, n) for cell, n in self.available.items()
+                if cell[0] not in self.budgeted and n]
 
     def one_sided(self) -> tuple[str, ...]:
         """Budgeted rules whose two halves end filled to different counts:

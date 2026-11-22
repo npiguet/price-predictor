@@ -831,7 +831,7 @@ def _rule_counts_parser(subparsers) -> None:
         "rule-counts",
         help=(
             "Count, per rule of the catalogue, the records showing each side of it, "
-            "split by random-seat, Forge-AI and aimed records"
+            "split by random-seat, Forge-AI, aimed and fork records"
         ),
     )
     parser.set_defaults(func=run_rule_counts)

@@ -81,7 +81,7 @@ from effects.domain.records import (
     acting_keys,
 )
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import RuleSource, RuleTag, TagResult
+from effects.domain.rule_detectors import RuleSource, RuleTag, TagResult, counts_as_fork
 from effects.domain.rule_output_carriage import carried_outputs
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
@@ -500,6 +500,8 @@ class _PendingRecord:
     tags: tuple[RuleTag, ...]
     #: Rule-test-eligible ``(rule, polarity)`` cells over budgeted rules.
     eligible: tuple[RuleCell, ...]
+    #: Counts under ``RuleSource.FORK`` (``counts_as_fork``).
+    fork: bool
     aimed: bool
     protection: tuple[str, ...]
     protection_hash: int
@@ -523,9 +525,9 @@ class _ShardSurveyor:
         )
         self.protection_rules = frozenset(config.budgeted) & PROTECTION_RULES
         self.pending: list[_PendingRecord] = []
-        #: ``(game, aimed, tags)`` of every tagged record read, refused ones
-        #: included, counted once the game's source is known.
-        self.counted: list[tuple[str, bool, tuple[RuleTag, ...]]] = []
+        #: ``(game, fork, aimed, tags)`` of every tagged record read, refused
+        #: ones included, counted once the game's source is known.
+        self.counted: list[tuple[str, bool, bool, tuple[RuleTag, ...]]] = []
 
     def observe(self, record: EffectRecord) -> None:
         self.out.records += 1
@@ -586,7 +588,8 @@ class _ShardSurveyor:
         counts.not_countable |= found.not_countable
         counts.review |= {(record.record_id, tag.scenario) for tag in found.review}
         if found.tags:
-            self.counted.append((record.game_id, record.aimed_at is not None, found.tags))
+            self.counted.append((record.game_id, counts_as_fork(record),
+                                 record.aimed_at is not None, found.tags))
             self._note_carried(record, found.tags)
         return found
 
@@ -630,6 +633,7 @@ class _ShardSurveyor:
                 (tag.rule, tag.polarity) for tag in found.tags
                 if tag.rule in self.config.budgeted and rule_test_eligible(record, tag)
             ),
+            fork=counts_as_fork(record),
             aimed=record.aimed_at is not None,
             protection=protection,
             protection_hash=context.protection_hash_of(record) if protection else 0,
@@ -672,8 +676,8 @@ class _ShardSurveyor:
 
     def finish(self) -> ShardSurvey:
         seat_games = self.out.games.random_seat
-        for game, aimed, tags in self.counted:
-            source = RuleSource.of(aimed=aimed, random_seat_game=game in seat_games)
+        for game, fork, aimed, tags in self.counted:
+            source = RuleSource.of(fork=fork, aimed=aimed, random_seat_game=game in seat_games)
             for tag in tags:
                 self.out.rule_counts.counts[tag.rule, str(tag.polarity), str(source)] += 1
         # The records the tags were read on: a cut game's are not.
@@ -721,7 +725,7 @@ class _ShardSurveyor:
             game=pending.game, record_hash=pending.value, klass=pending.klass,
             cell=pending.cell, keys=pending.keys,
             tags=tuple((tag.rule, tag.polarity) for tag in pending.tags),
-            source=RuleSource.of(aimed=pending.aimed,
+            source=RuleSource.of(fork=pending.fork, aimed=pending.aimed,
                                  random_seat_game=pending.game in seat_games),
             held_out_text=pending.acts_through_held_out_text,
             protection=pending.protection, protection_hash=pending.protection_hash,

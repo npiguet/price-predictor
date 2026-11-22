@@ -158,8 +158,8 @@ def missing_games(units: Mapping[str, VariantGames], target: int) -> dict[str, f
 
 @dataclass(frozen=True, slots=True)
 class ShortPair:
-    """A (rule, polarity) with fewer than ``--steer-floor`` records over all
-    three sources (FR-058c)."""
+    """A (rule, polarity) with fewer than ``--steer-floor`` records over every
+    source (FR-058c)."""
 
     rule: str
     polarity: Polarity

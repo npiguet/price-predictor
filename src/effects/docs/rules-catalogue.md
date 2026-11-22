@@ -40,11 +40,12 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 - A tag whose outcome is an absence names condition entities only. A `trigger` record's tags name no outcome entity, because the trigger's effect arrives as its resolution's record.
 - The hard rule mask's gate trains at both roles. A rule test reads at the outcome entities.
 - A tag whose `observed` disagrees with its polarity goes on the review list and is never a rule-test record.
-- `RuleSource` (`random_seat`, `forge_ai`, `aimed`) is decided per record.
+- `RuleSource` (`random_seat`, `forge_ai`, `aimed`, `fork`) is decided per record. `fork` is a probe's, an intervention's or a protection fork's record (`FORK_SOURCE_ORIGINS`), even one carrying `aimed_at`; it re-records a moment of its live game, so `directed-rules` and the budgets' `available` leave it out, or a combat would count once per probe.
 
 ## `rule-counts`
 
-- Writes `rule -> polarity -> source -> records` to `--output` (pass it: a file in an `inputs` run directory when a later run reads it, as the steered round does), with the rules declared without a detector, the uncountable ones, the review list and the per-rule `carriers`.
+- Writes `rule -> polarity -> source -> records` to `--output` (pass it: a file in an `inputs` run directory when a later run reads it, as the steered round does), with the rules declared without a detector, the uncountable ones, the review list and the per-rule `carriers`. Every source is written, `fork` included.
+- A `playability` record's carrier is the candidate's own card with its line, and a judged card only through the keyword line the rule names (`tag_carriers`): naming every judged entity's card makes `carriers` most of the file and gives the steered round no line to vary.
 - A rule with a taggable declaration that no record tags is listed under `declared_zero`. The file also lists `untaggable` (per scenario, why no record can show it) and `same_as`. Only a rule with no declaration is left out silently.
 - A gen-3 game whose shard holds no game-end marker counts toward no rule, review entry or carrier; `cut_games` says how many were left out.
 - It reads gen-3 shards only, as `scripts/rule_breadth.py` does; a set of an older generation is refused, naming it. The file's `generation` is what the steered variant round checks.

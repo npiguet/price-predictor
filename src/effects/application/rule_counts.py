@@ -4,6 +4,8 @@ Every record of a records set is tagged by the catalogue's detectors and
 counted under ``rule -> polarity -> source``. The source says where the record
 came from, which decides what it can be trusted for:
 
+- ``fork``: a probe's, an intervention's or a protection fork's record, which
+  re-records a moment of its live game, whatever else it carries;
 - ``aimed``: the record carries ``aimed_at`` (a directed fork, or a coverage or
   variant run aimed at rules), whatever its game;
 - ``random_seat``: a natural record of a game with a random seat;
@@ -12,12 +14,14 @@ came from, which decides what it can be trusted for:
 Per rule the counts also list its carriers (FR-058f), the cards the steered
 variant round edits: the script file of every card that is a condition entity
 of the rule's tags, with the lines the tags act through on it and the records
-of each. A line acted through is an acting key of the record (the acting line,
-or a decision's candidate) on the carrier's script; where none is, the
-carrier's keyword line of the keyword the tagging scenario's detector names,
-from the entity's lines or, where the snapshot lists none, from the carrier's
-sidecar. A card entity with no printed line names no script file and carries
-nothing.
+of each. A line acted through is an acting key of the record (the acting line)
+on the carrier's script; where none is, the carrier's keyword line of the
+keyword the tagging scenario's detector names, from the entity's lines or,
+where the snapshot lists none, from the carrier's sidecar. A card entity with
+no printed line names no script file and carries nothing. A legality record
+(``playability``) judges every entity of a list, so its carrier is the
+candidate's own card, with the candidate's line, and a judged card only
+through the keyword line the rule names.
 
 Shards are read once each, in parallel; a game never spans shards (a shard is
 one worker JVM's lifetime), so whether a game has a random seat, and whether a
@@ -45,9 +49,15 @@ from effects.application.parallel_map import run_parallel
 from effects.domain.game_ends import GameEnds
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
-from effects.domain.records import EffectRecord, acting_keys
+from effects.domain.records import EffectRecord, RecordKind, acting_keys
 from effects.domain.rule_catalogue import NoDetector, Polarity
-from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
+from effects.domain.rule_detectors import (
+    DetectorIndex,
+    RuleSource,
+    RuleTag,
+    counts_as_fork,
+    tag_record,
+)
 from effects.domain.shard_generation import ShardGeneration
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 from effects.infrastructure.shard_io import DecodeTally
@@ -193,30 +203,68 @@ def scenario_keywords(catalogue) -> dict[str, str]:
     return found
 
 
+#: ``(script file, key)`` pairs: a carrier's card under key None, each line
+#: acted through on it under its key.
+Carried = set[tuple[str, ProvenanceKey | None]]
+
+
 def tag_carriers(
     record: EffectRecord, tag: RuleTag, keywords: dict[str, str],
     sidecars: SidecarLookup | None = None,
-) -> set[tuple[str, ProvenanceKey | None]]:
+) -> Carried:
     """``(script file, key)`` of the carriers ``tag`` names in ``record``:
-    each condition entity's card with key None, and each line the tag acts
-    through on it (see the module's docstring)."""
+    each carrier's card with key None, and each line the tag acts through on
+    it (see the module's docstring)."""
+    keyword = _KeywordLines(keywords.get(tag.scenario), sidecars)
+    if record.kind is RecordKind.PLAYABILITY:
+        return _legality_carriers(record, tag, keyword)
     acting = acting_keys(record)
-    keyword = keywords.get(tag.scenario)
-    found: set[tuple[str, ProvenanceKey | None]] = set()
-    for entity_id in tag.condition:
-        entity = record.state.entity(entity_id)
-        if entity is None or not entity.printed:
-            continue
-        script_file = entity.printed[0].script_file
+    found: Carried = set()
+    for entity, script_file in _printed_cards(record, tag.condition):
+        through = ([key for key in acting if key.script_file == script_file]
+                   or keyword.keys(entity, script_file))
         found.add((script_file, None))
-        through = [key for key in acting if key.script_file == script_file]
-        if not through and keyword is not None:
-            through = [
-                key for line in entity.keyword_lines if line.keyword == keyword
-                for key in line.keys if key.script_file == script_file
-            ] or _sidecar_keyword_keys(sidecars, script_file, keyword)
         found.update((script_file, key) for key in through)
     return found
+
+
+def _legality_carriers(record: EffectRecord, tag: RuleTag, keyword: _KeywordLines) -> Carried:
+    """A legality record's carriers: the candidate's own card with its line,
+    and a judged card only through the keyword line the rule names."""
+    found: Carried = {(key.script_file, line)
+                      for key in acting_keys(record) for line in (None, key)}
+    for entity, script_file in _printed_cards(record, tag.condition):
+        through = keyword.keys(entity, script_file)
+        if through:
+            found.add((script_file, None))
+            found.update((script_file, key) for key in through)
+    return found
+
+
+def _printed_cards(record: EffectRecord, entity_ids):
+    """``(entity, script file)`` of each of ``entity_ids`` with a printed line."""
+    for entity_id in entity_ids:
+        entity = record.state.entity(entity_id)
+        if entity is not None and entity.printed:
+            yield entity, entity.printed[0].script_file
+
+
+@dataclass(frozen=True)
+class _KeywordLines:
+    """The keyword a tagging scenario's detector names, looked for on a carrier."""
+
+    keyword: str | None
+    sidecars: SidecarLookup | None
+
+    def keys(self, entity, script_file: str) -> list[ProvenanceKey]:
+        """The keys of the entity's keyword lines of the keyword on its own
+        script, else of its sidecar's; none where no keyword is named."""
+        if self.keyword is None:
+            return []
+        return [
+            key for line in entity.keyword_lines if line.keyword == self.keyword
+            for key in line.keys if key.script_file == script_file
+        ] or _sidecar_keyword_keys(self.sidecars, script_file, self.keyword)
 
 
 def _sidecar_keyword_keys(
@@ -270,7 +318,8 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
             continue
         out.review |= found.review
         out.carriers.update(found.carried)
-        source = RuleSource.of(aimed=found.aimed, random_seat_game=found.game_id in seat_games)
+        source = RuleSource.of(fork=found.fork, aimed=found.aimed,
+                               random_seat_game=found.game_id in seat_games)
         for tag in found.tags:
             out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
     out.decode = take_decode_tally()
@@ -294,6 +343,7 @@ class _Pending:
     """What one record adds, held until its game is known to have ended."""
 
     game_id: str
+    fork: bool
     aimed: bool
     tags: tuple
     review: frozenset
@@ -318,7 +368,8 @@ def _count_records(records, by_game: _GameReads, index, sidecars, keywords,
             for script_file, key in tag_carriers(record, tag, keywords, sidecars)
         )
         if result.tags or review:
-            pending.append(_Pending(record.game_id, record.aimed_at is not None,
+            pending.append(_Pending(record.game_id, counts_as_fork(record),
+                                    record.aimed_at is not None,
                                     tuple(result.tags), review, carried))
 
 

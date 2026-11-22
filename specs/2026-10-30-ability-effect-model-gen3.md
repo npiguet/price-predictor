@@ -236,9 +236,14 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
   `rule-counts` (§ 15).
 - Per rule, the counts separate records in which the rule's effect happens from records
   in which it does not.
-- Each count is split into three sources: natural records of random-seat games, natural
-  records of games between two Forge AIs, and aimed records (§ 5.3), whatever their game.
-  A gen-2 record is natural.
+- Each count is split into four sources: natural records of random-seat games, natural
+  records of games between two Forge AIs, aimed records (§ 5.3), and fork records, each of
+  the last two whatever its game. A gen-2 record is natural.
+- A fork record is the record of a damage-step probe, an intervention or a protection fork.
+  It is a fork record even when it carries `aimed_at`. A directed fork's record is aimed.
+- The counts a decision reads leave out fork records, so a combat re-run by its probes counts
+  once: the directed-fork list (§ 6) and the records available to a rule in the rule budgets
+  (§ 12.1). Fork records still train and are still written to the strata.
 - The corpus manifest of every gen-3 build carries the same per-rule counts.
 
 ## 5.3 Sources of rule records
@@ -708,7 +713,7 @@ Steered round
   `rule-counts` over its own shards.
 - A short pair is a rule the rules-to-fields map marks `trained` (§ 7) with a declared
   detector, and a polarity, `fires` or `does_not_fire`, with fewer than `--steer-floor`
-  records over all three sources (§ 5.2). A rule no record tags is short in both
+  records over every source of § 5.2. A rule no record tags is short in both
   polarities.
 - A pair's carriers are the cards its rule's scenarios name, and the cards whose lines are
   condition entities of the rule's tags in the counted records, as `rule-counts` lists them
@@ -1091,8 +1096,9 @@ The verdict head gains a column for `timing` and one for each identifier of
   entities in both roles (§ 5.1). A copy within the natural share carries none. A rule tag is a detector's output on a record; a drawn rule is the rule
   one added copy was drawn for.
 - The manifest records, per class, rule and polarity, the records available, the share,
-  the records written and the shortfall, each split by the three sources of § 5.2, and
-  names every rule whose two sides stay unequal in a class.
+  the records written and the shortfall, each split by the sources of § 5.2, and
+  names every rule whose two sides stay unequal in a class. The records available leave out
+  fork records; the records written count their copies.
 
 ## 12.2 Condition balance
 
@@ -1388,7 +1394,9 @@ python -m effects collect-variants
 
 `rule-counts` also lists, per rule, the carriers of § 8.15: the script files of the cards
 whose lines are its tags' condition entities, with the lines its tags act through, each
-with its record count.
+with its record count. On a `playability` record the carrier is the candidate's own card
+with the candidate's line, and a judged card is a carrier only through the keyword line the
+rule's detector names.
 
 `collect-variants` takes `--directed-fork-rules`, `--directed-forks-per-game` and
 `--directed-fork-probability` as `match-outcomes` does.
@@ -1434,7 +1442,7 @@ Printed output
 - A collecting run prints its dropped-event counts by event type and engine phase when it
   ends, under `--count-dropped-events`.
 - `rule-counts` prints, per rule, the records in which its effect happens and does not,
-  split by the three sources of § 5.2.
+  split by the four sources of § 5.2.
 - Each training epoch line carries each stratum's score and its components, and the
   control score; the line after it gives the control score's seconds against the epoch's
   training seconds.

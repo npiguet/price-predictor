@@ -101,7 +101,8 @@ The manifest stores `{rule → RuleMapEntry}` and `rule_map_digest`, and `effect
 ### RuleSource (enum, new)
 
 `random_seat` (natural, game has a random seat), `forge_ai` (natural, two Forge AIs), `aimed` (record
-carries `aimed_at`). A gen-2 record is natural.
+carries `aimed_at`), `fork` (`origin` is `probe`, `forced` or `protection_fork`, whatever else the
+record carries). A gen-2 record is natural.
 
 ### RuleCounts (new; `rule-counts.json` and the manifest)
 

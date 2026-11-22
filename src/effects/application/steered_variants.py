@@ -4,7 +4,7 @@ is short of (root spec § 8.15, FR-058c, FR-058d).
 The round reads ``--rule-counts``, the gen-3 counts of the corpus being
 collected, and finds the short pairs: a rule the rules-to-fields map marks
 ``trained`` with a declared detector, and a polarity with fewer than
-``--steer-floor`` records over all three sources. Each pair takes
+``--steer-floor`` records over every source. Each pair takes
 ``--steer-variants`` × its shortfall ÷ the summed shortfall variants, at least
 one, made on its carriers: the cards the rule's scenarios name and the cards
 ``rule-counts`` lists as its carriers, none held out or multi-faced. A carrier

@@ -449,8 +449,27 @@ def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey
     counts = survey.totals.rule_counts
     assert counts.records == survey.totals.records == GEN3_FIXTURE_RECORDS
     assert counts.counts
-    assert {source for (_rule, _polarity, source) in counts.counts} <= {
-        "forge_ai", "random_seat", "aimed"}
+    assert {source for (_rule, _polarity, source) in counts.counts} == {
+        "forge_ai", "random_seat", "aimed", "fork"}
+
+
+def test_the_survey_s_rule_counts_are_rule_counts_own_forks_apart(gen3_survey, tmp_path):
+    """F01: the manifest's counts and ``rule-counts`` put a probe's, an
+    intervention's and a protection fork's record under ``fork`` alike."""
+    import shutil
+
+    from effects.application.rule_counts import RuleCountsConfig, count
+    from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+
+    survey, _config = gen3_survey
+    (tmp_path / "records").mkdir()
+    shutil.copyfile(GEN3_RECORDS, tmp_path / "records" / GEN3_RECORDS.name)
+    counted, _standing = count(RuleCountsConfig(
+        records_dir=tmp_path / "records", output=tmp_path / "rule-counts.json",
+        rules_dir=Path("rules"), workers=1,
+        sidecar_roots={"cardsfolder": GEN3_SIDECAR_FOLDERS[0],
+                       "tokenscripts": GEN3_SIDECAR_FOLDERS[1]}))
+    assert survey.totals.rule_counts.counts == counted.counts
 
 
 def test_candidates_are_forge_ai_games_with_their_inventories(gen3_survey):
@@ -472,12 +491,13 @@ def test_candidates_are_forge_ai_games_with_their_inventories(gen3_survey):
 def test_training_records_kept_for_the_budgets_are_tagged(gen3_survey):
     """Only random-seat games train outright here; each tagged record of one
     is kept with its tags and the source the rule counts give it: the random
-    seat, or ``aimed`` for a directed fork such a game took."""
+    seat, ``aimed`` for a directed fork such a game took, or ``fork`` for a
+    probe's, an intervention's or a protection fork's record."""
     survey, _config = gen3_survey
     tagged = survey.totals.tagged
     assert tagged
     assert all(record.tags or record.protection for record in tagged)
-    assert {record.source for record in tagged} == {"random_seat", "aimed"}
+    assert {record.source for record in tagged} == {"random_seat", "aimed", "fork"}
 
 
 def test_the_closed_lists_are_what_effects_grant_or_remove(gen3_survey):

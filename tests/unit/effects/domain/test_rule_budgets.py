@@ -168,6 +168,33 @@ def test_rows_split_available_and_written_by_source():
     assert row.shortfall == 0
 
 
+def test_a_fork_record_is_written_and_left_out_of_available():
+    """F01: a probe re-records its live combat, so the records available to
+    a rule count the combat once; its copies are written all the same."""
+    records = (make(2, ("x", FIRES), natural=1)
+               + make(3, ("x", FIRES), start=2, natural=1, source=RuleSource.FORK))
+    row = plan(records, target=6).rows[KLASS]["x"]["fires"]
+    assert row.available == {"forge_ai": 2}
+    assert row.written == {"forge_ai": 2, "fork": 3}
+
+
+def test_a_side_only_forks_show_keeps_its_row():
+    """Deathtouch's near miss is a probe that strips it: the side has no
+    record available and its probes' copies written."""
+    records = (make(2, ("x", FIRES), natural=1)
+               + make(3, ("x", NOT), start=2, natural=1, source=RuleSource.FORK))
+    row = plan(records, target=6).rows[KLASS]["x"]["does_not_fire"]
+    assert row.available == {}
+    assert row.written == {"fork": 3}
+
+
+def test_an_unbudgeted_rule_s_available_records_leave_out_forks():
+    records = (make(2, ("y", NOT), natural=1)
+               + make(4, ("y", NOT), start=2, natural=1, source=RuleSource.FORK))
+    budgets = plan(records, budgeted=set())
+    assert budgets.unbudgeted == {"y": {"does_not_fire": {"forge_ai": 2}}}
+
+
 def test_classes_are_budgeted_apart():
     records = make(4, ("x", FIRES)) + make(4, ("x", FIRES), start=4, klass="combat")
     budgets = plan_rule_budgets(

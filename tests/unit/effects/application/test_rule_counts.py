@@ -95,10 +95,12 @@ def test_the_fixture_s_deaths_are_counted_per_side(tmp_path, gen3_dir):
     assert document["rules"]["704.5f"] == {
         "fires": {"forge_ai": 3, "random_seat": 2}, "does_not_fire": {"forge_ai": 1}}
     assert document["rules"]["704.5g"] == {"fires": {"forge_ai": 5, "random_seat": 2}}
-    assert document["rules"]["702.2b"] == {"does_not_fire": {"forge_ai": 2}}
+    # Deathtouch's near misses are the damage-step probes that strip it.
+    assert document["rules"]["702.2b"] == {"does_not_fire": {"fork": 2}}
+    # Five of the decisions are protection forks' re-recordings of a live one.
     assert document["rules"]["601.2"] == {
-        "fires": {"aimed": 1, "forge_ai": 11, "random_seat": 8},
-        "does_not_fire": {"aimed": 3, "forge_ai": 8, "random_seat": 14}}
+        "fires": {"aimed": 1, "forge_ai": 9, "fork": 3, "random_seat": 7},
+        "does_not_fire": {"aimed": 3, "forge_ai": 6, "fork": 2, "random_seat": 14}}
 
 
 def test_the_fixture_holds_every_source(tmp_path, gen3_dir):
@@ -218,7 +220,7 @@ def test_a_record_carrying_aimed_at_counts_as_aimed_even_when_empty(
     every = list(read_shard(gen3_dir / GEN3.name))
     seat_games = {record.game_id for record in every if record.random_seat}
     records = [replace(record, aimed_at=aimed_at) for record in every
-               if record.game_id not in seat_games and record.directed is None]
+               if record.game_id not in seat_games and not record.fork]
     shard = tmp_path / "aimed" / GEN3.name
     write_shard(shard, records)
 
@@ -358,3 +360,127 @@ def test_carriers_add_up_across_workers(tmp_path):
     archer = _carrier(two, "702.2b", "cardsfolder/t/thornweald_archer.txt")
     assert archer["records"] == 2 * _carrier(
         one, "702.2b", "cardsfolder/t/thornweald_archer.txt")["records"]
+
+
+# --- fork records count apart (F01, finding 5.8) ----------------------------------------------
+
+_510_1A = _scenario("510.1a-1", ["510.1a"], "combat", {
+    "family": "outcome_event", "record_kind": "combat", "outcome": "o", "near_miss": "n",
+    "params": {"event": "damage_dealt", "combat": True}})
+#: A Forge-AI game of the fixture whose one combat has a real damage-step probe.
+_PROBED_COMBAT = "3550376f-3c30-4231-90cd-cc0f1b308e87.2-mwqvqdxrusnv.425"
+_ITS_PROBE = "3550376f-3c30-4231-90cd-cc0f1b308e87.2-mwqvqdxrusnv.426"
+
+
+def _probed_combat_shard(tmp_path, *, aimed_at=None) -> Path:
+    """The probed combat's game, its one other combat left out, with a second
+    probe of the combat beside the real one: the real probe copied under a
+    record id of its own."""
+    from dataclasses import replace
+
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.shard_io import read_shard, write_shard
+
+    every = list(read_shard(GEN3))
+    combat = next(r for r in every if r.record_id == _PROBED_COMBAT)
+    probe = next(r for r in every if r.record_id == _ITS_PROBE)
+    assert probe.mirror_of == combat.record_id and probe.fork_kind is not None
+    kept = [replace(r, aimed_at=aimed_at) for r in every if r.game_id == combat.game_id and (
+        r.kind is not RecordKind.COMBAT or r.record_id in (_PROBED_COMBAT, _ITS_PROBE))]
+    second = replace(probe, record_id=f"{_ITS_PROBE}0", aimed_at=aimed_at)
+    shard = tmp_path / "probed" / GEN3.name
+    write_shard(shard, [*kept, second])
+    return shard.parent
+
+
+def _count_510_1a(tmp_path, records_dir) -> dict:
+    config = RuleCountsConfig(
+        records_dir=records_dir, output=tmp_path / "rule-counts.json",
+        rules_dir=_rules_dir(tmp_path, _510_1A),
+        sidecar_roots={"cardsfolder": SIDECARS / "cardsfolder",
+                       "tokenscripts": SIDECARS / "tokenscripts"},
+        workers=1)
+    counts, standing = count(config)
+    return counts.to_json(standing)["rules"]["510.1a"]
+
+
+def test_a_combat_and_two_probes_of_it_count_the_combat_once_and_the_probes_as_forks(tmp_path):
+    """The live combat is the natural record of 510.1a; its probes re-record
+    that combat and count under ``fork``, apart from it."""
+    found = _count_510_1a(tmp_path, _probed_combat_shard(tmp_path))
+    assert found == {"fires": {"forge_ai": 1, "fork": 2}}
+
+
+def test_a_probe_of_an_aimed_game_counts_as_a_fork_not_as_aimed(tmp_path):
+    """A coverage or variant run stamps its game's ``aimed_at`` on its probes
+    too: ``fork`` wins, so the combat still counts once under ``aimed``."""
+    found = _count_510_1a(tmp_path, _probed_combat_shard(tmp_path, aimed_at=("510.1a",)))
+    assert found == {"fires": {"aimed": 1, "fork": 2}}
+
+
+# --- a legality rule's carriers (F01, finding 7.7) --------------------------------------------
+
+_LEGALITY_CATALOGUE = (
+    # A decision's target legality: every permanent of the battlefield is judged.
+    _scenario("205.2b-1", ["205.2b"], "playability", {
+        "family": "legality_membership", "record_kind": "playability", "outcome": "o",
+        "near_miss": "n", "params": {"list": "legal_targets", "fires_when": "inside",
+                                     "universe": "battlefield", "min_types": 2}}),
+    # An attackers record judges every noncreature permanent and names no candidate.
+    _scenario("506.3-1", ["506.3"], "playability", {
+        "family": "legality_membership", "record_kind": "playability", "outcome": "o",
+        "near_miss": "n", "params": {"list": "legal_attackers", "fires_when": "outside",
+                                     "universe": "battlefield",
+                                     "judged_not_type": "creature"}}),
+    # An attackers rule whose tags act through the judged creature's keyword line.
+    _scenario("702.10b-1", ["702.10b"], "playability", {
+        "family": "legality_membership", "record_kind": "playability", "outcome": "o",
+        "near_miss": "n", "params": {"list": "legal_attackers", "fires_when": "inside",
+                                     "keyword": "haste"}}),
+)
+
+
+def _legality_carriers(tmp_path) -> dict:
+    config = RuleCountsConfig(
+        records_dir=tmp_path / "records", output=tmp_path / "rule-counts.json",
+        rules_dir=_rules_dir(tmp_path, *_LEGALITY_CATALOGUE),
+        sidecar_roots={"cardsfolder": SIDECARS / "cardsfolder",
+                       "tokenscripts": SIDECARS / "tokenscripts"},
+        workers=1)
+    (tmp_path / "records").mkdir()
+    shutil.copyfile(GEN3, tmp_path / "records" / GEN3.name)
+    counts, standing = count(config)
+    document = counts.to_json(standing)
+    assert {"205.2b", "506.3", "702.10b"} <= set(document["rules"])
+    return document["carriers"]
+
+
+def _candidate_files() -> set[str]:
+    from effects.domain.records import RecordKind, acting_keys
+    from effects.infrastructure.shard_io import read_shard
+
+    return {key.script_file for record in read_shard(GEN3)
+            if record.kind is RecordKind.PLAYABILITY for key in acting_keys(record)}
+
+
+def test_a_target_legality_rule_s_carrier_is_the_candidate_s_own_card(tmp_path):
+    """Not the cards of the permanents judged as its targets: each carrier is
+    a candidate's card, with the candidate's line."""
+    carriers = _legality_carriers(tmp_path)["205.2b"]
+    assert carriers
+    assert {carrier["script_file"] for carrier in carriers} <= _candidate_files()
+    assert all(carrier["lines"] for carrier in carriers)
+
+
+def test_an_attack_legality_rule_names_no_judged_permanent_as_its_carrier(tmp_path):
+    """An attackers record has no candidate and acts through no line of a
+    noncreature permanent it judges: 506.3 has no carrier."""
+    assert "506.3" not in _legality_carriers(tmp_path)
+
+
+def test_an_attack_legality_rule_keeps_the_keyword_line_its_tags_act_through(tmp_path):
+    carriers = _legality_carriers(tmp_path)["702.10b"]
+    assert carriers and all(
+        line["key"]["trait_kind"] == "keyword"
+        for carrier in carriers for line in carrier["lines"])
+    assert all(carrier["lines"] for carrier in carriers)

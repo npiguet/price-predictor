@@ -29,7 +29,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from effects.domain.provenance import SidecarLookup
-from effects.domain.records import EffectRecord, is_game_end
+from effects.domain.records import EffectRecord, RecordOrigin, is_game_end
 from effects.domain.rule_catalogue import (
     DetectorDeclaration,
     Polarity,
@@ -79,19 +79,41 @@ class RuleTag:
 
 class RuleSource(StrEnum):
     """Where a tagged record came from, which decides what it can be trusted
-    for (FR-008): aimed collection, or a natural record of a game with or
-    without a random seat."""
+    for (FR-008): a fork of a live game's moment, aimed collection, or a
+    natural record of a game with or without a random seat.
+
+    ``fork`` is a probe's, an intervention's or a protection fork's record
+    (:data:`FORK_SOURCE_ORIGINS`): it re-records a moment its live game
+    recorded already, a combat once per probe, so the counts a decision
+    reads leave it out and a moment counts once. A directed fork's record is
+    ``aimed``, a record of its own.
+    """
 
     RANDOM_SEAT = "random_seat"
     FORGE_AI = "forge_ai"
     AIMED = "aimed"
+    FORK = "fork"
 
     @classmethod
-    def of(cls, *, aimed: bool, random_seat_game: bool) -> RuleSource:
-        """``aimed`` whatever the game; else by whether the game had a random seat."""
+    def of(cls, *, fork: bool, aimed: bool, random_seat_game: bool) -> RuleSource:
+        """``fork`` whatever else holds (a coverage run's probe carries its
+        game's ``aimed_at`` too); else ``aimed`` whatever the game; else by
+        whether the game had a random seat."""
+        if fork:
+            return cls.FORK
         if aimed:
             return cls.AIMED
         return cls.RANDOM_SEAT if random_seat_game else cls.FORGE_AI
+
+
+#: The origins counted under :attr:`RuleSource.FORK`.
+FORK_SOURCE_ORIGINS: frozenset[RecordOrigin] = frozenset({
+    RecordOrigin.PROBE, RecordOrigin.FORCED, RecordOrigin.PROTECTION_FORK})
+
+
+def counts_as_fork(record: EffectRecord) -> bool:
+    """Whether ``record`` counts under :attr:`RuleSource.FORK`."""
+    return record.origin in FORK_SOURCE_ORIGINS
 
 
 @dataclass(frozen=True, slots=True)
