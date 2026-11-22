@@ -14,7 +14,7 @@ from effects.application.collect_variants import (
     drop_held_out_variants,
 )
 from effects.domain.split import HoldoutRule
-from tests.unit.effects.application.test_collect_variants import (
+from tests.unit.effects.application.test_collect_variants_held_out import (
     TestNoVariantPrintsAHeldOutText as Printing,
 )
 
