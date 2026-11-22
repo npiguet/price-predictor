@@ -17,6 +17,9 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 - No two scenarios of different rules share one declaration. A scenario stating another's observable fact declares `{"same_as": id or [ids], "reason": …}` and is counted under the named scenarios' rules, never its own: `DetectorIndex.of` refuses a `same_as` naming a scenario of one of its own rules, so two scenarios of one rule stating one fact each declare the detector. What a record cannot show declares `none`.
 - On a degraded worker's record and on a forced resolution, a missing hook-derived event reads as unknown: `outcome_event` gives neither an absence's `fires` side nor a near miss.
 - The game-end marker is tagged by no declaration.
+- The game-end record (`EffectRecord.is_game_end_record`) is read by a declaration only for a game-end event (`player_won`, `player_lost`); the events the collector rescued into it are no resolution's, so `outcome_event` returns no tag on it for any other event, and `sba_game_loss` and `sba_zone_move` skip it and read every other effect half.
+- A game-end rule is declared on `resolution` and on `combat` records (104.2a-1 and 104.2a-2): most games end in the combat record's damage step. A rule no combat can show (704.5b's draw from an empty library) has no combat declaration.
+- `sba_game_loss` reads life loss from `life_change` only: damage dealt to a player is not life loss under infect. `keyword_combat`'s `observed` is whether the record shows the keyword's effect (`keyword_outcomes.py`), so a `fires` combat without it goes on the review list.
 - A rewrite's `buffered_events` are a place of their own, never the rewrite's events a family reads. `rewrite_event` reads no record whose incoming event is unknown.
 - `combat_keyword_effect` covers the combat keywords outside gate 2's table and leaves that table alone.
 

@@ -39,6 +39,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors.keyword_outcomes import effect_happened
 
 _ROWS = {row.keyword: row for row in DAMAGE_STEP_KEYWORDS}
 
@@ -81,7 +82,19 @@ class KeywordCombat:
         carriers = tuple(dict.fromkeys(p.carrier.id for _, p in found))
         outcome = tuple(dict.fromkeys(
             e for _, p in found for e in _outcome(row, p, resolver.keywords_of)))
-        return FamilyMatch(Polarity.FIRES, True, carriers, outcome)
+        return FamilyMatch(Polarity.FIRES, _happened(record, row, found, resolver.keywords_of),
+                           carriers, outcome)
+
+
+def _happened(record: EffectRecord, row: DamageStepKeyword, found, keywords_of: KeywordsOf) -> bool:
+    """Whether the record shows an observable effect of the row happening to
+    its subject, for any carrier: what ``observed`` says of a ``fires`` combat."""
+    events = record.payload.listed_events()
+    return any(
+        effect_happened(effect, subject, events)
+        for _, participant in found
+        for effect in row.effects if effect.observable(participant, keywords_of)
+        if (subject := participant.subject(effect.subject)) is not None)
 
 
 def _outcome(row: DamageStepKeyword, participant: CombatParticipant,

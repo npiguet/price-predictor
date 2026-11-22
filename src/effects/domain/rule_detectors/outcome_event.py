@@ -285,6 +285,20 @@ _OWN = frozenset({"event", "min_count", "api", "api_in_chain", "keyword", "sourc
 _EVENT_KINDS = frozenset({RecordKind.RESOLUTION, RecordKind.COMBAT, RecordKind.TURN_ACTION})
 
 
+_GAME_END_EVENTS = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
+
+
+def _reads_record(record: EffectRecord, event: EventType) -> bool:
+    """Whether a declaration of ``event`` reads ``record``: an effect half, a
+    combat or a turn action; the game-end record only for a game-end event,
+    since the events the collector rescued into it are no resolution's."""
+    if record.kind not in _EVENT_KINDS:
+        return False
+    if record.kind is RecordKind.RESOLUTION and record.moment is not Moment.RESOLUTION:
+        return False
+    return event in _GAME_END_EVENTS or not record.is_game_end_record
+
+
 def acting_api(record: EffectRecord, lines: SidecarLookup | None) -> str | None:
     """The acting line's script API type, or None where no line is readable."""
     line = acting_line(record, lines)
@@ -451,8 +465,7 @@ class OutcomeEvent:
         scoped = api is not None or keyword is not None or source_keyword is not None
         absent = bool(params.get("absent"))
         qualified = bool(_QUALIFIERS & set(params))
-        if record.kind not in _EVENT_KINDS or (
-                record.kind is RecordKind.RESOLUTION and record.moment is not Moment.RESOLUTION):
+        if not _reads_record(record, event):
             return None
         if scoped or "script_param" in params or "chain_param" in params:
             line = acting_line(record, lines)

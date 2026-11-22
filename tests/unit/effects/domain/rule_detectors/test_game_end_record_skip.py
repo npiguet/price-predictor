@@ -20,12 +20,13 @@ def _by_id(gen3_records, record_id):
 
 
 def _lethal_to_p1(record):
-    """The real half, edited so P1 stands at 1 life and takes 1 damage."""
+    """The real half, edited so P1 stands at 1 life and loses 1 life."""
     state = replace(record.state, players=tuple(
         replace(p, life=1) if p.id == "P1" else p for p in record.state.players))
-    hit = Event(type=EventType.DAMAGE_DEALT, subjects=("P1",), params={"amount": 1})
+    hit = (Event(type=EventType.DAMAGE_DEALT, subjects=("P1",), params={"amount": 1}),
+           Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -1}))
     return replace(record, state=state,
-                   payload=replace(record.payload, events=(*record.payload.events, hit)))
+                   payload=replace(record.payload, events=(*record.payload.events, *hit)))
 
 
 @pytest.mark.parametrize("record_id", _NOT_GAME_END)

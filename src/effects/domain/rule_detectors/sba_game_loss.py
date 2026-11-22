@@ -11,8 +11,9 @@ short of it. ``observed`` is the game ending against that player: a
 Parameter ``check``: ``life_zero`` or ``poison_ten``.
 
 A player's life loss is the record's ``life_change`` deltas for that player,
-or, where the record holds none for them, the damage dealt to them: combat
-damage to a player is not always filed with its own ``life_change``.
+and only those: damage dealt to a player is not life loss where the source
+has infect (poison counters instead, 702.90b), and every other hit to a
+player is filed with its own ``life_change``.
 
 A player the record takes over the other check's line too (a combat dealing
 lethal damage and the tenth poison counter at once) is on neither side: the
@@ -45,10 +46,9 @@ CHECKS = frozenset({"life_zero", "poison_ten"})
 _GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
 
 
-def _changes(record: EffectRecord, player: str) -> tuple[int | None, int, int, bool]:
-    """``(life delta from life_change or None, damage dealt, poison delta, lost)``."""
-    life: int | None = None
-    damage = poison = 0
+def _changes(record: EffectRecord, player: str) -> tuple[int, int, bool]:
+    """``(life delta from life_change, poison delta, lost)``."""
+    life = poison = 0
     lost = False
     for event in record.payload.listed_events():
         params = event.params or {}
@@ -57,14 +57,12 @@ def _changes(record: EffectRecord, player: str) -> tuple[int | None, int, int, b
         if player not in event.subjects:
             continue
         if event.type is EventType.LIFE_CHANGE:
-            life = (life or 0) + int(params.get("delta") or 0)
-        elif event.type is EventType.DAMAGE_DEALT:
-            damage += int(params.get("amount") or 0)
+            life += int(params.get("delta") or 0)
         elif event.type is EventType.POISON_CHANGE:
             poison += int(params.get("delta") or 0)
         elif event.type is EventType.PLAYER_LOST:
             lost = True
-    return life, damage, poison, lost
+    return life, poison, lost
 
 
 def _outcome_readable(record: EffectRecord) -> bool:
@@ -99,8 +97,8 @@ class SbaGameLoss:
             return None
         fires, spared, observed = [], [], []
         for player in record.state.players:
-            life, damage, poison, lost = _changes(record, player.id)
-            loss = -life if life is not None else damage
+            life, poison, lost = _changes(record, player.id)
+            loss = -life
             dead = loss > 0 and player.life - loss <= 0
             poisoned = poison > 0 and player.poison + poison >= 10
             if check == "life_zero":

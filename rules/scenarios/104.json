@@ -87,6 +87,67 @@
       }
     },
     {
+      "id": "104.2a-2",
+      "rules": [
+        "104.2a"
+      ],
+      "title": "The last opponent losing to combat damage makes the remaining player win",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 3
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Both players hold a library, so no draw ends the game."
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "lethal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant deals 3 combat damage to B; B is at 0 life and loses, A, the only player left, wins and the game ends with A as winner."
+        },
+        {
+          "label": "four_life",
+          "polarity": "does_not_fire",
+          "delta": "B is at 4 life instead of 3.",
+          "expected": "B is at 1 life, nobody wins and the game goes on.",
+          "operation": "life"
+        }
+      ],
+      "cards": [
+        "Hill Giant"
+      ],
+      "forge_notes": "The combat-damage twin of 104.2a-1: most games end in a combat record, which 104.2a-1's resolution declaration never reads.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "The game ends with one player still in it, every opponent having left, and the combat record holds a player_won event naming that player.",
+        "near_miss": "No near miss is counted: without an API to restrict to, every combat without a player_won would count.",
+        "params": {
+          "event": "player_won"
+        },
+        "needs": []
+      }
+    },
+    {
       "id": "104.2b-1",
       "rules": [
         "104.2b"
