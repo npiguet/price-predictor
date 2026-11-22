@@ -161,7 +161,10 @@ _KEYWORDS = frozenset({
     *DETAILED_KEYWORDS.values(),
 })
 _ZONES = frozenset(z.lower() for z in FORGE_ZONES if z) | {"any"}
-_MANA = re.compile(r"^(\d+|[WUBRGCSXYZ]|[WUBRGC\d]+/[WUBRGCP](/P)?)$")
+#: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
+#: ``W/P``), upper-cased; ``T`` and ``Q`` are symbols too, and any other
+#: token of a cost is a part.
+MANA_SYMBOL = re.compile(r"^(\d+|[WUBRGCSXYZ]|[WUBRGC\d]+/[WUBRGCP](/P)?)$")
 _SYMBOL_CLASSES = frozenset({"hybrid", "monohybrid", "phyrexian"})
 
 
@@ -244,7 +247,7 @@ def counter_type(family: str, name: str, value: Any) -> None:
 def cost_symbol(family: str, name: str, value: Any) -> None:
     if not isinstance(value, str) or not (
             value.lower() in _SYMBOL_CLASSES or value.upper() in ("T", "Q")
-            or _MANA.match(value.upper())):
+            or MANA_SYMBOL.match(value.upper())):
         _refuse(family, name, value, "cost symbol")
 
 

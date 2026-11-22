@@ -136,9 +136,6 @@ FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "s
 CANDIDATE_FACES = frozenset({"front", "alternative"})
 CHECKS = frozenset(check.value for check in PlayabilityCheck)
 
-#: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
-#: ``W/P``); ``T`` and ``Q`` are symbols too, and any other token is a part.
-_MANA = re.compile(r"^(\d+|[WUBRGCSXYZ]|[WUBRGC\d]+/[WUBRGCP](/P)?)$")
 _COST_TOKEN = re.compile(r"[^\s<]+<[^>]*>|\S+")
 _TAP = frozenset({"T", "Q"})
 _COLOURS = frozenset("WUBRG")
@@ -163,9 +160,10 @@ def cost_of(candidate: Candidate, lines: SidecarLookup | None
     found = root_params_of(line)
     # A part's ``<…>`` may hold spaces (``Sac<1/CARDNAME/this token>``).
     written = _COST_TOKEN.findall((found or {}).get("Cost", "")) if line is not None else []
-    symbols = {t.upper() for t in written if t.upper() in _TAP or _MANA.match(t.upper())}
+    symbols = {t.upper() for t in written
+               if t.upper() in _TAP or dv.MANA_SYMBOL.match(t.upper())}
     parts = {t.split("<", 1)[0].upper() for t in written if t.upper() not in _TAP
-             and not _MANA.match(t.upper())}
+             and not dv.MANA_SYMBOL.match(t.upper())}
     mana = (candidate.cost_after_adjustment or {}).get("mana")
     if isinstance(mana, str):
         symbols.update(s.upper() for s in re.findall(r"\{([^}]*)\}", mana))

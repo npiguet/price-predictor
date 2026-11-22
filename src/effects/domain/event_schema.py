@@ -343,6 +343,15 @@ def countered_objects(event: Event) -> tuple[str, ...]:
     return (host,) if isinstance(host, str) else ()
 
 
+def damage_source(event: Event) -> str | None:
+    """The object a damage event (``damage_dealt``, ``damage_prevented``)
+    names as its source: its ``source``, or outside combat, where it writes
+    none, its ``cause``, the same object for damage; None where it names
+    neither."""
+    found = event.params or {}
+    return found.get("source") or found.get("cause") or None
+
+
 #: The run-parameter modes (an event's provenance ``mode``) whose ``delta``
 #: is a loss. A trigger's or replacement's map carries the amount as a
 #: magnitude and names the direction by its mode (``LifeReduced 3``), while a

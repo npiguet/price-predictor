@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from effects.domain.event_schema import Event, EventType
+from effects.domain.event_schema import Event, EventType, damage_source
 from effects.domain.protection_model import (
     Opportunity,
     ProtectionOutcome,
@@ -43,10 +43,6 @@ def damage_opportunities(events: tuple[Event, ...], entities,
             shared_qualities(entities[source] for source in sources),
         ))
     return tuple(found)
-
-
-def _source_of(event: Event) -> str | None:
-    return event.params.get("source") or event.params.get("cause")
 
 
 def _is_damage_to(event: Event, subject: str) -> bool:
@@ -103,7 +99,7 @@ class _Hits:
         return False
 
     def _take_damage(self, event: Event, entities) -> bool:
-        source = entities.get(_source_of(event))
+        source = entities.get(damage_source(event))
         if source is None or _keywords(source) & SOURCE_EXCLUSIONS:
             return False
         self.sources.append(source.id)
@@ -164,7 +160,7 @@ def _prevented(event: Event, protected: str, quality: ProtectionQuality, entitie
     """``event`` as Forge writes a hit the protection prevents, else itself."""
     if not _is_damage_to(event, protected):
         return event
-    source = entities.get(_source_of(event))
+    source = entities.get(damage_source(event))
     if source is None or not damage_prevented((quality,), Characteristics.of(source)):
         return event
     params = {"amount": event.params.get("amount", 0), "source": source.id}

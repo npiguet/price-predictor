@@ -79,7 +79,7 @@ from effects.domain.damage_step_keywords import (
     combat_participant,
     defender_ref,
 )
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import EventType, damage_source
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
@@ -149,18 +149,14 @@ class _Combat:
         """What ``source`` dealt combat damage to in this step."""
         return tuple(dict.fromkeys(
             subject for event in self.events(EventType.DAMAGE_DEALT)
-            if event.params.get("combat") and _source(event) == source
+            if event.params.get("combat") and damage_source(event) == source
             for subject in event.subjects))
 
     def damage_to(self, subject: str) -> tuple[str, ...]:
         """Every source whose combat damage reached ``subject`` in this step."""
         return tuple(dict.fromkeys(
-            _source(event) for event in self.events(EventType.DAMAGE_DEALT)
+            damage_source(event) for event in self.events(EventType.DAMAGE_DEALT)
             if event.params.get("combat") and subject in event.subjects))
-
-
-def _source(event) -> str | None:
-    return event.params.get("source") or event.params.get("cause")
 
 
 def _players(found: tuple[str, ...]) -> tuple[str, ...]:

@@ -158,7 +158,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from effects.domain.effect_targets import placed_subjects
-from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
+from effects.domain.event_schema import EVENT_PARAMS, Event, EventType, damage_source
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionOutcome
 from effects.domain.rule_catalogue import Polarity
@@ -579,13 +579,6 @@ def _both(first: bool | None, second: bool | None) -> bool | None:
     return None if first is None or second is None else first and second
 
 
-def _source_of(event: Event) -> str | None:
-    """A damage event's ``source``; a damage event outside combat writes no
-    ``source``, only the ``cause``, the same object for damage."""
-    found = event.params or {}
-    return found.get("source") or found.get("cause") or None
-
-
 def _dies(entity_id: str, listed: tuple[Event, ...]) -> bool:
     """Whether the record moves ``entity_id`` from the battlefield to a graveyard."""
     return any(e.type is EventType.ZONE_CHANGE and entity_id in e.subjects
@@ -600,7 +593,7 @@ def _source_verdict(event: Event, listed: tuple[Event, ...],
     says (True when it is not declared); None where the event names none."""
     if "source_dies" not in params:
         return True
-    source = _source_of(event)
+    source = damage_source(event)
     if source is None:
         return None
     return _dies(source, listed) == bool(params["source_dies"])
@@ -614,7 +607,7 @@ def _victims(record: EffectRecord, wanted: list[Event],
     None in any other step, or where the snapshot names no step."""
     if record.state.global_.combat_substep != CombatSubstep.FIRST_STRIKE:
         return ()
-    sources = {_source_of(e) for e in wanted}
+    sources = {damage_source(e) for e in wanted}
     found = []
     for event in wanted:
         for subject in event.subjects:

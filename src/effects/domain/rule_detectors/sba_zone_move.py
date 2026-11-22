@@ -95,7 +95,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from effects.domain.damage_step_keywords import KeywordResolver
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import EventType, damage_source
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_detectors import (
@@ -156,8 +156,7 @@ def _touched(record: EffectRecord) -> dict[str, _Touched]:
                 t.lowered = t.lowered or delta < 0
             elif kind is EventType.DAMAGE_DEALT:
                 t.damage_dealt += int(params.get("amount") or 0)
-                # A damage event outside combat names its source as its ``cause`` only.
-                source = params.get("source") or params.get("cause")
+                source = damage_source(event)
                 if source:
                     t.damage_sources.append(source)
             elif kind is EventType.COUNTER_CHANGE:
