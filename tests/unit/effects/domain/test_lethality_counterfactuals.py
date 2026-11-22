@@ -254,7 +254,7 @@ class TestQualify:
 
     def test_no_fork_intervention_directed_fork_or_synthetic_record_is_copied(self):
         """Only natural records are copy material, as for the other two
-        derivations (``protection_copies.qualifies``, the damage grid)."""
+        derivations (``protection_opportunities.qualify``, the damage grid)."""
         from effects.domain.records import DirectedTag
 
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])

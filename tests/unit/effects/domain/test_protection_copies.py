@@ -14,16 +14,15 @@ import pytest
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
-from effects.domain.protection_copies import (
+from effects.domain.protection_copies import CopyDraw, copied, protection_copy
+from effects.domain.protection_model import (
     EVERYTHING_RULE,
     PROTECTION_RULES,
     ProtectionOutcome,
-    copied,
-    protection_copy,
-    qualify,
     rare_qualities,
     rules_offered,
 )
+from effects.domain.protection_opportunities import qualify
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     Candidate,
@@ -172,12 +171,13 @@ def _sweeper(*creatures: EntityState, source: EntityState | None = None,
 
 def _copy_of(record: EffectRecord, opportunity, seed: int = 0):
     """The copy drawn for ``opportunity`` alone, in its own rule."""
-    return protection_copy(record, (opportunity,), rule=opportunity.rule,
-                           rng=random.Random(seed), index=0)
+    return protection_copy(
+        record, (opportunity,), CopyDraw(opportunity.rule, random.Random(seed), 0))
 
 
 def _copy(record: EffectRecord, rule: str, seed: int = 0):
-    copy = protection_copy(record, qualify(record), rule=rule, rng=random.Random(seed), index=0)
+    copy = protection_copy(
+        record, qualify(record), CopyDraw(rule, random.Random(seed), 0))
     assert copy is not None
     return copy
 
@@ -244,13 +244,13 @@ class TestDamagePrevented:
         assert found.qualities and not found.everything
         assert not any(q.covers(_char(aura)) for q in found.qualities)
         assert EVERYTHING_RULE not in rules_offered((found,))
-        assert protection_copy(record, (found,), rule=EVERYTHING_RULE,
-                               rng=random.Random(0), index=0) is None
+        assert protection_copy(
+            record, (found,), CopyDraw(EVERYTHING_RULE, random.Random(0), 0)) is None
 
     def test_the_copy_prevents_the_damage_and_undoes_the_death(self):
         record = _sweeper(_creature("E1"), _creature("E2"))
-        copy = protection_copy(record, qualify(record)[:1], rule="702.16e",
-                               rng=random.Random(3), index=2)
+        copy = protection_copy(
+            record, qualify(record)[:1], CopyDraw("702.16e", random.Random(3), 2))
         assert copy.record.record_id == "g.0-0.1~pc2" and copy.record.synthetic
         assert copy.rule == "702.16e" and copy.outcome_entities == ("E1",)
         assert copy.quality in qualify(record)[0].qualities
@@ -530,7 +530,8 @@ class TestBlockIllegal:
         assert [o.protected for o in found] == ["A1"] * 3
         only_goblins = tuple(
             replace(o, qualities=(goblins,)) for o in found if o.covered == ("B1",))
-        copy = protection_copy(record, only_goblins, rule="702.16f", rng=random.Random(0), index=0)
+        copy = protection_copy(
+            record, only_goblins, CopyDraw("702.16f", random.Random(0), 0))
         assert copy.outcome_entities == ("B1", "B3")
         payload = copy.record.payload
         assert payload.legal_blockers == ("B2",) and payload.must_block == ("B3",)
@@ -549,7 +550,8 @@ class TestBlockIllegal:
         goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
         (only,) = [replace(o, qualities=(goblins,)) for o in qualify(record)
                    if o.covered == ("B1",)]
-        copy = protection_copy(record, (only,), rule="702.16f", rng=random.Random(0), index=0)
+        copy = protection_copy(
+            record, (only,), CopyDraw("702.16f", random.Random(0), 0))
         assert copy.outcome_entities == ("B1", "B2")
         assert copy.record.payload.legal_blockers == ("B3",)
 
@@ -631,8 +633,8 @@ class TestAuraToGraveyard:
 class TestDraw:
     def test_a_rule_no_opportunity_shows_draws_nothing(self):
         record = _sweeper(_creature("E1"))
-        assert protection_copy(record, qualify(record), rule="702.16f",
-                               rng=random.Random(0), index=0) is None
+        assert protection_copy(
+            record, qualify(record), CopyDraw("702.16f", random.Random(0), 0)) is None
 
     def test_no_shared_rare_quality_leaves_only_protection_from_everything(self):
         artifact = make_entity("S2", "rod", types=("artifact",), mana_value=5, lines=())

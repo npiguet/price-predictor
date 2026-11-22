@@ -66,12 +66,9 @@ from effects.domain.corpus_plan import (
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
 from effects.domain.effect_targets import derive_targets, unsupervised_kind
-from effects.domain.protection_copies import (
-    PROTECTION_RULES,
-    protection_copy,
-    qualify,
-    rules_offered,
-)
+from effects.domain.protection_copies import CopyDraw, protection_copy
+from effects.domain.protection_model import PROTECTION_RULES, rules_offered
+from effects.domain.protection_opportunities import qualify
 from effects.domain.provenance import JOIN_GAP_KINDS, KeyResolution
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
@@ -697,7 +694,7 @@ class _ShardSurveyor:
         wanted = self.config.read.rule_outputs.get(rule)
         if not wanted:
             return
-        made = protection_copy(record, opportunities, rule=rule, rng=random.Random(0), index=0)
+        made = protection_copy(record, opportunities, CopyDraw(rule, random.Random(0), 0))
         if made is None:
             return
         for output in carried_outputs(made.record, made.outcome_entities, wanted):

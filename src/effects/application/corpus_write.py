@@ -30,7 +30,8 @@ from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameStrata, Keys, planned_copies
-from effects.domain.protection_copies import protection_copy, qualify
+from effects.domain.protection_copies import CopyDraw, protection_copy
+from effects.domain.protection_opportunities import qualify
 from effects.domain.record_quality import has_unattributed_events
 from effects.domain.records import (
     Curation,
@@ -319,7 +320,7 @@ class _ShardWriter:
         drawn = tuple(sorted(set(rules)))
         written = 0
         for index, rule in enumerate(rules):
-            made = protection_copy(record, opportunities, rule=rule, rng=rng, index=index)
+            made = protection_copy(record, opportunities, CopyDraw(rule, rng, index))
             if made is None:
                 continue
             self.outputs[stratum].append(replace(made.record, curation=Curation(

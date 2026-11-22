@@ -2344,7 +2344,7 @@ def test_protection_copies_are_written_as_their_rules_draw_them(tmp_path):
     written as a synthetic record carrying its rule."""
     import json
 
-    from effects.domain.protection_copies import PROTECTION_RULES
+    from effects.domain.protection_model import PROTECTION_RULES
 
     rules = tmp_path / "rules"
     (rules / "scenarios").mkdir(parents=True)

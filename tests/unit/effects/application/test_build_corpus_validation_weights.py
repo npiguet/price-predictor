@@ -136,7 +136,7 @@ def test_the_manifest_adds_to_a_protection_rule_the_copies_written_for_it(tmp_pa
     rule's ``added`` is the protection copies written for it (702.16j's
     protection from everything is offered beside 702.16e and 702.16f here,
     and before counted every draw)."""
-    from effects.domain.protection_copies import PROTECTION_RULES
+    from effects.domain.protection_model import PROTECTION_RULES
 
     # A scenario no record can tag: a build refuses a catalogue with none.
     rules = _rules_dir(tmp_path, _NO_RULES / "scenarios" / "103.json", [
