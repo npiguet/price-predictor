@@ -833,7 +833,8 @@ places:
   - global slot: its type one-hot, its amount, its mode one-hot and whether it is combat
     damage; the mode one-hot is over the modes the gen-3 fixture and the review pilots
     carry, with an "other" column;
-  - card slot: whether the card is its subject, and whether the card is its source;
+  - card slot: whether the card is its subject, and whether the card is its source; the
+    subject's last-known copy reads as a subject too;
   - player slot: whether the player is its subject.
 - A card slot reads two of Forge's hidden keywords as bits: can't block (`CARDNAME can't
   block.`, `CARDNAME can't attack or block.`) and can't attack (`CARDNAME can't attack.`,

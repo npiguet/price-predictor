@@ -763,10 +763,21 @@ class StateSnapshot:
         return None
 
     def names_as_pending_subject(self, ref: str) -> bool:
-        """Whether the pending event names the card or player ``ref`` among
-        its subjects; False without a pending event."""
+        """Whether the pending event's subjects take in the card or player
+        ``ref``: one it names, or the last-known copy of one it names, which
+        shows the object the event happened to as it last existed (a dies
+        trigger names the graveyard card ``E7``, and ``L7`` is the creature
+        that died). False without a pending event."""
         pending = self.pending_event
-        return pending is not None and ref in pending.subjects
+        if pending is None:
+            return False
+        return ref in pending.subjects or self.last_known_card_of(ref) in pending.subjects
+
+    def last_known_card_of(self, ref: str) -> str | None:
+        """The card ``ref`` is the last-known copy of, by its
+        ``last_known_state_of`` link; None for any other ref."""
+        return next((link.to for link in self.links
+                     if link.type == "last_known_state_of" and link.from_ == ref), None)
 
     def targets_card(self, ref: str) -> bool:
         """Whether the acting item targets the card or player ``ref`` itself,
