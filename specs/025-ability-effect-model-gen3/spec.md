@@ -1170,7 +1170,9 @@ and that the reporting half never enters the control score.
   rule whose two sides stay unequal in a class MUST be named in the manifest.
 - **FR-055**: A record tagged with several rules MUST count toward each; each added copy MUST be
   drawn for the rule furthest below its share and carry that rule as its drawn rule. A copy within the natural share
-  MUST carry none. A record with no tag keeps its natural share.
+  MUST carry none. A record with no tag keeps its natural share. A protection copy (FR-058) of a
+  record offering several protection rules MUST count toward its drawn rule alone, in the rule's
+  written and added copies.
 - **FR-056**: For a record whose acting line, candidate or listed static carries a turn or step
   condition, the outcome signature MUST gain whether the condition held, read from `failed_checks`,
   `conditions_met` or `active`; met and unmet MUST draw equal budgets, a short side repeating up to
@@ -1290,10 +1292,13 @@ and that the reporting half never enters the control score.
   corpus, the held-out coverage round included, MUST use the same `--playability-rate`,
   `--zone-candidate-rate` and `--plain-candidate-rate` (the held-out round sets none of its own),
   and `build-corpus` MUST give each validation stratum the training stratum's class mix
-  (`--class-mix`). A validation stratum reaches the mix through its records' natural copies and
-  drops none: over the classes it holds, the class most over its share is written once a record,
-  and each other class is repeated toward its share, at most `--reuse-cap` times a record; a
-  class the mix omits is written once a record.
+  (`--class-mix`) as a weight, never by repeating a record. A validation stratum writes each
+  record's natural copy once (natural share 1) and drops none, and every row it writes carries its
+  class's `class_weight`: over the classes it holds, the class most over its share weighs 1, and
+  each other class weighs toward its share, at most `--reuse-cap`; a class the mix omits weighs 1.
+  A training row's `class_weight` is 1. A reader that weighs a validation row (the explained-deviance
+  sample, the freeze's standard errors) MUST multiply by it; a reader taking each record once
+  MUST NOT.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, four sources), per class
   and rule the records available (fork records left out), share, written and shortfall, each split
   by polarity and by the same sources, for the training stratum and for each validation stratum, the one-sided conditions
@@ -1374,9 +1379,12 @@ and that the reporting half never enters the control score.
   its mean absolute error to the error of predicting the grid's mean outcome in every cell.
 - **FR-068a**: The validation strata MUST be curated balanced, by four rules:
   - Rule mix: each stratum MUST be built with the training stratum's rule budgets (FR-054,
-    FR-054a), its added copies carrying their rule. The explained-deviance component reads a
-    stratum's records with those copies, under the run's `--rule-mask`, as training reads its own.
-    Rule tests, probes, grids, gates and calibration read each distinct record once.
+    FR-054a), planned for a validation record exactly as for a training record: its natural copy
+    once plus the added copies the budgets draw, at most `--reuse-cap` in all, a class's target
+    being its records. Its added copies carry their rule. The explained-deviance component reads a
+    stratum's records with those copies, under the run's `--rule-mask`, as training reads its own,
+    each row weighed by its `class_weight` (FR-059a). Rule tests, probes, grids, gates and
+    calibration read each distinct record once.
   - Rules in both strata: `build-corpus` MUST place games in the strata, within each stratum's own
     definition (the card-disjoint stratum's held-out cards, the game-disjoint stratum's games), so
     that every rule with rule-test-eligible records of both polarities has test records of both

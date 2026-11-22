@@ -256,11 +256,15 @@ class Curation:
     records only, never a collected shard. Curation metadata: it says how the
     record was copied, never what the board was, so it never reaches the model.
 
-    ``natural_share`` (n) is the copies the budgets give the record and
-    ``copies`` (d) every copy written, natural and added. ``drawn_rule`` is set
-    on an added copy only, ``drawn_rules`` lists the rule of every added copy
-    of the record, and ``condition_entities`` and ``outcome_entities`` hold
-    the drawn rule's tag entities in their two roles (research R1).
+    ``natural_share`` (n) is the copies the budgets give the record, 1 in a
+    validation stratum, and ``copies`` (d) every copy written, natural and
+    added. ``drawn_rule`` is set on an added copy only, ``drawn_rules`` lists
+    the rule of every added copy of the record, and ``condition_entities`` and
+    ``outcome_entities`` hold the drawn rule's tag entities in their two roles
+    (research R1). ``class_weight`` is what a reader weighing a row of a
+    validation stratum multiplies by: the stratum's multiplier for the
+    record's class, which gives the stratum the training stratum's class mix
+    (FR-059a); 1 on a training row.
     """
 
     natural_share: int
@@ -269,6 +273,7 @@ class Curation:
     drawn_rules: tuple[str, ...] = ()
     condition_entities: tuple[str, ...] = ()
     outcome_entities: tuple[str, ...] = ()
+    class_weight: float = 1.0
 
     def __post_init__(self) -> None:
         if self.drawn_rule is not None and self.drawn_rule not in self.drawn_rules:

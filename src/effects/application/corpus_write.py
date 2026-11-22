@@ -8,8 +8,9 @@ Every written copy carries its ``curation`` (research T1): a training record's
 natural copies, the ones gen-2's budgets give it, then the copies the rule
 budgets added, each carrying the rule it was drawn for and that rule's tag
 entities; a validation record's one natural copy and its added copies, by the
-same rule budgets planned over its stratum (FR-068a); and a record's
-protection copies (FR-058), each a synthetic record of its own. ``turn_action``
+same rule budgets planned over its stratum (FR-068a), each carrying its
+class's weight in the class mix (FR-059a); and a record's protection copies
+(FR-058), each a synthetic record of its own. ``turn_action``
 records are written nowhere and counted by subkind (FR-059). A game the survey
 found cut (no game-end marker in its shard) is written nowhere, every record
 counted under ``dropped-cut``.
@@ -26,7 +27,7 @@ from pathlib import Path
 
 from effects.application.corpus_survey import ReadConfig, ReadGaps, RefusalTally, WorkerContext
 from effects.application.parallel_map import run_parallel
-from effects.domain.corpus_curation import CopyPlan, natural_copies
+from effects.domain.corpus_curation import CopyPlan
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameStrata, Keys, planned_copies
 from effects.domain.protection_copies import protection_copy, qualify
@@ -56,9 +57,9 @@ class WritePlan:
     #: Places a legality record in its rarest mode's family exactly as the
     #: survey's supply was folded.
     mode_counts: dict[str, int] = field(default_factory=dict)
-    #: ``validation stratum -> class -> natural copies per record``
+    #: ``validation stratum -> class -> class_weight``
     #: (``corpus_curation.validation_multipliers``): the class mix (FR-059a).
-    validation_copies: Mapping[Stratum, Mapping[str, float]] = field(default_factory=dict)
+    validation_weights: Mapping[Stratum, Mapping[str, float]] = field(default_factory=dict)
 
 
 #: ``game -> record hash -> drawn rule per added copy``: the rule budgets'
@@ -235,14 +236,13 @@ class _ShardWriter:
     def _hold(
         self, record: EffectRecord, stratum: Stratum, keys: Keys, klass: SamplingClass,
     ) -> None:
-        """A validation game's record, written as many natural times as its
-        class's share of the mix asks (FR-059a), its added copies and
-        protection copies, and gate 1's one copy of a card-disjoint resolution
-        acting through a held-out text."""
-        multiplier = self.plan.validation_copies.get(stratum, {}).get(str(klass), 1.0)
-        copies = natural_copies(multiplier, self.context.hash_of(record))
-        natural = self._write(stratum, record, keys, natural=copies)[0]
-        self._protection_copies(record, stratum, keys)
+        """A validation game's record, written once with its added copies and
+        protection copies, each weighing its class's multiplier in the mix
+        (FR-059a), and gate 1's one copy of a card-disjoint resolution acting
+        through a held-out text."""
+        weight = self.plan.validation_weights.get(stratum, {}).get(str(klass), 1.0)
+        natural = self._write(stratum, record, keys, natural=1, weight=weight)[0]
+        self._protection_copies(record, stratum, keys, weight=weight)
         if stratum is Stratum.CARD_DISJOINT and record.kind is RecordKind.RESOLUTION:
             text = self.context.held_out_text(keys)
             if text is not None:
@@ -277,21 +277,23 @@ class _ShardWriter:
 
     def _write(
         self, stratum: Stratum, record: EffectRecord, keys: Keys, *, natural: int,
+        weight: float = 1.0,
     ) -> list[EffectRecord]:
         """``natural`` copies of ``record`` then its added copies, each with
-        its curation; the copies written, natural first."""
+        its curation, weighing ``weight``; the copies written, natural first."""
         added = self.copies.get(record.game_id, _NO_ADDED).get(
             self.context.hash_of(record), ())
         total = natural + len(added)
         if total <= 0:
             return []
         drawn = tuple(sorted(set(added)))
-        copies = [replace(record, curation=Curation(natural, total, None, drawn))] * natural
+        copies = [replace(record, curation=Curation(
+            natural, total, None, drawn, class_weight=weight))] * natural
         if added:
             tags = {tag.rule: tag for tag in self.context.tags(record).tags}
             copies += [
                 replace(record, curation=Curation(
-                    natural, total, rule, drawn, *_roles(tags.get(rule))))
+                    natural, total, rule, drawn, *_roles(tags.get(rule)), class_weight=weight))
                 for rule in added
             ]
             self.out.added[stratum] += len(added)
@@ -299,9 +301,12 @@ class _ShardWriter:
         self.out.strata.note(stratum, keys, total)
         return copies
 
-    def _protection_copies(self, record: EffectRecord, stratum: Stratum, keys: Keys) -> int:
+    def _protection_copies(
+        self, record: EffectRecord, stratum: Stratum, keys: Keys, *, weight: float = 1.0,
+    ) -> int:
         """The protection copies the rule budgets drew for ``record`` (FR-058),
-        each a synthetic record carrying its drawn rule; how many were written.
+        each a synthetic record carrying its drawn rule and weighing
+        ``weight``; how many were written.
 
         The draws are seeded by the record's protection hash, so a rebuild
         writes the same copies."""
@@ -318,7 +323,8 @@ class _ShardWriter:
             if made is None:
                 continue
             self.outputs[stratum].append(replace(made.record, curation=Curation(
-                0, len(rules), rule, drawn, made.condition_entities, made.outcome_entities)))
+                0, len(rules), rule, drawn, made.condition_entities, made.outcome_entities,
+                class_weight=weight)))
             self.out.protection[rule] += 1
             written += 1
         self.out.strata.note(stratum, keys, written)

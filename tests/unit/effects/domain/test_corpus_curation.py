@@ -511,10 +511,10 @@ class TestConditionBalance:
 
 
 class TestValidationClassMix:
-    """FR-059a (T183): each validation stratum is written in the training
+    """FR-059a (T183): each validation stratum is weighed into the training
     stratum's class mix. A validation record is never dropped, so the
-    over-represented class sets the size and the others are repeated, at most
-    ``--reuse-cap`` times a record, as training repeats a short family's."""
+    over-represented class weighs 1 and the others weigh more, at most
+    ``--reuse-cap`` a record, the most copies training writes of one."""
 
     def test_the_multipliers_deliver_the_mix(self):
         from effects.domain.corpus_curation import validation_multipliers
@@ -547,10 +547,3 @@ class TestValidationClassMix:
 
         assert multipliers["continuous"] == 1.0
 
-    def test_copies_realize_a_fractional_multiplier_on_average(self):
-        from effects.domain.corpus_curation import natural_copies, record_hash
-
-        copies = [natural_copies(2.25, record_hash(f"r{i}", seed=1)) for i in range(4000)]
-
-        assert set(copies) == {2, 3}
-        assert sum(copies) / len(copies) == pytest.approx(2.25, abs=0.03)

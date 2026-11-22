@@ -120,6 +120,24 @@ def test_a_multi_tagged_copy_counts_toward_each_rule():
     assert written(budgets, "b", NOT) == 3
 
 
+def test_a_protection_copy_counts_toward_its_drawn_rule_alone():
+    """Finding 14.2: a record offering 702.16b and 702.16j enters the budgets
+    as one protection record tagged with both; 702.16b's half is already
+    filled, so its one copy is drawn for 702.16j and adds to 702.16j only."""
+    filled = make(2, ("702.16b", FIRES), natural=1, start=10)
+    offering = [BudgetedRecord(
+        game="g0", record_hash=0, klass=KLASS, text="text-0", natural=0, source=AI,
+        tags=(("702.16b", FIRES), ("702.16j", FIRES)), protection=True,
+    )]
+    budgets = plan(offering + filled, target=8, reuse_cap=1)
+    assert budgets.added("g0", 0) == ("702.16j",)
+    rows = budgets.rows[KLASS]
+    assert rows["702.16j"]["fires"].added == {"forge_ai": 1}
+    assert rows["702.16j"]["fires"].written == {"forge_ai": 1}
+    assert rows["702.16b"]["fires"].added == {}
+    assert rows["702.16b"]["fires"].written == {"forge_ai": 2}
+
+
 def test_a_record_never_passes_the_reuse_cap():
     records = make(5, ("x", FIRES), natural=2) + make(5, ("x", NOT), start=5, natural=4)
     budgets = plan(records, target=1_000, reuse_cap=4)

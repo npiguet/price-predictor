@@ -202,17 +202,20 @@ Member `curation` on every record `build-corpus` writes (T1):
 
 | Field | Type | Rule |
 |---|---|---|
-| `natural_share` | int ≥ 0 | n: copies gen-2's budgets give the record |
+| `natural_share` | int ≥ 0 | n: copies gen-2's budgets give the record; 1 in a validation stratum |
 | `copies` | int ≥ 1 | d: the record's copies written, natural and added |
 | `drawn_rule` | rule id or null | set on an added copy only |
 | `drawn_rules` | list of rule ids | every rule any added copy of this record was drawn for |
 | `condition_entities` | list of entity refs | the drawn rule's tag condition entities, on an added copy |
 | `outcome_entities` | list of entity refs | the drawn rule's tag outcome entities, on an added copy; the hard mask trains the gate at both lists |
+| `class_weight` | float ≥ 1 | the stratum's multiplier for the record's class, which weighs a validation stratum into the class mix (FR-059a); 1 on a training row |
 
-Invariants: `copies ≤ reuse cap`; `drawn_rule ∈ drawn_rules`; a natural copy has `drawn_rule = null`.
-A protection copy (FR-058) is a synthetic record `<record_id>~pc<i>` with `natural_share = 0` and its
-`drawn_rule`. A validation stratum holds a record once per copy, so a reader of distinct records
-dedupes by `record_id` (FR-068a).
+Invariants: `copies ≤ reuse cap`, in every stratum, its one natural copy included in a validation
+stratum; `drawn_rule ∈ drawn_rules`; a natural copy has `drawn_rule = null`; every copy of a record
+carries the same `class_weight`. A protection copy (FR-058) is a synthetic record `<record_id>~pc<i>`
+with `natural_share = 0`, its `drawn_rule` and its record's `class_weight`. A validation stratum
+holds a record once, plus once per added copy, so a reader of distinct records dedupes by
+`record_id` (FR-068a).
 
 ### RuleRow (new, manifest)
 
@@ -223,7 +226,7 @@ Per class, rule and polarity, each count split by `RuleSource`:
 | `available` | distinct tagged records |
 | `share` | the half (or, for `other` and unbudgeted rules, none), per polarity |
 | `written` | natural plus added copies |
-| `added` | the copies rule budgets added |
+| `added` | the copies rule budgets added; a protection copy counts toward its drawn rule only |
 | `shortfall` | `max(0, share − written)`, per polarity |
 
 ### CorpusManifest (extended)

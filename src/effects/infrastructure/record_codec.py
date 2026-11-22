@@ -1111,6 +1111,7 @@ def _curation_to_json(curation: Curation) -> dict:
         "drawn_rules": list(curation.drawn_rules),
         "condition_entities": list(curation.condition_entities),
         "outcome_entities": list(curation.outcome_entities),
+        "class_weight": curation.class_weight,
     }
 
 
@@ -1122,6 +1123,7 @@ def _curation_from_json(data: dict) -> Curation:
         drawn_rules=tuple(data.get("drawn_rules") or ()),
         condition_entities=tuple(data.get("condition_entities") or ()),
         outcome_entities=tuple(data.get("outcome_entities") or ()),
+        class_weight=float(data["class_weight"]),
     )
 
 

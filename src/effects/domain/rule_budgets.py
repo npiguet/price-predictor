@@ -8,7 +8,9 @@ copies stay each record's natural share:
    the class's records, a budgeted rule being one the map snapshot marks
    ``trained``; each polarity's half is the share halved;
 2. a (rule, polarity)'s written count starts at the natural copies of its
-   tagged records, and a record tagged with several rules counts toward each;
+   tagged records, and a record tagged with several rules counts toward each,
+   its added copies too; a protection record's copy (FR-058) counts toward
+   its drawn rule alone, since the copy shows that rule's protection only;
 3. each half is filled on its own: what a short side cannot reach stays its
    shortfall and is never given to the other side;
 4. a record's added copies never take its total past ``reuse_cap``, and a
@@ -61,6 +63,9 @@ class BudgetedRecord:
     source: RuleSource
     #: ``(rule, polarity)``, one per rule the record's detectors tag.
     tags: tuple[tuple[str, Polarity], ...]
+    #: A record offering protection copies, tagged with every protection
+    #: rule it offers: each copy is drawn for one and counts toward it alone.
+    protection: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,7 +310,7 @@ class _ClassPlan:
     def _add(self, index: int, rule: str) -> None:
         record = self.records[index]
         self.drawn.setdefault(index, []).append(rule)
-        for tagged, polarity in record.tags:
+        for tagged, polarity in _counted_tags(record, rule):
             self.written[tagged, polarity, record.source] += 1
             self.added[tagged, polarity, record.source] += 1
             self.totals[tagged, polarity] += 1
@@ -349,6 +354,15 @@ class _ClassPlan:
             if len({min(self.half, self.totals[rule, polarity])
                     for polarity in HALF_POLARITIES}) > 1
         )
+
+
+def _counted_tags(record: BudgetedRecord, rule: str) -> tuple[tuple[str, Polarity], ...]:
+    """The tags one added copy of ``record`` drawn for ``rule`` counts toward:
+    every tag of a natural record's copy, the drawn rule's alone on a
+    protection copy."""
+    if not record.protection:
+        return record.tags
+    return tuple(tag for tag in record.tags if tag[0] == rule)
 
 
 def _seeded(record: BudgetedRecord) -> tuple:

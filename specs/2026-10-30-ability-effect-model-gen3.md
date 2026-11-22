@@ -1137,13 +1137,16 @@ get examples from three sources, in amounts per-rule rebalancing sets:
   - every collecting run of the corpus, the held-out coverage round included, uses the same
     `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate`;
   - `build-corpus` gives each validation stratum the training stratum's class mix
-    (`--class-mix`) through its records' natural copies, dropping none: the class most over
-    its share is written once a record, each other class repeats toward its share, at most
-    `--reuse-cap` times a record, and a class the mix omits is written once a record.
-- Each validation stratum is built with the training stratum's rule budgets (§ 12.1), its
-  added copies carrying their rule. The explained-deviance component (§ 14.1) reads a
-  stratum's records with those copies, under the run's `--rule-mask`, as training reads its
-  own. Rule tests, probes, grids, gates and calibration read each distinct record once.
+    (`--class-mix`) as a weight: each record's natural copy is written once, none is dropped,
+    and every row carries its class's `class_weight`. The class most over its share weighs 1,
+    each other class weighs toward its share, at most `--reuse-cap`, and a class the mix omits
+    weighs 1. A training row weighs 1.
+- Each validation stratum is built with the training stratum's rule budgets (§ 12.1), planned
+  for a validation record as for a training record: its natural copy plus its added copies, at
+  most `--reuse-cap` in all, its added copies carrying their rule. The explained-deviance
+  component (§ 14.1) reads a stratum's records with those copies, under the run's
+  `--rule-mask`, as training reads its own, each row weighed by its `class_weight`. Rule tests,
+  probes, grids, gates and calibration read each distinct record once.
 - `build-corpus` places games in the strata, within each stratum's own definition (the
   card-disjoint stratum's held-out cards, the game-disjoint stratum's games), so that every
   rule with rule-test records of both polarities has test records of both polarities in
@@ -1469,7 +1472,7 @@ Printed output
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3`, aimed records marked by `aimed_at` (§ 8.1) |
 | `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt`, `rules/directed-fork-counts.json` | by `rules_catalogue.py directed-rules` | the rules the full collection's directed forks run for (§ 6), the cards of the wording-card coverage round (§ 8.11), and the part of the counts the list is decided from |
-| curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, condition and outcome entities); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
+| curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, condition and outcome entities, class weight); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
 | `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash, and each rule's effective outputs (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), the closed subtype and keyword lists (§ 11.2, § 11.3), and each validation stratum's selection and reporting halves (§ 14.2) |
 | the `rule-counts` file (`--output`) | by `rule-counts` | per-rule counts by source over a records set (§ 5.2), and per rule its carriers with the lines its tags act through (§ 8.15) |
 | the variant tree (`--variant-scripts`) | by `collect-variants` | variant scripts of both rounds, named by their script's hash, with their sidecars (§ 8.15) |
