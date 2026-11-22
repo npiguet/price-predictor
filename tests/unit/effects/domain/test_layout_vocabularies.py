@@ -13,9 +13,12 @@ import pytest
 from effects.domain.effect_head_input import (
     COMBAT_SUBSTEPS,
     ENTITY_ROLES,
+    PENDING_EVENT_MODES,
     ZONES,
+    SlotKind,
     card_features,
     card_segments,
+    feature_widths,
 )
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
@@ -82,20 +85,32 @@ def test_the_heads_keep_their_widths():
 
 
 def test_the_card_slot_keeps_its_width_and_parts():
-    """A card slot is 542 features in 18 parts. A combat record's damage
+    """A card slot is 543 features in 18 parts. A combat record's damage
     assignment is no part of it (D3): it reads the first-strike rule
     without the keyword. The role is (finding 4.7): six columns, the five
-    of :data:`ENTITY_ROLES` and "other". The width moves with the kept
-    keyword flags and the other lists the parts one-hot over."""
+    of :data:`ENTITY_ROLES` and "other". The pending event's part is three
+    columns: a pending event, the card is its subject, the card is its
+    source (finding 4.8). The width moves with the kept keyword flags and
+    the other lists the parts one-hot over."""
     record = record_from_dict(gen3_fixture_records()[0])
     entity = record.state.entities[0]
-    assert len(card_features(entity, record)) == 542
+    assert len(card_features(entity, record)) == 543
     assert list(card_segments(entity, record)) == [
         "characteristics", "face_state", "mana_cost", "printed_loyalty_defense",
         "status", "role", "keyword_flags", "relation_to_act", "designations", "x_paid",
         "chosen", "costs_paid", "history", "order_rank", "stack_extras",
         "pending_event", "command_zone", "comparable_amounts",
     ]
+
+
+def test_the_global_and_player_slots_keep_their_widths():
+    """The ``[GLOBAL]`` slot is 210 features, 83 of them the pending event's
+    mode, one-hot over the 81 :data:`PENDING_EVENT_MODES` and "other", and
+    its combat bit; a player slot is 114, one the pending event's subject
+    (finding 4.8)."""
+    assert len(PENDING_EVENT_MODES) == 81
+    widths = feature_widths([record_from_dict(gen3_fixture_records()[0])])
+    assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (210, 114)
 
 
 def test_the_value_head_keeps_its_slices():

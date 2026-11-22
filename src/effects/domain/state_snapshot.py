@@ -762,6 +762,12 @@ class StateSnapshot:
                 return candidate
         return None
 
+    def names_as_pending_subject(self, ref: str) -> bool:
+        """Whether the pending event names the card or player ``ref`` among
+        its subjects; False without a pending event."""
+        pending = self.pending_event
+        return pending is not None and ref in pending.subjects
+
     def targets_card(self, ref: str) -> bool:
         """Whether the acting item targets the card or player ``ref`` itself,
         as cast (:attr:`Refs.as_cast`).

@@ -807,8 +807,8 @@ places:
 | card slot | subtypes, face state, is a copy, is a token, role (§ 9.3), pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
-| player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit |
-| global slot | day or night |
+| player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit, pending-event subject |
+| global slot | day or night, pending-event details |
 | command-zone and library card slots | floating effects, dungeons, each library's top card |
 | acting-ability slot | die results and coin flips |
 
@@ -829,6 +829,14 @@ places:
   assignment states which creatures deal damage in the step, so a first-strike step would
   show who has first strike without the keyword. Who attacks and who blocks is read from
   the snapshot's combat status and the `attacks` and `blocks` relations.
+- The pending event's details go into three slots:
+  - global slot: its type one-hot, its amount, its mode one-hot and whether it is combat
+    damage; the mode one-hot is over the modes the gen-3 fixture and the review pilots
+    carry, with an "other" column;
+  - card slot: whether the card is its subject, and whether the card is its source;
+  - player slot: whether the player is its subject.
+- A rewrite record's pending event is its incoming event. Its outgoing event, result and
+  replacing ability stay outputs.
 - Summoning sickness reads on a permanent on the battlefield only.
 - The acting source's costs paid read as not cast on an effect half: a forced resolution
   pays no cost, so the payment would tell a forced half from a live one. A cost half and

@@ -157,6 +157,29 @@ COLOR_NAMES: Mapping[str, str] = MappingProxyType({
 CHOSEN_DIRECTIONS: tuple[str, ...] = ("left", "right")
 CHOSEN_PARITIES: tuple[str, ...] = ("even", "odd")
 EVENT_TYPES: tuple[str, ...] = tuple(event.value for event in EventType)
+#: The pending event's ``mode`` (the engine's name for the hook that wrote
+#: it: a ``state_flag_change`` is a phase, a room entered or an attacker
+#: unblocked only by it): every mode the gen-3 fixture's and the five
+#: 2026-11-21/22 review pilots' pending events carry, in case-blind
+#: alphabetical order. The corpus manifest lists no event modes.
+PENDING_EVENT_MODES: tuple[str, ...] = (
+    "AbilityCast", "AddCounter", "Always", "Attached", "AttackerBlocked",
+    "AttackerBlockedByCreature", "AttackersDeclared", "AttackersDeclaredOneTarget",
+    "AttackerUnblocked", "Attacks", "BecomeMonstrous", "BecomesSaddled",
+    "BecomesTarget", "BeginPhase", "Blocks", "ChangesController", "ChangesZone",
+    "ChangesZoneAll", "ClassLevelGained", "CollectEvidence", "CommitCrime",
+    "CounterAdded", "CounterAddedOnce", "CounterRemoved", "CounterRemovedOnce",
+    "CreateToken", "Crewed", "Cycled", "DamageDealtOnce", "DamageDone",
+    "DamageDoneOnce", "DamageDoneOnceByController", "DayTimeChanges", "Destroy",
+    "Discarded", "DiscardedAll", "Draw", "Drawn", "Enlisted", "Evolved",
+    "ExcessDamageAll", "Exerted", "Exiled", "Exploited", "GainLife", "GameLoss",
+    "Immediate", "LandPlayed", "LifeGained", "LifeLost", "LifeLostAll", "LifeReduced",
+    "ManaExpend", "ManifestDread", "Moved", "Mutates", "PayCumulativeUpkeep", "PayEcho",
+    "Phase", "Proliferate", "RingTemptsYou", "RollDice", "RolledDieOnce", "RoomEntered",
+    "Sacrificed", "SacrificedOnce", "SpellCast", "SpellCastOrCopy", "Surveil",
+    "TakesInitiative", "Taps", "TapsForMana", "TokenCreated", "Transformed",
+    "TurnBegin", "TurnFaceUp", "Unattached", "UnlockDoor", "Untap", "Untaps", "Vote",
+)
 
 # Forge's own spellings of phases, counters and protection miss the
 # vocabularies above and would land in "other"; the layout aliases them.
@@ -447,6 +470,27 @@ def _event_amount(event: Event) -> float:
     return 0.0
 
 
+def _push_pending_event_globals(out: list[float], pending: Event | None) -> None:
+    """The pending event's type, amount and mode, and whether it is combat
+    damage (``in.pending_event_details``); zeros without one. A trigger's
+    fired bit hangs on them ("whenever CARDNAME deals combat damage"), and
+    a ``state_flag_change`` is a phase, a room entered or an attacker
+    unblocked only by its mode."""
+    if pending is None:
+        out += _NO_PENDING_EVENT
+        return
+    out += _one_hot(pending.type.value, EVENT_TYPES)
+    _push_scalar(out, _event_amount(pending))
+    out += _one_hot(pending.params.get("mode"), PENDING_EVENT_MODES)
+    out.append(1.0 if pending.params.get("combat") is True else 0.0)
+
+
+#: The pending-event block of a record without one.
+_NO_PENDING_EVENT: tuple[float, ...] = (0.0,) * (
+    _one_hot_width(EVENT_TYPES) + _SCALAR_WIDTH + _one_hot_width(PENDING_EVENT_MODES) + 1
+)
+
+
 def global_features(record: EffectRecord) -> tuple[float, ...]:
     """Turn structure, day or night, the pending event, plus the record's own
     kind flags, which stay last (:data:`KIND_FLAG_WIDTH`)."""
@@ -461,9 +505,7 @@ def global_features(record: EffectRecord) -> tuple[float, ...]:
     out.append(1.0 if g.priority == record.actor_player else 0.0)
     _push_scalar(out, len(g.emblems))
     out += _one_hot(g.day_night or "neither", DAY_NIGHT)
-    pending = state.pending_event
-    out += _one_hot(pending.type.value if pending else None, EVENT_TYPES)
-    _push_scalar(out, _event_amount(pending) if pending else 0)
+    _push_pending_event_globals(out, state.pending_event)
     out += _one_hot(record.kind.value, _RECORD_KINDS)
     out += _one_hot(
         record.moment.value if record.moment else None, _MOMENTS,
@@ -518,8 +560,9 @@ _ACT_FEATURE_WIDTH = 2 + 9 * _SCALAR_WIDTH
 
 
 def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, ...]:
-    """One player's resources and designations, plus their relation to the
-    acting player and to the turn (root spec § 9.4, § 9.5)."""
+    """One player's resources and designations, whether the pending event
+    names them as its subject, plus their relation to the acting player and
+    to the turn (root spec § 9.4, § 9.5)."""
     out: list[float] = []
     for value in (player.life, player.hand, player.library, player.graveyard,
                   player.poison, player.energy):
@@ -542,6 +585,7 @@ def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, .
     counts = player.turn_counts
     for name in TURN_COUNTS:
         _push_scalar(out, getattr(counts, name) if counts is not None else 0)
+    out.append(1.0 if record.state.names_as_pending_subject(player.id) else 0.0)
     g = record.state.global_
     out.append(1.0 if player.id == record.actor_player else 0.0)
     out.append(0.0 if player.id == record.actor_player else 1.0)
@@ -801,15 +845,18 @@ def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
 
 
 def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) -> None:
-    """Whether a ``rewrite`` or ``trigger`` record has a pending event, and
-    whether this card is its subject; the event's type and amount are the
-    ``[GLOBAL]`` slot's."""
-    pending = record.state.pending_event
+    """Whether a ``rewrite`` or ``trigger`` record has a pending event,
+    whether this card is its subject and whether its source (the damage
+    source: "whenever CARDNAME deals combat damage"); the event's type,
+    amount, mode and combat bit are the ``[GLOBAL]`` slot's."""
+    state = record.state
+    pending = state.pending_event
     if pending is None:
-        out += (0.0, 0.0)
+        out += (0.0, 0.0, 0.0)
         return
     out.append(1.0)
-    out.append(1.0 if entity.id in pending.subjects else 0.0)
+    out.append(1.0 if state.names_as_pending_subject(entity.id) else 0.0)
+    out.append(1.0 if pending.params.get("source") == entity.id else 0.0)
 
 
 def command_zone_object(record: EffectRecord, object_id: str) -> CommandZoneObject | None:
