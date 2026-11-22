@@ -80,6 +80,9 @@ def tagged():
         ([record_from_dict(raw) for raw in java_golden_records()], None),
     ]
     index = DetectorIndex.of(load_scenarios(RULES))
+    matchers = {kind: [(scenario, family.compile(declaration.params))
+                       for scenario, declaration, family in entries]
+                for kind, entries in index.by_kind.items()}
     sides: dict[str, dict[Polarity, set[str]]] = defaultdict(lambda: defaultdict(set))
     kinds: dict[str, set[str]] = defaultdict(set)
     rules = {}
@@ -87,8 +90,8 @@ def tagged():
         for record in records:
             rid = f"{number}:{record.record_id}"
             kinds[_label(record)].add(rid)
-            for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
-                found = family.match(record, lines, declaration.params)
+            for scenario, matcher in matchers.get(record.kind.value, ()):
+                found = matcher(record, lines)
                 if found is not None:
                     sides[scenario.id][found.polarity].add(rid)
                     sides[scenario.id]["label"] = _label(record)

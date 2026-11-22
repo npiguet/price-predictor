@@ -9,7 +9,6 @@ import pytest
 
 from effects.domain.rule_catalogue import NoDetector, Polarity, SameAs
 from effects.domain.rule_detectors import (
-    BindsParams,
     DeclarationError,
     DetectorIndex,
     Duplicate,
@@ -24,7 +23,7 @@ from tests.unit.effects.domain.rule_detectors.builders import catalogue, declara
 
 
 @dataclass(frozen=True)
-class _Fixed(BindsParams, EventlessFamily):
+class _Fixed(EventlessFamily):
     """A family that answers the same for every record, so the merge is what is tested."""
 
     answer: FamilyMatch | None
@@ -35,6 +34,9 @@ class _Fixed(BindsParams, EventlessFamily):
 
     def needs(self, params):
         return self.gen3_fields
+
+    def compile(self, params):
+        return lambda record, lines: self.answer
 
     def match(self, record, lines, params):
         return self.answer

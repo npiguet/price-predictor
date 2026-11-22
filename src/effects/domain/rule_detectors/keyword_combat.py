@@ -23,14 +23,13 @@ when a keyword is observable, so the detector and gate 2 cannot disagree.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     CombatParticipant,
     DamageStepKeyword,
-    KeywordResolver,
     KeywordsOf,
     combat_participant,
     qualifying_observations,
@@ -38,14 +37,61 @@ from effects.domain.damage_step_keywords import (
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors.keyword_outcomes import effect_happened
+from effects.domain.rule_detectors.keyword_reading import KeywordReading
 
 _ROWS = {row.keyword: row for row in DAMAGE_STEP_KEYWORDS}
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class KeywordCombatMatcher:
+    """A compiled ``keyword_combat`` declaration."""
+
+    keyword: str
+    row: DamageStepKeyword
+    keywords: KeywordReading = field(default_factory=KeywordReading)
+
+    @classmethod
+    def of(cls, params: Mapping[str, Any]) -> KeywordCombatMatcher:
+        keyword = params.get("keyword")
+        return cls(keyword, _ROWS[keyword])
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        if record.kind is not RecordKind.COMBAT:
+            return None
+        if record.is_probe:
+            return self._stripped(record)
+        return self._carried(record, lines)
+
+    def _stripped(self, record: EffectRecord) -> FamilyMatch | None:
+        """The near miss: the probe fork that stripped the keyword from its carrier."""
+        if record.payload.probed_keyword != self.keyword:
+            return None
+        entity = record.payload.probed_entity
+        carrier = record.state.entity(entity) if entity else None
+        participant = (combat_participant(record.state, carrier)
+                       if carrier is not None else None)
+        outcome = _outcome(self.row, participant, None) if participant is not None else ()
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False,
+                           (entity,) if entity else (), outcome)
+
+    def _carried(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        """The ``fires`` side: a real combat with an observable carrier."""
+        row = self.row
+        resolver = self.keywords.of(lines)
+        found = qualifying_observations(record, (row,), resolver)
+        if not found:
+            return None
+        carriers = tuple(dict.fromkeys(p.carrier.id for _, p in found))
+        outcome = tuple(dict.fromkeys(
+            e for _, p in found for e in _outcome(row, p, resolver.keywords_of)))
+        return FamilyMatch(Polarity.FIRES, _happened(record, row, found, resolver.keywords_of),
+                           carriers, outcome)
+
+
 @dataclass(frozen=True, slots=True)
-class KeywordCombat(BindsParams, EventlessFamily):
+class KeywordCombat(EventlessFamily):
     id: str = "keyword_combat"
     kinds: frozenset[str] = frozenset({"combat"})
     params: frozenset[str] = frozenset({"keyword"})
@@ -60,31 +106,12 @@ class KeywordCombat(BindsParams, EventlessFamily):
             raise ValueError(
                 f"keyword_combat: {keyword!r} is not a damage-step keyword; known: {sorted(_ROWS)}")
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return KeywordCombatMatcher.of(params)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        keyword = params.get("keyword")
-        if record.kind is not RecordKind.COMBAT:
-            return None
-        row = _ROWS[keyword]
-        if record.is_probe:
-            if record.payload.probed_keyword != keyword:
-                return None
-            entity = record.payload.probed_entity
-            carrier = record.state.entity(entity) if entity else None
-            participant = (combat_participant(record.state, carrier)
-                           if carrier is not None else None)
-            outcome = _outcome(row, participant, None) if participant is not None else ()
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False,
-                               (entity,) if entity else (), outcome)
-        resolver = KeywordResolver(lines)
-        found = qualifying_observations(record, (row,), resolver)
-        if not found:
-            return None
-        carriers = tuple(dict.fromkeys(p.carrier.id for _, p in found))
-        outcome = tuple(dict.fromkeys(
-            e for _, p in found for e in _outcome(row, p, resolver.keywords_of)))
-        return FamilyMatch(Polarity.FIRES, _happened(record, row, found, resolver.keywords_of),
-                           carriers, outcome)
+        return self.compile(params)(record, lines)
 
 
 def _happened(record: EffectRecord, row: DamageStepKeyword, found, keywords_of: KeywordsOf) -> bool:

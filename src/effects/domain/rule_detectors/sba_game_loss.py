@@ -32,7 +32,7 @@ combat record holds its damage step's game end.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,15 +40,28 @@ from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_detectors import (
-    BindsParams,
     EventlessFamily,
     FamilyMatch,
+    Matcher,
     first_side,
     register,
 )
+from effects.domain.state_snapshot import PlayerState
 
 CHECKS = frozenset({"life_zero", "poison_ten"})
 _GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
+
+
+def _delta(event, kind: EventType) -> int:
+    """The ``delta`` of ``event`` where it is a ``kind``, else 0."""
+    return int((event.params or {}).get("delta") or 0) if event.type is kind else 0
+
+
+def _lost_in(event, player: str) -> bool:
+    """Whether ``event`` says ``player`` lost: they lost, or another won."""
+    if event.type is EventType.PLAYER_WON:
+        return bool(event.subjects) and player not in event.subjects
+    return event.type is EventType.PLAYER_LOST and player in event.subjects
 
 
 def _changes(record: EffectRecord, player: str) -> tuple[int, int, bool]:
@@ -56,17 +69,10 @@ def _changes(record: EffectRecord, player: str) -> tuple[int, int, bool]:
     life = poison = 0
     lost = False
     for event in record.payload.listed_events():
-        params = event.params or {}
-        if event.type is EventType.PLAYER_WON and event.subjects and player not in event.subjects:
-            lost = True
-        if player not in event.subjects:
-            continue
-        if event.type is EventType.LIFE_CHANGE:
-            life += int(params.get("delta") or 0)
-        elif event.type is EventType.POISON_CHANGE:
-            poison += int(params.get("delta") or 0)
-        elif event.type is EventType.PLAYER_LOST:
-            lost = True
+        lost = lost or _lost_in(event, player)
+        if player in event.subjects:
+            life += _delta(event, EventType.LIFE_CHANGE)
+            poison += _delta(event, EventType.POISON_CHANGE)
     return life, poison, lost
 
 
@@ -79,7 +85,7 @@ def _outcome_readable(record: EffectRecord) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class SbaGameLoss(BindsParams, EventlessFamily):
+class SbaGameLoss(EventlessFamily):
     id: str = "sba_game_loss"
     kinds: frozenset[str] = frozenset({"combat", "resolution"})
     params: frozenset[str] = frozenset({"check"})
@@ -93,40 +99,94 @@ class SbaGameLoss(BindsParams, EventlessFamily):
         if check not in CHECKS:
             raise ValueError(f"sba_game_loss: unknown check {check!r}; known: {sorted(CHECKS)}")
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return GameLossMatcher(_CHECK_SIDES[params.get("check")])
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        check = params.get("check")
+        return self.compile(params)(record, lines)
+
+
+@dataclass(frozen=True, slots=True)
+class _Toll:
+    """What a record cost one player: life lost, poison gained, and whether
+    each would end the game."""
+
+    loss: int
+    poison: int
+    dead: bool
+    poisoned: bool
+
+
+def _life_side(toll: _Toll) -> bool | None:
+    """``life_zero``'s side of a player: None where no life was lost or poison
+    would end the game first."""
+    if toll.loss <= 0 or toll.poisoned:
+        return None
+    return toll.dead
+
+
+def _poison_side(toll: _Toll) -> bool | None:
+    """``poison_ten``'s side of a player: None where no poison was gained or
+    life loss would end the game first."""
+    if toll.poison <= 0 or toll.dead:
+        return None
+    return toll.poisoned
+
+
+#: Each check's side of a player: True on the ``fires`` side, False spared, None unjudged.
+_CHECK_SIDES: dict[str, Callable[[_Toll], bool | None]] = {
+    "life_zero": _life_side, "poison_ten": _poison_side}
+
+
+def _toll(record: EffectRecord, player: PlayerState) -> tuple[_Toll, bool]:
+    """What the record cost ``player``, and whether the record says they lost."""
+    life, poison, lost = _changes(record, player.id)
+    loss = -life
+    return _Toll(loss, poison, loss > 0 and player.life - loss <= 0,
+                 poison > 0 and player.poison + poison >= 10), lost
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class GameLossMatcher:
+    """A compiled ``sba_game_loss`` declaration."""
+
+    side_of: Callable[[_Toll], bool | None]
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
         effect_half = record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
         if not effect_half and record.kind is not RecordKind.COMBAT:
             return None
         if record.is_game_end_record:
             return None
+        fires, spared, observed = self._players(record)
+        # The player's life or poison is both what the check reads and
+        # where the game loss falls.
+        first = first_side(fires, spared)
+        if first is None:
+            return None
+        polarity, judged = first
+        readable = _outcome_readable(record)
+        return FamilyMatch(polarity, any(p in observed for p in judged) if readable else None,
+                           judged, judged)
+
+    def _players(self, record: EffectRecord) -> tuple[list[str], list[str], list[str]]:
+        """The players on the ``fires`` side, the spared ones, and those the
+        record shows lost."""
         fires, spared, observed = [], [], []
         for player in record.state.players:
-            life, poison, lost = _changes(record, player.id)
-            loss = -life
-            dead = loss > 0 and player.life - loss <= 0
-            poisoned = poison > 0 and player.poison + poison >= 10
-            if check == "life_zero":
-                if loss <= 0 or poisoned:
-                    continue
-                side = dead
-            else:
-                if poison <= 0 or dead:
-                    continue
-                side = poisoned
+            side, lost = self._judge(record, player)
+            if side is None:
+                continue
             (fires if side else spared).append(player.id)
             if lost:
                 observed.append(player.id)
-        readable = _outcome_readable(record)
-        # The player's life or poison is both what the check reads and
-        # where the game loss falls.
-        side = first_side(fires, spared)
-        if side is None:
-            return None
-        polarity, judged = side
-        return FamilyMatch(polarity, any(p in observed for p in judged) if readable else None,
-                           judged, judged)
+        return fires, spared, observed
+
+    def _judge(self, record: EffectRecord, player: PlayerState) -> tuple[bool | None, bool]:
+        """``(side, lost)`` of one player; the side None where the check leaves them out."""
+        toll, lost = _toll(record, player)
+        return self.side_of(toll), lost
 
 
 FAMILY = register(SbaGameLoss())

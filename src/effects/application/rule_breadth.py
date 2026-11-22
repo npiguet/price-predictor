@@ -18,7 +18,7 @@ from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
 from effects.application.rule_counts import CountContext
-from effects.domain.rule_breadth import BreadthRow, breadth_counts, breadth_rows
+from effects.domain.rule_breadth import BreadthPlan, BreadthRow, breadth_rows
 from effects.domain.rule_detectors import DetectorIndex
 from effects.domain.tally_merge import merge_into
 
@@ -37,9 +37,10 @@ def breadth_shard(built, shard: Path) -> BreadthTally:
 
     index, sidecars, _ = built
     out = BreadthTally()
+    plan = BreadthPlan.of(index)
     for record in read_shard(shard):
         out.records += 1
-        out.counts.update(breadth_counts(record, index, sidecars))
+        out.counts.update(plan.counts(record, sidecars))
     return out
 
 

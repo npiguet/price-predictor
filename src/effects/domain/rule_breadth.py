@@ -26,7 +26,7 @@ from typing import Any
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, is_game_end
 from effects.domain.rule_catalogue import DetectorDeclaration, Polarity
-from effects.domain.rule_detectors import DetectorFamily, DetectorIndex
+from effects.domain.rule_detectors import DetectorFamily, DetectorIndex, Matcher
 
 POOL = "pool"
 TAGGED = "tagged"
@@ -38,26 +38,54 @@ def pool_params(declaration: DetectorDeclaration, family: DetectorFamily) -> dic
             if name in family.general}
 
 
-def _fires(family: DetectorFamily, record: EffectRecord, lines: SidecarLookup | None,
-           params: Mapping[str, Any]) -> bool:
-    found = family.match(record, lines, params)
+def _fires(matcher: Matcher, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+    found = matcher(record, lines)
     return found is not None and found.polarity is Polarity.FIRES
+
+
+@dataclass(frozen=True, slots=True)
+class _Scenario:
+    """One declared scenario's matchers, each compiled once: its pool's (the
+    declaration's general parameters alone) and its own."""
+
+    id: str
+    pool: Matcher
+    tagged: Matcher
+
+
+@dataclass(frozen=True, slots=True)
+class BreadthPlan:
+    """Every declared scenario's matchers by record kind, compiled once."""
+
+    by_kind: Mapping[str, tuple[_Scenario, ...]]
+
+    @classmethod
+    def of(cls, index: DetectorIndex) -> BreadthPlan:
+        return cls({kind: tuple(
+            _Scenario(scenario.id, family.compile(pool_params(declaration, family)),
+                      family.compile(declaration.params))
+            for scenario, declaration, family in entries)
+            for kind, entries in index.by_kind.items()})
+
+    def counts(self, record: EffectRecord, lines: SidecarLookup | None = None) -> Counter:
+        """``(scenario, POOL | TAGGED) -> 1`` for each declared scenario of the
+        record's kind whose pool, or whose own detector, finds a ``fires`` side."""
+        found: Counter = Counter()
+        if is_game_end(record):
+            return found  # no detector reads the game-end marker, as tag_record says
+        for scenario in self.by_kind.get(record.kind.value, ()):
+            if _fires(scenario.pool, record, lines):
+                found[(scenario.id, POOL)] += 1
+            if _fires(scenario.tagged, record, lines):
+                found[(scenario.id, TAGGED)] += 1
+        return found
 
 
 def breadth_counts(record: EffectRecord, index: DetectorIndex,
                    lines: SidecarLookup | None = None) -> Counter:
-    """``(scenario, POOL | TAGGED) -> 1`` for each declared scenario of the
-    record's kind whose pool, or whose own detector, finds a ``fires`` side.
-    """
-    found: Counter = Counter()
-    if is_game_end(record):
-        return found  # no detector reads the game-end marker, as tag_record says
-    for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
-        if _fires(family, record, lines, pool_params(declaration, family)):
-            found[(scenario.id, POOL)] += 1
-        if _fires(family, record, lines, declaration.params):
-            found[(scenario.id, TAGGED)] += 1
-    return found
+    """:meth:`BreadthPlan.counts` of a plan built for this one record; a
+    caller reading many records builds the plan once."""
+    return BreadthPlan.of(index).counts(record, lines)
 
 
 @dataclass(frozen=True, slots=True)

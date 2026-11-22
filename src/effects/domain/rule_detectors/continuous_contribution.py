@@ -60,7 +60,7 @@ from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import Contribution, EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
@@ -134,24 +134,46 @@ _LIST_TOKENS = frozenset({"=", "all-creature-types", "all-land-types", "all-arti
 _COLOURS = frozenset("WUBRGC")
 
 
+def _bare(value: Any) -> Any:
+    """``value`` without a leading ``-`` (a removal)."""
+    return value[1:] if isinstance(value, str) and value.startswith("-") else value
+
+
+def _keyword_value(family: str, name: str, value: Any) -> None:
+    dv.keyword(family, name, _bare(value))
+
+
+def _colour_value(family: str, name: str, value: Any) -> None:
+    bare = _bare(value)
+    if bare not in _COLOURS and bare not in _LIST_TOKENS:
+        raise ValueError(f"{family}: {name} {value!r} is no colour")
+
+
+def _names_a_type_class(bare: Any) -> bool:
+    """Whether ``bare`` is a list token, a card type or a supertype."""
+    if not isinstance(bare, str):
+        return False
+    lower = bare.lower()
+    return lower in _LIST_TOKENS or lower in dv.DECLARED_CARD_TYPES or lower in dv.SUPERTYPES
+
+
+def _type_value(family: str, name: str, value: Any) -> None:
+    bare = _bare(value)
+    if not _names_a_type_class(bare):
+        dv.subtype(family, name, bare)
+
+
+#: The check a ``value`` of each field passes.
+_VALUE_CHECKS = {"keywords": _keyword_value, "colors": _colour_value, "types": _type_value}
+
+
 def _value_check(field: str):
     """The check a ``value`` of ``field`` passes; a leading ``-`` names a removal."""
-    def check(family: str, name: str, value: Any) -> None:
-        bare = value[1:] if isinstance(value, str) and value.startswith("-") else value
-        if field == "keywords":
-            dv.keyword(family, name, bare)
-        elif field == "colors":
-            if bare not in _COLOURS and bare not in _LIST_TOKENS:
-                raise ValueError(f"{family}: {name} {value!r} is no colour")
-        elif not (isinstance(bare, str) and (bare.lower() in _LIST_TOKENS
-                                             or bare.lower() in dv.DECLARED_CARD_TYPES
-                                             or bare.lower() in dv.SUPERTYPES)):
-            dv.subtype(family, name, bare)
-    return check
+    return _VALUE_CHECKS.get(field, _type_value)
 
 
 @dataclass(frozen=True, slots=True)
-class ContinuousContribution(BindsParams, EventlessFamily):
+class ContinuousContribution(EventlessFamily):
     id: str = "continuous_contribution"
     kinds: frozenset[str] = frozenset({"continuous"})
     params: frozenset[str] = frozenset(
@@ -180,24 +202,12 @@ class ContinuousContribution(BindsParams, EventlessFamily):
             "source_keyword": dv.keyword, "script_param": dv.script_param,
             "affected_face_state": dv.face_state, "designation": dv.designation})
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return ContributionMatcher.of(params)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        if record.kind is not RecordKind.CONTINUOUS or not _source_fits(record, lines, params):
-            return None
-        contributions = record.payload.contributions
-        face = params.get("affected_face_state")
-        if face is not None:
-            contributions = tuple(c for c in contributions if _entity_fact(
-                record, c.entity, lambda entity: has_face_state(entity, face)))
-        if not contributions:
-            return None
-        carrying, applied = _sides(record, contributions, params)
-        host = source_ids(record)
-        if carrying:
-            return FamilyMatch(Polarity.FIRES, True, host, carrying)
-        if not applied or not SCOPES & set(params):
-            return None
-        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, host, applied)
+        return self.compile(params)(record, lines)
 
 
 #: The parameters that say which statics a rule speaks for, so which records
@@ -208,42 +218,91 @@ SCOPES = frozenset({"script_param", "source_keyword", "counter_condition",
                     "source_token_kind", "designation", "affected_face_state"})
 
 
-def _source_fits(record: EffectRecord, lines: SidecarLookup | None,
-                 params: Mapping[str, Any]) -> bool:
-    """Whether the acting static is one the declaration's source filters name."""
-    kind = params.get("source_token_kind")
-    if kind is not None and not source_is_token_of_kind(record.state, kind, record.ability):
-        return False
-    counters = params.get("counter_condition")
-    if counters is not None:
-        line = acting_line(record, lines)
-        if not conditioned_on_counters(line.script_text if line else None, counters):
+@dataclass(frozen=True, slots=True, eq=False)
+class ContributionMatcher:
+    """A compiled ``continuous_contribution`` declaration."""
+
+    field: str | None
+    value: str | None
+    #: The static's source filters, None where absent.
+    token_kind: str | None
+    counter_condition: str | None
+    script_param: Any
+    source_keyword: str | None
+    #: ``affected_face_state`` and ``designation``, None where absent.
+    face: str | None
+    designation: str | None
+    #: The declaration carries a scoping parameter: its near miss is counted.
+    scoped: bool
+
+    @classmethod
+    def of(cls, params: Mapping[str, Any]) -> ContributionMatcher:
+        return cls(params.get("field"), params.get("value"),
+                   params.get("source_token_kind"), params.get("counter_condition"),
+                   params.get("script_param"), params.get("source_keyword"),
+                   params.get("affected_face_state"), params.get("designation"),
+                   bool(SCOPES & set(params)))
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        if record.kind is not RecordKind.CONTINUOUS or not self._source_fits(record, lines):
+            return None
+        contributions = self._affected(record)
+        if not contributions:
+            return None
+        carrying, applied = self._sides(record, contributions)
+        host = source_ids(record)
+        if carrying:
+            return FamilyMatch(Polarity.FIRES, True, host, carrying)
+        if not applied or not self.scoped:
+            return None
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, host, applied)
+
+    def _affected(self, record: EffectRecord) -> tuple[Contribution, ...]:
+        """The contributions to an entity in the declared face state, all where none is."""
+        contributions = record.payload.contributions
+        face = self.face
+        if face is None:
+            return contributions
+        return tuple(c for c in contributions if _entity_fact(
+            record, c.entity, lambda entity: has_face_state(entity, face)))
+
+    def _source_fits(self, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+        """Whether the acting static is one the declaration's source filters name."""
+        if self.token_kind is not None and not source_is_token_of_kind(
+                record.state, self.token_kind, record.ability):
             return False
-    if "script_param" in params and not script_params_match(
-            acting_root_params(record, lines), params["script_param"]):
-        return False
-    return "source_keyword" not in params or card_has_keyword(
-        record.ability or (), lines, params["source_keyword"])
+        if not self._counters_fit(record, lines):
+            return False
+        if self.script_param is not None and not script_params_match(
+                acting_root_params(record, lines), self.script_param):
+            return False
+        return self.source_keyword is None or card_has_keyword(
+            record.ability or (), lines, self.source_keyword)
 
+    def _counters_fit(self, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+        if self.counter_condition is None:
+            return True
+        line = acting_line(record, lines)
+        return conditioned_on_counters(line.script_text if line else None,
+                                       self.counter_condition)
 
-def _sides(record: EffectRecord, contributions: tuple[Contribution, ...],
-           params: Mapping[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """``(carrying, applied)``: the entities a contribution carrying the
-    declared field reaches, and every entity the static applies to; under a
-    ``designation``, the carriers holding it and the others lacking it."""
-    field = params.get("field")
-    carrying = tuple(dict.fromkeys(
-        c.entity for c in contributions if _carries(c, field, params.get("value"))))
-    applied = tuple(dict.fromkeys(c.entity for c in contributions))
-    designation = params.get("designation")
-    if designation is None:
-        return carrying, applied
+    def _sides(self, record: EffectRecord, contributions: tuple[Contribution, ...]
+               ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """``(carrying, applied)``: the entities a contribution carrying the
+        declared field reaches, and every entity the static applies to; under a
+        ``designation``, the carriers holding it and the others lacking it."""
+        carrying = tuple(dict.fromkeys(
+            c.entity for c in contributions if _carries(c, self.field, self.value)))
+        applied = tuple(dict.fromkeys(c.entity for c in contributions))
+        designation = self.designation
+        if designation is None:
+            return carrying, applied
 
-    def holds(entity_id: str) -> bool | None:
-        return _entity_fact(record, entity_id,
-                            lambda entity: has_designation(entity, designation))
-    return (tuple(e for e in carrying if holds(e)),
-            tuple(e for e in applied if e not in carrying and holds(e) is False))
+        def holds(entity_id: str) -> bool | None:
+            return _entity_fact(record, entity_id,
+                                lambda entity: has_designation(entity, designation))
+        return (tuple(e for e in carrying if holds(e)),
+                tuple(e for e in applied if e not in carrying and holds(e) is False))
 
 
 def _entity_fact(record: EffectRecord, entity_id: str, read) -> bool | None:

@@ -27,7 +27,7 @@ import json
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
@@ -207,27 +207,6 @@ class DetectorFamily(Protocol):
         """The record's side of the rule, or None where the record does not
         show it: what ``compile(params)`` finds in it."""
         ...
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class BoundMatch:
-    """A family's ``match`` with one declaration's parameters bound to it."""
-
-    family: DetectorFamily
-    params: Mapping[str, Any]
-
-    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
-        return self.family.match(record, lines, self.params)
-
-
-class BindsParams:
-    """What a family whose ``match`` still reads its parameters on every
-    record inherits: ``compile`` binds them to ``match``."""
-
-    __slots__ = ()
-
-    def compile(self, params: Mapping[str, Any]) -> Matcher:
-        return BoundMatch(cast(DetectorFamily, self), params)
 
 
 class EventlessFamily:

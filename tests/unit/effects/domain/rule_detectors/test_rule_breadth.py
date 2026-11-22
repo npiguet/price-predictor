@@ -94,15 +94,18 @@ def test_the_game_end_marker_counts_in_no_pool():
     """As ``tag_record`` reads it (WP7): no detector reads the marker."""
     from effects.domain.records import TurnActionPayload, TurnActionSubkind
     from effects.domain.rule_catalogue import Polarity
-    from effects.domain.rule_detectors import BindsParams, FamilyMatch
+    from effects.domain.rule_detectors import FamilyMatch
     from tests.unit.effects.builders import make_record
 
-    class _Everything(BindsParams):
+    class _Everything:
         id = "everything"
         params = general = frozenset()
 
         def needs(self, params):
             return frozenset()
+
+        def compile(self, params):
+            return lambda record, lines: FamilyMatch(Polarity.FIRES, True)
 
         def match(self, record, lines, params):
             return FamilyMatch(Polarity.FIRES, True)

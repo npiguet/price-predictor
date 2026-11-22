@@ -76,7 +76,7 @@ from typing import Any
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
@@ -91,7 +91,8 @@ from effects.domain.rule_detectors.outcome_subjects import (
     QUALIFIER_CHECKS,
     SUBJECT_QUALIFIER_NEEDS,
     SUBJECT_QUALIFIERS,
-    subject_verdict,
+    subject_qualifiers,
+    subjects_meet,
 )
 from effects.domain.rule_outcomes import PHASE_ORDER
 from effects.domain.script_text import api_of, params, segments
@@ -112,28 +113,22 @@ _SEGMENT_PARAMS = frozenset(_SCRIPT_PARAMS) | {"script_param"}
 SPAWNING_APIS = frozenset({"DelayedTrigger", "ImmediateTrigger"})
 
 
-def _script_params(record: EffectRecord, lines: SidecarLookup | None,
-                   params: Mapping[str, Any]) -> dict[str, str] | None:
-    """The script parameters a declaration's script conditions are read off:
-    the spawning segment's under ``spawned_by``, else the acting line's root
-    when any is declared, else none (an empty set)."""
-    if params.get("spawned_by") is not None:
-        return _spawning_segment(record, lines, params["spawned_by"])
-    return acting_root_params(record, lines) if set(params) & _SEGMENT_PARAMS else {}
-
-
 def _validate_selection(params: Mapping[str, Any]) -> None:
     """Which triggers a declaration names: a keyword's line, a spawned trigger,
     a step or a mode, each with the parameters that go with it."""
-    keyword = params.get("keyword")
-    if keyword is not None and set(params) & _SEGMENT_PARAMS:
-        raise ValueError("trigger_mode: a keyword's line has no script parameters to compare")
-    if keyword is not None and params.get("spawned_by") is not None:
-        raise ValueError("trigger_mode: a keyword's line holds no chain to spawn a trigger")
+    if params.get("keyword") is not None:
+        _validate_keyword_line(params)
     if not ({"keyword", "mode", "step", "spawned_by"} & params.keys()):
         raise ValueError(
             "trigger_mode: a declaration names the trigger's mode, keyword, step or spawned_by")
     _validate_spawn_and_step(params.get("spawned_by"), params.get("step"))
+
+
+def _validate_keyword_line(params: Mapping[str, Any]) -> None:
+    if set(params) & _SEGMENT_PARAMS:
+        raise ValueError("trigger_mode: a keyword's line has no script parameters to compare")
+    if params.get("spawned_by") is not None:
+        raise ValueError("trigger_mode: a keyword's line holds no chain to spawn a trigger")
 
 
 def _validate_spawn_and_step(spawned_by: str | None, step: str | None) -> None:
@@ -141,19 +136,6 @@ def _validate_spawn_and_step(spawned_by: str | None, step: str | None) -> None:
         raise ValueError(f"trigger_mode: spawned_by is one of {sorted(SPAWNING_APIS)}")
     if step is not None and step not in PHASE_ORDER:
         raise ValueError(f"trigger_mode: step {step!r} is none of {PHASE_ORDER}")
-
-
-def _subtype_fits(sources: tuple[EntityState, ...], params: Mapping[str, Any]) -> bool:
-    if "source_subtype" not in params:
-        return True
-    wanted = params["source_subtype"].lower()
-    return any(wanted in {s.lower() for s in e.subtypes} for e in sources)
-
-
-def _copy_fits(sources: tuple[EntityState, ...], record: EffectRecord,
-               params: Mapping[str, Any]) -> bool:
-    return any(is_copy(entity, record.state) == bool(params["source_is_copy"])
-               for entity in sources)
 
 
 def _zones(value: str) -> frozenset[str]:
@@ -185,11 +167,10 @@ def _param_fits(found: Mapping[str, str], name: str, wanted: str) -> bool:
     return found.get(_SCRIPT_PARAMS[name]) == wanted
 
 
-def _script_fits(found: Mapping[str, str], params: Mapping[str, Any]) -> bool:
-    """Whether the trigger's script holds each ``params`` value it declares: a
-    zone as :func:`_zone_fits` reads it, any other as written."""
-    return all(_param_fits(found, name, params[name]) for name in _SCRIPT_PARAMS
-               if name in params)
+def _script_fits(found: Mapping[str, str], wanted: tuple[tuple[str, str], ...]) -> bool:
+    """Whether the trigger's script holds each ``wanted`` value: a zone as
+    :func:`_zone_fits` reads it, any other as written."""
+    return all(_param_fits(found, name, value) for name, value in wanted)
 
 
 def _spawning_segment(record: EffectRecord, lines: SidecarLookup | None,
@@ -211,7 +192,7 @@ def _spawning_segment(record: EffectRecord, lines: SidecarLookup | None,
 
 
 @dataclass(frozen=True, slots=True)
-class TriggerMode(BindsParams, EventlessFamily):
+class TriggerMode(EventlessFamily):
     id: str = "trigger_mode"
     kinds: frozenset[str] = frozenset({"trigger"})
     params: frozenset[str] = _SEGMENT_PARAMS | {
@@ -235,45 +216,104 @@ class TriggerMode(BindsParams, EventlessFamily):
             "source_designation": dv.designation, "source_subtype": dv.subtype,
             "source_is_copy": dv.boolean, "script_param": dv.script_param})
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return TriggerMatcher.of(params)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        keyword, step = params.get("keyword"), params.get("step")
-        if record.kind is not RecordKind.TRIGGER:
-            return None
-        if step is not None and (record.state.global_.phase or "").lower() != step:
-            return None
-        if not self._source_fits(record, params):
-            return None
-        if keyword is not None:
-            if not is_keyword_line(acting_line(record, lines), keyword):
-                return None
-            return self._side(record, params)
-        found = _script_params(record, lines, params)
-        if found is None or not _script_fits(found, params):
-            return None
-        if "script_param" in params and not script_params_match(found, params["script_param"]):
-            return None
-        return self._side(record, params)
+        return self.compile(params)(record, lines)
 
-    @staticmethod
-    def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:
+
+@dataclass(frozen=True, slots=True, eq=False)
+class TriggerMatcher:
+    """A compiled ``trigger_mode`` declaration."""
+
+    keyword: str | None
+    step: str | None
+    #: ``source_subtype`` lower-cased, ``source_is_copy`` and
+    #: ``source_designation``: None where absent.
+    subtype: str | None
+    is_copy: bool | None
+    designation: str | None
+    #: The subject qualifiers, name -> declared value.
+    subjects: Mapping[str, Any]
+    #: ``spawned_by``, None where absent.
+    spawned_by: str | None
+    #: Whether any parameter is read off the trigger's script segment.
+    reads_segment: bool
+    #: The script parameters declared, name -> value, in ``_SCRIPT_PARAMS`` order.
+    script: tuple[tuple[str, str], ...]
+    #: ``script_param`` where declared.
+    script_param: Any
+
+    @classmethod
+    def of(cls, params: Mapping[str, Any]) -> TriggerMatcher:
+        subtype = params.get("source_subtype")
+        return cls(
+            params.get("keyword"), params.get("step"),
+            subtype.lower() if subtype is not None else None,
+            bool(params["source_is_copy"]) if "source_is_copy" in params else None,
+            params.get("source_designation"), subject_qualifiers(params),
+            params.get("spawned_by"), bool(set(params) & _SEGMENT_PARAMS),
+            tuple((name, params[name]) for name in _SCRIPT_PARAMS if name in params),
+            params.get("script_param"))
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        if record.kind is not RecordKind.TRIGGER or not self._selected(record, lines):
+            return None
+        return self._side(record)
+
+    def _selected(self, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+        """Whether the trigger is one the declaration names, before its fired bit."""
+        return (self._step_fits(record) and self._source_fits(record)
+                and self._line_fits(record, lines))
+
+    def _step_fits(self, record: EffectRecord) -> bool:
+        if self.step is None:
+            return True
+        return (record.state.global_.phase or "").lower() == self.step
+
+    def _line_fits(self, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+        """Whether the acting line is the ``keyword``'s, or its script holds
+        the declared parameters."""
+        if self.keyword is not None:
+            return is_keyword_line(acting_line(record, lines), self.keyword)
+        found = self._script_params(record, lines)
+        if found is None or not _script_fits(found, self.script):
+            return False
+        return self.script_param is None or script_params_match(found, self.script_param)
+
+    def _script_params(self, record: EffectRecord,
+                       lines: SidecarLookup | None) -> dict[str, str] | None:
+        """The script parameters a declaration's script conditions are read off:
+        the spawning segment's under ``spawned_by``, else the acting line's root
+        when any is declared, else none (an empty set)."""
+        if self.spawned_by is not None:
+            return _spawning_segment(record, lines, self.spawned_by)
+        return acting_root_params(record, lines) if self.reads_segment else {}
+
+    def _source_fits(self, record: EffectRecord) -> bool:
         """Whether the trigger's source is a copy where ``source_is_copy``
         asks; a record with no readable source fits no such declaration."""
         sources = source_entities(record.state, record.ability or ())
-        if not _subtype_fits(sources, params):
+        if not self._subtype_fits(sources):
             return False
-        if set(SUBJECT_QUALIFIERS) & set(params) and not subject_verdict(
-                record.payload.event.subjects, record.state, params):
+        if self.subjects and not subjects_meet(
+                record.payload.event.subjects, record.state, self.subjects):
             # Not the object the rule is about, or none readable.
             return False
-        return "source_is_copy" not in params or _copy_fits(sources, record, params)
+        return self.is_copy is None or any(
+            is_copy(entity, record.state) == self.is_copy for entity in sources)
 
-    @staticmethod
-    def _side(record: EffectRecord, params: Mapping[str, Any]) -> FamilyMatch | None:
+    def _subtype_fits(self, sources: tuple[EntityState, ...]) -> bool:
+        wanted = self.subtype
+        return wanted is None or any(
+            wanted in {s.lower() for s in e.subtypes} for e in sources)
+
+    def _side(self, record: EffectRecord) -> FamilyMatch | None:
         fired = record.payload.fired
-        designation = params.get("source_designation")
-        if designation is not None:
-            held = [has_designation(entity, designation)
+        if self.designation is not None:
+            held = [has_designation(entity, self.designation)
                     for entity in source_entities(record.state, record.ability or ())]
             held = [h for h in held if h is not None]
             if not held or any(held) != fired:

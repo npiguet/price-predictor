@@ -83,7 +83,7 @@ from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind, RewriteResult
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_line, source_ids
 from effects.domain.rule_detectors.outcome_events import (
@@ -97,7 +97,8 @@ from effects.domain.rule_detectors.outcome_subjects import (
     QUALIFIER_CHECKS,
     SUBJECT_QUALIFIER_NEEDS,
     SUBJECT_QUALIFIERS,
-    subject_verdict,
+    subject_qualifiers,
+    subjects_meet,
 )
 
 #: How the outgoing event's ``amount`` compares with the incoming one's.
@@ -144,7 +145,7 @@ def _results(value: Any) -> frozenset[RewriteResult]:
 
 
 @dataclass(frozen=True, slots=True)
-class RewriteEvent(BindsParams, EventlessFamily):
+class RewriteEvent(EventlessFamily):
     id: str = "rewrite_event"
     kinds: frozenset[str] = frozenset({"rewrite"})
     params: frozenset[str] = _OWN | EVENT_FILTERS
@@ -171,51 +172,94 @@ class RewriteEvent(BindsParams, EventlessFamily):
         if "result" in params:
             _results(params["result"])
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return RewriteMatcher.of(self.id, params)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
+        return self.compile(params)(record, lines)
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class RewriteMatcher:
+    """A compiled ``rewrite_event`` declaration."""
+
+    event: EventType
+    filters: Mapping[str, Any]
+    #: ``mode``, ``amount_change`` and ``keyword``, None where absent.
+    mode: Any
+    amount_change: str | None
+    keyword: str | None
+    prevention: bool
+    caused_with_empty_stack: bool
+    #: The results by which the rewrite fires.
+    wanted: frozenset[RewriteResult]
+    #: The subject qualifiers, name -> declared value.
+    subjects: Mapping[str, Any]
+
+    @classmethod
+    def of(cls, family: str, params: Mapping[str, Any]) -> RewriteMatcher:
         event = EventType(params["event"])
-        filters = event_filters(self.id, event, params, _OWN)
         prevention = bool(params.get("prevention"))
         wanted = (_results(params["result"]) if "result" in params
                   else PREVENTING if prevention else frozenset({RewriteResult.REPLACED}))
+        return cls(event, event_filters(family, event, params, _OWN),
+                   params.get("mode"), params.get("amount_change"), params.get("keyword"),
+                   prevention, bool(params.get("caused_with_empty_stack")), wanted,
+                   subject_qualifiers(params))
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
         if record.kind is not RecordKind.REWRITE:
             return None
         incoming = record.payload.arrived
         if incoming is None:
             return None  # what came in is unknown: its event, subjects and amounts
-        # A set-aside ability's run (``buffered_events``) is a place of its
-        # own (``emittable_events.BUFFERED``), never this family's event.
-        if incoming.type is not event:
-            return None
-        found = incoming.params or {}
-        if "mode" in params and not same_value(found.get("mode"), params["mode"]):
-            return None
-        if not meets_filters(incoming, filters):
-            return None
-        if not subject_verdict(incoming.subjects, record.state, params):
-            return None  # not the object the rule is about, or unreadable
-        if params.get("caused_with_empty_stack") and not caused_with_empty_stack(record, incoming):
+        if not self._incoming_fits(record, incoming):
             return None
         result = record.payload.result
         if result is None:
             return None  # collected before the result was recorded: no side to read
-        if "amount_change" in params and not _amount_changed(
-                incoming, record.payload.outgoing, params["amount_change"]):
-            return None
-        if "keyword" in params or prevention:
-            line = acting_line(record, lines)
-            if "keyword" in params and not is_keyword_line(line, params["keyword"]):
-                return None
-            if prevention and not (result is RewriteResult.PREVENTED
-                                   or is_prevention_line(line)):
-                return None
-        fires = result in wanted
         outgoing = record.payload.outgoing
+        if self.amount_change is not None and not _amount_changed(
+                incoming, outgoing, self.amount_change):
+            return None
+        if not self._line_fits(record, lines, result):
+            return None
+        fires = result in self.wanted
         outcome = tuple(dict.fromkeys((
             *incoming.subjects, *(outgoing.subjects if outgoing is not None else ()))))
         condition = tuple(dict.fromkeys((*incoming.subjects, *source_ids(record))))
         return FamilyMatch(Polarity.FIRES if fires else Polarity.DOES_NOT_FIRE, fires,
                            condition, outcome)
+
+    def _incoming_fits(self, record: EffectRecord, incoming) -> bool:
+        """Whether the incoming event is the one the rule is about."""
+        # A set-aside ability's run (``buffered_events``) is a place of its
+        # own (``emittable_events.BUFFERED``), never this family's event.
+        if incoming.type is not self.event:
+            return False
+        if not self._mode_fits(incoming):
+            return False
+        if not meets_filters(incoming, self.filters):
+            return False
+        if not subjects_meet(incoming.subjects, record.state, self.subjects):
+            return False  # not the object the rule is about, or unreadable
+        return not self.caused_with_empty_stack or caused_with_empty_stack(record, incoming)
+
+    def _mode_fits(self, incoming) -> bool:
+        return self.mode is None or same_value((incoming.params or {}).get("mode"), self.mode)
+
+    def _line_fits(self, record: EffectRecord, lines: SidecarLookup | None,
+                   result: RewriteResult) -> bool:
+        """Whether the replacing line is the ``keyword``'s and, under
+        ``prevention``, a prevention effect's."""
+        if self.keyword is None and not self.prevention:
+            return True
+        line = acting_line(record, lines)
+        if self.keyword is not None and not is_keyword_line(line, self.keyword):
+            return False
+        return not self.prevention or (result is RewriteResult.PREVENTED
+                                       or is_prevention_line(line))
 
 
 FAMILY = register(RewriteEvent())

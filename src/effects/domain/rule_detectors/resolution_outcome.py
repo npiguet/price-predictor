@@ -55,7 +55,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, Matcher, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     CANDIDATE_KINDS,
@@ -127,7 +127,7 @@ SCOPES = frozenset({"keyword", "source_keyword", "ability_kind", "targeted"})
 
 
 @dataclass(frozen=True, slots=True)
-class ResolutionOutcomeFamily(BindsParams, EventlessFamily):
+class ResolutionOutcomeFamily(EventlessFamily):
     id: str = "resolution_outcome"
     kinds: frozenset[str] = frozenset({"resolution"})
     params: frozenset[str] = frozenset({"outcome", "near", "targeted", "source_keyword",
@@ -147,47 +147,69 @@ class ResolutionOutcomeFamily(BindsParams, EventlessFamily):
         dv.check(self.id, params, {"targeted": dv.boolean, "source_keyword": dv.keyword,
                                    "keyword": dv.keyword})
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return OutcomeMatcher.of(params)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        fires = ResolutionOutcome(params["outcome"])
-        near = {ResolutionOutcome(o) for o in params.get("near", ["resolved"])}
-        observed = _observed(record, ResolutionOutcome.COUNTERED in near | {fires})
-        if observed is None or not _fits(record, lines, observed, params):
+        return self.compile(params)(record, lines)
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class OutcomeMatcher:
+    """A compiled ``resolution_outcome`` declaration."""
+
+    fires: ResolutionOutcome
+    near: frozenset[ResolutionOutcome]
+    #: The declaration carries a scoping parameter: its near miss is counted.
+    scoped: bool
+    targeted: bool
+    #: ``ability_kind``, None where absent.
+    kind: str | None
+    source_keyword: str | None
+    #: ``keyword``, None where absent.
+    keyword: str | None
+
+    @classmethod
+    def of(cls, params: Mapping[str, Any]) -> OutcomeMatcher:
+        return cls(
+            ResolutionOutcome(params["outcome"]),
+            frozenset(ResolutionOutcome(o) for o in params.get("near", ["resolved"])),
+            any(params.get(name) for name in SCOPES),
+            bool(params.get("targeted")),
+            params.get("ability_kind"), params.get("source_keyword"), params.get("keyword"))
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        observed = _observed(record, ResolutionOutcome.COUNTERED in self.near | {self.fires})
+        if observed is None or not self._fits(record, lines, observed):
             return None
-        if observed.outcome is fires:
+        if observed.outcome is self.fires:
             return FamilyMatch(Polarity.FIRES, True, observed.condition,
                                observed.outcome_entities)
-        if observed.outcome in near and any(params.get(name) for name in SCOPES):
+        if observed.outcome in self.near and self.scoped:
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, observed.condition,
                                observed.outcome_entities)
         return None
 
+    def _fits(self, record: EffectRecord, lines: SidecarLookup | None,
+              observed: _Observed) -> bool:
+        """Whether the stack object is one ``targeted``, ``ability_kind``,
+        ``source_keyword`` and ``keyword`` speak for, each where given."""
+        return (self._targeted_fits(observed) and self._kind_fits(record, lines)
+                and self._keywords_fit(record, lines, observed))
 
-def _fits(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
-          params: Mapping[str, Any]) -> bool:
-    """Whether the stack object is one ``targeted``, ``ability_kind``,
-    ``source_keyword`` and ``keyword`` speak for, each where given."""
-    return (_targeted_fits(observed, params) and _kind_fits(record, lines, params)
-            and _keywords_fit(record, lines, observed, params))
+    def _targeted_fits(self, observed: _Observed) -> bool:
+        return not self.targeted or observed.targeted
 
+    def _kind_fits(self, record: EffectRecord, lines: SidecarLookup | None) -> bool:
+        return self.kind is None or ability_kind(record.ability or (), lines) == self.kind
 
-def _targeted_fits(observed: _Observed, params: Mapping[str, Any]) -> bool:
-    return not params.get("targeted") or observed.targeted
-
-
-def _kind_fits(record: EffectRecord, lines: SidecarLookup | None,
-               params: Mapping[str, Any]) -> bool:
-    return "ability_kind" not in params or ability_kind(
-        record.ability or (), lines) == params["ability_kind"]
-
-
-def _keywords_fit(record: EffectRecord, lines: SidecarLookup | None, observed: _Observed,
-                  params: Mapping[str, Any]) -> bool:
-    keyword = params.get("source_keyword")
-    if keyword is not None and not _prints(record, lines, observed, keyword):
-        return False
-    return "keyword" not in params or is_keyword_line(acting_line(record, lines),
-                                                      params["keyword"])
+    def _keywords_fit(self, record: EffectRecord, lines: SidecarLookup | None,
+                      observed: _Observed) -> bool:
+        if self.source_keyword is not None and not _prints(
+                record, lines, observed, self.source_keyword):
+            return False
+        return self.keyword is None or is_keyword_line(acting_line(record, lines), self.keyword)
 
 
 FAMILY = register(ResolutionOutcomeFamily())
