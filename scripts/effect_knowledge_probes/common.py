@@ -56,7 +56,7 @@ def stable_hash(value: str) -> int:
 def load_checkpoint(path: Path):
     """The checkpoint at ``path``; exits on one written under another input
     layout than this code builds (``gen-3``), which no probe can read."""
-    from effects.domain.effect_head_input import CheckpointLayoutError
+    from effects.domain.checkpoint_layout import CheckpointLayoutError
     from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
     try:

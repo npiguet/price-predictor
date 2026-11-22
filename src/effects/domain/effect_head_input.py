@@ -44,7 +44,6 @@ from effects.domain.keyword_names import (
     overlay_keyword,
     overlay_keyword_set,
 )
-from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey, TraitKind, first_text
 from effects.domain.records import (
     EffectRecord,
@@ -54,12 +53,7 @@ from effects.domain.records import (
     ResolutionPayload,
     acting_keys,
 )
-from effects.domain.relation_types import (
-    RELATION_TYPES,
-    TARGET_INDICES,
-    Direction,
-    relation_type,
-)
+from effects.domain.relation_types import Direction, relation_type
 from effects.domain.state_snapshot import (
     COLORS,
     CardLine,
@@ -89,9 +83,9 @@ class SlotKind(IntEnum):
     ABILITY = 4
 
 
-# Each vocabulary's one-hot ends in an "other" slot. Never edit these tuples,
-# nor the enums two of them are read off, without a new INPUT_LAYOUT: a
-# checkpoint trained on them reads them bit for bit.
+# Each vocabulary's one-hot ends in an "other" slot. A checkpoint records the
+# order of each of these tuples, and of the enums they are read off
+# (``checkpoint_layout.LAYOUT_VOCABULARIES``), and a loader refuses another.
 
 PHASES: tuple[str, ...] = (
     "untap", "upkeep", "draw", "main1", "begin_combat", "declare_attackers",
@@ -188,9 +182,6 @@ PENDING_EVENT_MODES: tuple[str, ...] = (
 # Forge's own spellings of phases, counters and protection miss the
 # vocabularies above and would land in "other"; the layout aliases them.
 
-#: Where a checkpoint's ``training_settings`` record the layout it trained on.
-INPUT_LAYOUT_KEY = "input_layout"
-
 PHASE_ALIASES: dict[str, str] = {
     "combat_begin": "begin_combat",
     "combat_declare_attackers": "declare_attackers",
@@ -198,74 +189,6 @@ PHASE_ALIASES: dict[str, str] = {
     "combat_first_strike_damage": "first_strike_damage",
     "combat_end": "end_combat",
 }
-
-
-#: The input layout every training run builds and records, and the only one a
-#: loader accepts (FR-045): a checkpoint recording another layout, or none, was
-#: trained on inputs this code no longer builds. Gen-3 is the card's lines as
-#: ability slots, its gen-3 card, player, global and act inputs, command-zone
-#: slots and the relations (root spec § 9 – § 10).
-INPUT_LAYOUT = "gen-3"
-
-
-class CheckpointLayoutError(ValueError):
-    """A checkpoint trained on an input layout this code does not build."""
-
-
-#: Where a checkpoint records the trunk's relation types, by name in table-row
-#: order, and the ``targets`` index cap (research M3, M4).
-RELATION_TYPES_KEY = "relation_types"
-RELATION_TARGET_INDICES_KEY = "relation_target_indices"
-#: Where a checkpoint records the subtype and named-counter lists whose order
-#: fixes its embedding rows.
-SUBTYPES_KEY = "subtypes"
-NAMED_COUNTERS_KEY = "named_counters"
-#: The head's closed output lists (root spec 11.2, 11.3), whose order fixes
-#: the subtype and keyword outputs' columns.
-SUBTYPES_CHANGED_KEY = "subtypes_changed"
-KEYWORDS_CHANGED_KEY = "keywords_changed"
-
-
-def layout_settings() -> dict:
-    """What a run records about the inputs it was built on: the input layout,
-    the relation types whose order fixes the trunk's table rows, the
-    subtypes and named counters whose order fixes the card slot's rows and
-    the named counters' output columns, and the closed output lists whose
-    order fixes the subtype and keyword outputs' columns."""
-    return {
-        INPUT_LAYOUT_KEY: INPUT_LAYOUT,
-        RELATION_TYPES_KEY: list(RELATION_TYPES),
-        RELATION_TARGET_INDICES_KEY: TARGET_INDICES,
-        SUBTYPES_KEY: list(SUBTYPES),
-        NAMED_COUNTERS_KEY: list(NAMED_COUNTERS),
-        SUBTYPES_CHANGED_KEY: list(SUBTYPES_CHANGED),
-        KEYWORDS_CHANGED_KEY: list(KEYWORDS_CHANGED),
-    }
-
-
-def _layout_generation(recorded) -> str:
-    """The generation a checkpoint's recorded layout names: a checkpoint that
-    records none predates the layout key, which is gen-1."""
-    return "gen-1" if recorded is None else str(recorded)
-
-
-def require_input_layout(training_settings) -> None:
-    """Refuse a checkpoint trained on another input layout, relation-type table
-    or card-slot vocabulary; a refusal names the checkpoint's generation."""
-    settings = training_settings or {}
-    recorded = settings.get(INPUT_LAYOUT_KEY)
-    if recorded != INPUT_LAYOUT:
-        raise CheckpointLayoutError(
-            f"the checkpoint is a {_layout_generation(recorded)} checkpoint "
-            f"(input layout {recorded!r}); this code reads {INPUT_LAYOUT} "
-            "checkpoints only. Retrain it on the current code."
-        )
-    for key, value in layout_settings().items():
-        if settings.get(key) != value:
-            raise CheckpointLayoutError(
-                f"the checkpoint records another {key} than this code's ({INPUT_LAYOUT!r} "
-                "layout); its embedding tables would be read in the wrong rows. Retrain it."
-            )
 
 
 #: The largest magnitude a count or a signed delta is scored at, by the field
@@ -458,11 +381,11 @@ class EffectHeadInput:
 
 #: The kinds a model input can be: every kind but ``turn_action``, which no
 #: curated stratum holds and so never reaches the model.
-_RECORD_KINDS: tuple[str, ...] = tuple(
+RECORD_KINDS: tuple[str, ...] = tuple(
     k.value for k in RecordKind if k is not RecordKind.TURN_ACTION
 )
-_MOMENTS: tuple[str, ...] = tuple(m.value for m in Moment)
-_PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
+MOMENTS: tuple[str, ...] = tuple(m.value for m in Moment)
+PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
     s.value for s in PlayabilitySubkind
 )
 
@@ -517,20 +440,20 @@ def global_features(record: EffectRecord) -> tuple[float, ...]:
     _push_scalar(out, len(g.emblems))
     out += _one_hot(g.day_night or "neither", DAY_NIGHT)
     _push_pending_event_globals(out, state.pending_event)
-    out += _one_hot(record.kind.value, _RECORD_KINDS)
+    out += _one_hot(record.kind.value, RECORD_KINDS)
     out += _one_hot(
-        record.moment.value if record.moment else None, _MOMENTS,
+        record.moment.value if record.moment else None, MOMENTS,
     )
     out += _one_hot(
         record.subkind.value if record.subkind else None,
-        _PLAYABILITY_SUBKINDS,
+        PLAYABILITY_SUBKINDS,
     )
     return tuple(out)
 
 
 #: Width of the kind, moment and subkind one-hots that end every ``[GLOBAL]``
 #: slot; the ``no-state`` baseline keeps exactly these (FR-094).
-KIND_FLAG_WIDTH = sum(map(_one_hot_width, (_RECORD_KINDS, _MOMENTS, _PLAYABILITY_SUBKINDS)))
+KIND_FLAG_WIDTH = sum(map(_one_hot_width, (RECORD_KINDS, MOMENTS, PLAYABILITY_SUBKINDS)))
 
 ACT_SLOT = 1
 
@@ -991,6 +914,8 @@ _CARD_PARTS = (
     ("command_zone", _push_command_zone),
     ("comparable_amounts", _push_comparable_amounts),
 )
+#: The card slot's parts by name, in order.
+CARD_PARTS: tuple[str, ...] = tuple(name for name, _ in _CARD_PARTS)
 
 
 def counter_rows(entity: EntityState) -> tuple[tuple[int, float], ...]:

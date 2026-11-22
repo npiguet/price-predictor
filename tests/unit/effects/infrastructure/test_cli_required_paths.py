@@ -122,7 +122,7 @@ def _checkpoint(root: Path, corpus: Path) -> tuple[Path, Path, Path]:
     import torch
 
     from effects.domain.ability_encoder import AbilityEncoderConfig
-    from effects.domain.effect_head_input import layout_settings
+    from effects.domain.checkpoint_layout import layout_settings
     from effects.domain.effect_model import EffectModel, EffectModelConfig
     from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure.effect_model_store import (

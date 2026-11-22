@@ -77,7 +77,7 @@ _Config = TypeVar("_Config")
 #: Torch loads with this module, so its exceptions are named rather than imported.
 _EFFECT_MODEL_STORE = "effects.infrastructure.effect_model_store"
 #: A checkpoint trained on another input layout (FR-045), refused by every loader.
-_LAYOUT_REFUSED = "effects.domain.effect_head_input.CheckpointLayoutError"
+_LAYOUT_REFUSED = "effects.domain.checkpoint_layout.CheckpointLayoutError"
 #: A corpus manifest of an older generation, or one missing a member.
 _MANIFEST_REFUSED = "effects.domain.corpus_manifest.ManifestError"
 

@@ -19,7 +19,7 @@ from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import (
     Baseline,
 )
-from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, layout_settings
+from effects.domain.checkpoint_layout import INPUT_LAYOUT, INPUT_LAYOUT_KEY, layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
@@ -399,7 +399,7 @@ class TestTheInputLayout:
     def test_a_checkpoint_recording_another_layout_or_none_is_refused(
         self, tmp_path, files, settings,
     ):
-        from effects.domain.effect_head_input import CheckpointLayoutError
+        from effects.domain.checkpoint_layout import CheckpointLayoutError
         from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
         store = EffectModelStore(tmp_path)
@@ -408,6 +408,36 @@ class TestTheInputLayout:
             store.load()
         with pytest.raises(CheckpointLayoutError):
             load_effect_checkpoint(store.latest_path())
+
+    def test_a_reordered_vocabulary_is_refused_by_its_name(self, tmp_path, files, monkeypatch):
+        """Two event types swapped keep every width, so only the recorded
+        order tells the checkpoint written under them from one this code
+        reads (finding 11.6)."""
+        from effects.domain import checkpoint_layout
+        from effects.domain.checkpoint_layout import CheckpointLayoutError
+
+        registry = dict(checkpoint_layout.LAYOUT_VOCABULARIES)
+        first, second, *rest = registry["event_types"]
+        registry["event_types"] = (second, first, *rest)
+        monkeypatch.setattr(checkpoint_layout, "LAYOUT_VOCABULARIES", tuple(registry.items()))
+        reordered = layout_settings()
+        monkeypatch.undo()
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files, training_settings=reordered))
+        with pytest.raises(CheckpointLayoutError, match="another event_types order"):
+            store.load()
+
+    def test_a_checkpoint_recording_no_vocabulary_digest_is_refused(self, tmp_path, files):
+        """Written before the stamp existed, it is refused by the stamp's name,
+        never read with this code's order assumed."""
+        from effects.domain.checkpoint_layout import CheckpointLayoutError
+
+        settings = {**layout_settings()}
+        settings.pop("event_types_digest", None)
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files, training_settings=settings))
+        with pytest.raises(CheckpointLayoutError, match="records no event_types digest"):
+            store.load()
 
 
 class TestSweepSettings:
@@ -467,13 +497,10 @@ class TestGen3Checkpoint:
         assert loaded.extra == {}
 
     def test_the_relation_tables_layout_rides_the_training_settings(self, tmp_path, files):
-        from effects.domain.effect_head_input import (
-            RELATION_TARGET_INDICES_KEY,
-            RELATION_TYPES_KEY,
-        )
+        from effects.domain.checkpoint_layout import RELATION_TARGET_INDICES_KEY
 
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(files))
         settings = store.load().training_settings
-        assert settings[RELATION_TYPES_KEY] == layout_settings()[RELATION_TYPES_KEY]
+        assert settings["relation_types_digest"] == layout_settings()["relation_types_digest"]
         assert RELATION_TARGET_INDICES_KEY in settings

@@ -324,8 +324,10 @@ Adds the relation tables (inside the model state), the averaged weights (as the 
 `best_control_score`, `rule_mask`, `deviance_floor`, `ema_epochs`, `stratum_weight`,
 `relation_values`, `rule_map_digest`, `loss_denominators`, `selection_set_digest`, each under its
 own key. Removes `best_val_loss`. `training_settings` holds `input_layout = "gen-3"` and, from
-`layout_settings()`, the relation types, the relation target indices, the subtypes and named counters
-and the closed output lists; any other layout or list is refused (M1).
+`layout_settings()`, the relation target indices and, as `<name>_digest`, the sha256 of every ordered
+name list that fixes a row or column of the model's tables (`checkpoint_layout.LAYOUT_VOCABULARIES`:
+the relation types, the input vocabularies, each output head's fields and classes); any other layout,
+digest or a missing digest is refused (M1).
 
 ### resume.pt (extended)
 

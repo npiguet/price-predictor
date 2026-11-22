@@ -66,7 +66,7 @@ def test_a_checkpoint_missing_the_option_kind_embedding_is_refused():
 def test_only_the_current_layout_is_accepted():
     import pytest
 
-    from effects.domain.effect_head_input import (
+    from effects.domain.checkpoint_layout import (
         INPUT_LAYOUT,
         INPUT_LAYOUT_KEY,
         CheckpointLayoutError,
@@ -75,11 +75,13 @@ def test_only_the_current_layout_is_accepted():
     )
 
     require_input_layout(layout_settings())
-    with pytest.raises(CheckpointLayoutError, match="relation_types"):
-        require_input_layout({**layout_settings(), "relation_types": ["line_of:forward"]})
-    with pytest.raises(CheckpointLayoutError):
+    with pytest.raises(CheckpointLayoutError, match="another relation_types order"):
+        require_input_layout({**layout_settings(), "relation_types_digest": "0" * 64})
+    with pytest.raises(CheckpointLayoutError, match="another subtypes_changed order"):
         # Another closed output list moves the subtype outputs' columns.
-        require_input_layout({**layout_settings(), "subtypes_changed": ["goblin"]})
+        require_input_layout({**layout_settings(), "subtypes_changed_digest": "0" * 64})
+    with pytest.raises(CheckpointLayoutError, match="another relation_target_indices"):
+        require_input_layout({**layout_settings(), "relation_target_indices": 3})
     for settings in ({}, None, {INPUT_LAYOUT_KEY: "gen-1"}, {INPUT_LAYOUT_KEY: "gen-2"},
                      {**layout_settings(), INPUT_LAYOUT_KEY: "gen-2"}):
         with pytest.raises(CheckpointLayoutError, match=INPUT_LAYOUT):
@@ -90,7 +92,7 @@ def test_a_refusal_names_the_generation_the_checkpoint_belongs_to():
     """No recorded layout is a gen-1 checkpoint; ``"gen-2"`` is a gen-2 one."""
     import pytest
 
-    from effects.domain.effect_head_input import (
+    from effects.domain.checkpoint_layout import (
         INPUT_LAYOUT_KEY,
         CheckpointLayoutError,
         layout_settings,
@@ -115,7 +117,7 @@ def test_a_fresh_run_records_the_gen3_layout():
         RunSpec,
         TrainEffectModelConfig,
     )
-    from effects.domain.effect_head_input import INPUT_LAYOUT_KEY, require_input_layout
+    from effects.domain.checkpoint_layout import INPUT_LAYOUT_KEY, require_input_layout
 
     settings = training_settings(
         RunSpec(TrainEffectModelConfig.unpathed(corpus="unused"), CorpusFacts(), seed=1),

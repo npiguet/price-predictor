@@ -42,7 +42,7 @@ def test_a_corpus_not_wholly_gen3_or_a_checkpoint_of_another_layout_exits_one(
 ) -> None:
     """contracts/cli.md: evaluate-effect-model reads gen-3 records and a
     gen-3 checkpoint only (FR-076)."""
-    from effects.domain.effect_head_input import CheckpointLayoutError
+    from effects.domain.checkpoint_layout import CheckpointLayoutError
     from effects.domain.shard_generation import (
         OlderGenerationError,
         UnknownGenerationError,

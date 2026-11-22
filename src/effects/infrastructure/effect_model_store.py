@@ -17,7 +17,7 @@ import torch
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_PREFIXES
 from effects.domain.baselines import Baseline
-from effects.domain.effect_head_input import require_input_layout
+from effects.domain.checkpoint_layout import require_input_layout
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles

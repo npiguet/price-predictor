@@ -134,3 +134,91 @@ def test_the_value_head_keeps_its_slices():
         "mana_g", "mana_c", "mana_generic",
     ]
     assert AT_LEAST_SLICES["damage"] == (21, 61)
+
+
+# ── every list a checkpoint's columns hang on is recorded (finding 11.6) ──
+
+#: Module-level name lists no column hangs on by itself, each with the
+#: recorded list that carries it.
+_RECORDED_THROUGH = {
+    "OVERLAY_KEYWORDS": "keywords_changed, which begins with them",
+    "FAMILIES": "relation_types, derived from them",
+    "PER_ENTITY_TERMS": "per_entity_head",
+    "DISPERSED_FIELDS": "per_entity_head, the fields' types",
+    "CREATED_SLOT_COLUMNS": "created_objects_head",
+    "CREATED_DISPERSED": "created_objects_head",
+    "VERDICT_BITS": "verdict_head",
+    "VALUE_DISPERSED": "value_head, the targets' types",
+}
+
+
+def _recorded_lists() -> set[tuple[str, ...]]:
+    from effects.domain.checkpoint_layout import LAYOUT_VOCABULARIES
+
+    return {tuple(names) for _, names in LAYOUT_VOCABULARIES}
+
+
+def _layout_modules():
+    from effects.domain import (
+        effect_head_input,
+        effect_head_layout,
+        field_types,
+        forge_vocabularies,
+        kept_keyword_flags,
+        output_vocabularies,
+        relation_types,
+    )
+
+    return (effect_head_input, effect_head_layout, field_types, forge_vocabularies,
+            kept_keyword_flags, output_vocabularies, relation_types)
+
+
+def _is_public_constant(name: str) -> bool:
+    return name.isupper() and not name.startswith("_")
+
+
+def _is_name_list(value) -> bool:
+    members = value if isinstance(value, tuple | frozenset) else ()
+    return bool(members) and all(type(member) is str for member in members)
+
+
+def _name_lists(module):
+    """A module's public name lists, a set by its sorted members."""
+    for name, value in vars(module).items():
+        if _is_public_constant(name) and _is_name_list(value):
+            yield name, tuple(sorted(value)) if isinstance(value, frozenset) else value
+
+
+def test_every_name_list_of_the_layout_modules_is_recorded():
+    """A new list a slot one-hots over or a head names columns by is recorded
+    by a checkpoint from its first line, or the test names it."""
+    recorded = _recorded_lists()
+    missing = sorted({
+        f"{module.__name__}.{name}"
+        for module in _layout_modules() for name, names in _name_lists(module)
+        if names not in recorded and name not in _RECORDED_THROUGH
+    })
+    assert missing == []
+
+
+def test_every_head_fields_classes_and_members_are_recorded():
+    from effects.domain.effect_head_layout import (
+        GLOBAL_LAYOUT,
+        PER_ENTITY_FIELDS,
+        VERDICT_LAYOUT,
+    )
+
+    recorded = _recorded_lists()
+    lists = [(spec.name, spec.classes) for spec in PER_ENTITY_FIELDS]
+    lists += [(spec.name, names) for layout in (VERDICT_LAYOUT, GLOBAL_LAYOUT)
+              for spec in layout.fields for names in (spec.classes, spec.members)]
+    assert [str(name) for name, names in lists if names and names not in recorded] == []
+
+
+def test_the_slot_kinds_and_the_heads_are_recorded():
+    from effects.domain.checkpoint_layout import LAYOUT_VOCABULARIES
+
+    names = dict(LAYOUT_VOCABULARIES)
+    assert names["slot_kinds"] == tuple(kind.name for kind in SlotKind)
+    assert {"per_entity_head", "created_objects_head", "verdict_head", "global_head",
+            "value_head"} <= names.keys()

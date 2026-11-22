@@ -7,7 +7,7 @@ Rules to respect when changing the input layout, the relation attention or an ou
 
 ## Orders are part of a checkpoint
 
-- The order of the relation types, the subtypes, the named counters and the closed output lists fixes rows and columns of the model's tables. A checkpoint records them and a loader refuses a difference, so reordering or inserting into any of them invalidates every existing checkpoint (`checkpoints.md`).
+- The order of every name list an input slot reads or an output head names columns by fixes rows and columns of the model's tables, a list derived from an enum or a dataclass's fields included. A checkpoint records a digest of each list in `domain/checkpoint_layout.LAYOUT_VOCABULARIES` and a loader refuses a difference, so reordering or inserting into any of them invalidates every existing checkpoint (`checkpoints.md`). A new list is registered there: `tests/unit/effects/domain/test_layout_vocabularies.py` fails on a public name list of the layout modules, or a head field's classes or members, that the registry lacks.
 - Those lists are generated, not hand-edited:
   - `domain/kept_keyword_flags.py` by `scripts/scan_keyword_flags.py`; its test fails when the file is stale.
   - `domain/forge_vocabularies.py` by `scripts/scan_forge_vocabularies.py`.

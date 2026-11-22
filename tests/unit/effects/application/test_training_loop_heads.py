@@ -407,11 +407,12 @@ class TestTheBatchersTheLoopBuilds:
                 api_types=[], param_keys=[],
             ))
 
+        from effects.domain.checkpoint_layout import LAYOUT_VOCABULARIES
+
         rest = [
             "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
             "api_weight", "api_types", "param_keys", "tokenizer_rules", "input_layout",
-            "relation_types", "relation_target_indices", "subtypes", "named_counters",
-            "subtypes_changed", "keywords_changed",
+            "relation_target_indices", *(f"{name}_digest" for name, _ in LAYOUT_VOCABULARIES),
         ]
         assert keys() == rest
         assert keys(lethality_copies=2) == ["lethality_copies", *rest]

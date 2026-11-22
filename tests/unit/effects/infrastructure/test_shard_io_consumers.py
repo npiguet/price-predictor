@@ -40,7 +40,7 @@ def _evaluate(root: Path, corpus: Path) -> None:
 
     from effects.application.evaluation_context import load_context
     from effects.domain.ability_encoder import AbilityEncoderConfig
-    from effects.domain.effect_head_input import layout_settings
+    from effects.domain.checkpoint_layout import layout_settings
     from effects.domain.effect_model import EffectModel, EffectModelConfig
     from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure.corpus_store import CorpusStore

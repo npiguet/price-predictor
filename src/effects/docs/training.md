@@ -56,7 +56,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 
 ## Layout and magnitudes
 
-- A checkpoint records its input layout and the ordered lists behind it (relation types, subtypes, named counters, the closed output lists). Every loader refuses another layout or a differing list (`CheckpointLayoutError`). Reordering any of those lists invalidates every existing checkpoint. See `model-layout.md` and `checkpoints.md`.
+- A checkpoint records its input layout and a digest of every ordered list behind its tables; every loader refuses another layout, a differing digest or a missing one (`CheckpointLayoutError`), so reordering any of those lists invalidates every existing checkpoint (`model-layout.md` § Orders are part of a checkpoint, `checkpoints.md`).
 - Every count and signed-delta magnitude is capped at 40 (`MAGNITUDE_CAP`) in four places that must agree: the field losses, the created-objects counts, the constant-predictor floor and the evaluation's deviance. Above the cap an amount is the game compounding, not the text.
 - The thermometer codes on card and player slots use the same 40 steps, so a stated amount compares with power, toughness and life in one attention score.
 

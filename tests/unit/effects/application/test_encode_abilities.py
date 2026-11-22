@@ -22,7 +22,7 @@ from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.ability_tokenizer import TOKENIZER_RULES, TOKENIZER_RULES_KEY
 from effects.domain.baselines import Baseline
-from effects.domain.effect_head_input import layout_settings
+from effects.domain.checkpoint_layout import layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.split_provenance import SplitProvenance
@@ -476,7 +476,7 @@ class TestAGen3Checkpoint:
         assert not np.allclose(rows[0], rows[1]) and not np.allclose(rows[1], rows[2])
 
     def test_the_checkpoint_loads_whole_at_the_gen3_layout(self, checkpoint):
-        from effects.domain.effect_head_input import INPUT_LAYOUT_KEY
+        from effects.domain.checkpoint_layout import INPUT_LAYOUT_KEY
         from effects.infrastructure.effect_model_store import (
             load_effect_checkpoint,
             load_weights,
