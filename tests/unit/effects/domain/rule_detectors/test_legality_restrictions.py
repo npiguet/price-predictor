@@ -168,15 +168,25 @@ def _with_power(entity, power):
     return replace(entity, pt=PowerToughness((power, power)))
 
 
+def _outside_sides(record, restriction):
+    """``sides`` of a blockers record under ``restriction``, read without sidecars."""
+    from effects.domain.damage_step_keywords import KeywordResolver
+    from effects.domain.rule_detectors.legality_restrictions import (
+        Restriction,
+        blocker_judgements,
+        sides,
+    )
+
+    return sides(blocker_judgements(record, KeywordResolver().keywords_of,
+                                    Restriction(restriction)), "outside")
+
+
 def test_skulk_forbids_a_blocker_with_greater_power():
     """702.118b, which blocking_restrictions did not model."""
-    from effects.domain.rule_detectors.legality_restrictions import blocker_judgements, sides
-
     skulker = _with_power(_creature("E1", "skulk", controller="P0"), 2)
     record = _blockers(skulker, legal=(_with_power(_creature("E3"), 1),),
                        forbidden=(_with_power(_creature("E2"), 3),))
-    assert sides(blocker_judgements(record, None, "skulk", None), "outside") == (
-        ("E2",), ("E3",))
+    assert _outside_sides(record, "skulk") == (("E2",), ("E3",))
 
 
 def test_landwalk_needs_the_land_it_names_on_the_defender_s_battlefield():
@@ -184,7 +194,6 @@ def test_landwalk_needs_the_land_it_names_on_the_defender_s_battlefield():
     Swamp; nonbasic and snow landwalk read their selector."""
     from dataclasses import replace
 
-    from effects.domain.rule_detectors.legality_restrictions import blocker_judgements, sides
     from effects.domain.state_snapshot import CardLine
 
     def walker(selector):
@@ -202,16 +211,13 @@ def test_landwalk_needs_the_land_it_names_on_the_defender_s_battlefield():
     forest = make_entity("E6", "forest", controller="P1", types=("Land",),
                          subtypes=("Forest",), supertypes=("Basic",))
     wastes = make_entity("E7", "evolving wilds", controller="P1", types=("Land",))
-    fires = sides(blocker_judgements(board(walker("Swamp"), swamp), None, "landwalk", None),
-                  "outside")
+    fires = _outside_sides(board(walker("Swamp"), swamp), "landwalk")
     assert fires == (("E2",), ())
-    near = sides(blocker_judgements(board(walker("Swamp"), forest, forbidden=False), None,
-                                    "landwalk", None), "outside")
+    near = _outside_sides(board(walker("Swamp"), forest, forbidden=False), "landwalk")
     assert near == ((), ("E2",))
     nonbasic = board(walker("Land.nonBasic"), forest)
-    assert sides(blocker_judgements(nonbasic, None, "landwalk", None), "outside") == ((), ())
-    assert sides(blocker_judgements(board(walker("Land.nonBasic"), wastes), None, "landwalk",
-                                    None), "outside") == (("E2",), ())
+    assert _outside_sides(nonbasic, "landwalk") == ((), ())
+    assert _outside_sides(board(walker("Land.nonBasic"), wastes), "landwalk") == (("E2",), ())
 
 
 def test_a_changeling_has_every_creature_type():

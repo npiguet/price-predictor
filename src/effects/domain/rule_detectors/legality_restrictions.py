@@ -57,13 +57,13 @@ player.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from functools import partial
 
-from effects.domain.damage_step_keywords import KeywordResolver
+from effects.domain.damage_step_keywords import KeywordsOf
 from effects.domain.keyword_names import HEXPROOF_FROM, PROTECTION_FROM
-from effects.domain.provenance import SidecarLookup
-from effects.domain.records import EffectRecord
+from effects.domain.records import Candidate, EffectRecord, ForbiddenEntity
 from effects.domain.rule_outcomes import (
     BlockingRestriction,
     Characteristics,
@@ -75,7 +75,7 @@ from effects.domain.rule_outcomes import (
     landwalk_lands,
     targeting_restrictions,
 )
-from effects.domain.state_snapshot import EntityState
+from effects.domain.state_snapshot import CardLine, EntityState, StateSnapshot
 
 TAPPED, LANDWALK, EFFECT, SELECTOR, SICK = "tapped", "landwalk", "effect", "selector", "sick"
 #: What keeps a creature out of the legal attackers (508.1a): tapped, or
@@ -95,6 +95,15 @@ _EVASION_KEYWORD = {
 
 
 @dataclass(frozen=True, slots=True)
+class Restriction:
+    """The one rule a declaration names, with a protection's quality kind
+    (``everything``) where it names one."""
+
+    name: str
+    quality: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Judgement:
     """One entity's standing under one restriction."""
 
@@ -104,17 +113,28 @@ class Judgement:
     in_play: bool
 
 
+def _outside_side(j: Judgement) -> bool | None:
+    """``fires_when = outside``: outside where the restriction applies, the
+    near miss inside where it is in play and does not."""
+    if j.applies:
+        return None if j.inside else True
+    return False if j.in_play and j.inside else None
+
+
+def _inside_side(j: Judgement) -> bool | None:
+    """``fires_when = inside``: inside nonetheless where the restriction
+    applies, the near miss outside."""
+    return j.inside if j.applies else None
+
+
 def sides(judged: Iterable[Judgement], fires_when: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """``(fires, near)`` entity ids, each once, in the order judged."""
+    side_of = _outside_side if fires_when == "outside" else _inside_side
     fires, near = [], []
     for j in judged:
-        if fires_when == "outside":
-            if j.applies and not j.inside:
-                fires.append(j.entity)
-            elif j.in_play and not j.applies and j.inside:
-                near.append(j.entity)
-        elif j.applies:
-            (fires if j.inside else near).append(j.entity)
+        side = side_of(j)
+        if side is not None:
+            (fires if side else near).append(j.entity)
     return tuple(dict.fromkeys(fires)), tuple(dict.fromkeys(near))
 
 
@@ -131,42 +151,88 @@ def _filtered(keywords: set[str], quality: str | None) -> set[str]:
     return {k for k in keywords if not k.startswith(PROTECTION_FROM) or k in kept}
 
 
-def blocker_judgements(record: EffectRecord, lines: SidecarLookup | None, restriction: str,
-                       quality: str | None) -> list[Judgement]:
+def _listed_entities(state: StateSnapshot, legal: Sequence[str],
+                     forbidden: Sequence[ForbiddenEntity]
+                     ) -> Iterator[tuple[str, bool, EntityState]]:
+    """Each entity a legality list names, once, inside (legal) or outside
+    (forbidden), with its snapshot entity; one the snapshot lacks left out."""
+    listed = [(e, True) for e in legal]
+    listed += [(f.entity, False) for f in forbidden]
+    for entity_id, inside in dict.fromkeys(listed):
+        entity = state.entity(entity_id)
+        if entity is not None:
+            yield entity_id, inside, entity
+
+
+# ── blockers ────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class _Blocking:
+    """One listed creature against the anchor attacker, with what the
+    restrictions read of the pair."""
+
+    entity_id: str
+    inside: bool
+    blocker: EntityState
+    blocker_keywords: set[str]
+    #: The anchor's keywords, protections of another quality kind dropped.
+    attacker: set[str]
+    evasions: frozenset[BlockingRestriction]
+    #: Whether something the record shows keeps it from blocking.
+    explained: bool
+    #: Whether its controller controls a land the anchor's landwalk names;
+    #: None where no line says which land, or the restriction is no landwalk.
+    walked: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Blockers:
+    """A blockers record's anchor attacker, as each listed creature is judged against."""
+
+    state: StateSnapshot
+    anchor: EntityState
+    attacker: set[str]
+    keywords_of: KeywordsOf
+    #: The forbidden creatures the record names a responsible line for.
+    named: set[str]
+    landwalk: bool
+
+    def blocking(self, entity_id: str, inside: bool, blocker: EntityState) -> _Blocking:
+        blocker_keywords = self.keywords_of(blocker)
+        evasions = blocking_restrictions(
+            Combatant.of(self.anchor, self.attacker), Combatant.of(blocker, blocker_keywords))
+        explained = (bool(evasions) or blocker.tapped or entity_id in self.named
+                     or _cant_block_keyword(blocker, blocker_keywords, self.state))
+        walked = _walked(self.anchor, blocker, self.state) if self.landwalk else None
+        return _Blocking(entity_id, inside, blocker, blocker_keywords, self.attacker,
+                         frozenset(evasions), explained, walked)
+
+
+def blocker_judgements(record: EffectRecord, keywords_of: KeywordsOf,
+                       restriction: Restriction) -> list[Judgement]:
     """Each listed creature of a blockers record against its anchor attacker."""
     payload, state = record.payload, record.state
     anchor = state.entity(payload.anchor_attacker)
     if anchor is None:
         return []
-    keywords_of = KeywordResolver(lines).keywords_of
-    attacker = _filtered(keywords_of(anchor), quality)
-    named = {f.entity for f in payload.forbidden if f.explained}
-    listed = [(e, True) for e in payload.legal_blockers]
-    listed += [(f.entity, False) for f in payload.forbidden]
-    found = []
-    for entity_id, inside in dict.fromkeys(listed):
-        blocker = state.entity(entity_id)
-        if blocker is None:
-            continue
-        blocker_keywords = keywords_of(blocker)
-        evasions = blocking_restrictions(
-            Combatant.of(anchor, attacker), Combatant.of(blocker, blocker_keywords))
-        explained = (bool(evasions) or blocker.tapped or entity_id in named
-                     or _cant_block_keyword(blocker, blocker_keywords, state))
-        walked = _walked(anchor, blocker, state) if restriction == LANDWALK else None
-        found.append(_blocker(restriction, entity_id, inside, attacker, blocker_keywords,
-                              evasions, blocker, explained, walked))
-    return found
+    blockers = _Blockers(state, anchor, _filtered(keywords_of(anchor), restriction.quality),
+                         keywords_of, {f.entity for f in payload.forbidden if f.explained},
+                         restriction.name == LANDWALK)
+    judge = _blocker_judge(restriction.name)
+    return [judge(blockers.blocking(entity_id, inside, blocker)) for entity_id, inside, blocker
+            in _listed_entities(state, payload.legal_blockers, payload.forbidden)]
 
 
 #: The keywords Forge reads, with no static, to keep a creature from
 #: blocking at all (``CombatUtil.canBlock(Card, boolean)``), lower-cased.
-_CANT_BLOCK = ("cardname can't block.", "cardname can't attack or block.")
+_CANT_BLOCK = frozenset({"cardname can't block.", "cardname can't attack or block."})
 #: The same while its controller has no other creature in play.
-_CANT_BLOCK_ALONE = ("cardname can't block alone.", "cardname can't attack or block alone.")
+_CANT_BLOCK_ALONE = frozenset({"cardname can't block alone.",
+                               "cardname can't attack or block alone."})
 
 
-def _cant_block_keyword(blocker: EntityState, keywords: set[str], state) -> bool:
+def _cant_block_keyword(blocker: EntityState, keywords: set[str], state: StateSnapshot) -> bool:
     """Whether a keyword of the blocker's own, printed or granted
     (``keywords``), or hidden (``granted_temporary.hidden_keywords``), keeps
     it from blocking at all, as Forge reads it: "can't block", "can't attack
@@ -174,53 +240,108 @@ def _cant_block_keyword(blocker: EntityState, keywords: set[str], state) -> bool
     creature."""
     hidden = blocker.granted_temporary.hidden_keywords or ()
     texts = {k.lower().strip() for k in (*keywords, *hidden)}
-    if texts & set(_CANT_BLOCK):
+    if texts & _CANT_BLOCK:
         return True
-    if not texts & set(_CANT_BLOCK_ALONE):
-        return False
-    creatures = [e for e in state.entities if e.on_battlefield
-                 and e.controller == blocker.controller
-                 and "creature" in {t.lower() for t in e.types}]
+    return bool(texts & _CANT_BLOCK_ALONE) and _alone(blocker, state)
+
+
+def _alone(blocker: EntityState, state: StateSnapshot) -> bool:
+    """Whether its controller controls no other creature."""
+    creatures = [e for e in state.entities if _creature_of(e, blocker.controller)]
     return len(creatures) < 2
 
 
-def _walked(anchor: EntityState, blocker: EntityState, state) -> bool | None:
+def _creature_of(entity: EntityState, controller: str | None) -> bool:
+    if not entity.on_battlefield or entity.controller != controller:
+        return False
+    return "creature" in {t.lower() for t in entity.types}
+
+
+#: A landwalk selector naming no land the record shows.
+_UNNAMED_LANDS = ("ChosenType", "YourBasic")
+
+
+def _walked(anchor: EntityState, blocker: EntityState, state: StateSnapshot) -> bool | None:
     """Whether the blocker's controller controls a land the anchor's landwalk
     names (702.14c), read off its keyword lines' fragments; None where no
     line says which land (a chosen type)."""
-    selectors = [line.fragment.split(":")[1] for line in anchor.lines
-                 if line.fragment and line.fragment.lower().startswith("landwalk:")
-                 and len(line.fragment.split(":")) > 1]
-    if not selectors or any(s.split(".")[0] in ("ChosenType", "YourBasic") for s in selectors):
+    selectors = [s for s in map(_landwalk_selector, anchor.lines) if s is not None]
+    if _names_no_land(selectors):
         return None
     lands = [e for e in state.entities if e.on_battlefield and e.controller == blocker.controller]
     return any(landwalk_lands(selector, land) for selector in selectors for land in lands)
 
 
-def _blocker(restriction: str, entity_id: str, inside: bool, attacker: set[str],
-             blocker_keywords: set[str], evasions, blocker: EntityState,
-             explained: bool, walked: bool | None = None) -> Judgement:
-    if restriction == TAPPED:
-        return _tapped(entity_id, inside, blocker)
-    if restriction == LANDWALK:
-        walks = "landwalk" in attacker
-        if walked is not None:
-            # The land the landwalk names is on the defender's battlefield.
-            return Judgement(entity_id, inside, walks and walked, walks)
-        return Judgement(entity_id, inside, walks and not inside and not explained, walks)
-    if restriction == EFFECT:
-        applies = not inside and not explained and "landwalk" not in attacker
-        return Judgement(entity_id, inside, applies, applies)
-    rule = BlockingRestriction(restriction)
-    if rule is BlockingRestriction.SHADOW:
-        in_play = "shadow" in attacker or "shadow" in blocker_keywords
-    elif rule is BlockingRestriction.PROTECTION:
-        in_play = any(k.startswith(PROTECTION_FROM) for k in attacker)
-    elif rule is BlockingRestriction.SKULK:
-        in_play = "skulk" in attacker
-    else:
-        in_play = _EVASION_KEYWORD[rule] in attacker
-    return Judgement(entity_id, inside, rule in evasions, in_play)
+def _landwalk_selector(line: CardLine) -> str | None:
+    """The land a ``Landwalk:<selector>`` fragment names; None for another line."""
+    fragment = line.fragment
+    if not fragment or not fragment.lower().startswith("landwalk:"):
+        return None
+    parts = fragment.split(":")
+    return parts[1] if len(parts) > 1 else None
+
+
+def _names_no_land(selectors: list[str]) -> bool:
+    if not selectors:
+        return True
+    return any(s.split(".")[0] in _UNNAMED_LANDS for s in selectors)
+
+
+def _tapped_blocker(b: _Blocking) -> Judgement:
+    return _tapped(b.entity_id, b.inside, b.blocker)
+
+
+def _landwalk(b: _Blocking) -> Judgement:
+    walks = "landwalk" in b.attacker
+    if b.walked is not None:
+        # The land the landwalk names is on the defender's battlefield.
+        return Judgement(b.entity_id, b.inside, walks and b.walked, walks)
+    return Judgement(b.entity_id, b.inside, walks and not b.inside and not b.explained, walks)
+
+
+def _effect(b: _Blocking) -> Judgement:
+    applies = not b.inside and not b.explained and "landwalk" not in b.attacker
+    return Judgement(b.entity_id, b.inside, applies, applies)
+
+
+def _shadow_in_play(rule: BlockingRestriction, b: _Blocking) -> bool:
+    return "shadow" in b.attacker or "shadow" in b.blocker_keywords
+
+
+def _protection_in_play(rule: BlockingRestriction, b: _Blocking) -> bool:
+    return any(k.startswith(PROTECTION_FROM) for k in b.attacker)
+
+
+def _skulk_in_play(rule: BlockingRestriction, b: _Blocking) -> bool:
+    return "skulk" in b.attacker
+
+
+def _evasion_keyword_in_play(rule: BlockingRestriction, b: _Blocking) -> bool:
+    return _EVASION_KEYWORD[rule] in b.attacker
+
+
+#: Whether each evasion is in play; the others' attacker keyword (``_EVASION_KEYWORD``).
+_EVASION_IN_PLAY: dict[BlockingRestriction, Callable[[BlockingRestriction, _Blocking], bool]] = {
+    BlockingRestriction.SHADOW: _shadow_in_play,
+    BlockingRestriction.PROTECTION: _protection_in_play,
+    BlockingRestriction.SKULK: _skulk_in_play,
+}
+
+
+def _evasion(rule: BlockingRestriction, b: _Blocking) -> Judgement:
+    in_play = _EVASION_IN_PLAY.get(rule, _evasion_keyword_in_play)(rule, b)
+    return Judgement(b.entity_id, b.inside, rule in b.evasions, in_play)
+
+
+_BLOCKER_JUDGES: dict[str, Callable[[_Blocking], Judgement]] = {
+    TAPPED: _tapped_blocker, LANDWALK: _landwalk, EFFECT: _effect}
+
+
+def _blocker_judge(restriction: str) -> Callable[[_Blocking], Judgement]:
+    """How a blocker restriction judges one listed creature: tapped,
+    landwalk, effect, else the evasion it names."""
+    judge = _BLOCKER_JUDGES.get(restriction)
+    return judge if judge is not None else partial(_evasion, BlockingRestriction(restriction))
 
 
 def _tapped(entity_id: str, inside: bool, creature: EntityState) -> Judgement:
@@ -231,69 +352,115 @@ def _tapped(entity_id: str, inside: bool, creature: EntityState) -> Judgement:
     return Judgement(entity_id, inside, creature.tapped, creature.tapped)
 
 
-def attacker_judgements(record: EffectRecord, lines: SidecarLookup | None,
+# ── attackers ───────────────────────────────────────────────────────────
+
+
+def attacker_judgements(record: EffectRecord, keywords_of: KeywordsOf,
                         restriction: str) -> list[Judgement]:
     """Each creature of an attackers record (a gen-3 record's anchor alone)
     against 508.1a's two conditions."""
     payload, state = record.payload, record.state
-    listed = [(e, True) for e in payload.legal_attackers]
-    listed += [(f.entity, False) for f in payload.forbidden]
     anchor = getattr(payload, "anchor_attacker", None)
-    keywords_of = KeywordResolver(lines).keywords_of
     found = []
-    for entity_id, inside in dict.fromkeys(listed):
-        creature = state.entity(entity_id)
-        if creature is None or (anchor is not None and entity_id != anchor):
-            continue
-        if restriction == TAPPED:
-            found.append(_tapped(entity_id, inside, creature))
-        else:
-            sick = creature.sick
-            found.append(Judgement(entity_id, inside,
-                                   sick and "haste" not in keywords_of(creature), sick))
+    for entity_id, inside, creature in _listed_entities(
+            state, payload.legal_attackers, payload.forbidden):
+        if anchor is None or entity_id == anchor:
+            found.append(_tapped(entity_id, inside, creature) if restriction == TAPPED
+                         else _sick(entity_id, inside, creature, keywords_of))
     return found
 
 
-def target_judgements(record: EffectRecord, lines: SidecarLookup | None, restriction: str,
-                      quality: str | None, candidates, universe: Iterable[str]) -> list[Judgement]:
-    """Each entity of ``universe`` against each targeting candidate's card."""
+def _sick(entity_id: str, inside: bool, creature: EntityState,
+          keywords_of: KeywordsOf) -> Judgement:
+    """Summoning sick without haste: in play on any sick creature."""
+    sick = creature.sick
+    return Judgement(entity_id, inside, sick and "haste" not in keywords_of(creature), sick)
+
+
+# ── targets ─────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class TargetPool:
+    """The targeting candidates judged, and the entities each is judged against."""
+
+    candidates: Sequence[Candidate]
+    universe: Iterable[str]
+
+
+def _has_hexproof(keywords: set[str]) -> bool:
+    return "hexproof" in keywords
+
+
+def _has_hexproof_from(keywords: set[str]) -> bool:
+    return any(k.startswith(HEXPROOF_FROM) for k in keywords)
+
+
+def _has_shroud(keywords: set[str]) -> bool:
+    return "shroud" in keywords
+
+
+def _has_protection(keywords: set[str]) -> bool:
+    return any(k.startswith(PROTECTION_FROM) for k in keywords)
+
+
+#: Whether each targeting restriction is in play on an entity's keywords.
+_TARGET_IN_PLAY: dict[TargetingRestriction, Callable[[set[str]], bool]] = {
+    TargetingRestriction.HEXPROOF: _has_hexproof,
+    TargetingRestriction.HEXPROOF_FROM: _has_hexproof_from,
+    TargetingRestriction.SHROUD: _has_shroud,
+    TargetingRestriction.PROTECTION: _has_protection,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _Targets:
+    """A decision record's source card, as each entity is judged against it."""
+
+    state: StateSnapshot
+    keywords_of: KeywordsOf
+    restriction: Restriction
+    source: Characteristics
+    actor: str | None
+    players: frozenset[str]
+
+    def judgements(self, candidate: Candidate, universe: Iterable[str]) -> Iterator[Judgement]:
+        legal = set(candidate.legal_targets)
+        for entity_id in universe:
+            standing = self._standing(entity_id)
+            if standing is not None:
+                yield self._judge(entity_id, entity_id in legal, *standing)
+
+    def _standing(self, entity_id: str) -> tuple[set[str], str | None] | None:
+        """The entity's keywords and controller; a player has no keywords in
+        a snapshot. None for an entity the snapshot lacks."""
+        if entity_id in self.players:
+            return set(), entity_id
+        entity = self.state.entity(entity_id)
+        if entity is None:
+            return None
+        return _filtered(self.keywords_of(entity), self.restriction.quality), entity.controller
+
+    def _judge(self, entity_id: str, inside: bool, keywords: set[str],
+               controller: str | None) -> Judgement:
+        rules = targeting_restrictions(keywords, source=self.source,
+                                       opponents=controller != self.actor)
+        if self.restriction.name == SELECTOR:
+            return Judgement(entity_id, inside, not rules, True)
+        rule = TargetingRestriction(self.restriction.name)
+        return Judgement(entity_id, inside, rule in rules, _TARGET_IN_PLAY[rule](keywords))
+
+
+def target_judgements(record: EffectRecord, keywords_of: KeywordsOf, restriction: Restriction,
+                      pool: TargetPool) -> list[Judgement]:
+    """Each entity of the pool's universe against each targeting candidate's card."""
     state = record.state
     source_entity = state.entity(state.refs.source) if state.refs.source else None
     if source_entity is None:
         return []
     source = Characteristics.of(source_entity)._replace(
-        changeling="changeling" in KeywordResolver(lines).keywords_of(source_entity))
-    keywords_of = KeywordResolver(lines).keywords_of
-    actor = record.actor_player
-    players = {p.id for p in state.players}
-    found = []
-    for candidate in candidates:
-        legal = set(candidate.legal_targets)
-        for entity_id in universe:
-            if entity_id in players:
-                keywords: set[str] = set()
-                controller = entity_id
-            else:
-                entity = state.entity(entity_id)
-                if entity is None:
-                    continue
-                keywords = _filtered(keywords_of(entity), quality)
-                controller = entity.controller
-            rules = targeting_restrictions(keywords, source=source,
-                                           opponents=controller != actor)
-            found.append(_target(restriction, entity_id, entity_id in legal, keywords, rules))
-    return found
-
-
-def _target(restriction: str, entity_id: str, inside: bool, keywords: set[str],
-            rules) -> Judgement:
-    if restriction == SELECTOR:
-        return Judgement(entity_id, inside, not rules, True)
-    rule = TargetingRestriction(restriction)
-    in_play = {
-        TargetingRestriction.HEXPROOF: "hexproof" in keywords,
-        TargetingRestriction.HEXPROOF_FROM: any(k.startswith(HEXPROOF_FROM) for k in keywords),
-        TargetingRestriction.SHROUD: "shroud" in keywords,
-        TargetingRestriction.PROTECTION: any(k.startswith(PROTECTION_FROM) for k in keywords),
-    }[rule]
-    return Judgement(entity_id, inside, rule in rules, in_play)
+        changeling="changeling" in keywords_of(source_entity))
+    targets = _Targets(state, keywords_of, restriction, source, record.actor_player,
+                       frozenset(p.id for p in state.players))
+    return [j for candidate in pool.candidates
+            for j in targets.judgements(candidate, pool.universe)]
