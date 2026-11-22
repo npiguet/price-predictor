@@ -83,7 +83,7 @@ from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_outcomes import strikes_in_step
 from effects.domain.state_snapshot import (
@@ -313,7 +313,7 @@ def _loyalty(card: EntityState) -> int:
 
 
 @dataclass(frozen=True, slots=True)
-class CombatKeywordEffect(EventlessFamily):
+class CombatKeywordEffect(BindsParams, EventlessFamily):
     id: str = "combat_keyword_effect"
     kinds: frozenset[str] = frozenset({"combat"})
     params: frozenset[str] = frozenset({"keyword", "fires_when", "defender", "tapped"})

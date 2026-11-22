@@ -162,7 +162,7 @@ from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionOutcome
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
@@ -438,7 +438,7 @@ def _player_in_combat(player: str, state: StateSnapshot, wanted: Any) -> bool | 
 
 
 @dataclass(frozen=True, slots=True)
-class OutcomeEvent:
+class OutcomeEvent(BindsParams):
     id: str = "outcome_event"
     kinds: frozenset[str] = frozenset({"combat", "resolution", "turn_action"})
     params: frozenset[str] = _OWN | EVENT_FILTERS

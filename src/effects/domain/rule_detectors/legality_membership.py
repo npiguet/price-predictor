@@ -110,7 +110,7 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     candidate_kind,
@@ -331,7 +331,7 @@ def _carriers(record: EffectRecord, ids: tuple[str, ...], lines: SidecarLookup |
 
 
 @dataclass(frozen=True, slots=True)
-class LegalityMembership(EventlessFamily):
+class LegalityMembership(BindsParams, EventlessFamily):
     id: str = "legality_membership"
     kinds: frozenset[str] = frozenset({"playability"})
     params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe",

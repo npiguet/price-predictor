@@ -76,7 +76,7 @@ from typing import Any
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
@@ -211,7 +211,7 @@ def _spawning_segment(record: EffectRecord, lines: SidecarLookup | None,
 
 
 @dataclass(frozen=True, slots=True)
-class TriggerMode(EventlessFamily):
+class TriggerMode(BindsParams, EventlessFamily):
     id: str = "trigger_mode"
     kinds: frozenset[str] = frozenset({"trigger"})
     params: frozenset[str] = _SEGMENT_PARAMS | {

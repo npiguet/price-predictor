@@ -39,8 +39,13 @@ from typing import Any
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
-from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import (
+    BindsParams,
+    EventlessFamily,
+    FamilyMatch,
+    first_side,
+    register,
+)
 
 CHECKS = frozenset({"life_zero", "poison_ten"})
 _GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
@@ -74,7 +79,7 @@ def _outcome_readable(record: EffectRecord) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class SbaGameLoss(EventlessFamily):
+class SbaGameLoss(BindsParams, EventlessFamily):
     id: str = "sba_game_loss"
     kinds: frozenset[str] = frozenset({"combat", "resolution"})
     params: frozenset[str] = frozenset({"check"})
@@ -116,12 +121,12 @@ class SbaGameLoss(EventlessFamily):
         readable = _outcome_readable(record)
         # The player's life or poison is both what the check reads and
         # where the game loss falls.
-        for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):
-            if judged:
-                return FamilyMatch(polarity,
-                                   any(p in observed for p in judged) if readable else None,
-                                   tuple(judged), tuple(judged))
-        return None
+        side = first_side(fires, spared)
+        if side is None:
+            return None
+        polarity, judged = side
+        return FamilyMatch(polarity, any(p in observed for p in judged) if readable else None,
+                           judged, judged)
 
 
 FAMILY = register(SbaGameLoss())

@@ -55,7 +55,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     CANDIDATE_KINDS,
@@ -127,7 +127,7 @@ SCOPES = frozenset({"keyword", "source_keyword", "ability_kind", "targeted"})
 
 
 @dataclass(frozen=True, slots=True)
-class ResolutionOutcomeFamily(EventlessFamily):
+class ResolutionOutcomeFamily(BindsParams, EventlessFamily):
     id: str = "resolution_outcome"
     kinds: frozenset[str] = frozenset({"resolution"})
     params: frozenset[str] = frozenset({"outcome", "near", "targeted", "source_keyword",

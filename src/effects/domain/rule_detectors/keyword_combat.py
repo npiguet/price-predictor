@@ -38,14 +38,14 @@ from effects.domain.damage_step_keywords import (
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors.keyword_outcomes import effect_happened
 
 _ROWS = {row.keyword: row for row in DAMAGE_STEP_KEYWORDS}
 
 
 @dataclass(frozen=True, slots=True)
-class KeywordCombat(EventlessFamily):
+class KeywordCombat(BindsParams, EventlessFamily):
     id: str = "keyword_combat"
     kinds: frozenset[str] = frozenset({"combat"})
     params: frozenset[str] = frozenset({"keyword"})

@@ -101,8 +101,11 @@ def test_entity_kinds_name_act_players_zones_and_missing_refs():
 
 
 def test_the_index_is_cut_per_family():
+    unread = SimpleNamespace(compile=lambda params: lambda record, lines: None)
+
     def entry(family):
-        return (SimpleNamespace(rules=("1.1",)), SimpleNamespace(family=family), None)
+        return (SimpleNamespace(rules=("1.1",)), SimpleNamespace(family=family, params={}),
+                unread)
 
     index = DetectorIndex({"combat": (entry("a"), entry("b")), "trigger": (entry("a"),)},
                           frozenset({"1.1"}))

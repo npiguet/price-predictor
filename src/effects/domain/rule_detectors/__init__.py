@@ -23,10 +23,11 @@ Torch-free: the ``build-corpus`` survey workers tag records.
 from __future__ import annotations
 
 import importlib
-from collections.abc import Iterable, Mapping
+import json
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
@@ -140,6 +141,23 @@ class FamilyMatch:
         return tuple(dict.fromkeys((*self.condition, *self.outcome)))
 
 
+#: A declaration compiled by its family: the declaration's side of its rule in
+#: one record (read with the sidecar lines), or None where the record does not
+#: show it.
+Matcher = Callable[[EffectRecord, SidecarLookup | None], FamilyMatch | None]
+
+
+def first_side(fires: Sequence[str], spared: Sequence[str]
+               ) -> tuple[Polarity, tuple[str, ...]] | None:
+    """The side a family judging entities one by one reports: the entities it
+    judged on the ``fires`` side where there are any, else those the rule's
+    condition spared; None where it judged none."""
+    for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):
+        if judged:
+            return polarity, tuple(judged)
+    return None
+
+
 class DetectorFamily(Protocol):
     """One record shape a rule's outcome can take."""
 
@@ -178,10 +196,38 @@ class DetectorFamily(Protocol):
         middle of a run; ``match`` takes the same values."""
         ...
 
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        """The declaration's matcher, built once by :class:`DetectorIndex`:
+        whatever the family reads off ``params`` alone is read here, not on
+        every record. ``params`` passed ``validate``."""
+        ...
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        """The record's side of the rule, or None where the record does not show it."""
+        """The record's side of the rule, or None where the record does not
+        show it: what ``compile(params)`` finds in it."""
         ...
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class BoundMatch:
+    """A family's ``match`` with one declaration's parameters bound to it."""
+
+    family: DetectorFamily
+    params: Mapping[str, Any]
+
+    def __call__(self, record: EffectRecord, lines: SidecarLookup | None) -> FamilyMatch | None:
+        return self.family.match(record, lines, self.params)
+
+
+class BindsParams:
+    """What a family whose ``match`` still reads its parameters on every
+    record inherits: ``compile`` binds them to ``match``."""
+
+    __slots__ = ()
+
+    def compile(self, params: Mapping[str, Any]) -> Matcher:
+        return BoundMatch(cast(DetectorFamily, self), params)
 
 
 class EventlessFamily:
@@ -253,12 +299,65 @@ class Duplicate:
     counted_under: tuple[str, ...]
 
 
+#: One declared scenario of the index: the scenario, its declaration and the
+#: family reading it.
+Entry = tuple[Scenario, DetectorDeclaration, DetectorFamily]
+_UNRUN = object()
+
+
+def _declaration_key(family: DetectorFamily, declaration: DetectorDeclaration) -> tuple[int, str]:
+    """What makes two declarations of one record kind identical: the family
+    reading them and the parameters, written out in one order."""
+    return id(family), json.dumps(dict(declaration.params), sort_keys=True)
+
+
+@dataclass(frozen=True, slots=True)
+class KindPlan:
+    """One record kind's declared scenarios with their compiled matchers.
+
+    Identical declarations (one family, the same parameters: two scenarios of
+    one rule stating one fact) share one matcher, which runs once a record
+    and is fanned out to each of them.
+    """
+
+    matchers: tuple[Matcher, ...] = ()
+    #: Each scenario in index order, with the position of its matcher.
+    scenarios: tuple[tuple[Scenario, int], ...] = ()
+
+    @classmethod
+    def of(cls, entries: Iterable[Entry]) -> KindPlan:
+        slots: dict[tuple[int, str], int] = {}
+        matchers: list[Matcher] = []
+        placed: list[tuple[Scenario, int]] = []
+        for scenario, declaration, family in entries:
+            key = _declaration_key(family, declaration)
+            if key not in slots:
+                slots[key] = len(matchers)
+                matchers.append(family.compile(declaration.params))
+            placed.append((scenario, slots[key]))
+        return cls(tuple(matchers), tuple(placed))
+
+    def found(self, record: EffectRecord,
+              lines: SidecarLookup | None) -> Iterator[tuple[Scenario, FamilyMatch]]:
+        """Each scenario of which ``record`` shows a side, in index order."""
+        results: list[Any] = [_UNRUN] * len(self.matchers)
+        for scenario, slot in self.scenarios:
+            if results[slot] is _UNRUN:
+                results[slot] = self.matchers[slot](record, lines)
+            if results[slot] is not None:
+                yield scenario, results[slot]
+
+
+_NO_PLAN = KindPlan()
+
+
 @dataclass(frozen=True, slots=True)
 class DetectorIndex:
     """The catalogue's declared scenarios by record kind, built once per command.
 
     Running every scenario on every record would cost 1,763 calls a record;
-    a record is only ever matched against the scenarios of its own kind.
+    a record is only ever matched against the scenarios of its own kind, by
+    the matchers ``plans`` compiles once from ``by_kind``.
 
     Building it checks every declaration: a family that is not registered, a
     parameter the family does not declare, a record kind it does not read, or a
@@ -272,7 +371,7 @@ class DetectorIndex:
     scenarios of one rule stating one fact each declare it.
     """
 
-    by_kind: Mapping[str, tuple[tuple[Scenario, DetectorDeclaration, DetectorFamily], ...]]
+    by_kind: Mapping[str, tuple[Entry, ...]]
     #: The rules some taggable declaration speaks for.
     declared_rules: frozenset[str] = field(default_factory=frozenset)
     #: Scenario id -> why its declaration can tag no record.
@@ -281,53 +380,84 @@ class DetectorIndex:
     duplicates: Mapping[str, Duplicate] = field(default_factory=dict)
     #: Scenario id -> the rules it lists, for every untaggable scenario.
     untaggable_rules: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: Record kind -> its scenarios' compiled matchers, built from ``by_kind``.
+    plans: Mapping[str, KindPlan] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "plans", {
+            kind: KindPlan.of(entries) for kind, entries in self.by_kind.items()})
+
+    def plan(self, kind: str) -> KindPlan:
+        """The record kind's plan; an empty one for a kind no scenario reads."""
+        return self.plans.get(kind, _NO_PLAN)
 
     @classmethod
     def of(cls, catalogue: ScenarioCatalogue) -> DetectorIndex:
-        registry = families()
-        by_kind: dict[str, list] = {}
-        rules: set[str] = set()
-        untaggable: dict[str, str] = {}
-        untaggable_rules: dict[str, tuple[str, ...]] = {}
-        same_as: list[Scenario] = []
+        indexing = _Indexing(families())
         for scenario in catalogue.scenarios:
-            declaration = scenario.detector
-            if isinstance(declaration, SameAs):
-                same_as.append(scenario)
-                continue
-            if not isinstance(declaration, DetectorDeclaration):
-                continue
-            family = registry.get(declaration.family)
-            if family is None:
-                raise DeclarationError(
-                    f"{scenario.id}: detector family {declaration.family!r} is not registered")
-            _check(scenario, declaration, family)
-            reason = _untaggable(declaration, family)
-            if reason is not None:
-                untaggable[scenario.id] = reason
-                untaggable_rules[scenario.id] = scenario.rules
-                continue
-            by_kind.setdefault(declaration.record_kind, []).append(
-                (scenario, declaration, family))
-            rules.update(scenario.rules)
+            indexing.read(scenario)
         scenarios = {s.id: s for s in catalogue.scenarios}
-        duplicates = {}
-        for scenario in same_as:
-            under: list[str] = []
-            for named in scenario.detector.scenarios:
-                target = scenarios.get(named)
-                if target is None or not isinstance(target.detector, DetectorDeclaration):
-                    raise DeclarationError(
-                        f"{scenario.id}: same_as {named!r} names no scenario declaring a detector")
-                if set(target.rules) & set(scenario.rules):
-                    raise DeclarationError(
-                        f"{scenario.id}: same_as {named!r} names a scenario of its own rule; "
-                        "a duplicate is counted under other rules, so declare the detector")
-                under += target.rules
-            duplicates[scenario.id] = Duplicate(
-                scenario.rules, scenario.detector.scenarios, tuple(dict.fromkeys(under)))
-        return cls({kind: tuple(found) for kind, found in by_kind.items()}, frozenset(rules),
-                   untaggable, duplicates, untaggable_rules)
+        duplicates = {s.id: _duplicate(s, scenarios) for s in indexing.same_as}
+        return cls({kind: tuple(found) for kind, found in indexing.by_kind.items()},
+                   frozenset(indexing.rules), indexing.untaggable, duplicates,
+                   indexing.untaggable_rules)
+
+
+class _Indexing:
+    """What :meth:`DetectorIndex.of` gathers while it reads the scenarios in
+    catalogue order."""
+
+    def __init__(self, registry: Mapping[str, DetectorFamily]) -> None:
+        self.registry = registry
+        self.by_kind: dict[str, list[Entry]] = {}
+        self.rules: set[str] = set()
+        self.untaggable: dict[str, str] = {}
+        self.untaggable_rules: dict[str, tuple[str, ...]] = {}
+        self.same_as: list[Scenario] = []
+
+    def read(self, scenario: Scenario) -> None:
+        declaration = scenario.detector
+        if isinstance(declaration, SameAs):
+            self.same_as.append(scenario)
+        elif isinstance(declaration, DetectorDeclaration):
+            self._declare(scenario, declaration)
+
+    def _declare(self, scenario: Scenario, declaration: DetectorDeclaration) -> None:
+        family = self.registry.get(declaration.family)
+        if family is None:
+            raise DeclarationError(
+                f"{scenario.id}: detector family {declaration.family!r} is not registered")
+        _check(scenario, declaration, family)
+        reason = _untaggable(declaration, family)
+        if reason is not None:
+            self.untaggable[scenario.id] = reason
+            self.untaggable_rules[scenario.id] = scenario.rules
+            return
+        self.by_kind.setdefault(declaration.record_kind, []).append(
+            (scenario, declaration, family))
+        self.rules.update(scenario.rules)
+
+
+def _duplicate(scenario: Scenario, scenarios: Mapping[str, Scenario]) -> Duplicate:
+    """A ``same_as`` scenario and the rules of the scenarios it names."""
+    named = scenario.detector.scenarios
+    under = [rule for one in named for rule in _counted_under(scenario, one, scenarios)]
+    return Duplicate(scenario.rules, named, tuple(dict.fromkeys(under)))
+
+
+def _counted_under(scenario: Scenario, named: str,
+                   scenarios: Mapping[str, Scenario]) -> tuple[str, ...]:
+    """The rules of the scenario ``named``, which declares a detector and
+    states none of ``scenario``'s own rules."""
+    target = scenarios.get(named)
+    if target is None or not isinstance(target.detector, DetectorDeclaration):
+        raise DeclarationError(
+            f"{scenario.id}: same_as {named!r} names no scenario declaring a detector")
+    if set(target.rules) & set(scenario.rules):
+        raise DeclarationError(
+            f"{scenario.id}: same_as {named!r} names a scenario of its own rule; "
+            "a duplicate is counted under other rules, so declare the detector")
+    return target.rules
 
 
 def _check(scenario: Scenario, declaration: DetectorDeclaration,
@@ -391,10 +521,7 @@ def tag_record(record: EffectRecord, index: DetectorIndex,
     if is_game_end(record):
         return TagResult()
     per_rule: dict[str, list[RuleTag]] = {}
-    for scenario, declaration, family in index.by_kind.get(record.kind.value, ()):
-        found = family.match(record, lines, declaration.params)
-        if found is None:
-            continue
+    for scenario, found in index.plan(record.kind.value).found(record, lines):
         for rule in scenario.rules:
             per_rule.setdefault(rule, []).append(RuleTag(
                 rule, found.polarity, found.observed, found.condition, found.outcome,

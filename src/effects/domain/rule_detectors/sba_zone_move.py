@@ -98,8 +98,13 @@ from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
-from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import (
+    BindsParams,
+    EventlessFamily,
+    FamilyMatch,
+    first_side,
+    register,
+)
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_outcomes import damage_lethal
 from effects.domain.state_snapshot import EntityState, normalize_counter_type
@@ -378,7 +383,7 @@ def _aura_checks(record, touched, keywords, cause: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class SbaZoneMove(EventlessFamily):
+class SbaZoneMove(BindsParams, EventlessFamily):
     id: str = "sba_zone_move"
     kinds: frozenset[str] = frozenset({"combat", "resolution"})
     params: frozenset[str] = frozenset({"check", "marked_before", "aura_cause"})
@@ -426,14 +431,16 @@ class SbaZoneMove(EventlessFamily):
                 record, touched, KeywordResolver(lines).keywords_of, params.get("aura_cause"))
         else:
             fires, spared, observed = _uniqueness_checks(record, touched, check)
-        for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):
-            if judged:
-                return FamilyMatch(polarity, any(e in observed for e in judged),
-                                   _condition(record, judged, check), tuple(judged))
-        return None
+        side = first_side(fires, spared)
+        if side is None:
+            return None
+        polarity, judged = side
+        return FamilyMatch(polarity, any(e in observed for e in judged),
+                           _condition(record, judged, check), judged)
 
 
-def _condition(record: EffectRecord, judged: list[str], check: str) -> tuple[str, ...]:
+def _condition(record: EffectRecord, judged: tuple[str, ...], check: str
+               ) -> tuple[str, ...]:
     """What the check reads: the permanent it judges, and for an Aura the
     host whose departure or protection makes it illegal. The outcome, the
     move to the graveyard or its absence, falls on the judged permanent."""

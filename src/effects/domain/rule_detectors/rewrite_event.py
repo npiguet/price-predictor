@@ -83,7 +83,7 @@ from effects.domain.event_schema import EventType
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind, RewriteResult
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors import EventlessFamily, FamilyMatch, register
+from effects.domain.rule_detectors import BindsParams, EventlessFamily, FamilyMatch, register
 from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_line, source_ids
 from effects.domain.rule_detectors.outcome_event import (
@@ -142,7 +142,7 @@ def _results(value: Any) -> frozenset[RewriteResult]:
 
 
 @dataclass(frozen=True, slots=True)
-class RewriteEvent(EventlessFamily):
+class RewriteEvent(BindsParams, EventlessFamily):
     id: str = "rewrite_event"
     kinds: frozenset[str] = frozenset({"rewrite"})
     params: frozenset[str] = _OWN | EVENT_FILTERS
