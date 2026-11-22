@@ -224,9 +224,13 @@ def subtype(family: str, name: str, value: Any) -> None:
 
 def token_kind(family: str, name: str, value: Any) -> None:
     """A token's kind: a Forge subtype (``Treasure``), or a Role's name."""
-    if not isinstance(value, str) or (value.lower() not in _SUBTYPES
-                                      and value.lower().replace(" ", "_") not in ROLE_KINDS):
+    if not (isinstance(value, str) and _names_a_token_kind(value)):
         _refuse(family, name, value, "token kind")
+
+
+def _names_a_token_kind(value: str) -> bool:
+    lower = value.lower()
+    return lower in _SUBTYPES or lower.replace(" ", "_") in ROLE_KINDS
 
 
 def designation(family: str, name: str, value: Any) -> None:
@@ -245,10 +249,14 @@ def counter_type(family: str, name: str, value: Any) -> None:
 
 
 def cost_symbol(family: str, name: str, value: Any) -> None:
-    if not isinstance(value, str) or not (
-            value.lower() in _SYMBOL_CLASSES or value.upper() in ("T", "Q")
-            or MANA_SYMBOL.match(value.upper())):
+    if not (isinstance(value, str) and _is_cost_symbol(value)):
         _refuse(family, name, value, "cost symbol")
+
+
+def _is_cost_symbol(value: str) -> bool:
+    upper = value.upper()
+    return (value.lower() in _SYMBOL_CLASSES or upper in ("T", "Q")
+            or bool(MANA_SYMBOL.match(upper)))
 
 
 def boolean(family: str, name: str, value: Any) -> None:
@@ -270,11 +278,16 @@ def one_of(*allowed: Any) -> Callable[[str, str, Any], None]:
 
 def script_param(family: str, name: str, value: Any) -> None:
     """A parameter name, or a name -> value map."""
-    if isinstance(value, str) and value:
-        return
-    if isinstance(value, Mapping) and value and all(isinstance(k, str) for k in value):
-        return
-    _refuse(family, name, value, "parameter name or name -> value map")
+    if not (_is_name(value) or _is_name_map(value)):
+        _refuse(family, name, value, "parameter name or name -> value map")
+
+
+def _is_name(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
+def _is_name_map(value: Any) -> bool:
+    return isinstance(value, Mapping) and bool(value) and all(isinstance(k, str) for k in value)
 
 
 def check(family: str, params: Mapping[str, Any],

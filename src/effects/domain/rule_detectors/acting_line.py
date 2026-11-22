@@ -171,12 +171,14 @@ def script_params_match(found: Mapping[str, str] | None, wanted: Any) -> bool:
         wanted = {wanted: ANY}
     if not isinstance(wanted, Mapping) or not wanted:
         raise ValueError(f"script_param {wanted!r}: a parameter name or a name -> value map")
-    for name, value in wanted.items():
-        if name not in found:
-            return False
-        if value != ANY and str(found[name]).lower() != str(value).lower():
-            return False
-    return True
+    return all(_param_holds(found, name, value) for name, value in wanted.items())
+
+
+def _param_holds(found: Mapping[str, str], name: str, value: Any) -> bool:
+    """Whether ``found`` has ``name``, with ``value`` where it is not :data:`ANY`."""
+    if name not in found:
+        return False
+    return value == ANY or str(found[name]).lower() == str(value).lower()
 
 
 def source_entities(state: StateSnapshot,
@@ -195,9 +197,15 @@ def source_entities(state: StateSnapshot,
     if not files:
         return ()
     stems = {_stem(f) for f in files}
-    return tuple(e for e in state.entities if e.on_battlefield and (
-        any(key.script_file in files for key in e.printed)
-        or (e.token_script_id is not None and e.token_script_id in stems)))
+    return tuple(e for e in state.entities if e.on_battlefield and _printed_from(e, files, stems))
+
+
+def _printed_from(entity: EntityState, files: set[str], stems: set[str]) -> bool:
+    """Whether the entity prints a line of one of the script ``files``, or is
+    a token made from one (``stems``)."""
+    if any(key.script_file in files for key in entity.printed):
+        return True
+    return entity.token_script_id is not None and entity.token_script_id in stems
 
 
 def source_ids(record: EffectRecord) -> tuple[str, ...]:

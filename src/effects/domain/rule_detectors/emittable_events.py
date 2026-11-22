@@ -157,10 +157,14 @@ def carries(kind: RecordKind | str, event: E | str, *, acting_line: bool = False
     one is named), which holds the game's end only when its own API ends the
     game."""
     kind, event = RecordKind(kind), E(event)
-    if (acting_line and kind is RecordKind.RESOLUTION and event in GAME_END
-            and api not in GAME_ENDING_APIS):
+    if acting_line and _outside_acting_end(kind, event, api):
         return False
     return event in EMITTABLE.get(kind, frozenset())
+
+
+def _outside_acting_end(kind: RecordKind, event: E, api: str | None) -> bool:
+    """Whether ``event`` is the game's end on a resolution whose API does not end it."""
+    return kind is RecordKind.RESOLUTION and event in GAME_END and api not in GAME_ENDING_APIS
 
 
 def carries_buffered(event: E | str) -> bool:
