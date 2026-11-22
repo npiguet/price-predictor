@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from effects.application.selection_deviance import TargetDevianceLosses
+from effects.application.selection_deviance import DevianceSettings, TargetDevianceLosses
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_TERM
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 
@@ -52,9 +52,10 @@ def test_each_record_carries_the_constant_loss_of_its_scored_targets() -> None:
     records = [_Record(rid, f"g{rid}") for rid in "abcd"]
     weights = {"hard": _Weights(0.0), "soft": _Weights(0.5)}
     reader = TargetDevianceLosses(
-        _prepare, {}, fields=(FIELDS_BY_NAME["tap_state"],), batch_size=3,
-        weights_of=lambda record, mode: (_Weights() if record.record_id != "a"
-                                         else weights[mode]))
+        _prepare, {}, settings=DevianceSettings(
+            fields=(FIELDS_BY_NAME["tap_state"],), batch_size=3,
+            weights_of=lambda record, mode: (_Weights() if record.record_id != "a"
+                                             else weights[mode])))
     out = reader.losses(iter(records))
     # The gate trains on all eight entities, five of them affected.
     p = 5 / 8
@@ -69,16 +70,18 @@ def test_each_record_carries_the_constant_loss_of_its_scored_targets() -> None:
 
 def test_a_field_whose_targets_never_vary_has_no_loss() -> None:
     records = [_Record("d", "g")]
-    out = TargetDevianceLosses(_prepare, {}, fields=(FIELDS_BY_NAME["tap_state"],),
-                               weights_of=lambda record, mode: _Weights()).losses(records)
+    out = TargetDevianceLosses(_prepare, {}, settings=DevianceSettings(
+        fields=(FIELDS_BY_NAME["tap_state"],),
+        weights_of=lambda record, mode: _Weights())).losses(records)
     assert out["tap_state"]["hard"] == [0.0]
 
 
 def test_the_hard_masks_gate_weighs_the_share_of_entities_its_rule_names() -> None:
     records = [_Record("a", "g"), _Record("b", "g")]
     out = TargetDevianceLosses(
-        _prepare, {}, fields=(), modes=("hard",),
-        weights_of=lambda record, mode: _Weights(0.0, frozenset({"E1"})),
+        _prepare, {}, settings=DevianceSettings(
+            fields=(), modes=("hard",),
+            weights_of=lambda record, mode: _Weights(0.0, frozenset({"E1"}))),
     ).losses(records)
     p = 3 / 4
     whole = [_bce(p, 1) * 2, _bce(p, 1) + _bce(p, 0)]
@@ -135,8 +138,8 @@ def _prepare_with_heads(records):
 
 def test_verdict_fields_and_created_objects_terms_are_items_of_their_own() -> None:
     records = [_Record(rid, f"g{rid}") for rid in "abcd"]
-    out = TargetDevianceLosses(_prepare_with_heads, {}, fields=(),
-                               weights_of=lambda record, mode: _ByOutput({})).losses(records)
+    out = TargetDevianceLosses(_prepare_with_heads, {}, settings=DevianceSettings(
+        fields=(), weights_of=lambda record, mode: _ByOutput({}))).losses(records)
     assert "verdict.can_play" in out and "created_objects.count" in out
     assert "created_objects.present" in out and "gate" in out
     # A head no record supervises has no item, and a verdict field none sets neither.
@@ -153,8 +156,8 @@ def test_record_head_items_sum_to_the_constant_predictors_floor() -> None:
     from effects.domain.selection_set import deviance_items
 
     records = [_Record(rid, f"g{rid}") for rid in "abcd"]
-    out = TargetDevianceLosses(_prepare_with_heads, {}, fields=(),
-                               weights_of=lambda record, mode: _ByOutput({})).losses(records)
+    out = TargetDevianceLosses(_prepare_with_heads, {}, settings=DevianceSettings(
+        fields=(), weights_of=lambda record, mode: _ByOutput({}))).losses(records)
     sample = TargetSample()
     batch, heads = _prepare_with_heads(records)
     sample.add(batch, heads)
@@ -168,11 +171,13 @@ def test_a_record_heads_items_weigh_each_copy_as_the_mask_weighs_its_output() ->
     weights = {"hard": _ByOutput({"can_play": 0.0, "created_objects": 0.0}),
                "soft": _ByOutput({"can_play": 0.25, "created_objects": 0.5})}
     out = TargetDevianceLosses(
-        _prepare_with_heads, {}, fields=(),
-        weights_of=lambda record, mode: weights[mode] if record.record_id == "a" else _ByOutput({}),
+        _prepare_with_heads, {}, settings=DevianceSettings(
+            fields=(),
+            weights_of=lambda record, mode: (weights[mode] if record.record_id == "a"
+                                             else _ByOutput({}))),
     ).losses(records)
-    whole = TargetDevianceLosses(_prepare_with_heads, {}, fields=(),
-                                 weights_of=lambda record, mode: _ByOutput({})).losses(records)
+    whole = TargetDevianceLosses(_prepare_with_heads, {}, settings=DevianceSettings(
+        fields=(), weights_of=lambda record, mode: _ByOutput({}))).losses(records)
     for item, share in (("verdict.can_play", 0.25), ("created_objects.count", 0.5)):
         assert out[item]["hard"] == pytest.approx([0.0, *whole[item]["hard"][1:]])
         assert out[item]["soft"] == pytest.approx(

@@ -29,8 +29,8 @@ applied here, so one preparation serves both modes.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from dataclasses import fields as dataclass_fields
-from dataclasses import replace
 from pathlib import Path
 
 import torch
@@ -73,6 +73,19 @@ RECORD_HEADS: tuple[tuple[Head, RecordHeadLayout], ...] = (
 PreparedTargets = tuple[EntityTargetBatch, Mapping]
 
 
+@dataclass(frozen=True)
+class DevianceSettings:
+    """How :class:`TargetDevianceLosses` reads a sample: the per-entity
+    ``fields`` it covers, the ``batch_size`` of a scoring step, the rule-mask
+    ``modes`` it weighs under, and ``weights_of(record, mode)``, a copy's
+    weights under a mode (``rule_mask.copy_weights`` where None)."""
+
+    fields: tuple[FieldSpec, ...] = PER_ENTITY_FIELDS
+    batch_size: int = BATCH_SIZE
+    modes: Sequence[str] = ("hard", "soft")
+    weights_of: Callable | None = None
+
+
 class TargetDevianceLosses:
     """``DevianceLosses`` over every shipped head's targets: the per-entity
     head's gate and fields, the verdict and global heads' fields and the
@@ -81,23 +94,21 @@ class TargetDevianceLosses:
 
     ``prepare`` turns records into their unmasked targets (a scoring step's
     ``targets`` and ``heads``); ``rule_outputs`` is the manifest's
-    ``rule -> outputs``, which the mask reads. ``weights_of(record, mode)``
-    is a copy's weights under a mode, ``rule_mask.copy_weights`` by default.
+    ``rule -> outputs``, which the mask reads; ``settings`` is
+    :class:`DevianceSettings`.
     """
 
     def __init__(
         self, prepare: Callable[[list[EffectRecord]], PreparedTargets],
         rule_outputs: Mapping[str, tuple[str, ...]], *,
-        fields: tuple[FieldSpec, ...] = PER_ENTITY_FIELDS, batch_size: int = BATCH_SIZE,
-        modes: Sequence[str] = ("hard", "soft"),
-        weights_of: Callable | None = None,
+        settings: DevianceSettings = DevianceSettings(),
     ) -> None:
         self.prepare = prepare
         self.rule_outputs = dict(rule_outputs)
-        self.fields = fields
-        self.batch_size = batch_size
-        self.modes = tuple(modes)
-        self.weights_of = weights_of or self._copy_weights
+        self.fields = settings.fields
+        self.batch_size = settings.batch_size
+        self.modes = tuple(settings.modes)
+        self.weights_of = settings.weights_of or self._copy_weights
 
     def _copy_weights(self, record: EffectRecord, mode: str):
         from effects.domain.rule_mask import RuleMask, copy_weights
@@ -159,24 +170,35 @@ class _Gathered:
     def losses(self, specs: Mapping[str, FieldSpec]) -> dict[str, dict[str, list[float]]]:
         """Each item's per-copy constant losses by mode, at the copy's class
         weight times its mode weight, the constant fitted at the class weights."""
-        classes = torch.tensor(self.classes, dtype=torch.float64)
+        sample = _Sample(self.count, torch.tensor(self.classes, dtype=torch.float64))
+        out = self._field_losses(specs, sample)
+        out.update(self._head_item_losses(sample))
+        return out
+
+    def _field_losses(self, specs: Mapping[str, FieldSpec],
+                      sample: _Sample) -> dict[str, dict[str, list[float]]]:
         out: dict[str, dict[str, list[float]]] = {}
         for name, parts in self.rows.items():
             index = torch.cat([part[0] for part in parts])
             target = torch.cat([part[1] for part in parts])
-            per_record = _per_record_losses(specs.get(name), target, index,
-                                            self.count, classes) * classes
+            per_record = _per_record_losses(specs.get(name), target, index, sample
+                                            ) * sample.classes
             out[name] = {mode: (per_record * torch.tensor(
                 self._mode_weights(name, mode), dtype=torch.float64)).tolist()
                 for mode in self.modes}
-        for head, by_term in _head_losses(self.heads, self.count, classes).items():
+        return out
+
+    def _head_item_losses(self, sample: _Sample) -> dict[str, dict[str, list[float]]]:
+        out: dict[str, dict[str, list[float]]] = {}
+        for head, by_term in _head_losses(self.heads, sample).items():
             # The map names the created-objects head whole.
             whole = head == str(Head.CREATED_OBJECTS)
             for term, per_record in by_term.items():
                 output = CREATED_OBJECTS_OUTPUT if whole else term
-                out[deviance_item(head, term)] = {mode: (per_record * classes * torch.tensor(
-                    [cw.weight(output) for cw in self.weights[mode]], dtype=torch.float64,
-                )).tolist() for mode in self.modes}
+                out[deviance_item(head, term)] = {mode: (
+                    per_record * sample.classes * torch.tensor(
+                        [cw.weight(output) for cw in self.weights[mode]], dtype=torch.float64,
+                    )).tolist() for mode in self.modes}
         return out
 
     def _mode_weights(self, name: str, mode: str) -> list[float]:
@@ -191,42 +213,58 @@ def _class_weight(record: EffectRecord) -> float:
     return 1.0 if curation is None else float(curation.class_weight)
 
 
-def _head_losses(heads: Mapping[str, list[tuple[int, tuple]]], records: int,
-                 classes: torch.Tensor) -> dict[str, dict[str, torch.Tensor]]:
+@dataclass(frozen=True)
+class _Sample:
+    """The deviance sample's size and each record's class weight (one a
+    record), the weights the constants are fitted at."""
+
+    records: int
+    classes: torch.Tensor
+
+
+def _head_losses(heads: Mapping[str, list[tuple[int, tuple]]],
+                 sample: _Sample) -> dict[str, dict[str, torch.Tensor]]:
     """Each shipped record head's per-record constant losses by term, over
     every record (zero where a record does not supervise the term), the
-    constant fitted at each record's class weight ``classes``."""
+    constant fitted at each record's class weight."""
     out: dict[str, dict[str, torch.Tensor]] = {}
     for head, layout in RECORD_HEADS:
         held = heads.get(str(head))
-        if not held:
-            continue
-        target = torch.zeros(records, layout.target_width)
-        mask = torch.zeros(records, len(layout.fields), dtype=torch.bool)
-        for offset, (values, flags, *_) in held:
-            flags = flags != 0
-            if flags.dim() == 1:
-                flags = flags.unsqueeze(-1).expand(-1, len(layout.fields))
-            target[offset:offset + values.shape[0]] = values.float()
-            mask[offset:offset + flags.shape[0]] = flags
-        found = record_head_record_losses(target, mask, layout, classes)
+        found = _record_head_found(held, layout, sample) if held else None
         if found:
             out[str(head)] = found
     held = heads.get(str(Head.CREATED_OBJECTS))
-    if held:
-        target = torch.zeros(records, CREATED_OBJECTS_WIDTH)
-        known = torch.ones(records, CREATED_OBJECTS_WIDTH)
-        mask = torch.zeros(records, dtype=torch.bool)
-        for offset, (values, flags, *rest) in held:
-            size = values.shape[0]
-            target[offset:offset + size] = values.float()
-            mask[offset:offset + size] = flags != 0
-            if rest and rest[0] is not None:
-                known[offset:offset + size] = (rest[0] != 0).float()
-        found = created_objects_record_losses(target, mask, known, classes)
-        if found:
-            out[str(Head.CREATED_OBJECTS)] = found
+    found = _created_objects_found(held, sample) if held else None
+    if found:
+        out[str(Head.CREATED_OBJECTS)] = found
     return out
+
+
+def _record_head_found(held: list[tuple[int, tuple]], layout: RecordHeadLayout,
+                       sample: _Sample) -> dict[str, torch.Tensor]:
+    target = torch.zeros(sample.records, layout.target_width)
+    mask = torch.zeros(sample.records, len(layout.fields), dtype=torch.bool)
+    for offset, (values, flags, *_) in held:
+        flags = flags != 0
+        if flags.dim() == 1:
+            flags = flags.unsqueeze(-1).expand(-1, len(layout.fields))
+        target[offset:offset + values.shape[0]] = values.float()
+        mask[offset:offset + flags.shape[0]] = flags
+    return record_head_record_losses(target, mask, layout, sample.classes)
+
+
+def _created_objects_found(held: list[tuple[int, tuple]],
+                           sample: _Sample) -> dict[str, torch.Tensor]:
+    target = torch.zeros(sample.records, CREATED_OBJECTS_WIDTH)
+    known = torch.ones(sample.records, CREATED_OBJECTS_WIDTH)
+    mask = torch.zeros(sample.records, dtype=torch.bool)
+    for offset, (values, flags, *rest) in held:
+        size = values.shape[0]
+        target[offset:offset + size] = values.float()
+        mask[offset:offset + size] = flags != 0
+        if rest and rest[0] is not None:
+            known[offset:offset + size] = (rest[0] != 0).float()
+    return created_objects_record_losses(target, mask, known, sample.classes)
 
 
 def _keep(rows: dict, name: str, targets: tuple[torch.Tensor, torch.Tensor],
@@ -241,19 +279,19 @@ def _keep(rows: dict, name: str, targets: tuple[torch.Tensor, torch.Tensor],
 
 
 def _per_record_losses(spec: FieldSpec | None, target: torch.Tensor, index: torch.Tensor,
-                       records: int, classes: torch.Tensor) -> torch.Tensor:
+                       sample: _Sample) -> torch.Tensor:
     """The field's constant-prediction loss summed per record, the constant
-    fitted with each target at its record's class weight (``classes``, one a
-    record), so a copy of weight k fits as k repeated copies; zero for a field
+    fitted with each target at its record's class weight (``sample.classes``,
+    one a record), so a copy of weight k fits as k repeated copies; zero for a field
     whose targets never vary, which has no deviance to explain (the floor
     reports it as zero)."""
-    totals = torch.zeros(records, dtype=torch.float64)
+    totals = torch.zeros(sample.records, dtype=torch.float64)
     if target.numel() == 0 or bool((target == target[0]).all()):
         return totals
     kind_type = FieldType.BINARY if spec is None else spec.type
     arity = 1 if spec is None else spec.arity
     kind = FIELD_KINDS[kind_type]
-    weights = classes[index]
+    weights = sample.classes[index]
     constant = kind.best_constant(target, arity=arity, cap=MAGNITUDE_CAP, weights=weights)
     constant = torch.as_tensor(constant, dtype=torch.float32).reshape(-1)
     if spec is not None:
