@@ -15,6 +15,20 @@ ALWAYS_DIRECTED = {
 #: would add no record of the side it is for (the user's decisions of
 #: 2026-11-06, T096, and 2026-11-14).
 NOT_DIRECTED = {
+    # Their forced side ends the game, and curation drops every record holding a game's
+    # end (the user's decision D13 of 2026-11-17), so their forks would write records
+    # curation throws away; each reason names what ends the game.
+    "104.2b": "its forced side ends the game, which game-ending records do not survive "
+              "curation (D13): a player at forty life wins as Felidar Sovereign's upkeep "
+              "trigger resolves",
+    "104.3d": "its forced side ends the game, which game-ending records do not survive "
+              "curation (D13): a player at nine poison counters takes a tenth and loses at "
+              "the next state-based check",
+    "104.4a": "its forced side ends the game, which game-ending records do not survive "
+              "curation (D13): every player at one life loses at once to an upkeep trigger, "
+              "and the game is a draw",
+    "704.5b": "its forced side ends the game, which game-ending records do not survive "
+              "curation (D13): a player whose library is empty draws from it and loses",
     "104.2a": "the AI never concedes, the only forkable variant (add Platinum Angel) stops "
               "any other loss, and the lacking polarity is no event",
     "500.11": "500.11-1 (Eon Hub) has no detector, a static skip filing no event, and "
@@ -23,9 +37,10 @@ NOT_DIRECTED = {
                "701.12d-2's contrast is ownership, not a board edit",
     "702.62d": "the suspend cast happens inside a resolution, never at a priority stop, so "
                "no playability record exists for it",
-    **{rule: f"restates {other}, which is listed in its place (the user's decision of "
-             "2026-11-14): its scenario declares the same fact as " + other + "'s"
-       for rule, other in {"121.4": "704.5b", "703.4m": "510.2"}.items()},
+    "121.4": "restates 704.5b (the user's decision of 2026-11-14): its scenario declares the "
+             "same fact as 704.5b's, which is left out for its own reason",
+    "703.4m": "restates 510.2, which is listed in its place (the user's decision of "
+              "2026-11-14): its scenario declares the same fact as 510.2's",
     "701.42c": "restates 701.42b (the user's decision of 2026-11-14): its scenario declares the "
                "same fact as 701.42b's, which is left out for its own reason",
     "122.1g": "restates 704.5v (the user's decision of 2026-11-14): its scenario declares the "

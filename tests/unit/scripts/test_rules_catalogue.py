@@ -320,6 +320,9 @@ NO_EDIT_YIELDS_THEM = [
     "704.7", "707.10d", "712.11d", "730.2g"]
 #: Left out because another listed rule's fork writes their lacking side.
 ANOTHER_FORK_YIELDS_THEM = ["702.19e"]
+#: Left out because their forced side ends the game, and game-ending records are
+#: not curated (the user's decision D13 of 2026-11-17).
+GAME_END_RULES = ["104.2b", "104.3d", "104.4a", "704.5b"]
 
 
 def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
@@ -330,17 +333,19 @@ def test_the_rules_left_out_are_those_the_user_dropped_each_with_a_reason():
     it, its variant's edit is refused, its point needs a choice no boundary
     foresees, or no sealed pool makes it happen); and the rules no single board
     edit yields the lacking side of; 2026-11-15, 702.19e, whose lacking side
-    702.19f's fork writes."""
+    702.19f's fork writes; 2026-11-17 (D13), the four whose forced side
+    ends the game."""
     assert sorted(directed_exclusions.NOT_DIRECTED) == sorted([
         "104.2a", "104.4c", "115.7a", "121.4", "122.1g", "122.1h", "500.11", "505.5",
         "614.10a", "701.10c", "701.11c", "701.12d", "701.24f", "701.40c", "701.40d",
         "701.42c", "702.105b", "702.62d", "703.4m", "712.16", "712.4c", *NO_EDIT_YIELDS_THEM,
-        *ANOTHER_FORK_YIELDS_THEM])
+        *ANOTHER_FORK_YIELDS_THEM, *GAME_END_RULES])
     assert all(reason.strip() for reason in directed_exclusions.NOT_DIRECTED.values())
-    own = [*NO_EDIT_YIELDS_THEM, *ANOTHER_FORK_YIELDS_THEM]
+    own = [*NO_EDIT_YIELDS_THEM, *ANOTHER_FORK_YIELDS_THEM, *GAME_END_RULES]
     reasons = {directed_exclusions.NOT_DIRECTED[rule] for rule in own}
     assert len(reasons) == len(own), "each with a reason of its own"
     assert "702.19f" in directed_exclusions.NOT_DIRECTED["702.19e"]
+    assert all("D13" in directed_exclusions.NOT_DIRECTED[rule] for rule in GAME_END_RULES)
     for rule, other in {"121.4": "704.5b", "122.1g": "704.5v", "703.4m": "510.2",
                         "701.42c": "701.42b"}.items():
         assert other in directed_exclusions.NOT_DIRECTED[rule], rule

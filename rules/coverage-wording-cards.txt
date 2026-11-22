@@ -14,7 +14,6 @@ crustacean commando
 cut
 demonic tutor
 dimir infiltrator
-divination
 dregscape zombie
 dryad arbor
 echo inspector
@@ -25,8 +24,6 @@ enraged revolutionary
 everlasting torment
 evolving wilds
 exalted angel
-felidar sovereign
-flame rift
 fleshwrither
 forest
 furtive homunculus
@@ -41,7 +38,6 @@ hill giant
 history of benalia
 holy strength
 hopeful eidolon
-ichor rats
 island
 jace beleren
 kellan joins up

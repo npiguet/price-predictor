@@ -109,12 +109,12 @@ def test_a_rule_at_1_filled_by_this_run_s_kept_forks_is_written_at_0_for_the_nex
     assert _real_needs(tmp_path, chosen).probabilities(tally)["118.12b"] == 0.0
 
 
-def test_704_5b_reaches_zero_once_its_fires_side_is_full(tmp_path):
+def test_701_24e_reaches_zero_once_its_fires_side_is_full(tmp_path):
     counts, _ = _real_chosen()
-    counts["rules"].setdefault("704.5b", {}).setdefault("fires", {})["directed"] = 1000
+    counts["rules"].setdefault("701.24e", {}).setdefault("fires", {})["directed"] = 1000
     chosen = forks.directed_rules(counts, reading.load_scenarios_by_rule(locations.RULES),
                                forks.registered_sides(locations.RULES))
-    assert _real_needs(tmp_path, chosen).probabilities()["704.5b"] == 0.0
+    assert _real_needs(tmp_path, chosen).probabilities()["701.24e"] == 0.0
 
 
 def test_the_subcommand_writes_the_file_when_asked(tmp_path, monkeypatch, capsys):
