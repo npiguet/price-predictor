@@ -45,15 +45,13 @@ from dataclasses import dataclass, field
 
 from effects.domain.corpus_curation import game_disjoint_draw, game_hash
 from effects.domain.corpus_plan import GameStrata
+from effects.domain.corpus_types import RuleCell
 from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import RuleTag
 from effects.domain.score_scales import auc_standard_error, component_standard_error
 from effects.domain.seeded_draw import stable_order
 from effects.domain.strata import Half, Stratum
-
-#: ``(rule, polarity)``: one cell of a game's inventory.
-RuleCell = tuple[str, Polarity]
 
 #: The polarities a rule test reads (FR-068a); ``other`` draws none.
 TEST_POLARITIES: tuple[Polarity, ...] = (Polarity.FIRES, Polarity.DOES_NOT_FIRE)

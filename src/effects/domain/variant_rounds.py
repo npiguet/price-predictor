@@ -14,6 +14,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from effects.domain.corpus_types import RuleCell
 from effects.domain.coverage import CoverageUnit
 from effects.domain.directed_sides import DirectedForkGames
 from effects.domain.provenance import ProvenanceKey, SourceTree
@@ -218,7 +219,7 @@ def short_pairs(counts: Mapping, scope: SteerScope) -> list[ShortPair]:
     return found
 
 
-def variant_shares(pairs: list[ShortPair], total: int) -> dict[tuple[str, Polarity], int]:
+def variant_shares(pairs: list[ShortPair], total: int) -> dict[RuleCell, int]:
     """``--steer-variants`` split over the pairs by shortfall, at least one
     each (FR-058c): ``total × shortfall ÷ summed shortfall``, rounded down."""
     summed = sum(pair.shortfall for pair in pairs)

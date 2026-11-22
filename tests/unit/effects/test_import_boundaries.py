@@ -290,6 +290,7 @@ _TORCH_FREE = (
     "effects.domain.canonical_digest",
     "effects.domain.strata",
     "effects.domain.corpus_plan",
+    "effects.domain.corpus_types",
     "effects.domain.seeded_draw",
     "effects.domain.rule_budgets",
     "effects.domain.stratum_placement",

@@ -25,6 +25,7 @@ from effects.domain.corpus_curation import (
     rate_plan,
     text_capacity,
 )
+from effects.domain.corpus_types import RecordHash
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import (
     FamilySentinel,
@@ -147,7 +148,7 @@ class TrainingSupply:
         # A partial rather than a lambda, so the supply pickles.
         self.heaps = defaultdict(partial(CapHeap, self.heap_cap))
 
-    def add(self, cell: Cell, keys: Keys, value: int) -> None:
+    def add(self, cell: Cell, keys: Keys, value: RecordHash) -> None:
         """One training-bound record, by its cell, acting keys and record hash."""
         if not keys:
             self.keyless[cell] += 1
@@ -378,7 +379,7 @@ class SelectionPlan:
     #: which the rule budgets' text cap counts (``rule_budgets``).
     text_planned: dict[str, dict[str, int]] = field(default_factory=dict)
 
-    def copies(self, cell: Cell, keys: Keys, value: int) -> int:
+    def copies(self, cell: Cell, keys: Keys, value: RecordHash) -> int:
         """A record's natural share: the plan of its ``(cell, keys)`` group,
         else its cell's keyless plan, applied to its hash ``value``."""
         return planned_copies(self.plans, self.keyless, cell, keys, value)
@@ -389,7 +390,7 @@ _NO_COPIES = CopyPlan()
 
 def planned_copies(
     plans: Mapping[tuple[Cell, Keys], CopyPlan], keyless: Mapping[Cell, CopyPlan],
-    cell: Cell, keys: Keys, value: int,
+    cell: Cell, keys: Keys, value: RecordHash,
 ) -> int:
     """What :meth:`SelectionPlan.copies` reads, for a caller holding only the
     two plan tables: the write pass's workers, which receive no family table."""

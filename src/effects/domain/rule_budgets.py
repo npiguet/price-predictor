@@ -36,6 +36,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from effects.domain.corpus_types import CopyMap, RecordHash, RuleCell
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import RuleSource
 
@@ -53,7 +54,7 @@ class BudgetedRecord:
     """
 
     game: str
-    record_hash: int
+    record_hash: RecordHash
     klass: str
     #: The acting text ``--text-cap`` counts; None for a record with none,
     #: which no text cap bounds, as in gen-2's keyless member.
@@ -62,7 +63,7 @@ class BudgetedRecord:
     natural: int
     source: RuleSource
     #: ``(rule, polarity)``, one per rule the record's detectors tag.
-    tags: tuple[tuple[str, Polarity], ...]
+    tags: tuple[RuleCell, ...]
     #: A record offering protection copies, tagged with every protection
     #: rule it offers: each copy is drawn for one and counts toward it alone.
     protection: bool = False
@@ -129,7 +130,7 @@ class RuleBudgets:
     #: ``game -> record hash -> drawn rule per added copy``; a record with no
     #: added copy is absent. Grouped by game so the write pass can shard it
     #: by whatever game hash its writers split on.
-    copies: dict[str, dict[int, tuple[str, ...]]]
+    copies: CopyMap
     #: ``class -> rule -> polarity -> RuleRow``, budgeted and unbudgeted rules.
     rows: dict[str, dict[str, dict[str, RuleRow]]]
     #: ``class -> one rule's share``; a class with no budgeted rule is absent.
@@ -141,7 +142,7 @@ class RuleBudgets:
     #: rule the map does not mark ``trained`` (FR-054).
     unbudgeted: dict[str, dict[str, dict[str, int]]]
 
-    def added(self, game: str, record_hash: int) -> tuple[str, ...]:
+    def added(self, game: str, record_hash: RecordHash) -> tuple[str, ...]:
         """The drawn rule of each added copy of one record; empty for none."""
         return self.copies.get(game, {}).get(record_hash, ())
 
@@ -172,7 +173,7 @@ def plan_rule_budgets(records: Iterable[BudgetedRecord], inputs: BudgetInputs) -
     for record in records:
         by_class[record.klass].append(record)
 
-    copies: dict[str, dict[int, tuple[str, ...]]] = {}
+    copies: dict[str, dict[RecordHash, tuple[str, ...]]] = {}
     rows: dict[str, dict[str, dict[str, RuleRow]]] = {}
     shares: dict[str, int] = {}
     one_sided: dict[str, tuple[str, ...]] = {}
@@ -199,7 +200,7 @@ def plan_rule_budgets(records: Iterable[BudgetedRecord], inputs: BudgetInputs) -
     )
 
 
-def _add_copies(copies: dict[str, dict[int, tuple[str, ...]]], plan: _ClassPlan) -> None:
+def _add_copies(copies: dict[str, dict[RecordHash, tuple[str, ...]]], plan: _ClassPlan) -> None:
     """Each of the class's records with an added copy, under its game."""
     for index, drawn in plan.drawn.items():
         record = plan.records[index]
@@ -301,7 +302,7 @@ class _ClassPlan:
         return {text: max(0, self.text_cap - max(n, self.text_natural.get(text, 0)))
                 for text, n in natural.items()}
 
-    def _halves(self, record: BudgetedRecord) -> list[tuple[str, Polarity]]:
+    def _halves(self, record: BudgetedRecord) -> list[RuleCell]:
         """The record's tags that draw a half."""
         return [
             (rule, polarity) for rule, polarity in record.tags
@@ -369,7 +370,7 @@ class _ClassPlan:
         )
 
 
-def _counted_tags(record: BudgetedRecord, rule: str) -> tuple[tuple[str, Polarity], ...]:
+def _counted_tags(record: BudgetedRecord, rule: str) -> tuple[RuleCell, ...]:
     """The tags one added copy of ``record`` drawn for ``rule`` counts toward:
     every tag of a natural record's copy, the drawn rule's alone on a
     protection copy."""

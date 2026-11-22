@@ -14,6 +14,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from effects.domain.corpus_types import RecordHash
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import derive_targets
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
@@ -35,7 +36,7 @@ from effects.domain.seeded_draw import id_hash, keyed_hash
 from effects.domain.state_snapshot import Zone
 
 
-def record_hash(record_id: str, *, seed: int) -> int:
+def record_hash(record_id: str, *, seed: int) -> RecordHash:
     """A stable uniform draw in [0, 2^64) for one record.
 
     Not the built-in ``hash()``, which is salted per process, so the survey and

@@ -30,6 +30,7 @@ from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameStrata, Keys, planned_copies
+from effects.domain.corpus_types import CopyMap, RecordHash
 from effects.domain.protection_copies import CopyDraw, protection_copy
 from effects.domain.protection_opportunities import qualify
 from effects.domain.record_quality import has_unattributed_events
@@ -61,12 +62,6 @@ class WritePlan:
     #: ``validation stratum -> class -> class_weight``
     #: (``corpus_curation.validation_multipliers``): the class mix (FR-059a).
     validation_weights: Mapping[Stratum, Mapping[str, float]] = field(default_factory=dict)
-
-
-#: ``game -> record hash -> drawn rule per added copy``: the rule budgets'
-#: draws (``RuleBudgets.copies``), a record's protection copies under its
-#: protection hash. A worker receives its own shard's games only.
-CopyMap = Mapping[str, Mapping[int, tuple[str, ...]]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +192,7 @@ class _Weighed:
     weight: float = 1.0
 
 
-_NO_ADDED: Mapping[int, tuple[str, ...]] = {}
+_NO_ADDED: Mapping[RecordHash, tuple[str, ...]] = {}
 
 
 class _ShardWriter:

@@ -64,6 +64,7 @@ from effects.domain.corpus_plan import (
     Keys,
     TrainingSupply,
 )
+from effects.domain.corpus_types import RecordHash, RuleCell
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
 from effects.domain.effect_targets import derive_targets, unsupervised_kind
 from effects.domain.protection_copies import CopyDraw, protection_copy
@@ -77,12 +78,11 @@ from effects.domain.records import (
     RecordKind,
     acting_keys,
 )
-from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import RuleSource, RuleTag, TagResult, counts_as_fork
 from effects.domain.rule_output_carriage import carried_outputs
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
-from effects.domain.stratum_placement import PlacementRule, RuleCell, rule_test_eligible
+from effects.domain.stratum_placement import PlacementRule, rule_test_eligible
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
@@ -122,7 +122,7 @@ class ReadConfig:
 REFUSED_SOURCE = "refused"
 
 
-def protection_hash(record_id: str, *, seed: int) -> int:
+def protection_hash(record_id: str, *, seed: int) -> RecordHash:
     """The hash a record's protection copies (FR-058) are planned under: a
     second, distinct entry beside the record's own in the rule budgets."""
     return record_hash(f"{record_id}~pc", seed=seed)
@@ -206,10 +206,10 @@ class WorkerContext:
     ) -> Cell:
         return Cell.of(record, self.sidecars, self.resolver, mode_counts)
 
-    def hash_of(self, record: EffectRecord) -> int:
+    def hash_of(self, record: EffectRecord) -> RecordHash:
         return record_hash(record.record_id, seed=self.read.seed)
 
-    def protection_hash_of(self, record: EffectRecord) -> int:
+    def protection_hash_of(self, record: EffectRecord) -> RecordHash:
         return protection_hash(record.record_id, seed=self.read.seed)
 
     def variant_prints_held_out(self, script_file: str) -> bool:
@@ -315,16 +315,16 @@ class SurveyedRecord:
     """
 
     game: str
-    record_hash: int
+    record_hash: RecordHash
     klass: SamplingClass
     cell: Cell
     keys: Keys
-    tags: tuple[tuple[str, Polarity], ...]
+    tags: tuple[RuleCell, ...]
     source: RuleSource
     #: Acts through a held-out text: never trains, even in a training game.
     held_out_text: bool = False
     protection: tuple[str, ...] = ()
-    protection_hash: int = 0
+    protection_hash: RecordHash = 0
 
 
 @dataclass(slots=True)
@@ -523,7 +523,7 @@ class _PendingRecord:
     fork: bool
     aimed: bool
     protection: tuple[str, ...]
-    protection_hash: int
+    protection_hash: RecordHash
 
 
 class _ShardSurveyor:
