@@ -339,6 +339,7 @@ _TORCH_FREE = (
     "effects.application.corpus_survey",
     "effects.application.corpus_write",
     "effects.application.corpus_report",
+    "effects.infrastructure.build_inputs",
     "effects.application.build_corpus",
     "effects.application.build_corpus_config",
     "effects.application.corpus_rule_catalogue",

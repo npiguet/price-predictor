@@ -23,7 +23,12 @@ def _normalized(template: str | None) -> str | None:
 
 def load_keyword_definitions(path: Path) -> dict[str, KeywordDefinition]:
     """Read the definition file into ``display name -> KeywordDefinition``."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return parse_keyword_definitions(Path(path).read_text(encoding="utf-8"))
+
+
+def parse_keyword_definitions(text: str) -> dict[str, KeywordDefinition]:
+    """A definition file's text as ``display name -> KeywordDefinition``."""
+    data = json.loads(text)
     return {
         keyword: KeywordDefinition(
             keyword=keyword,

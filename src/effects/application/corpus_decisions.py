@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from effects.application.build_corpus_config import BuildCorpusConfig
@@ -46,6 +45,7 @@ from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.stratum_placement import GameCensus, PlacementRule, place_games
 
 if TYPE_CHECKING:
+    from effects.infrastructure.build_inputs import KeywordTable
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -55,10 +55,13 @@ __all__ = ["Decisions", "TextJoin", "decide", "tagged_nowhere_written"]
 @dataclass(frozen=True, slots=True)
 class TextJoin:
     """How a provenance key joins its ability text: the sidecars its line is
-    read from, and the encoding surface the text is read on."""
+    read from, the encoding surface the text is read on, and the keyword
+    definitions a non-keyword line's display name must not match (FR-015;
+    None checks no line)."""
 
     sidecars: SidecarCache
     surface: Surface
+    keywords: KeywordTable | None = None
 
     def reader(self) -> Callable[[ProvenanceKey], str | None]:
         """The trainer's own key-to-text join, so the rarity table keys match."""
@@ -142,7 +145,7 @@ def decide(
     totals = survey.totals
     _refuse_another_heap_cap(totals.supply, config)
     key_text, text_games = _fold_keys_to_texts(totals.rarity, join.reader())
-    _refuse_keyword_misfires(key_text, join.sidecars, config.keyword_definitions)
+    _refuse_keyword_misfires(key_text, join.sidecars, join.keywords)
     census = _census(survey)
     strata = place_games(census, config.placement)
     placed = PlacedSurvey(survey, strata)
@@ -272,15 +275,13 @@ def _fold_keys_to_texts(
 
 
 def _keyword_misfires(
-    key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
+    key_text: dict[Keys, str], sidecars: SidecarCache, keywords: KeywordTable | None,
 ) -> list[str]:
     """Texts a display-name keyword match would expand on a non-keyword line
     (FR-015), replacing a script with a reminder template it does not carry."""
-    if definitions is None or not Path(definitions).exists():
+    if keywords is None:
         return []
-    from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-
-    names = {name.lower() for name in load_keyword_definitions(Path(definitions))}
+    names = {name.lower() for name in keywords.names}
     found = [
         misfire for keys in key_text for key in keys
         if (misfire := _misfire(key, sidecars.line_or_none(key), names)) is not None
@@ -301,9 +302,9 @@ def _misfire(key: ProvenanceKey, line: SidecarLine | None, names: set[str]) -> s
 
 
 def _refuse_keyword_misfires(
-    key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
+    key_text: dict[Keys, str], sidecars: SidecarCache, keywords: KeywordTable | None,
 ) -> None:
-    misfires = _keyword_misfires(key_text, sidecars, definitions)
+    misfires = _keyword_misfires(key_text, sidecars, keywords)
     if misfires:
         raise BuildCorpusError(
             f"{len(misfires)} non-keyword line(s) would expand as a keyword by "

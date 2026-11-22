@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,6 +25,7 @@ from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 from effects.domain.text_holdout import normalize_script_text
+from effects.infrastructure.build_inputs import code_version
 from price_predictor.infrastructure.converted_provenance import sidecar_digest
 from price_predictor.infrastructure.forge_classpath import project_root
 
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
     from effects.application.build_corpus_config import BuildCorpusConfig
     from effects.application.corpus_decisions import Decisions
     from effects.domain.split import HeldOutCards
+    from effects.infrastructure.build_inputs import KeywordTable
 
 logger = logging.getLogger(__name__)
 
@@ -246,11 +249,23 @@ def _unique_texts(keys: Iterable[Keys], key_text: Mapping[Keys, str]) -> int:
     return len({key_text.get(key, key) for key in keys})
 
 
-def build_manifest(
-    config: BuildCorpusConfig, *, surface: Surface, held_out: HeldOutCards, survey: Survey,
-    decisions: Decisions, written: WriteResult,
-) -> CorpusManifest:
+@dataclass(frozen=True, slots=True)
+class BuildOutcome:
+    """What a build read, decided and wrote: everything its manifest records
+    besides the config."""
+
+    surface: Surface
+    held_out: HeldOutCards
+    keywords: KeywordTable | None
+    survey: Survey
+    decisions: Decisions
+    written: WriteResult
+
+
+def build_manifest(config: BuildCorpusConfig, outcome: BuildOutcome) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""
+    surface, held_out, survey = outcome.surface, outcome.held_out, outcome.survey
+    decisions, written = outcome.decisions, outcome.written
     training = written.training
     per_class = {
         name: ClassCounts(
@@ -317,21 +332,8 @@ def build_manifest(
         game_disjoint_keywords=tuple(config.game_disjoint_keywords),
         reuse_cap=config.reuse_cap,
         **decisions.rule_fields,
-        **_collection_fields(config, survey, decisions),
+        **_collection_fields(config, outcome),
     )
-
-
-def _code_version() -> str:
-    """``git rev-parse HEAD`` of the checkout this code runs from; "" outside one."""
-    import subprocess
-
-    try:
-        done = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, capture_output=True,
-            text=True, timeout=30, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return done.stdout.strip() if done.returncode == 0 else ""
 
 
 def _under(where: str, records_dir: Path) -> str:
@@ -346,26 +348,21 @@ def _under(where: str, records_dir: Path) -> str:
     return f"{relative}{comma}{rest}"
 
 
-def _collection_fields(
-    config: BuildCorpusConfig, survey: Survey, decisions: Decisions,
-) -> dict:
+def _collection_fields(config: BuildCorpusConfig, outcome: BuildOutcome) -> dict:
     """How the records were collected and read, and what the build ran under
     (P3a #17): the manifest's ``validation_rules``, ``record_flags``,
     ``placement_thresholds``, ``keyword_definitions_digest``,
     ``decode_off_list``, ``damaged_tails``, ``join_gaps`` and ``cut_games``, the survey's:
     the write pass reads the same bytes, and a difference is warned of
     (:func:`report_write_pass`)."""
-    import hashlib
     import math
 
-    totals = survey.totals
+    totals, decisions = outcome.survey.totals, outcome.decisions
     reading = totals.reading
     flags: dict[str, dict[str, int]] = {}
     for (klass, flag), count in sorted(totals.flags.items()):
         flags.setdefault(klass, {})[flag] = count
-    definitions = config.keyword_definitions
-    digest = (hashlib.sha256(Path(definitions).read_bytes()).hexdigest()
-              if definitions is not None and Path(definitions).exists() else "")
+    digest = outcome.keywords.digest if outcome.keywords is not None else ""
     return {
         "validation_rules": {str(stratum): planned.rows
                              for stratum, planned in sorted(decisions.validation_budgets.items())},
@@ -382,7 +379,7 @@ def _collection_fields(
             _under(where, config.records_dir) for where in reading.damaged_tails)),
         "unsupervised_events": dict(sorted(totals.unsupervised.items())),
         "cut_games": len(totals.cut.games),
-        "code_version": _code_version(),
+        "code_version": code_version(),
         "sidecar_digest": sidecar_digest(config.source_trees.sidecar_roots()),
         "join_gaps": _join_gaps(reading),
     }

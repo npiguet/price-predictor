@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from effects.application.build_corpus_config import BuildCorpusConfig
 from effects.application.corpus_decisions import Decisions, TextJoin, decide
 from effects.application.corpus_report import (
+    BuildOutcome,
     build_manifest,
     check_refusals,
     check_samples,
@@ -48,6 +49,7 @@ from effects.domain.strata import OUTPUT_STRATA
 from effects.domain.stratum_placement import rule_test_misses
 
 if TYPE_CHECKING:
+    from effects.infrastructure.build_inputs import KeywordTable
     from effects.infrastructure.converted_trees import ConvertedTrees
     from effects.infrastructure.corpus_store import CorpusStore
 
@@ -59,23 +61,26 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class _Sources:
     """What a build reads before its survey: the rules catalogue, the
-    converted trees, the holdout over them and the encoding surface."""
+    converted trees, the holdout over them, the encoding surface and the
+    keyword-definition table (None without one)."""
 
     rules: RuleCatalogue
     trees: ConvertedTrees
     held_out: HeldOutCards
     surface: Surface
+    keywords: KeywordTable | None
 
     @property
     def join(self) -> TextJoin:
         """The key-to-text join over the trees' sidecars."""
-        return TextJoin(self.trees.sidecars, self.surface)
+        return TextJoin(self.trees.sidecars, self.surface, self.keywords)
 
 
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code:
     1, after the corpus and its manifest are written, when a rule-test
     component already misses its precision target (research E5)."""
+    from effects.infrastructure.build_inputs import read_keyword_table
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.vocabulary_file import vocabulary_surface
 
@@ -96,9 +101,11 @@ def build(config: BuildCorpusConfig) -> int:
         catalogue=rules.scenarios,
         rule_outputs={rule: tuple(entry.outputs) for rule, entry in rules.heads.items()},
     )
+    keywords = read_keyword_table(config.keyword_definitions)
     with _unreadable_shards("nothing under --output was touched"):
-        survey = _survey(config, read, rules)
-    decisions = _decide_or_refuse(config, survey, _Sources(rules, trees, held_out, surface))
+        survey = _survey(config, read, rules, keywords)
+    sources = _Sources(rules, trees, held_out, surface, keywords)
+    decisions = _decide_or_refuse(config, survey, sources)
     _warn_on_resized_shards(config.records_dir, survey)
 
     # Before the first output shard, and only on a real build: a rebuild
@@ -116,10 +123,10 @@ def build(config: BuildCorpusConfig) -> int:
     shards = _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, WorkerContext(read))
 
-    manifest = replace(build_manifest(
-        config, surface=surface, held_out=held_out, survey=survey,
+    manifest = replace(build_manifest(config, BuildOutcome(
+        surface=surface, held_out=held_out, keywords=keywords, survey=survey,
         decisions=decisions, written=written,
-    ), shards=shards)
+    )), shards=shards)
     store.save(manifest)
     log_report(manifest, survey, decisions, written)
     logger.info(
@@ -271,18 +278,18 @@ def _warn_on_resized_shards(records_dir: Path, survey: Survey) -> None:
             "survey read are written to no stratum.", len(moved), ", ".join(moved))
 
 
-def _known_keywords(definitions: Path | None) -> frozenset[str]:
+def _known_keywords(keywords: KeywordTable | None) -> frozenset[str]:
     """Forge's keywords for the closed keyword list; none without the table,
     which leaves the overlay keywords alone."""
-    if definitions is None or not Path(definitions).exists():
+    if keywords is None:
         return frozenset()
-    from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-
-    return frozenset(normalize_keyword(name)
-                     for name in load_keyword_definitions(Path(definitions)))
+    return frozenset(normalize_keyword(name) for name in keywords.names)
 
 
-def _survey(config: BuildCorpusConfig, read: ReadConfig, rules: RuleCatalogue) -> Survey:
+def _survey(
+    config: BuildCorpusConfig, read: ReadConfig, rules: RuleCatalogue,
+    keywords: KeywordTable | None,
+) -> Survey:
     """The parallel survey, logged."""
     survey = run_survey(
         config.records_dir,
@@ -292,7 +299,7 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig, rules: RuleCatalogue) -
                 normalize_keyword(name) for name in config.game_disjoint_keywords
             ),
             budgeted=rules.budgeted,
-            known_keywords=_known_keywords(config.keyword_definitions),
+            known_keywords=_known_keywords(keywords),
         ),
         workers=config.workers,
     )
