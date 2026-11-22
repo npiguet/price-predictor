@@ -857,6 +857,19 @@ PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | StrEnum | None], type] = {
 }
 
 
+def _subkind_mismatch(kind: RecordKind, subkind: object) -> bool:
+    """Whether ``subkind`` is wrongly set, unset or of another kind's subkinds for ``kind``."""
+    subkinds = SUBKINDS_OF.get(kind)
+    if (subkind is not None) != (subkinds is not None):
+        return True
+    return subkinds is not None and not isinstance(subkind, subkinds)
+
+
+def _malformed_copy_dropped(copy_dropped: tuple[tuple[str, int], ...]) -> bool:
+    """Whether ``copy_dropped`` is empty or names a kind with no drop."""
+    return not copy_dropped or any(count < 1 for _kind, count in copy_dropped)
+
+
 @dataclass(frozen=True, slots=True)
 class EffectRecord:
     """One JSONL line: an observed game event or decision point.
@@ -945,10 +958,7 @@ class EffectRecord:
                 f"moment is the resolution kind's discriminator; kind="
                 f"{self.kind.value} carries moment={self.moment}"
             )
-        subkinds = SUBKINDS_OF.get(self.kind)
-        if (self.subkind is not None) != (subkinds is not None) or (
-            subkinds is not None and not isinstance(self.subkind, subkinds)
-        ):
+        if _subkind_mismatch(self.kind, self.subkind):
             raise ValueError(
                 f"subkind is the playability and turn-action kinds' discriminator; "
                 f"kind={self.kind.value} carries subkind={self.subkind}"
@@ -968,8 +978,10 @@ class EffectRecord:
                 f"{self.kind.value} records have no single acting line, so they "
                 "carry no ability"
             )
-        if self.ability_unresolved is None:
-            return
+        if self.ability_unresolved is not None:
+            self._check_ability_unresolved()
+
+    def _check_ability_unresolved(self) -> None:
         if self.kind in KINDS_WITHOUT_ACTING_ABILITY:
             raise ValueError(
                 f"{self.kind.value} records look for no acting line, so they "
@@ -992,25 +1004,11 @@ class EffectRecord:
     def _check_flags(self) -> None:
         # A forced resolution's effect half, or any record of a protection fork
         # played on to the turn's end (FR-058), cost halves linked as live ones.
-        if self.interventional and not self.fork:
-            raise ValueError("an interventional record is always a fork")
-        if self.mirror_of is not None and not self.fork:
-            raise ValueError("mirror_of names the real record a fork mirrors")
-        if self.copy_dropped is not None and not self.fork:
-            raise ValueError("copy_dropped says what a fork's copy left out")
-        if self.copy_dropped is not None and (
-                not self.copy_dropped or any(count < 1 for _kind, count in self.copy_dropped)):
-            # The connector writes the member only for a lossy copy, and each
-            # kind only with at least one drop (Forks.dropped).
-            raise ValueError(
-                f"copy_dropped names kinds with at least one drop: {self.copy_dropped}")
+        self._check_fork_only_members()
+        self._check_copy_dropped()
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
-        if self.directed is not None:
-            if not self.fork or self.interventional:
-                raise ValueError("a directed fork is a fork that intervened in nothing")
-            if self.aimed_at is None:
-                raise ValueError("a directed fork names the rule it aimed at in aimed_at")
+        self._check_directed()
         if self.what_if is not None and (
             self.subkind not in LEGALITY_SUBKINDS
         ):
@@ -1018,6 +1016,31 @@ class EffectRecord:
                 "what_if classes a legality record; "
                 f"kind={self.kind.value} subkind={self.subkind} carries it"
             )
+
+    def _check_fork_only_members(self) -> None:
+        if self.fork:
+            return
+        if self.interventional:
+            raise ValueError("an interventional record is always a fork")
+        if self.mirror_of is not None:
+            raise ValueError("mirror_of names the real record a fork mirrors")
+        if self.copy_dropped is not None:
+            raise ValueError("copy_dropped says what a fork's copy left out")
+
+    def _check_copy_dropped(self) -> None:
+        if self.copy_dropped is not None and _malformed_copy_dropped(self.copy_dropped):
+            # The connector writes the member only for a lossy copy, and each
+            # kind only with at least one drop (Forks.dropped).
+            raise ValueError(
+                f"copy_dropped names kinds with at least one drop: {self.copy_dropped}")
+
+    def _check_directed(self) -> None:
+        if self.directed is None:
+            return
+        if not self.fork or self.interventional:
+            raise ValueError("a directed fork is a fork that intervened in nothing")
+        if self.aimed_at is None:
+            raise ValueError("a directed fork names the rule it aimed at in aimed_at")
 
     def _check_fork_kind(self) -> None:
         """A fork kind is on a collected fork's record alone, with its kind's
