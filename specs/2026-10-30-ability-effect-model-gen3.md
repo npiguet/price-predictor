@@ -804,7 +804,7 @@ places:
 
 | where | inputs |
 |---|---|
-| card slot | subtypes, face state, is a copy, is a token, role (§ 9.3), pending-event details, can't block and can't attack, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
+| card slot | subtypes, face state, a face-down card's real face, is a copy, is a token, role (§ 9.3), pending-event details, can't block and can't attack, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
 | player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit, pending-event subject |
@@ -830,12 +830,18 @@ places:
   show who has first strike without the keyword. Who attacks and who blocks is read from
   the snapshot's combat status and the `attacks` and `blocks` relations.
 - The pending event's details go into three slots:
-  - global slot: its type one-hot, its amount, its mode one-hot and whether it is combat
-    damage; the mode one-hot is over the modes the gen-3 fixture and the review pilots
+  - global slot: its type one-hot, its amount, its mode one-hot, whether it is combat
+    damage, and its from-zone and to-zone, each one-hot over the zones with an "other"
+    column; the mode one-hot is over the modes the gen-3 fixture and the review pilots
     carry, with an "other" column;
-  - card slot: whether the card is its subject, and whether the card is its source; the
-    subject's last-known copy reads as a subject too;
-  - player slot: whether the player is its subject.
+  - card slot: whether the card is its subject, its source, its defender, among its
+    blockers, and its cause; the subject's last-known copy reads as a subject too;
+  - player slot: whether the player is its subject, its defender and its cause.
+- The pending event's `cause` is the ref of the object that caused it, so it reads as a
+  bit on that object's slot, as the source does.
+- A face-down card's slot reads its real face's types, colours, mana value, printed power
+  and toughness and number of subtypes, in a part of its own; every other card reads zeros
+  there. The face-down characteristics stay in the characteristics part.
 - A card slot reads two of Forge's hidden keywords as bits: can't block (`CARDNAME can't
   block.`, `CARDNAME can't attack or block.`) and can't attack (`CARDNAME can't attack.`,
   `CARDNAME can't attack or block.`). No other hidden keyword is read.

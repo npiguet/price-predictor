@@ -76,9 +76,9 @@ def _with_event(record, event):
 
 
 def _pending_part(record, entity_id: str) -> tuple[float, ...]:
-    """A card's pending-event part: a pending event, is its subject, is its source."""
+    """A card's pending-event part: pending, subject, source (three of six)."""
     entity = record.state.entity(entity_id)
-    return card_features(entity, record)[card_segments(entity, record)["pending_event"]]
+    return card_features(entity, record)[card_segments(entity, record)["pending_event"]][:3]
 
 
 def _player(record, player_id: str) -> tuple[float, ...]:

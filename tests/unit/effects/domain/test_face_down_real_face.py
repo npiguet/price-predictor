@@ -3,8 +3,8 @@
 What turning a card face up does depends on its real face. The collector
 writes a face-down card's real-face lines among its ``lines`` with
 ``active = False`` (``CardLine``), so they reach the surface as ability
-slots flagged inactive, each with its line's ``e``; the card slot itself
-reads nothing of ``real_face``.
+slots flagged inactive, each with its line's ``e``; the card slot reads
+``real_face``'s characteristics in a part of its own.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from effects.domain.effect_head_input import (
     SlotKind,
     SurfaceBuilder,
     card_features,
+    card_segments,
     face_state_of,
     slot_lines,
 )
@@ -71,7 +72,43 @@ def test_a_face_down_card_with_another_real_face_reads_apart(record):
     assert _surface(record).slots != _surface(blank).slots
 
 
-def test_the_card_slot_reads_nothing_of_the_real_face(record):
+def _real_face_part(record, entity):
+    return card_features(entity, record)[card_segments(entity, record)["real_face"]]
+
+
+def _changed(record, **changes):
     card = record.state.entity("E22")
-    renamed = replace(card, real_face=replace(card.real_face, name="Shock", mana_value=1))
-    assert card_features(card, record) == card_features(renamed, _with_entity(record, renamed))
+    renamed = replace(card, real_face=replace(card.real_face, **changes))
+    return _with_entity(record, renamed), renamed
+
+
+@pytest.mark.parametrize("changes", [
+    {"base_pt": (3, 3)},
+    {"types": ("creature",)},
+    {"colors": ("U",)},
+    {"mana_value": 5},
+    {"subtypes": ("goblin", "wizard")},
+])
+def test_each_characteristic_of_the_real_face_reaches_the_card_slot(record, changes):
+    other, card = _changed(record, **changes)
+    assert _real_face_part(record, record.state.entity("E22")) != _real_face_part(other, card)
+    assert _surface(record).slots != _surface(other).slots
+
+
+def test_two_face_down_records_differing_only_in_the_real_faces_power_differ(record):
+    low, _ = _changed(record, base_pt=(1, 2))
+    high, _ = _changed(record, base_pt=(4, 2))
+    assert _surface(low).slots != _surface(high).slots
+
+
+def test_the_face_down_characteristics_stay_where_they_are(record):
+    other, card = _changed(record, mana_value=5, types=("creature",))
+    whole = card_segments(card, other)["characteristics"]
+    assert card_features(card, other)[whole] == card_features(
+        record.state.entity("E22"), record)[whole]
+
+
+def test_a_card_that_is_not_face_down_reads_zeros_there(record):
+    card = record.state.entity("E1")
+    assert card.real_face is None
+    assert not any(_real_face_part(record, card))

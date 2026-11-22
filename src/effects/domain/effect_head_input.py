@@ -483,11 +483,14 @@ def _push_pending_event_globals(out: list[float], pending: Event | None) -> None
     _push_scalar(out, _event_amount(pending))
     out += _one_hot(pending.params.get("mode"), PENDING_EVENT_MODES)
     out.append(1.0 if pending.params.get("combat") is True else 0.0)
+    out += _one_hot(pending.params.get("from_zone"), ZONES)
+    out += _one_hot(pending.params.get("to_zone"), ZONES)
 
 
 #: The pending-event block of a record without one.
 _NO_PENDING_EVENT: tuple[float, ...] = (0.0,) * (
     _one_hot_width(EVENT_TYPES) + _SCALAR_WIDTH + _one_hot_width(PENDING_EVENT_MODES) + 1
+    + 2 * _one_hot_width(ZONES)
 )
 
 
@@ -586,6 +589,8 @@ def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, .
     for name in TURN_COUNTS:
         _push_scalar(out, getattr(counts, name) if counts is not None else 0)
     out.append(1.0 if record.state.names_as_pending_subject(player.id) else 0.0)
+    pending = record.state.pending_event
+    out += _pending_param_bits(pending, player.id, ("defender", "cause")) if pending else (0.0, 0.0)
     g = record.state.global_
     out.append(1.0 if player.id == record.actor_player else 0.0)
     out.append(0.0 if player.id == record.actor_player else 1.0)
@@ -628,13 +633,19 @@ def card_segments(
     return segments
 
 
+def _push_colors_and_mana_value(out, colors, mana_value) -> None:
+    """The colours' multi-hot and the mana value, as a card's characteristics
+    and a face-down card's real face read them."""
+    out += _multi_hot(colors, COLORS)
+    _push_scalar(out, mana_value)
+
+
 def _push_characteristics(out, entity: EntityState, record, masked) -> None:
     """Types, supertypes, colours, mana value and the P/T breakdown; whether
     it is a copy and whether a token (subtypes are the slot's ids)."""
     out += _multi_hot(entity.types, CARD_TYPES)
     out += _multi_hot(entity.supertypes, SUPERTYPES)
-    out += _multi_hot(entity.colors, COLORS)
-    _push_scalar(out, entity.mana_value)
+    _push_colors_and_mana_value(out, entity.colors, entity.mana_value)
     pt = entity.pt
     if pt is None:
         out += _NO_PT
@@ -654,8 +665,35 @@ def face_state_of(entity: EntityState) -> str:
 
 def _push_face_state(out, entity: EntityState, record, masked) -> None:
     """Face state one-hot (``in.face_state``). A face-down card's real face
-    reaches no card input: its lines enter only as inactive ability slots."""
+    is the next part's; its lines enter as inactive ability slots."""
     out += _one_hot(face_state_of(entity), FACE_STATES)
+
+
+#: What :func:`_push_real_face` writes for a card with no real face.
+_NO_REAL_FACE: tuple[float, ...] = (0.0,) * (
+    _one_hot_width(CARD_TYPES) + _one_hot_width(COLORS) + 4 * _SCALAR_WIDTH + 1
+)
+
+
+def _push_real_face(out, entity: EntityState, record, masked) -> None:
+    """A face-down card's real face: its types, colours, mana value, printed
+    power and toughness (a present flag, then two scalars) and how many
+    subtypes it has (``in.face_state``). Turning the card face up makes it
+    this, so ``face_after``, the base power and toughness and the type
+    changes depend on it; the face-down characteristics stay in
+    ``characteristics``. Zeros on every other card. Which subtypes they are
+    is no input: the subtype table is the slot's, summed once."""
+    face = entity.real_face
+    if face is None:
+        out += _NO_REAL_FACE
+        return
+    out += _multi_hot(face.types, CARD_TYPES)
+    _push_colors_and_mana_value(out, face.colors, face.mana_value)
+    power, toughness = face.base_pt if face.base_pt is not None else (0, 0)
+    out.append(0.0 if face.base_pt is None else 1.0)
+    _push_scalar(out, power)
+    _push_scalar(out, toughness)
+    _push_scalar(out, len(face.subtypes))
 
 
 def _push_mana_cost(out, entity: EntityState, record, masked) -> None:
@@ -860,6 +898,20 @@ def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
     _push_scalar(out, sum(extras.up_to_counts.values()))
 
 
+def _pending_param_bits(pending: Event, ref: str, names: tuple[str, ...]) -> list[float]:
+    """Whether the pending event's params ``names`` (each a ref or a list of
+    refs) name ``ref``."""
+    params = pending.params
+    return [1.0 if ref in _refs_of(params.get(name)) else 0.0 for name in names]
+
+
+def _refs_of(value) -> tuple[str, ...]:
+    """The refs a pending-event param holds: one, a list, or none."""
+    if isinstance(value, str):
+        return (value,)
+    return tuple(value) if isinstance(value, list) else ()
+
+
 def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) -> None:
     """Whether a ``rewrite`` or ``trigger`` record has a pending event,
     whether this card is its subject and whether its source (the damage
@@ -868,11 +920,12 @@ def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) 
     state = record.state
     pending = state.pending_event
     if pending is None:
-        out += (0.0, 0.0, 0.0)
+        out += (0.0,) * 6
         return
     out.append(1.0)
     out.append(1.0 if state.names_as_pending_subject(entity.id) else 0.0)
     out.append(1.0 if pending.params.get("source") == entity.id else 0.0)
+    out += _pending_param_bits(pending, entity.id, ("defender", "blockers", "cause"))
 
 
 def command_zone_object(record: EffectRecord, object_id: str) -> CommandZoneObject | None:
@@ -911,6 +964,7 @@ def _push_comparable_amounts(out, entity: EntityState, record, masked) -> None:
 _CARD_PARTS = (
     ("characteristics", _push_characteristics),
     ("face_state", _push_face_state),
+    ("real_face", _push_real_face),
     ("mana_cost", _push_mana_cost),
     ("printed_loyalty_defense", _push_printed_loyalty_defense),
     ("status", _push_status),

@@ -85,19 +85,21 @@ def test_the_heads_keep_their_widths():
 
 
 def test_the_card_slot_keeps_its_width_and_parts():
-    """A card slot is 545 features in 19 parts. A combat record's damage
+    """A card slot is 575 features in 20 parts. A combat record's damage
     assignment is no part of it (D3): it reads the first-strike rule
     without the keyword. The role is (finding 4.7): six columns, the five
-    of :data:`ENTITY_ROLES` and "other". The pending event's part is three
-    columns: a pending event, the card is its subject, the card is its
-    source; the hidden keywords' two: can't block, can't attack (finding
+    of :data:`ENTITY_ROLES` and "other". The pending event's part is six
+    columns: a pending event, the card is its subject, its source, its
+    defender, among its blockers, its cause; a face-down card's real face
+    is 27 (types, colours, mana value, printed power and toughness, the
+    subtype count); the hidden keywords' two: can't block, can't attack (finding
     4.8). The width moves with the kept keyword flags and the other lists
     the parts one-hot over."""
     record = record_from_dict(gen3_fixture_records()[0])
     entity = record.state.entities[0]
-    assert len(card_features(entity, record)) == 545
+    assert len(card_features(entity, record)) == 575
     assert list(card_segments(entity, record)) == [
-        "characteristics", "face_state", "mana_cost", "printed_loyalty_defense",
+        "characteristics", "face_state", "real_face", "mana_cost", "printed_loyalty_defense",
         "status", "role", "keyword_flags", "hidden_keywords", "relation_to_act",
         "designations", "x_paid",
         "chosen", "costs_paid", "history", "order_rank", "stack_extras",
@@ -106,13 +108,14 @@ def test_the_card_slot_keeps_its_width_and_parts():
 
 
 def test_the_global_and_player_slots_keep_their_widths():
-    """The ``[GLOBAL]`` slot is 210 features, 83 of them the pending event's
+    """The ``[GLOBAL]`` slot is 226 features, 83 of them the pending event's
     mode, one-hot over the 81 :data:`PENDING_EVENT_MODES` and "other", and
-    its combat bit; a player slot is 114, one the pending event's subject
-    (finding 4.8)."""
+    its combat bit, and 16 its from- and to-zone, each one-hot over
+    :data:`ZONES` and "other"; a player slot is 116, three the pending
+    event's subject, defender and cause (finding 4.8)."""
     assert len(PENDING_EVENT_MODES) == 81
     widths = feature_widths([record_from_dict(gen3_fixture_records()[0])])
-    assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (210, 114)
+    assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (226, 116)
 
 
 def test_the_value_head_keeps_its_slices():
