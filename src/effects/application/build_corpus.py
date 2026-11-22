@@ -18,7 +18,7 @@ import shutil
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -52,7 +52,7 @@ from effects.domain.corpus_curation import (
     one_sided_conditions,
     validation_multipliers,
 )
-from effects.domain.corpus_manifest import rule_curation_fields
+from effects.domain.corpus_manifest import CuratedShard, rule_curation_fields
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     GameStrata,
@@ -734,13 +734,13 @@ def build(config: BuildCorpusConfig) -> int:
             workers=config.workers,
         )
     report_write_pass(survey, written)
-    _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
+    shards = _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, WorkerContext(read))
 
-    manifest = build_manifest(
+    manifest = replace(build_manifest(
         config, surface=surface, held_out=held_out, survey=survey,
         decisions=decisions, written=written,
-    )
+    ), shards=shards)
     store.save(manifest)
     log_report(manifest, survey, decisions, written)
     logger.info(
@@ -1009,14 +1009,16 @@ def _write_validation_samples(
 
 def _repack_outputs(
     store: CorpusStore, written: WriteResult, *, shard_records: int, seed: int,
-) -> None:
-    """Deal each stratum's parts into uniform, mixed shards, then drop the parts.
+) -> dict[str, tuple[CuratedShard, ...]]:
+    """Deal each stratum's parts into uniform, mixed shards, then drop the
+    parts; each stratum's shards by name, with the records written into each.
 
     A part is one source shard, so unrepacked the trainer's per-shard step
     budget would be uneven and a shard's batches correlated by run.
     """
     from effects.infrastructure.shard_io import iter_shards, repack_shards
 
+    listing: dict[str, tuple[CuratedShard, ...]] = {}
     for stratum in OUTPUT_STRATA:
         parts = iter_shards(store.parts_dir_for(stratum))
         paths = repack_shards(
@@ -1027,4 +1029,9 @@ def _repack_outputs(
             "%-22s %d part(s) repacked into %d shard(s)",
             stratum, len(parts), len(paths),
         )
+        listing[str(stratum)] = tuple(sorted(
+            (CuratedShard(name=path.name, records=records) for path, records in paths.items()),
+            key=lambda shard: shard.name,
+        ))
     shutil.rmtree(store.parts_dir, ignore_errors=True)
+    return listing

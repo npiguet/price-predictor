@@ -740,6 +740,7 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
 @exits_with({
     BuildCorpusError: 1, FileNotFoundError: 1, _MANIFEST_REFUSED: 1,
     "price_predictor.domain.converted_provenance.ConversionRefused": 1,
+    "effects.infrastructure.corpus_store.OutputsNotCleared": 1,
 })
 def run_build_corpus(args: argparse.Namespace) -> int:
     from effects.application import build_corpus as build_corpus_module

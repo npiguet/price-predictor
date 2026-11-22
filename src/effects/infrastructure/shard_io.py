@@ -67,8 +67,9 @@ _GROUPS = 256
 def repack_shards(
     parts: Sequence[Path], out_dir: Path, *, shard_records: int,
     seed: int = 0, records: int | None = None, prefix: str = "shard",
-) -> list[Path]:
-    """Deal ``parts``' games into shards of about ``shard_records`` records each.
+) -> dict[Path, int]:
+    """Deal ``parts``' games into shards of about ``shard_records`` records
+    each; every shard written, in name order, with the records written into it.
 
     Whole games are dealt by a seeded hash of ``game_id``, so a game never
     spans two shards and each shard mixes games from across the stratum
@@ -82,7 +83,7 @@ def repack_shards(
     """
     parts = [Path(p) for p in parts]
     if not parts:
-        return []
+        return {}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if shard_records <= 0:
@@ -101,22 +102,30 @@ def repack_shards(
             index: out_dir / f"{prefix}-{number:05d}.jsonl.gz"
             for number, index in enumerate(sorted(filled), start=1)
         }
-        _write_shuffled_buckets(scratch, names, seed=seed, count=count)
+        written = _write_shuffled_buckets(scratch, names, seed=seed, count=count)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
-    return list(names.values())
+    # Zero-padded names: path order is name order.
+    return dict(sorted(written.items()))
 
 
-def _copy_parts_unshuffled(parts: list[Path], out_dir: Path, prefix: str) -> list[Path]:
-    written = []
+def _copy_parts_unshuffled(parts: list[Path], out_dir: Path, prefix: str) -> dict[Path, int]:
+    written = {}
     for number, part in enumerate(parts, start=1):
         path = out_dir / f"{prefix}-{number:05d}.jsonl.gz"
-        with gzip.open(path, "wt", encoding="utf-8") as handle:
-            for line in iter_shard_lines(part):
-                handle.write(line)
-                handle.write("\n")
-        written.append(path)
+        written[path] = _write_lines(path, iter_shard_lines(part))
     return written
+
+
+def _write_lines(path: Path, lines: Iterable[str]) -> int:
+    """Write ``lines`` as one gzipped shard, a newline after each; how many."""
+    count = 0
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        for line in lines:
+            handle.write(line)
+            handle.write("\n")
+            count += 1
+    return count
 
 
 def _bucket_of(line: str, *, seed: int, count: int) -> int:
@@ -163,12 +172,13 @@ def _deal_into_buckets(
 
 def _write_shuffled_buckets(
     scratch: Path, names: dict[int, Path], *, seed: int, count: int,
-) -> None:
+) -> dict[Path, int]:
     """Split each group into its shards by the index each line carries,
-    shuffle each under ``seed``, write it.
+    shuffle each under ``seed``, write it; each shard's records.
 
     A group is held whole, which is about ``count / _GROUPS`` shards' lines.
     """
+    written: dict[Path, int] = {}
     for group in range(min(count, _GROUPS)):
         buckets: dict[int, list[str]] = defaultdict(list)
         for tagged in iter_shard_lines(_group_path(scratch, group)):
@@ -176,10 +186,8 @@ def _write_shuffled_buckets(
             buckets[int(index)].append(line)
         for index, lines in buckets.items():
             random.Random(f"{seed}:{index}").shuffle(lines)
-            with gzip.open(names[index], "wt", encoding="utf-8") as handle:
-                for line in lines:
-                    handle.write(line)
-                    handle.write("\n")
+            written[names[index]] = _write_lines(names[index], lines)
+    return written
 
 
 def _game_of_line(line: str) -> str:

@@ -199,5 +199,15 @@ def test_the_deal_is_the_in_memory_deal(tmp_path, runs, monkeypatch, groups):
 
 
 def test_no_parts_writes_nothing(tmp_path):
-    assert repack_shards([], tmp_path / "out", shard_records=4) == []
+    assert repack_shards([], tmp_path / "out", shard_records=4) == {}
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("shard_records", [0, 40])
+def test_each_shard_comes_with_the_records_written_into_it(tmp_path, runs, shard_records):
+    """The counts the manifest's ``shards`` listing records, taken as the
+    lines are written rather than by reading the shards back."""
+    written = repack_shards(runs, tmp_path / "out", shard_records=shard_records)
+
+    assert written == {path: sum(1 for _ in read_shard(path)) for path in written}
+    assert sum(written.values()) == 320

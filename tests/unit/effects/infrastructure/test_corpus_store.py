@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from effects.domain.corpus_manifest import SourceShard
-from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure import corpus_store
+from effects.infrastructure.corpus_store import CorpusStore, OutputsNotCleared
 from effects.infrastructure.shard_io import list_shards
 from tests.unit.effects.domain.test_corpus_manifest import manifest
 
@@ -84,3 +87,42 @@ def test_saving_a_manifest_removes_the_one_set_aside(tmp_path, a_manifest):
     store.save(a_manifest)
     assert store.load() == a_manifest
     assert not store.previous_manifest_path.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses to delete an open file")
+def test_a_shard_the_clear_cannot_delete_stops_the_build_naming_it(tmp_path, a_manifest):
+    """A shard held open (Windows refuses to delete an open file) would survive
+    the clear and be read with the next build's shards, a stale shard possibly
+    of a game now placed in validation (finding 11.4). The manifest is moved
+    aside first all the same, so the failed clear leaves none matching the old
+    dataset."""
+    store = CorpusStore(tmp_path)
+    store.save(a_manifest)
+    shard = store.training_dir / "shard-00001.jsonl.gz"
+    shard.parent.mkdir(parents=True)
+    shard.write_bytes(b"x")
+
+    with shard.open("rb"), pytest.raises(OutputsNotCleared) as raised:
+        store.clear_outputs()
+
+    assert str(shard) in str(raised.value)
+    assert not store.manifest_path.exists()
+    assert store.previous_manifest_path.exists()
+
+
+def test_a_directory_that_survives_the_delete_is_named(tmp_path, monkeypatch):
+    """Whatever left it (a delete that reported nothing), a stratum directory
+    still there after the clear is refused by its path."""
+    store = CorpusStore(tmp_path)
+    store.card_disjoint_dir.mkdir(parents=True)
+    monkeypatch.setattr(corpus_store.shutil, "rmtree", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(OutputsNotCleared, match="card-disjoint"):
+        store.clear_outputs()
+
+
+def test_build_corpus_exits_1_on_an_uncleared_dataset():
+    """A refusal the operator can act on (close what holds the shard), not a traceback."""
+    from effects.infrastructure import cli
+
+    assert cli._exit_code(cli.run_build_corpus.exit_codes, OutputsNotCleared("held")) == 1

@@ -87,6 +87,15 @@ class SourceShard:
 
 
 @dataclass(frozen=True, slots=True)
+class CuratedShard:
+    """One shard the build wrote into a stratum, as the write pass counted it:
+    its file name inside the stratum's directory and its records."""
+
+    name: str
+    records: int
+
+
+@dataclass(frozen=True, slots=True)
 class ClassCounts:
     """What one sampling class contributed. ``unique_texts`` says whether the
     per-text cap trimmed the head or flattened the tail (FR-145)."""
@@ -149,6 +158,13 @@ def _doubly_nested_int_map(values: dict) -> dict[str, dict[str, dict[str, int]]]
 
 def _sources(values: list) -> tuple[SourceShard, ...]:
     return tuple(SourceShard(name=s["name"], size=int(s["size"])) for s in values)
+
+
+def _curated_shards(values: dict) -> dict[str, tuple[CuratedShard, ...]]:
+    return {
+        stratum: tuple(CuratedShard(**shard) for shard in shards)
+        for stratum, shards in values.items()
+    }
 
 
 def _class_counts(values: dict) -> dict[str, ClassCounts]:
@@ -441,6 +457,14 @@ class CorpusManifest:
     #: (WP7); their records are ``per_stratum["dropped-cut"]``. Inside the
     #: digest: which games are cut decides which records the corpus holds.
     cut_games: int = field(default=0, metadata=_reads(int))
+    #: ``output stratum -> its shards``, each by file name inside the
+    #: stratum's directory with the records the write pass put in it, sorted
+    #: by name; a stratum holding none lists none. What a reader compares the
+    #: shards it finds with (finding 11.4). Outside the digest: the names
+    #: follow from the repack, decided by members inside it.
+    shards: dict[str, tuple[CuratedShard, ...]] = field(
+        default_factory=dict, metadata=_reads(_curated_shards),
+    )
 
     @property
     def budgeted_rules(self) -> frozenset[str]:
@@ -534,7 +558,7 @@ class CorpusManifest:
     _OUTSIDE_THE_DIGEST = (
         "no_acting_text_scripts", "decode_off_list", "damaged_tails", "join_gaps",
         "unsupervised_events", "code_version", "sidecar_digest",
-        "tagged_nowhere_written",
+        "tagged_nowhere_written", "shards",
     )
 
     def digest(self) -> str:

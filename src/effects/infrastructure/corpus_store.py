@@ -32,6 +32,10 @@ MANIFEST_NAME = "manifest.json"
 PREVIOUS_MANIFEST_NAME = "manifest.previous.json"
 
 
+class OutputsNotCleared(OSError):
+    """An output directory the clear left on disk, named with what kept it."""
+
+
 class CorpusStore:
     """Reads and writes one curated dataset directory."""
 
@@ -93,17 +97,29 @@ class CorpusStore:
         """Delete every output directory, moving the manifest aside first.
 
         A dataset is rebuilt whole (FR-144), so no leftover shard joins a
-        dataset its manifest does not describe. The manifest goes first, so a
-        build that then fails leaves no manifest whose digest still matches
-        checkpoints trained on the old dataset.
+        dataset its manifest does not describe: a directory the delete leaves
+        (a shard another process holds open) raises :class:`OutputsNotCleared`
+        naming what was left. The manifest goes first, so a build that then
+        fails leaves no manifest whose digest still matches checkpoints
+        trained on the old dataset.
         """
         if self.manifest_path.exists():
             self.manifest_path.replace(self.previous_manifest_path)
-        for directory in (
-            *(self.output_dir(stratum) for stratum in OUTPUT_STRATA),
-            self.samples_dir, self.parts_dir,
-        ):
-            shutil.rmtree(directory, ignore_errors=True)
+        left = [
+            entry
+            for directory in (
+                *(self.output_dir(stratum) for stratum in OUTPUT_STRATA),
+                self.samples_dir, self.parts_dir,
+            )
+            for entry in _remove(directory)
+        ]
+        if left:
+            raise OutputsNotCleared(
+                f"{self.directory}: the old dataset could not be cleared, so its "
+                "shards would be read with the new ones. Close whatever holds "
+                "them and build again (the old manifest is "
+                f"{PREVIOUS_MANIFEST_NAME}). Left: " + "; ".join(left)
+            )
 
     def save(self, manifest: CorpusManifest) -> Path:
         """Write the manifest atomically, and drop the one ``clear_outputs`` set aside."""
@@ -126,6 +142,18 @@ class CorpusStore:
         return CorpusManifest.from_dict(
             json.loads(self.manifest_path.read_text(encoding="utf-8"))
         )
+
+
+def _remove(directory: Path) -> list[str]:
+    """Delete ``directory``; what the delete left, each with why, empty when
+    it is gone."""
+    if not directory.exists():
+        return []
+    left: list[str] = []
+    shutil.rmtree(directory, onexc=lambda _call, path, exc: left.append(f"{path} ({exc})"))
+    if directory.exists() and not left:
+        left.append(f"{directory} (still present after the delete)")
+    return left
 
 
 def training_acting_keys(directory: Path) -> set[Keys]:

@@ -7,6 +7,7 @@ import pytest
 from effects.domain.corpus_manifest import (
     ClassCounts,
     CorpusManifest,
+    CuratedShard,
     FamilyRow,
     ManifestError,
     SourceShard,
@@ -320,3 +321,24 @@ def test_the_rules_tagged_nowhere_written_round_trip_and_leave_the_digest_alone(
     restored = CorpusManifest.from_dict(json.loads(json.dumps(reported.as_dict())))
     assert restored.tagged_nowhere_written == ("104.2a", "703.4c")
     assert reported.digest() == plain.digest()
+
+
+def test_the_curated_shards_round_trip_and_leave_the_digest_alone():
+    """``shards`` lists each stratum's files and record counts, which the
+    trainer compares with what it finds on disk (finding 11.4). Two builds
+    deciding the same thing and naming their shards differently (another
+    repack, another filesystem) have one digest."""
+    listed = manifest(shards={
+        "training": (CuratedShard(name="shard-00001.jsonl.gz", records=40),
+                     CuratedShard(name="shard-00002.jsonl.gz", records=38)),
+        "card-disjoint": (),
+    })
+    renamed = manifest(shards={
+        "training": (CuratedShard(name="part-a.jsonl.gz", records=78),),
+        "card-disjoint": (),
+    })
+    restored = CorpusManifest.from_dict(json.loads(json.dumps(listed.as_dict())))
+    assert restored == listed
+    assert restored.shards["training"][1] == CuratedShard(
+        name="shard-00002.jsonl.gz", records=38)
+    assert listed.digest() == renamed.digest() == manifest().digest()

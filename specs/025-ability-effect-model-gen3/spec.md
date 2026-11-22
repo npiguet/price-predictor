@@ -1316,11 +1316,13 @@ and that the reporting half never enters the control score.
   under; and, outside the digest, what the survey's reading met without stopping (values outside
   the wire's closed lists, shards a damaged last member ended, by path under `--records-dir`, keys
   read as no line: unresolved, undescribed or of a tree with no root), the events no output column
-  reads by kind, the commit the build ran on and a hash of the sidecar trees.
+  reads by kind, the commit the build ran on, a hash of the sidecar trees, and every shard of each
+  output stratum by file name with the records the write pass put in it, sorted by name.
 - **FR-060b**: `build-corpus` MUST refuse a rules directory holding no scenario or no heads line
   before the survey, and a raw shard the survey cannot read whole before it clears `--output`; a
   shard that turns unreadable only in the write pass stops the build after `--output` was cleared,
-  saying so. The write pass MUST write no record past those the survey read in its shard (a shard
+  saying so. A clear that leaves an output directory on disk (a shard held open) MUST stop the
+  build, naming what was left, before the write pass. The write pass MUST write no record past those the survey read in its shard (a shard
   grown between the passes) and count each as `dropped-unsurveyed`. The survey MUST drop whole,
   before any tally reads it, every gen-3 game whose shard holds no game-end marker (a cut game),
   and the write pass the same games, counting their records as `dropped-cut` and the games in the
