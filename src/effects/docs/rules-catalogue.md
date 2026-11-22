@@ -4,7 +4,7 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 
 - The catalogue's own documentation: `rules/README.md`; its file formats: `specs/025-ability-effect-model-gen3/contracts/catalogue-extensions.md`.
 - What is specified: `specs/2026-10-30-ability-effect-model-gen3.md` § 4, 5 and 7.
-- Code: enums in `domain/rule_catalogue.py`, read-only loaders in `infrastructure/rules_catalogue_io.py`, one module per detector family in `domain/rule_detectors/` (`outcome_event` reads its matcher, events, entities and subject qualifiers from `outcome_matcher`, `outcome_events`, `outcome_entities` and `outcome_subjects`).
+- Code: enums in `domain/rule_catalogue.py`, read-only loaders in `infrastructure/rules_catalogue_io.py`, one module per detector family in `domain/rule_detectors/` (`outcome_event` reads its matcher, events, entities and subject qualifiers from `outcome_matcher`, `outcome_events`, `outcome_entities` and `outcome_subjects`; `sba_zone_move` reads what a record's events did to each entity, and whether they end the game, from `sba_board`).
 
 ## Declarations
 
