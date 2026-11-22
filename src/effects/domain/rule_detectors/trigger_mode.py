@@ -87,7 +87,7 @@ from effects.domain.rule_detectors.acting_line import (
     source_ids,
 )
 from effects.domain.rule_detectors.entity_facts import has_designation, is_copy
-from effects.domain.rule_detectors.outcome_event import (
+from effects.domain.rule_detectors.outcome_subjects import (
     QUALIFIER_CHECKS,
     SUBJECT_QUALIFIER_NEEDS,
     SUBJECT_QUALIFIERS,

@@ -4,7 +4,7 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 
 - The catalogue's own documentation: `rules/README.md`; its file formats: `specs/025-ability-effect-model-gen3/contracts/catalogue-extensions.md`.
 - What is specified: `specs/2026-10-30-ability-effect-model-gen3.md` § 4, 5 and 7.
-- Code: enums in `domain/rule_catalogue.py`, read-only loaders in `infrastructure/rules_catalogue_io.py`, one module per detector family in `domain/rule_detectors/`.
+- Code: enums in `domain/rule_catalogue.py`, read-only loaders in `infrastructure/rules_catalogue_io.py`, one module per detector family in `domain/rule_detectors/` (`outcome_event` reads its matcher, events, entities and subject qualifiers from `outcome_matcher`, `outcome_events`, `outcome_entities` and `outcome_subjects`).
 
 ## Declarations
 
@@ -40,11 +40,12 @@ Rules to respect when editing `rules/`, a detector family or rule tagging, and w
 ## Tagging
 
 - `rule-counts`, the `build-corpus` survey and the selection-set freeze all tag through the one `tag_record`.
+- `DetectorIndex` compiles each declaration once (`DetectorFamily.compile`) and gives identical declarations of a record kind (one family, the same parameters) one matcher, run once a record and fanned out to each scenario in index order. A matcher is therefore a pure function of the record and the sidecar lines: one keeping per-record state would answer once for every scenario sharing it.
 - A rule's scenarios merge into one tag: `fires` if any says so, else `does_not_fire`, else `other`.
 - A tag names entities in two roles, and this is the one definition:
   - Condition entities are what the rule's condition reads: a keyword's carrier, the acting source with its targets and controller, a judged permanent, an anchor attacker.
   - Outcome entities are where its outcome falls as the record's targets place it: the creature fought, the defending player, a lifelinker's controller, the player who discarded or drew, every card and player a target legality is written at.
-- A tag whose outcome is an absence (`outcome_event`'s scoped near miss without the event, an `absent` declaration's `fires` side, a qualified near miss whose missing events place nothing) names as its outcome entities where the outcome would have fallen: the acting clause's `refs.targets`, else its controller (`actor_player`, `outcome_event._would_fall_on`). Without them a rule read at entities has no reading on that polarity, and the freeze leaves it out. `resolution_outcome` names the stack object (`refs.source`) on both sides. A `trigger` record's tags name no outcome entity, because the trigger's effect arrives as its resolution's record and a trigger record supervises no per-entity output.
+- A tag whose outcome is an absence (`outcome_event`'s scoped near miss without the event, an `absent` declaration's `fires` side, a qualified near miss whose missing events place nothing) names as its outcome entities where the outcome would have fallen: the acting clause's `refs.targets`, else its controller (`actor_player`, `outcome_entities.would_fall_on`). Without them a rule read at entities has no reading on that polarity, and the freeze leaves it out. `resolution_outcome` names the stack object (`refs.source`) on both sides. A `trigger` record's tags name no outcome entity, because the trigger's effect arrives as its resolution's record and a trigger record supervises no per-entity output.
 - The hard rule mask's gate trains at both roles. A rule test reads at the outcome entities.
 - A tag whose `observed` disagrees with its polarity goes on the review list and is never a rule-test record.
 - `RuleSource` (`random_seat`, `forge_ai`, `aimed`, `fork`) is decided per record. `fork` is a probe's, an intervention's or a protection fork's record (`FORK_SOURCE_ORIGINS`), even one carrying `aimed_at`; it re-records a moment of its live game, so `directed-rules` and the budgets' `available` leave it out, or a combat would count once per probe. `directed-rules` decides the list from `forge_ai` and `random_seat` alone (`DECIDING_SOURCES` in `scripts/rules_catalogue_parts/directed_forks.py`): counting the directed forks' own `aimed` records would take a rule off the list that makes them.
