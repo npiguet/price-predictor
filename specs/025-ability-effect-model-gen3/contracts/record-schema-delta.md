@@ -633,8 +633,10 @@ loses as a step or phase ends with no `LoseMana` replacement (500.4).
   and is present when a link of the chain targets. On an effect half the acting item's entity
   reads them from its targets as cast, the refs `refs.targets_at_cast` lists, never from those
   left after Forge's check for illegal targets. `per_target_amounts` on such an entity holds
-  every target's share as announced when the item went on the stack, the targets the check
-  removed included, however many a link lost. Every other entity, and every record that is no
+  every target's share: the share the item holds now for a target it still carries (a retarget
+  moves a divided share to the new target), the share as announced when the item went on the
+  stack for each target the check removed, however many a link lost; a target a retarget moved
+  away from is no longer a target and carries none. Every other entity, and every record that is no
   effect half, reads what its item holds.
 - Forge deals a chain's damage from one damage map when its last clause resolves (Arc Trail's
   `DamageResolve`). A `damage_dealt` whose subject the resolving clause does not target, but an

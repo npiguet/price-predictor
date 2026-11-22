@@ -17,6 +17,10 @@ import java.util.Map;
  * a removed target's share off the item with it, before the resolution hook
  * runs, so the shares are read when the item goes on the stack, live and in a
  * fork, and kept beside the targets as cast ({@link ChainTargets#atCast}).
+ * A retarget since moves a share to the new target, which the announcement
+ * does not hold: at resolution start the item's current shares override it
+ * ({@link #updatedBy}), the announced ones standing for the targets Forge's
+ * check removed.
  */
 final class DividedAllocation {
 
@@ -37,6 +41,23 @@ final class DividedAllocation {
             links.add(sharesOf(link.getTargets()));
         }
         return new DividedAllocation(List.copyOf(links));
+    }
+
+    /**
+     * This allocation with each share {@code item}'s chain holds now laid
+     * over it: a target that still carries a share takes its current one (a
+     * retarget moved it there), and a target the check for illegal targets
+     * removed, no longer on the item, keeps its announced one.
+     */
+    DividedAllocation updatedBy(SpellAbility item) {
+        List<Map<GameObject, Integer>> now = of(item).perLink;
+        List<Map<GameObject, Integer>> merged = new ArrayList<>();
+        for (int index = 0; index < now.size(); index++) {
+            Map<GameObject, Integer> shares = new HashMap<>(ofLink(index));
+            shares.putAll(now.get(index));
+            merged.add(shares);
+        }
+        return new DividedAllocation(List.copyOf(merged));
     }
 
     private static Map<GameObject, Integer> sharesOf(TargetChoices chosen) {

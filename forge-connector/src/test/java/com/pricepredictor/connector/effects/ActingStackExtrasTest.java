@@ -5,6 +5,7 @@ import forge.card.CardStateName;
 import forge.game.Game;
 import forge.game.GameObject;
 import forge.game.ability.AbilityKey;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardZoneTable;
@@ -273,6 +274,47 @@ class ActingStackExtrasTest {
         Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
         assertEquals(Map.of("L" + bears.getId(), 1L, "L" + wurm.getId(), 1L, Refs.of(giant), 1L),
                 extras.get("per_target_amounts"), half);
+    }
+
+    /**
+     * Arc Lightning split 1, 1 and 1 over three creatures, one of them
+     * redirected by Spellskite's {@code ChangeTargets} (real card, its
+     * {@code ChangeSingleTarget} branch): Forge moves the share to the new
+     * target, and the effect half writes it as announced there, the old
+     * target no longer a target and without a share.
+     */
+    @Test
+    void aRetargetedDividedSpellKeepsTheShareItMovedToItsNewTarget() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        Card wurm = TestBoard.inPlay(game, opponent, "Craw Wurm");
+        Card skite = TestBoard.inPlay(game, opponent, "Spellskite");
+        Card arcLightning = TestBoard.inHand(game, caster, "Arc Lightning");
+        SpellAbility[] cast = {null};
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            cast[0] = TestBoard.spellOf(game.getAction().moveToStack(arcLightning, null), caster);
+            cast[0].clearTargets();
+            for (Card target : List.of(bears, wurm)) {
+                cast[0].getTargets().add(target);
+                cast[0].addDividedAllocation(target, target == bears ? 2 : 1);
+            }
+            game.getStack().add(cast[0]);
+            SpellAbility redirect = TestBoard.ability(skite, ApiType.ChangeTargets);
+            redirect.setActivatingPlayer(opponent);
+            redirect.resetTargets();
+            redirect.getTargets().add(cast[0]);
+            game.getStack().add(redirect);
+            game.getStack().resolveStack();
+            resolveAndMoveOn(game);
+        });
+
+        String half = RecordPicks.only(records, "resolution", "cardsfolder/a/arc_lightning.txt");
+        Map<String, Object> extras = extrasOf(half, cast[0].getHostCard());
+        assertEquals(Map.of(Refs.of(skite), 2L, Refs.of(wurm), 1L), extras.get("per_target_amounts"), half);
+        assertEquals(Set.of(Refs.of(skite), Refs.of(wurm)), Set.copyOf((List<?>) extras.get("targets")), half);
     }
 
     /**
