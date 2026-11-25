@@ -164,8 +164,9 @@ class EffectModel(nn.Module):
         with torch.no_grad():
             self.counter_embedding.weight[ID_PADDING].zero_()
         self.slot_kind_embedding = nn.Embedding(len(SlotKind), d)
-        # Zero rows: a checkpoint saved before option rows existed loads
-        # without this key and must read every row as it trained (FR-063a).
+        # Zero rows at initialisation: an option kind starts adding nothing to
+        # its slot. A checkpoint without this key is refused at load, as any
+        # other missing weight is.
         self.option_kind_embedding = nn.Embedding(OPTION_KINDS, d)
         nn.init.zeros_(self.option_kind_embedding.weight)
         self.position_embedding = nn.Embedding(config.max_position, d)
