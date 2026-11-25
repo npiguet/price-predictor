@@ -808,7 +808,9 @@ class TestEvaluatorWiring:
         )
         context = SimpleNamespace(
             main=SimpleNamespace(provenance=SplitProvenance(game_disjoint_games=("gd-1",))),
-            corpus_path=corpus, main_runnable=self._load,
+            shards={"game-disjoint": (
+                CorpusStore(corpus).game_disjoint_dir / "shard-00001.jsonl.gz",)},
+            main_runnable=self._load,
         )
 
         outcome = run_gate_two(context)
@@ -904,7 +906,8 @@ class TestGateTwoRecords:
         self._write(CorpusStore(corpus).game_disjoint_dir, recorded, other)
         provenance = SplitProvenance(game_disjoint_games=("gd-1",))
 
-        read = list(gate_two_records(provenance, corpus_path=corpus))
+        read = list(gate_two_records(
+            provenance, shards=(CorpusStore(corpus).game_disjoint_dir / "shard-00001.jsonl.gz",)))
         assert [r.record_id for r in read] == [recorded.record_id]
 
 

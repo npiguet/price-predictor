@@ -401,9 +401,18 @@ class ProfileTotals:
         return derive(pd.DataFrame(rows).fillna(0.0))
 
 
-def main() -> None:
-    from effects.infrastructure.shard_io import iter_shards
+def listed_training_shards(paths) -> list[str]:
+    """The training shards the corpus manifest lists, checked against the
+    disk (finding 11.4): a stale shard of an earlier build is refused, not
+    profiled."""
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.curated_shards import require_listed_shards
 
+    store = CorpusStore(paths.manifest.parent)
+    return [str(p) for p in require_listed_shards(store, store.load())["training"]]
+
+
+def main() -> None:
     parser = add_probe_arguments(
         argparse.ArgumentParser(description=__doc__.splitlines()[0]),
     )
@@ -415,7 +424,7 @@ def main() -> None:
             f"{paths.checkpoint} names no curated corpus, so there are no "
             "training shards to profile"
         )
-    shards = [str(p) for p in iter_shards(paths.training)]
+    shards = listed_training_shards(paths)
     keymap = paths.reusable("cache/keymap.pkl")
     totals = ProfileTotals()
     with Pool(args.workers, initializer=_init,

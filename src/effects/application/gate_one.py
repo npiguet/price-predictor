@@ -31,8 +31,8 @@ from effects.domain.gate_metrics import (
 )
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import RecordKind, acting_keys, distinct_records
+from effects.domain.strata import Stratum
 from effects.infrastructure.corpus_store import (
-    CorpusStore,
     card_disjoint_resolutions,
     training_acting_keys,
 )
@@ -71,19 +71,21 @@ def unique_text_records(records, text_of: TextOf, *, seen) -> list:
     return stratum
 
 
-def unique_text_stratum(corpus_path, card_disjoint_games, text_of: TextOf) -> list:
-    """Gate 1's population, read from the curated corpus the checkpoint trained on.
+def unique_text_stratum(shards, card_disjoint_games, text_of: TextOf) -> list:
+    """Gate 1's population, read from the curated corpus the checkpoint trained
+    on: ``shards`` are the corpus's listed shards by stratum.
 
     Not from the raw shards: a raw game outside the recorded validation sets
     is not necessarily a training game (curation drops held-out games, and
     collection continues after a build).
     """
     seen = training_texts(
-        training_acting_keys(CorpusStore(corpus_path).training_dir), text_of,
+        training_acting_keys(shards[str(Stratum.TRAINING)]), text_of,
     )
     logger.info("gate 1: %d acting texts in the training stratum", len(seen))
     return unique_text_records(
-        card_disjoint_resolutions(corpus_path, frozenset(card_disjoint_games)),
+        card_disjoint_resolutions(
+            shards[str(Stratum.CARD_DISJOINT)], frozenset(card_disjoint_games)),
         text_of, seen=seen,
     )
 
@@ -111,7 +113,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     # Both checkpoints read one vocabulary (require_same_split), so one
     # surface's texts decide the stratum for both: the batcher's own join.
     texts = KeyResolver(context.sidecars, vocabulary_surface(context.tokenizer_files.vocab))
-    stratum = unique_text_stratum(context.corpus_path, games, texts.text_of)
+    stratum = unique_text_stratum(context.shards, games, texts.text_of)
     if not stratum:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,

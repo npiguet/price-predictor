@@ -6,6 +6,7 @@ without importing the command.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -39,6 +40,9 @@ class EvaluationContext:
     tokenizer_files: TokenizerFiles
     corpus_path: Path
     manifest: CorpusManifest
+    #: Each output stratum's shards as the manifest lists them, checked against
+    #: the disk once at load (finding 11.4): every reader of the corpus reads these.
+    shards: Mapping[str, tuple[Path, ...]]
     _main_model: LoadedModel | None = field(default=None, repr=False)
     _sidecars: SidecarCache | None = field(default=None, repr=False)
 
@@ -202,7 +206,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     require_generation(path for paths in listed.values() for path in paths)
     return EvaluationContext(
         with_corpus_defaults(config, manifest), main, files,
-        corpus_path=corpus_path, manifest=manifest,
+        corpus_path=corpus_path, manifest=manifest, shards=listed,
     )
 
 

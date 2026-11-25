@@ -42,7 +42,7 @@ from effects.domain.evaluation_report import (
     EvaluationReport,
 )
 from effects.domain.records import distinct_records
-from effects.domain.strata import VALIDATION_STRATA, Half, Stratum
+from effects.domain.strata import VALIDATION_STRATA, Half
 from effects.infrastructure.ability_cache_store import SidecarIndex
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import read_shard
@@ -167,8 +167,7 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
         note = (f"the selection set was frozen again since training "
                 f"({main.selection_set_digest[:12]}… then, {selection.digest[:12]}… now)")
         logger.warning("reporting half: %s", note)
-    store = CorpusStore(context.corpus_path)
-    readers = {stratum: stratum_reader(store.output_dir(Stratum(stratum)))
+    readers = {stratum: stratum_reader(context.shards[stratum])
                for stratum in selection.halves}
     loaded = context.main_model()
     half = str(Half.REPORTING)

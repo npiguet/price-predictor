@@ -742,12 +742,14 @@ def _copies(read: StratumReader, wanted: set[tuple[str, int]]) -> Iterable[Effec
 # ── the command ──────────────────────────────────────────────────────────
 
 
-def stratum_reader(directory: Path) -> StratumReader:
-    """A stratum directory's shards in path order, each read lazily."""
-    from effects.infrastructure.shard_io import iter_shards, read_shard
+def stratum_reader(shards: Sequence[Path]) -> StratumReader:
+    """A stratum's listed ``shards`` in the order given, each read lazily
+    (``curated_shards.require_listed_shards`` names them: no directory is
+    walked, so a stale shard is never read)."""
+    from effects.infrastructure.shard_io import read_shard
 
     def read() -> Iterable[Iterable[EffectRecord]]:
-        return (read_shard(path) for path in iter_shards(directory))
+        return (read_shard(path) for path in shards)
 
     return read
 
@@ -774,6 +776,7 @@ def run(
     )
     from effects.domain.strata import VALIDATION_STRATA
     from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.curated_shards import require_listed_shards
     from effects.infrastructure.rules_catalogue_io import load_scenarios
 
     store = CorpusStore(Path(corpus))
@@ -782,9 +785,10 @@ def run(
         small = small_halves(manifest, thresholds.get("min_games_per_half", MIN_GAMES_PER_HALF))
         if small:
             raise SelectionSetRefused(small)
+        listed = require_listed_shards(store, manifest)
         selection = freeze_selection_set(
             manifest,
-            {str(stratum): stratum_reader(store.output_dir(stratum))
+            {str(stratum): stratum_reader(listed[str(stratum)])
              for stratum in VALIDATION_STRATA},
             rules=RuleTestRules.of(load_scenarios(rules_dir), manifest, lines),
             probes=probes, grids=grids,

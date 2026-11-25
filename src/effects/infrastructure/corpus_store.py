@@ -3,7 +3,8 @@
 ``validation/gate-one/`` and ``validation/samples/`` hold **copies** of
 records also in the strata beside them, so a consumer reads one directory at
 a time and never ``validation/`` or the corpus root recursively
-(``iter_shards`` recurses).
+(``iter_shards`` recurses). A reader of curated shards reads the ones the
+manifest lists (``curated_shards.require_listed_shards``), never a directory.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from effects.domain.corpus_manifest import CorpusManifest
@@ -21,8 +22,7 @@ from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.infrastructure.shard_io import (
     EnvelopeHead,
     iter_shard_matching,
-    iter_shards,
-    read_records_matching,
+    read_shards_matching,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,15 +156,14 @@ def _remove(directory: Path) -> list[str]:
     return left
 
 
-def training_acting_keys(directory: Path) -> set[Keys]:
-    """Every distinct ``acting_keys`` tuple among the records under ``directory``.
+def training_acting_keys(shards: Sequence[Path]) -> set[Keys]:
+    """Every distinct ``acting_keys`` tuple among the records of ``shards``.
 
-    ``directory`` is the curated corpus's ``training/``: what the checkpoint
-    actually trained on, and so what the identity baseline could have
-    memorized. A record curation wrote several times (``--reuse-cap``) is
+    ``shards`` are the curated corpus's listed ``training/`` shards: what the
+    checkpoint actually trained on, and so what the identity baseline could
+    have memorized. A record curation wrote several times (``--reuse-cap``) is
     parsed once; the set is all gate 1 needs, and the records are never held.
     """
-    shards = iter_shards(directory)
     read: set[str] = set()
 
     def first_copy(head: EnvelopeHead) -> bool:
@@ -187,13 +186,11 @@ def training_acting_keys(directory: Path) -> set[Keys]:
     return acting
 
 
-def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Iterator:
-    """The resolution records of the curated corpus's card-disjoint ``games``, streamed.
+def card_disjoint_resolutions(shards: Sequence[Path], games: frozenset[str]) -> Iterator:
+    """The resolution records of the card-disjoint ``games`` in the corpus's
+    listed card-disjoint ``shards``, streamed.
 
     Resolutions only, the one kind gate 1's stratum holds; the stratum's other
     kinds are never parsed.
     """
-    return read_records_matching(
-        CorpusStore(corpus_path).card_disjoint_dir,
-        game_ids=games, kinds={RecordKind.RESOLUTION},
-    )
+    return read_shards_matching(shards, game_ids=games, kinds={RecordKind.RESOLUTION})

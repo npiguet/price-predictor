@@ -72,7 +72,7 @@ def frozen_corpus(tmp_path_factory, records, sidecars, keywords_of):
     rules = RuleTestRules(rules.tag, rules.declared, rules.declared, rules.blocked)
     try:
         frozen = freeze_selection_set(
-            manifest, {GD: stratum_reader(stratum)}, rules=rules,
+            manifest, {GD: stratum_reader((stratum / "shard-00000.jsonl.gz",))}, rules=rules,
             probes=selection.ProbeItems(
                 sidecars, common.acting_text_function(sidecars, "script")),
             grids=selection.grid_sources(sidecars, keywords_of), deviance=_NoDeviance(),
@@ -98,7 +98,8 @@ def _context(frozen_corpus, sidecars, probe_model):
         checkpoint=SimpleNamespace(
             provenance=SimpleNamespace(held_out_cards=()), training_settings={"seed": 1},
             model_config=probe_model.model.config),
-        sidecars=lambda: sidecars, stratum_dir=lambda name: root / "validation" / name,
+        sidecars=lambda: sidecars,
+        stratum_shards=lambda name: (root / "validation" / name / "shard-00000.jsonl.gz",),
         training_dir=root / "training", model=lambda records, **_: probe_model,
     )
 
@@ -193,7 +194,8 @@ class TestRuleTests:
         from effects.infrastructure.rules_catalogue_io import load_heads
 
         direct = score_half(
-            frozen_corpus.selection, {GD: stratum_reader(frozen_corpus.stratum)},
+            frozen_corpus.selection,
+            {GD: stratum_reader((frozen_corpus.stratum / "shard-00000.jsonl.gz",))},
             half="reporting", encoder=probe_model.encoder, model=probe_model.model,
             batcher=probe_model.batcher,
             rule_outputs={rule: tuple(entry.outputs) for rule, entry in load_heads().items()},

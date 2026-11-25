@@ -388,6 +388,7 @@ class ProbeContext:
     cards_folders: tuple[Path, ...]
     variant_scripts: Path | None
     _sidecars: object = field(default=None, repr=False)
+    _listed: dict | None = field(default=None, repr=False)
 
     def sidecars(self):
         """One sidecar cache over the checkpoint's trees, built on first use."""
@@ -397,6 +398,17 @@ class ProbeContext:
 
     def stratum_dir(self, stratum: str) -> Path:
         return stratum_dir(self.corpus, stratum)
+
+    def stratum_shards(self, stratum: str) -> tuple[Path, ...]:
+        """The shards the manifest lists for ``stratum``, checked against the
+        disk once per context (finding 11.4): a stale shard is refused, so no
+        probe reads one."""
+        if self._listed is None:
+            from effects.infrastructure.corpus_store import CorpusStore
+            from effects.infrastructure.curated_shards import require_listed_shards
+
+            self._listed = require_listed_shards(CorpusStore(self.corpus), self.manifest)
+        return self._listed[stratum]
 
     def validation_dirs(self) -> list[Path]:
         """Both validation strata, card-disjoint first."""

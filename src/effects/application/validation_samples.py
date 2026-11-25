@@ -17,7 +17,7 @@ from __future__ import annotations
 import heapq
 import logging
 import random
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -114,8 +114,17 @@ def round_robin(by_text: Mapping[str, list[int]], quota: int,
     return taken
 
 
+def _records_of(shards: Sequence[Path]) -> Iterator[EffectRecord]:
+    """Every record of ``shards``, shard by shard in the order given: the
+    shards a build wrote, never a directory's."""
+    from effects.infrastructure.shard_io import read_shard
+
+    for shard in shards:
+        yield from read_shard(shard)
+
+
 def _gate_one_round_robin(
-    directory: Path, quota: Mapping[str, int], *, seed: int,
+    shards: Sequence[Path], quota: Mapping[str, int], *, seed: int,
     held_out_text_of: Callable[[EffectRecord], str | None],
 ) -> dict[str, list[EffectRecord]]:
     """Each gate-one class's records, chosen round-robin over held-out texts.
@@ -124,12 +133,11 @@ def _gate_one_round_robin(
     quota rather than by the slice.
     """
     from effects.domain.sampling import sampling_class
-    from effects.infrastructure.shard_io import read_records
 
     per_text: dict[str, dict[str, _DistinctSample]] = {
         name: {} for name in quota if name in GATE_ONE_CLASSES
     }
-    for record in read_records(directory):
+    for record in _records_of(shards):
         name = sampling_class(record)
         if name not in per_text:
             continue
@@ -147,7 +155,7 @@ def _gate_one_round_robin(
         for name, texts in per_text.items()
     }
     picked: dict[str, dict[str, EffectRecord]] = {name: {} for name in per_text}
-    for record in read_records(directory):
+    for record in _records_of(shards):
         name = sampling_class(record)
         if name not in chosen or _sample_hash(record, seed) not in chosen[name]:
             continue
@@ -163,13 +171,12 @@ def class_quota(mix: Mapping[str, float], size: int) -> dict[str, int]:
 
 
 def _collect(
-    directory: Path, quota: Mapping[str, int], *, seed: int,
+    shards: Sequence[Path], quota: Mapping[str, int], *, seed: int,
 ) -> dict[str, _DistinctSample]:
     from effects.domain.sampling import sampling_class
-    from effects.infrastructure.shard_io import read_records
 
     heaps = {name: _DistinctSample(cap) for name, cap in quota.items()}
-    for record in read_records(directory):
+    for record in _records_of(shards):
         name = sampling_class(record)
         if name in heaps:
             heaps[name].offer(_sample_hash(record, seed), record.record_id, record)
@@ -177,11 +184,11 @@ def _collect(
 
 
 def draw_samples(
-    store: CorpusStore, *, mix: Mapping[str, float], size: int, seed: int,
+    shards: Mapping[str, Sequence[Path]], *, mix: Mapping[str, float], size: int, seed: int,
     held_out_text_of: Callable[[EffectRecord], str | None],
 ) -> dict[str, list[EffectRecord]]:
-    """One mixture-matched sample per validation stratum of ``store``,
-    seeded and shuffled.
+    """One mixture-matched sample per validation stratum, drawn from the
+    ``shards`` the build wrote (each stratum's, by name), seeded and shuffled.
 
     ``held_out_text_of`` names the held-out text a gate-one record acts
     through, which the round-robin spreads that slice over. ``size <= 0``
@@ -194,10 +201,10 @@ def draw_samples(
     out: dict[str, list[EffectRecord]] = {}
 
     gate_records = _gate_one_round_robin(
-        store.gate_one_dir, quota, seed=seed, held_out_text_of=held_out_text_of,
+        shards[str(Stratum.GATE_ONE)], quota, seed=seed, held_out_text_of=held_out_text_of,
     )
     for stratum in VALIDATION_STRATA:
-        heaps = _collect(store.output_dir(stratum), quota, seed=seed)
+        heaps = _collect(shards[str(stratum)], quota, seed=seed)
         sample: list[EffectRecord] = []
         for name, cap in quota.items():
             chosen: list[EffectRecord] = []

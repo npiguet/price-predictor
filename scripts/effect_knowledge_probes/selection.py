@@ -93,15 +93,8 @@ def _first_rows(context, stratum: str, wanted: dict[str, tuple[str, ...]], games
     """``(record, entities)`` of each wanted record's first row in ``stratum``."""
     seen: set[str] = set()
     out: list[tuple[object, tuple[str, ...]]] = []
-    shards = iter_stratum_shards(context, stratum)
-    for _, record in common.read_games(shards, games, set(wanted)):
+    for _, record in common.read_games(context.stratum_shards(stratum), games, set(wanted)):
         if record.record_id not in seen:
             seen.add(record.record_id)
             out.append((record, wanted[record.record_id]))
     return out
-
-
-def iter_stratum_shards(context, stratum: str):
-    from effects.infrastructure.shard_io import iter_shards
-
-    return iter_shards(context.stratum_dir(stratum))

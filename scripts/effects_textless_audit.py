@@ -22,7 +22,9 @@ from pathlib import Path
 
 from effects.domain.provenance import KeyResolution
 from effects.domain.records import RecordKind
-from effects.infrastructure.shard_io import iter_shards, read_shard
+from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.curated_shards import require_listed_shards
+from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
 
@@ -41,13 +43,13 @@ def main() -> int:
         roots["variant-scripts"] = args.variant_scripts
     sidecars = SidecarCache(roots)
 
-    training = args.corpus / "training"
-    files = iter_shards(training)
+    store = CorpusStore(args.corpus)
+    files = list(require_listed_shards(store, store.load())["training"])
     if not files:
         # Zero shards print zero of everything, which reads exactly like a
         # clean corpus. A wrong --corpus is the likeliest reason to see it,
         # and this script exists to be compared across runs.
-        print(f"no shards under {training}", file=sys.stderr)
+        print(f"no training shards under {store.training_dir}", file=sys.stderr)
         return 2
     random.seed(args.seed)
     files = random.sample(files, min(args.shards, len(files)))

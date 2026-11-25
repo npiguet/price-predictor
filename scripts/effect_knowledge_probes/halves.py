@@ -78,9 +78,7 @@ def distinct(records: Iterable) -> Iterator:
 def half_records(context, stratum: str, games, record_ids=None) -> Iterator:
     """Every distinct record of ``games`` in ``stratum``, narrowed to
     ``record_ids``, in shard path order."""
-    from effects.infrastructure.shard_io import iter_shards
-
-    shards = iter_shards(context.stratum_dir(stratum))
+    shards = context.stratum_shards(stratum)
     return distinct(record for _, record in common.read_games(shards, set(games), record_ids))
 
 
@@ -349,7 +347,7 @@ def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, di
     from effects.application.freeze_selection_set import stratum_reader
     from effects.domain.selection_set import RULE_TESTS
 
-    readers = {stratum: stratum_reader(context.stratum_dir(stratum))
+    readers = {stratum: stratum_reader(context.stratum_shards(stratum))
                for stratum in selection.halves}
     scored = score_half(
         selection, readers, half=half, encoder=probe_model.encoder, model=probe_model.model,

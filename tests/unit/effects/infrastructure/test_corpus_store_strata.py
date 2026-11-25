@@ -48,6 +48,12 @@ def _corpus(tmp_path, *, training, card_disjoint):
     return store
 
 
+def _listed(store):
+    """The shards ``_corpus`` wrote, by stratum, as the manifest would list them."""
+    return {"training": (store.training_dir / "shard-00001.jsonl.gz",),
+            "card-disjoint": (store.card_disjoint_dir / "shard-00001.jsonl.gz",)}
+
+
 def test_training_acting_keys_reads_the_curated_training_stratum(tmp_path):
     shock = _record("train", 1, (_key("shock"),))
     store = _corpus(
@@ -56,7 +62,7 @@ def test_training_acting_keys_reads_the_curated_training_stratum(tmp_path):
         training=[shock, shock, _record("train", 2, None, RecordKind.COMBAT)],
         card_disjoint=[_record("held", 1, (_key("bolt"),))],
     )
-    assert training_acting_keys(store.training_dir) == {(_key("shock"),)}
+    assert training_acting_keys(_listed(store)["training"]) == {(_key("shock"),)}
 
 
 def test_card_disjoint_resolutions_streams_the_stratum_s_resolutions_only(tmp_path):
@@ -68,7 +74,7 @@ def test_card_disjoint_resolutions_streams_the_stratum_s_resolutions_only(tmp_pa
             _record("other", 1, (_key("growth"),)),
         ],
     )
-    found = card_disjoint_resolutions(store.directory, frozenset({"held"}))
+    found = card_disjoint_resolutions(_listed(store)["card-disjoint"], frozenset({"held"}))
     assert [r.record_id for r in found] == ["held.1"]
 
 
@@ -86,6 +92,6 @@ def test_a_text_seen_only_outside_the_training_stratum_stays_unique(tmp_path):
     raw = tmp_path / "records"
     write_shard(raw / "dropped.jsonl.gz", [_record("dropped", 1, (_key("bolt"),))])
 
-    stratum = unique_text_stratum(store.directory, frozenset({"held"}), _Texts().text_of)
+    stratum = unique_text_stratum(_listed(store), frozenset({"held"}), _Texts().text_of)
 
     assert [r.record_id for r in stratum] == ["held.1"]

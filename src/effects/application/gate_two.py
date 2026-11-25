@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from itertools import chain, islice
 from pathlib import Path
@@ -40,6 +40,7 @@ from effects.domain.evaluation_report import (
 )
 from effects.domain.head_decoding import HeadReading
 from effects.domain.records import EffectRecord, distinct_records
+from effects.domain.strata import Stratum
 
 if TYPE_CHECKING:
     from effects.application.evaluation_context import EvaluationContext
@@ -353,25 +354,22 @@ def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
     )
 
 
-def gate_two_records(provenance, *, corpus_path: Path) -> Iterator:
+def gate_two_records(provenance, *, shards: Sequence[Path]) -> Iterator:
     """The combat records of the checkpoint's **game-disjoint** games (FR-120).
 
     Game-disjoint rather than card-disjoint: the gate asks whether the model
     uses a keyword it has seen, and holding out the carriers would empty most
     populations to answer gate 1's question. Read from the curated corpus,
     never the raw shards, which also hold records curation refused.
+    ``shards`` are the corpus's listed game-disjoint shards.
     """
     from effects.domain.records import RecordKind
-    from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.shard_io import read_records_matching
+    from effects.infrastructure.shard_io import read_shards_matching
 
     games = frozenset(provenance.game_disjoint_games)
     if not games:
         return iter(())
-    return read_records_matching(
-        CorpusStore(corpus_path).game_disjoint_dir,
-        game_ids=games, kinds={RecordKind.COMBAT},
-    )
+    return read_shards_matching(shards, game_ids=games, kinds={RecordKind.COMBAT})
 
 
 class GateTwoOutcome(NamedTuple):
@@ -389,7 +387,8 @@ def run_gate_two(
     report the routing (FR-119 – FR-122)."""
     logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
     verdicts = keyword_verdicts(
-        gate_two_records(context.main.provenance, corpus_path=context.corpus_path),
+        gate_two_records(
+            context.main.provenance, shards=context.shards[str(Stratum.GAME_DISJOINT)]),
         context.main_runnable, rows,
     )
     return GateTwoOutcome(evaluate_gate_two(verdicts), verdicts)

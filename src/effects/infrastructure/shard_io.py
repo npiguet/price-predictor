@@ -634,10 +634,20 @@ def read_records_matching(
     parsing the rest; a line :func:`peek_envelope` cannot read is parsed and
     filtered the slow way.
     """
-    shards = iter_shards(directory)
+    yield from read_shards_matching(iter_shards(directory), game_ids=game_ids, kinds=kinds)
+
+
+def read_shards_matching(
+    shards: Sequence[Path],
+    *,
+    game_ids: Collection[str] | None = None,
+    kinds: Collection[RecordKind] | None = None,
+) -> Iterator[EffectRecord]:
+    """:func:`read_records_matching` over the shards named, in the order
+    given: a curated corpus's reader passes the shards its manifest lists."""
     for done, shard in enumerate(shards):
         if done and done % 250 == 0:
-            logger.info("scanned %d of %d shards under %s", done, len(shards), directory)
+            logger.info("scanned %d of %d shards", done, len(shards))
         yield from iter_shard_matching(shard, game_ids=game_ids, kinds=kinds)
 
 

@@ -50,7 +50,7 @@ def _context(tmp_path, *, rule_mask="soft", stratum_weight=0.25, deviance_floor=
         main=SimpleNamespace(rule_mask=rule_mask, stratum_weight=stratum_weight,
                              deviance_floor=deviance_floor, best_control_score=best,
                              selection_set_digest=selection_digest),
-        corpus_path=tmp_path / "corpus",
+        corpus_path=tmp_path / "corpus", shards={"card-disjoint": (), "game-disjoint": ()},
         main_model=lambda: loaded,
     )
 

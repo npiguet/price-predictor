@@ -121,7 +121,7 @@ def build(config: BuildCorpusConfig) -> int:
         )
     report_write_pass(survey, written)
     shards = _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
-    _write_validation_samples(config, store, WorkerContext(read))
+    _write_validation_samples(config, store, WorkerContext(read), shards)
 
     manifest = replace(build_manifest(config, BuildOutcome(
         surface=surface, held_out=held_out, keywords=keywords, survey=survey,
@@ -388,6 +388,7 @@ def _refuse_an_unsampled_game_disjoint(config: BuildCorpusConfig, decisions: Dec
 
 def _write_validation_samples(
     config: BuildCorpusConfig, store: CorpusStore, context: WorkerContext,
+    shards: dict[str, tuple[CuratedShard, ...]],
 ) -> None:
     if config.validation_sample <= 0:
         logger.info("no validation sample written (--validation-sample 0)")
@@ -395,7 +396,9 @@ def _write_validation_samples(
     from effects.application.validation_samples import draw_samples, write_samples
 
     samples = draw_samples(
-        store, mix=config.mix(), size=config.validation_sample, seed=config.seed,
+        {stratum: tuple(store.output_dir(stratum) / shard.name for shard in written)
+         for stratum, written in shards.items()},
+        mix=config.mix(), size=config.validation_sample, seed=config.seed,
         held_out_text_of=lambda record: context.held_out_text(acting_keys(record)),
     )
     sampled = write_samples(store, samples)

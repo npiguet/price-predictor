@@ -12,9 +12,15 @@ from effects.domain.sampling import (
     SamplingClass,
     sampling_class,
 )
-from effects.domain.strata import Stratum
+from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import write_shard
+
+
+def _listed(store):
+    """Each output stratum's shards as a build lists them (the ones written)."""
+    return {str(stratum): tuple(sorted(store.output_dir(stratum).glob("*.jsonl.gz")))
+            for stratum in OUTPUT_STRATA}
 
 
 def test_class_quota_rounds_each_share_and_keeps_every_class():
@@ -40,7 +46,7 @@ def strata(tmp_path, make_record):
         (Stratum.CARD_DISJOINT, card), (Stratum.GAME_DISJOINT, game), (Stratum.GATE_ONE, gate),
     ):
         write_shard(store.output_dir(stratum) / "shard-00001.jsonl.gz", records)
-    return store
+    return _listed(store)
 
 
 MIX = {SamplingClass.RESOLUTION_EFFECT: 0.5, SamplingClass.COMBAT: 0.5}
@@ -91,10 +97,10 @@ def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypa
     """``--validation-sample 0`` means no sample: not even a read of the strata."""
     from effects.infrastructure import shard_io
 
-    def bomb(directory):
-        raise AssertionError(f"draw_samples read {directory} despite size=0")
+    def bomb(shard):
+        raise AssertionError(f"draw_samples read {shard} despite size=0")
 
-    monkeypatch.setattr(shard_io, "read_records", bomb)
+    monkeypatch.setattr(shard_io, "read_shard", bomb)
     samples = draw_samples(strata, mix=MIX, size=0, seed=1, held_out_text_of=_one_text)
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 
@@ -109,7 +115,8 @@ def test_the_copies_of_one_record_take_one_place(tmp_path, make_record):
         make_record(record_id="same", game_id="g1"),
         make_record(record_id="other", game_id="g2"),
     ])
-    heaps = _collect(tmp_path, {SamplingClass.RESOLUTION_EFFECT: 2}, seed=1)
+    shards = [tmp_path / "shard-00001.jsonl.gz"]
+    heaps = _collect(shards, {SamplingClass.RESOLUTION_EFFECT: 2}, seed=1)
     assert sorted(r.record_id for r in heaps[SamplingClass.RESOLUTION_EFFECT].items()) == [
         "other", "same"]
 
@@ -134,8 +141,9 @@ def test_a_copied_class_fills_its_quota_with_distinct_natural_copies(tmp_path, m
     store = CorpusStore(tmp_path)
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT, Stratum.GATE_ONE):
         write_shard(store.output_dir(stratum) / "s.jsonl.gz", records)
-    samples = draw_samples(store, mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=8, seed=1,
-                           held_out_text_of=_one_text)
+    samples = draw_samples(
+        _listed(store), mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=8, seed=1,
+        held_out_text_of=_one_text)
     for stratum in ("card-disjoint", "game-disjoint"):
         sample = samples[stratum]
         assert len({r.record_id for r in sample}) == len(sample) == 8, stratum
@@ -180,7 +188,7 @@ def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, mak
     text_of = {common: "common text", rare: "rare text"}
 
     samples = draw_samples(
-        store, mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
+        _listed(store), mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
         held_out_text_of=lambda record: text_of[record.ability[0]],
     )
     chosen = [r.record_id for r in samples["card-disjoint"]]

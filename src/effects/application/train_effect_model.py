@@ -547,7 +547,7 @@ def run(config: TrainEffectModelConfig) -> int:
             "it records. Rebuild it with a gen-3 build-corpus."
         )
     require_closed_lists(manifest)
-    selection = frozen_selection(store, manifest, Path(config.reports_dir))
+    selection = frozen_selection(manifest, listed, Path(config.reports_dir))
     check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
     warn_untrained_classes(facts, store.manifest_path)
@@ -579,9 +579,11 @@ def warn_untrained_classes(facts: CorpusFacts, manifest_path: Path) -> None:
         )
 
 
-def frozen_selection(store: CorpusStore, manifest: CorpusManifest, reports_dir: Path):
+def frozen_selection(
+    manifest: CorpusManifest, listed: Mapping[str, tuple[Path, ...]], reports_dir: Path,
+):
     """The selection set frozen for the corpus, found by its digest under
-    ``reports_dir``, with a reader of each validation stratum; raises
+    ``reports_dir``, with a reader of each validation stratum's ``listed`` shards; raises
     ``SelectionSetError`` (exit 1) when none is there, or one frozen against
     another corpus or edited (E1)."""
     from effects.application.control_score import FrozenSelection
@@ -593,4 +595,4 @@ def frozen_selection(store: CorpusStore, manifest: CorpusManifest, reports_dir: 
     logger.info("Selection set %s… frozen for the corpus, under %s.", selection.digest[:12],
                 reports_dir)
     return FrozenSelection(selection, {
-        str(stratum): stratum_reader(store.output_dir(stratum)) for stratum in VALIDATION_STRATA})
+        str(stratum): stratum_reader(listed[str(stratum)]) for stratum in VALIDATION_STRATA})

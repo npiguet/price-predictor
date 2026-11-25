@@ -220,8 +220,9 @@ class TestFreezeSelectionSet:
                                      "selection": {"evasion": frozen([2])}}},
         )
         write_selection_set(selection_set_path(tmp_path, "d"), selection)
-        context = SimpleNamespace(corpus_digest="d",
-                                  stratum_dir=lambda name: tmp_path / "validation" / name)
+        context = SimpleNamespace(
+            corpus_digest="d",
+            stratum_shards=lambda name: sorted((tmp_path / "validation" / name).glob("shard-*")))
         found = frozen_grid_records(context, "evasion", reports_dir=tmp_path)
         assert [(r.record_id, e) for r, e in found] == [(rows[0]["record_id"], ("E1", "E2"))]
         both = frozen_grid_records(context, "evasion", halves=("selection", "reporting"),
