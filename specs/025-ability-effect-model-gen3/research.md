@@ -781,7 +781,7 @@ game.
 | item | estimator, on the rescaled scale |
 |---|---|
 | rule test, AUC probe | Hanley–McNeil at AUC 0.5, × 2: `2 √((n₊ + n₋ + 1) / (12 n₊ n₋))` (the spec's) |
-| grid | `(1/C) Σ_c 1/(2√N_c) / B`, with `B = (1/C) Σ_c |ȳ − y_c|`, `y_c` the cell's rule outcome and `ȳ` its mean over cells; B = 0 makes the standard error infinite, so the item is left out |
+| grid | `(1/C) Σ_c 1/(2√N_c) / B`, with `B = (1/C) Σ_c (1/N_c) Σ_r |ȳ − y_rc|`, `y_rc` the rule's outcome for record `r` in cell `c` and `ȳ` the mean over cells of each cell's mean outcome; B = 0 makes the standard error infinite, so the item is left out |
 | output field, R² probe | loss ratio: `√(Σ_g S_g²) / Σ_g S_g`, where `S_g` sums `w_i ℓ_i` over the game's records, `ℓ_i` the constant prediction's loss and `w_i` the record's weight in the component |
 
 For an output field, the freeze computes the standard error under both mask modes and records both;
@@ -789,8 +789,9 @@ training reads the one for its `--rule-mask`.
 
 **Rationale**:
 
-- Grid: each cell mean of predictions in [0, 1] has a standard deviation of at most `1/(2√N_c)`. The
-  mean absolute error is 1-Lipschitz in each cell mean. Averaging the bound over cells covers fully
+- Grid: a grid is scored record by record, each record's prediction in a cell against the rule's
+  outcome for that record there. Each of a cell's `N_c` absolute errors lies in [0, 1], so the cell's
+  mean absolute error has a standard deviation of at most `1/(2√N_c)`. Averaging the bound over cells covers fully
   correlated cells, which edit grids are, since every cell edits the same records. The two combat-grid
   variants whose rule is constant (deathtouch, indestructible) have B = 0 and drop out by the same
   rule.
