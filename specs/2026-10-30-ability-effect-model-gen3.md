@@ -824,7 +824,8 @@ places:
   them with damage or toughness.
 - Printed loyalty and defense each carry a thermometer, as toughness does.
 - Subtypes are one learned embedding per subtype, summed into the card slot. The same
-  embeddings serve chosen creature types.
+  embeddings serve chosen creature types and a face-down card's real-face subtypes, the
+  latter each plus one learned vector that marks them apart from the card's own subtypes.
 - Face state is one-hot over front, back, flipped, melded and face down, and replaces the
   face-down flag.
 - The relations row names relation types of § 10.3. Inputs placed in other rows bring
@@ -848,7 +849,8 @@ places:
 - The pending event's `cause` is the ref of the object that caused it, so it reads as a
   bit on that object's slot, as the source does.
 - A face-down card's slot reads its real face's types, colours, mana value, printed power
-  and toughness and number of subtypes, in a part of its own; every other card reads zeros
+  and toughness and number of subtypes, in a part of its own, and its subtypes through the
+  subtype table as above; every other card reads zeros
   there. The face-down characteristics stay in the characteristics part.
 - A card slot reads two of Forge's hidden keywords as bits: can't block (`CARDNAME can't
   block.`, `CARDNAME can't attack or block.`) and can't attack (`CARDNAME can't attack.`,

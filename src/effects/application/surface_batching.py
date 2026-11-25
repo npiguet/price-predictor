@@ -564,7 +564,8 @@ class SurfaceBatcher:
             # A card's subtypes and counters are card features too.
             inputs = dataclasses.replace(inputs, **{
                 name: torch.zeros_like(getattr(inputs, name))
-                for name in ("subtype_ids", "chosen_type_ids", "counter_ids", "counter_counts")
+                for name in ("subtype_ids", "chosen_type_ids", "real_face_subtype_ids",
+                             "counter_ids", "counter_counts")
                 if getattr(inputs, name) is not None
             })
             # The board's links are state too: no-state reads none.

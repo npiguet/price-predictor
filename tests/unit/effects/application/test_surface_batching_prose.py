@@ -146,7 +146,8 @@ def test_no_state_zeroes_the_line_flags_and_the_card_ids():
     assert full.slot_features[SlotKind.ABILITY].abs().sum() > 0
     assert full.subtype_ids.abs().sum() > 0 and full.counter_counts.abs().sum() > 0
     assert blind.slot_features[SlotKind.ABILITY].abs().sum() == 0
-    for name in ("subtype_ids", "chosen_type_ids", "counter_ids", "counter_counts"):
+    for name in ("subtype_ids", "chosen_type_ids", "real_face_subtype_ids",
+                 "counter_ids", "counter_counts"):
         assert getattr(blind, name).abs().sum() == 0, name
 
 

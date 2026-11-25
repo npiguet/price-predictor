@@ -152,6 +152,10 @@ class EffectModel(nn.Module):
         # reads the same rows through its own map (root spec § 9.4).
         self.subtype_embedding = nn.Embedding(SUBTYPE_ROWS, d, padding_idx=ID_PADDING)
         self.chosen_type_proj = nn.Linear(d, d, bias=False)
+        # A face-down card's real-face subtypes read the same rows, each plus
+        # this one vector, drawn at the rows' own scale (N(0, 1), nn.Embedding's
+        # default), so an own and a real-face subtype of one name differ.
+        self.real_face_subtype_offset = nn.Parameter(torch.randn(d))
         # One scalar input per named counter, kept sparse: a row per counter
         # type, its first half scaled by the count and its second by log1p of
         # it, which is a linear map of the dense raw-plus-log1p block.
@@ -230,7 +234,8 @@ class EffectModel(nn.Module):
 
     def _card_ids(self, inputs: TrunkInputs) -> torch.Tensor | float:
         """What a card slot's id lists add: its subtypes' rows, its chosen
-        types' rows through their map, and each named counter's row scaled by
+        types' rows through their map, a face-down card's real-face subtypes'
+        rows each plus one learned vector, and each named counter's row scaled by
         the count (raw and log1p). Padding rows are zero."""
         added: torch.Tensor | float = 0.0
         if inputs.subtype_ids is not None:
@@ -238,6 +243,11 @@ class EffectModel(nn.Module):
         if inputs.chosen_type_ids is not None:
             added = added + self.chosen_type_proj(
                 self.subtype_embedding(inputs.chosen_type_ids).sum(-2))
+        if inputs.real_face_subtype_ids is not None:
+            ids = inputs.real_face_subtype_ids
+            marked = self.subtype_embedding(ids) + (
+                self.real_face_subtype_offset * (ids != ID_PADDING).unsqueeze(-1))
+            added = added + marked.sum(-2)
         if inputs.counter_ids is not None:
             raw, logged = self.counter_embedding(inputs.counter_ids).chunk(2, dim=-1)
             counts = inputs.counter_counts.unsqueeze(-1)

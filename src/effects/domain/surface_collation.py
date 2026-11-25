@@ -40,9 +40,12 @@ class TrunkInputs:
     #: or empty where the batch holds no relation (root spec § 10.1).
     relations: torch.Tensor | None = None
     #: ``(batch, slots, k)`` long rows of the subtype table, padded with
-    #: ``ID_PADDING``: each ``[CARD]`` slot's subtypes, and its chosen types.
+    #: ``ID_PADDING``: each ``[CARD]`` slot's subtypes, its chosen types and its
+    #: real face's subtypes.
     subtype_ids: torch.Tensor | None = None
     chosen_type_ids: torch.Tensor | None = None
+    #: The same, for a face-down ``[CARD]`` slot's real face's subtypes.
+    real_face_subtype_ids: torch.Tensor | None = None
     #: ``(batch, slots, k)`` rows of the named-counter table, padded with
     #: ``ID_PADDING``, and the count beside each.
     counter_ids: torch.Tensor | None = None
@@ -63,6 +66,7 @@ class TrunkInputs:
             relations=moved(self.relations),
             subtype_ids=moved(self.subtype_ids),
             chosen_type_ids=moved(self.chosen_type_ids),
+            real_face_subtype_ids=moved(self.real_face_subtype_ids),
             counter_ids=moved(self.counter_ids),
             counter_counts=moved(self.counter_counts),
         )
@@ -129,13 +133,7 @@ def collate_surfaces(
          for i, j, r in getattr(surface, "relations", ())],
         dtype=np.int64).reshape(-1, 4)
 
-    depth = max((len(getattr(slot, name, ())) for surface in surfaces for slot in surface.slots
-                 for name in ("subtypes", "chosen_types", "counters")), default=0)
-    depth = max(depth, 1)
-    subtype_ids = np.full((batch, width, depth), ID_PADDING, dtype=np.int64)
-    chosen_type_ids = np.full((batch, width, depth), ID_PADDING, dtype=np.int64)
-    counter_ids = np.full((batch, width, depth), ID_PADDING, dtype=np.int64)
-    counter_counts = np.zeros((batch, width, depth), dtype=np.float32)
+    id_lists = _id_lists(surfaces, width)
 
     for row, surface in enumerate(surfaces):
         slots = surface.slots
@@ -152,13 +150,6 @@ def collate_surfaces(
                 e_rows[row, column] = slot.e
             elif slot.e is not None:
                 e_vectors[row, column, : len(slot.e)] = slot.e
-            if slot.subtypes:
-                subtype_ids[row, column, : len(slot.subtypes)] = slot.subtypes
-            if slot.chosen_types:
-                chosen_type_ids[row, column, : len(slot.chosen_types)] = slot.chosen_types
-            for k, (counter, count) in enumerate(slot.counters):
-                counter_ids[row, column, k] = counter
-                counter_counts[row, column, k] = count
 
     return TrunkInputs(
         slot_features={
@@ -171,11 +162,42 @@ def collate_surfaces(
         option_kinds=torch.from_numpy(option_kinds),
         e_rows=torch.from_numpy(e_rows),
         relations=torch.from_numpy(relations),
-        subtype_ids=torch.from_numpy(subtype_ids),
-        chosen_type_ids=torch.from_numpy(chosen_type_ids),
-        counter_ids=torch.from_numpy(counter_ids),
-        counter_counts=torch.from_numpy(counter_counts),
+        **{name: torch.from_numpy(array) for name, array in id_lists.items()},
     )
+
+
+#: The slot fields that are id lists, as ``(TrunkInputs field, Slot field)``.
+_ID_LISTS = (
+    ("subtype_ids", "subtypes"),
+    ("chosen_type_ids", "chosen_types"),
+    ("real_face_subtype_ids", "real_face_subtypes"),
+)
+
+
+def _id_lists(surfaces: list, width: int) -> dict[str, np.ndarray]:
+    """Each ``[CARD]`` slot's id lists and its counters, padded to one depth:
+    ``(batch, width, depth)`` arrays keyed by their :class:`TrunkInputs` field."""
+    slots = [(row, column, slot) for row, surface in enumerate(surfaces)
+             for column, slot in enumerate(surface.slots)]
+    depth = max((len(getattr(slot, field, ())) for _, _, slot in slots
+                 for field in (*(field for _, field in _ID_LISTS), "counters")), default=0)
+    shape = (len(surfaces), width, max(depth, 1))
+    arrays = {name: np.full(shape, ID_PADDING, dtype=np.int64) for name, _ in _ID_LISTS}
+    arrays["counter_ids"] = np.full(shape, ID_PADDING, dtype=np.int64)
+    arrays["counter_counts"] = np.zeros(shape, dtype=np.float32)
+    for row, column, slot in slots:
+        _fill_slot(arrays, row, column, slot)
+    return arrays
+
+
+def _fill_slot(arrays: dict[str, np.ndarray], row: int, column: int, slot) -> None:
+    """One slot's id lists and counters, written at its ``(row, column)``."""
+    for name, field in _ID_LISTS:
+        ids = getattr(slot, field, ())
+        arrays[name][row, column, : len(ids)] = ids
+    for k, (counter, count) in enumerate(slot.counters):
+        arrays["counter_ids"][row, column, k] = counter
+        arrays["counter_counts"][row, column, k] = count
 
 
 def scatter_e_rows(

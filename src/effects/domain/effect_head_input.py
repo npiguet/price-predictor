@@ -353,6 +353,9 @@ class Slot:
     subtypes: tuple[int, ...] = ()
     #: A ``CARD`` slot's chosen creature types, as rows of the same table.
     chosen_types: tuple[int, ...] = ()
+    #: A face-down ``CARD`` slot's real face's subtypes, as rows of the same
+    #: table; the model marks them apart from ``subtypes`` by one learned vector.
+    real_face_subtypes: tuple[int, ...] = ()
     #: A ``CARD`` slot's named counters other than keyword counters, as
     #: ``(row of the counter table, count)``.
     counters: tuple[tuple[int, float], ...] = ()
@@ -613,7 +616,8 @@ def _push_real_face(out, entity: EntityState, record, masked) -> None:
     this, so ``face_after``, the base power and toughness and the type
     changes depend on it; the face-down characteristics stay in
     ``characteristics``. Zeros on every other card. Which subtypes they are
-    is no input: the subtype table is the slot's, summed once."""
+    is the slot's ``real_face_subtypes`` (:func:`real_face_subtype_rows`),
+    not a feature."""
     face = entity.real_face
     if face is None:
         out += _NO_REAL_FACE
@@ -779,6 +783,12 @@ def chosen_subtypes(entity: EntityState) -> tuple[int, ...]:
         subtype_id(t) for t in (chosen.type, chosen.type2)
         if t is not None and vocabulary_slot(t, CARD_TYPES) is None
     )
+
+
+def real_face_subtype_rows(entity: EntityState) -> tuple[int, ...]:
+    """The subtype rows of a face-down card's real face; none on any other."""
+    face = entity.real_face
+    return () if face is None else tuple(subtype_id(subtype) for subtype in face.subtypes)
 
 
 def _paid_for(entity: EntityState, record: EffectRecord) -> CostsPaid | None:
@@ -1420,6 +1430,7 @@ class SurfaceBuilder:
             entity_id=entity.id,
             subtypes=tuple(subtype_id(subtype) for subtype in entity.subtypes),
             chosen_types=chosen_subtypes(entity),
+            real_face_subtypes=real_face_subtype_rows(entity),
             counters=counter_rows(entity),
         )]
         kept = [line for line in self._slot_lines(entity, record)
