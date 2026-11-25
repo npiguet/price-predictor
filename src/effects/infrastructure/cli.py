@@ -354,7 +354,8 @@ def _build_vocab_parser(subparsers) -> None:
     )
 
 
-@exits_with({EmptyCardsFolderError: 1, ValueError: 1})
+# A --keyword-definitions that names no file is refused, never read as none.
+@exits_with({EmptyCardsFolderError: 1, ValueError: 1, FileNotFoundError: 1})
 def run_build_vocab(args: argparse.Namespace) -> int:
     from effects.application.build_vocab import BuildVocabConfig
     from effects.application.build_vocab import run as build_vocab
@@ -1005,6 +1006,8 @@ def _train_effect_model_parser(subparsers) -> None:
     SurfaceMismatchError: 1,
     # A --keyword-definitions that names no file, or not the corpus's (finding 11.5).
     "effects.application.tokenizer_inputs.KeywordDefinitionsError": 1,
+    # Shards under the corpus that its manifest does not list (finding 11.4).
+    "effects.infrastructure.curated_shards.CorpusShardsError": 1,
     EmptyHoldoutError: 1,
     # A resume under other settings (contracts/cli.md).
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 1,

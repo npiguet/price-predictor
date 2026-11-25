@@ -206,7 +206,7 @@ def _camel_parts_of(pattern: re.Pattern, staged: list[str]) -> list[str]:
 def run(config: BuildVocabConfig) -> int:
     """Build and write the vocabulary. Returns the resulting size."""
     folders = _scan_sources(config)
-    definitions = _load_definitions(Path(config.keyword_definitions))
+    definitions = load_definitions(Path(config.keyword_definitions))
     staged = staged_lines(folders, config.surface)
     stager = staging_tokenizer(config.surface, definitions)
     staged_tokens = [stager.tokenize(line) for line in staged]
@@ -277,18 +277,6 @@ def _merge_vocab(
     prose = [token for result in results for token in result.vocab]
     vocab.update(dict.fromkeys([*script, *prose] if script_first else [*prose, *script]))
     return {token: index for index, token in enumerate(vocab)}, domain_token_count
-
-
-def _load_definitions(path: Path) -> dict:
-    if not path.exists():
-        logger.warning(
-            "No keyword-definition file at %s; the vocabulary will not "
-            "cover reminder text, so expanding a keyword would produce "
-            "[UNK] tokens. Run extract-keyword-definitions first.",
-            path,
-        )
-        return {}
-    return load_definitions(path)
 
 
 def _frequent(staged_tokens: list[list[Token]]) -> list[str]:

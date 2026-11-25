@@ -172,13 +172,23 @@ class TestScanSources:
         assert "blocked" in vocab
         assert "reach" in vocab
 
-    def test_a_missing_keyword_file_warns_rather_than_failing(
-        self, corpus, tmp_path, caplog,
+    def test_a_missing_keyword_file_is_refused_before_a_vocabulary_is_written(
+        self, corpus, tmp_path,
     ):
         config = _config(corpus, tmp_path, keyword_definitions=tmp_path / "absent.json")
-        with caplog.at_level("WARNING"):
-            assert run(config) > 0
-        assert "keyword-definition" in caplog.text
+        with pytest.raises(FileNotFoundError, match="absent.json"):
+            run(config)
+        assert not config.vocab_path.exists()
+
+    def test_a_missing_keyword_file_exits_one_from_the_command(self, corpus, tmp_path):
+        import argparse
+        from unittest import mock
+
+        from effects.infrastructure import cli
+
+        config = _config(corpus, tmp_path, keyword_definitions=tmp_path / "absent.json")
+        with mock.patch.object(cli, "config_from_args", lambda cls, args: config):
+            assert cli.run_build_vocab(argparse.Namespace()) == 1
 
     def test_an_empty_corpus_fails_with_the_command_to_run(self, tmp_path):
         empty = tmp_path / "empty"
