@@ -181,7 +181,7 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
     )
     games = {stratum: len(selection.halves[stratum].get(half, ())) for stratum in readers}
     return half_score_checks(score, half=half, games=games,
-                             selection_control=main.best_control_score, note=note)
+                             selection_control=main.control_score, note=note)
 
 
 def _recorded(value: float | None, name: str) -> float:

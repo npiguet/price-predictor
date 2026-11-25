@@ -403,7 +403,7 @@ def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_
 
     out = tmp_path / "averaged"
     run = _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
-    saved = EffectModelStore(out / "epochs").load()
+    saved = EffectModelStore(out / "epochs").load(out / "epochs" / "epoch-02.pt")
     averaged = run["average"]["state"]
     for name, value in saved.model_state.items():
         assert torch.equal(value, averaged["model"][name]), name
@@ -413,6 +413,7 @@ def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_
     # FR-069: the epoch's own control score, and the set it was scored against.
     state = run["stopper"]
     assert saved.best_control_score == state["best"]
+    assert saved.averaged and saved.control_score is not None
     assert saved.selection_set_digest == _selection().digest
 
 
@@ -532,8 +533,8 @@ def test_every_epoch_is_kept_and_the_best_one_s_resume_state(
 ):
     out = tmp_path / "kept"
     _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
-    assert len(list((out / "epochs").glob("2*.pt"))) == 2
-    assert (out / "epochs" / "latest.pt").exists()
+    assert sorted(p.name for p in (out / "epochs").iterdir()) == [
+        "epoch-01.pt", "epoch-02.pt"]
     assert (out / "resume-best.pt").exists()
 
 

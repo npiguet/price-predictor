@@ -325,8 +325,8 @@ def half_score_checks(
     """One half of every stratum, scored as the control score scores the
     selection half (FR-070): per stratum its four components and their mean,
     then each component's items, the rule tests per rule (FR-074), and last
-    the control score the strata mix to beside the selection half's the
-    checkpoint recorded. ``games`` is each stratum's games in the half."""
+    the control score the strata mix to beside the selection half's of the
+    epoch the checkpoint holds. ``games`` is each stratum's games in the half."""
     prefix = f"{half}-half"
     checks: list[CheckResult] = []
     for stratum, scored in sorted(score.strata.items()):
@@ -352,7 +352,7 @@ def half_score_checks(
         values["selection_control"] = float(selection_control)
     if values:
         detail = (f"stratum weight {score.stratum_weight:g} on the card-disjoint score"
-                  + ("; selection_control is the best the checkpoint recorded"
+                  + ("; selection_control is the control score of the epoch the checkpoint holds"
                      if selection_control is not None else "")
                   + (f"; {note}" if note else ""))
         checks.append(CheckResult(f"{prefix} control", CheckStatus.REPORTED, detail, values))

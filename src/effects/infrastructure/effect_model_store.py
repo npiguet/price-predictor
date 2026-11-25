@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
-import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,8 +20,10 @@ from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
 from price_predictor.infrastructure.torch_checkpoint import (
+    copy_atomically,
     load_checkpoint,
     save_checkpoint,
+    write_atomically,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,12 @@ class EffectCheckpoint:
     #: The best control score of the run (FR-069): the score of the epoch
     #: whose weights these are; None until a control score exists.
     best_control_score: float | None = None
+    #: The control score of the epoch these weights were saved at; None when
+    #: that epoch had none. Equals ``best_control_score`` in a best checkpoint.
+    control_score: float | None = None
+    #: Whether the weights are the averaged ones; False for an epoch that
+    #: ended before warmup did, saved with the raw weights.
+    averaged: bool = True
     #: ``--rule-mask``, ``--deviance-floor``, ``--ema-epochs``,
     #: ``--stratum-weight`` and ``--relation-values`` of the run; empty or None
     #: where the flag was not set.
@@ -119,7 +125,7 @@ class EffectCheckpoint:
 
 #: The gen-3 fields a checkpoint's payload carries under their own names.
 _GEN3_FIELDS: tuple[str, ...] = (
-    "best_control_score", "rule_mask", "deviance_floor", "ema_epochs",
+    "best_control_score", "control_score", "averaged", "rule_mask", "deviance_floor", "ema_epochs",
     "stratum_weight", "relation_values", "rule_map_digest", "selection_set_digest",
 )
 
@@ -178,7 +184,19 @@ class EffectModelStore:
 
     def save(self, checkpoint: EffectCheckpoint) -> Path:
         """Write a timestamped checkpoint and copy it to ``latest.pt``."""
-        self.directory.mkdir(parents=True, exist_ok=True)
+        path = self._unused_path(datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
+        self._write(path, checkpoint)
+        copy_atomically(path, self.latest_path())
+        return path
+
+    def save_epoch(self, checkpoint: EffectCheckpoint) -> Path:
+        """Write ``epoch-NN.pt`` for the checkpoint's epoch, numbered as the
+        training log numbers it; a later save of the same epoch replaces it."""
+        path = self.directory / f"epoch-{checkpoint.epoch:02d}.pt"
+        self._write(path, checkpoint)
+        return path
+
+    def _write(self, path: Path, checkpoint: EffectCheckpoint) -> None:
         payload = {
             "encoder_state_dict": checkpoint.encoder_state,
             "model_state_dict": filter_training_only(checkpoint.model_state),
@@ -192,11 +210,8 @@ class EffectModelStore:
             **{name: getattr(checkpoint, name) for name in _GEN3_FIELDS},
             **checkpoint.extra,
         }
-        path = self._unused_path(datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
         save_checkpoint(path, payload, checkpoint.model_config)
-        shutil.copyfile(path, self.latest_path())
         logger.info("Saved %s checkpoint to %s", checkpoint.variant, path)
-        return path
 
     def _unused_path(self, stamp: str) -> Path:
         """``{stamp}.pt``, or a numbered sibling when a save in the same second
@@ -304,12 +319,8 @@ class ResumeMismatchError(RuntimeError):
 
 def save_resume_state(directory: Path, state: dict[str, Any]) -> Path:
     """Write ``state`` to ``directory/resume.pt`` atomically, by rename."""
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / RESUME_NAME
-    temporary = directory / (RESUME_NAME + ".writing")
-    torch.save(state, temporary)
-    os.replace(temporary, path)
+    path = Path(directory) / RESUME_NAME
+    write_atomically(path, lambda temporary: torch.save(state, temporary))
     return path
 
 

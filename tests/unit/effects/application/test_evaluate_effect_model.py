@@ -48,7 +48,8 @@ def _context(tmp_path, *, rule_mask="soft", stratum_weight=0.25, deviance_floor=
             rule_map={"r.board": SimpleNamespace(outputs=["gate", "zone_outcome"])},
             effective_rule_outputs={"r.board": ("zone_outcome",)}),
         main=SimpleNamespace(rule_mask=rule_mask, stratum_weight=stratum_weight,
-                             deviance_floor=deviance_floor, best_control_score=best,
+                             deviance_floor=deviance_floor, control_score=best,
+                             best_control_score=0.99,
                              selection_set_digest=selection_digest),
         corpus_path=tmp_path / "corpus", shards={"card-disjoint": (), "game-disjoint": ()},
         main_model=lambda: loaded,
@@ -95,6 +96,7 @@ class TestTheReportingHalf:
         assert "reporting-half card-disjoint" in names
         assert "rule-tests game-disjoint reporting" in names
         control = next(check for check in checks if check.name == "reporting-half control")
+        # The checkpoint's own epoch's score, not the run's best (13.7).
         assert control.values == {"control": 0.5, "selection_control": 0.4}
         assert all(check.status is CheckStatus.REPORTED for check in checks)
 

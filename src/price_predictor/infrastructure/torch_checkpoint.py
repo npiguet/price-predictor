@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, TypeVar
@@ -11,10 +14,36 @@ import torch
 T = TypeVar("T")
 
 
-def save_checkpoint(path: Path, payload: dict[str, Any], config: Any) -> None:
-    """Write ``{**payload, "config": asdict(config)}`` via ``torch.save``."""
+def write_atomically(path: Path, write: Callable[[Path], None]) -> None:
+    """Have ``write`` fill a temporary file beside ``path`` and move it onto
+    ``path``: a kill or a failed move leaves the old ``path`` whole. A move
+    that fails (a file another process holds open, on Windows) raises an
+    ``OSError`` naming ``path`` and removes the temporary file."""
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({**payload, "config": asdict(config)}, path)
+    temporary = path.with_name(path.name + ".writing")
+    try:
+        write(temporary)
+        try:
+            os.replace(temporary, path)
+        except OSError as error:
+            raise OSError(f"Cannot replace {path}: {error}") from error
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def copy_atomically(source: Path, target: Path) -> None:
+    """Copy ``source`` to ``target`` through :func:`write_atomically`."""
+    write_atomically(target, lambda temporary: shutil.copyfile(source, temporary))
+
+
+def save_checkpoint(path: Path, payload: dict[str, Any], config: Any) -> None:
+    """Write ``{**payload, "config": asdict(config)}`` via ``torch.save``,
+    atomically."""
+    write_atomically(
+        path, lambda temporary: torch.save({**payload, "config": asdict(config)}, temporary),
+    )
 
 
 def load_checkpoint(

@@ -8,7 +8,6 @@ under different settings is refused.
 from __future__ import annotations
 
 import logging
-import shutil
 from dataclasses import fields
 from typing import TYPE_CHECKING
 
@@ -29,6 +28,7 @@ from effects.infrastructure.effect_model_store import (
     resume_mismatches,
     save_resume_state,
 )
+from price_predictor.infrastructure.torch_checkpoint import copy_atomically
 
 if TYPE_CHECKING:
     from effects.application.run_context import RunContext
@@ -116,7 +116,7 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
     if best:
         # The best epoch's own resume state, so a later run can continue
         # from the best epoch rather than the last one (FR-063f).
-        shutil.copyfile(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
+        copy_atomically(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
 
 
 def restore_resume(run: RunContext) -> int | None:

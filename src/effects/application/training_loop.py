@@ -283,7 +283,7 @@ class TrainingLoop:
         # validated on the current weights and is no best candidate.
         with run.average.applied() as averaged:
             scores = self.validator.epoch(run, samples, run.fields[epoch])
-            best = self._save_epoch(epoch, run, scores.control.control, candidate=averaged)
+            best = self._save_epoch(epoch, run, scores.control.control, averaged=averaged)
             self.reporter.epoch(EpochOutcome(
                 epoch, tally, scores, self.validator.floor.floor,
                 best=run.stopper.best_score, trained=trained,
@@ -310,20 +310,25 @@ class TrainingLoop:
                 run.pool.submit(task)
 
     def _save_epoch(
-        self, epoch: int, run: RunContext, control_score: float, *, candidate: bool,
+        self, epoch: int, run: RunContext, control_score: float, *, averaged: bool,
     ) -> bool:
         """Save what the epoch earned, with the weights it was scored on; True
         when its control score set a new best, whose checkpoint is the run's
         one best (FR-069). An epoch that is no best ``candidate`` leaves the
-        stopper alone, so it counts toward no patience."""
-        best = candidate and run.stopper.update(control_score)
+        stopper alone, so it counts toward no patience. A file under
+        ``epochs/`` records the epoch's own score and whether its weights are
+        the averaged ones (``averaged``)."""
+        best = averaged and run.stopper.update(control_score)
         if best or self.config.save_every_epoch:
-            checkpoint = self._checkpoint(epoch, run)
+            checkpoint = replace(
+                self._checkpoint(epoch, run),
+                control_score=control_score, averaged=averaged,
+            )
             output = self.config.resolved_model_output()
             if best:
                 EffectModelStore(output).save(checkpoint)
             if self.config.save_every_epoch:
-                EffectModelStore(output / EPOCHS_DIR).save(checkpoint)
+                EffectModelStore(output / EPOCHS_DIR).save_epoch(checkpoint)
         return best
 
     def _checkpoint(self, epoch: int, run: RunContext) -> EffectCheckpoint:
