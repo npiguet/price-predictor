@@ -17,9 +17,13 @@ A variant grants one creature a keyword as an effect until end of turn grants it
 granted keyword line plus the keyword's kept flag (``BoardEdit.grant_keyword``), which
 changes the rule's answer in a known way: deathtouch kills on any damage, indestructible
 never dies. A record covers one damage step, and the model predicts that step alone, so
-a first or double striker is read in the first-strike step, which the variant sets: there
-it deals its damage and the creature it fights deals none. A double striker's second hit
-is read in the regular step, with the blocker already marked with the first. Each grid
+a first or double striker is read in the first-strike step, which the variant sets, phase
+and substep both: there it deals its damage and the creature it fights deals none. A
+double striker's second hit is read in the regular step, with the blocker already marked
+with the first, and only where that first hit left the blocker alive to strike
+(``grid_edits.Variant``): read at the blocker, a cell whose power reaches the blocker's
+toughness prints nan, and read at the attacker, a block whose attacker power reaches its
+blocker's toughness is skipped, since no record shows that board. Each grid
 is scored against the rule for that step applied to every edited record, so the score is
 right whatever the other creature's real power and toughness are.
 
@@ -90,7 +94,7 @@ def several_blocks(record, keywords_of) -> tuple[str, str] | None:
 
 def score(grid: np.ndarray, rule: np.ndarray) -> str:
     """Mean absolute error against the rule, and the cells either side of the step."""
-    line = f"error against the rule {np.abs(grid - rule).mean():.3f}"
+    line = f"error against the rule {np.nanmean(np.abs(grid - rule)):.3f}"
     if np.array_equal(rule, np.array([[1.0 if p >= t else 0.0 for t in VALUES]
                                       for p in VALUES])):
         by1 = np.mean([grid[p - 1, p - 2] for p in range(2, 9)])
@@ -134,18 +138,25 @@ def _triples(args, context, resolver) -> list:
 
 def _mean_grids(probe_model, triples: list, variant: str, which: str):
     """The predicted and the rule's death grids of one variant, averaged over
-    the records."""
-    grid = np.zeros((8, 8))
-    rule = np.zeros((8, 8))
-    for record, attacker, blocker in triples:
+    the records it can edit at the cells it holds (``grid_edits.Variant``); a
+    cell it does not hold is NaN in both."""
+    chosen = VARIANTS[variant]
+    held = list(chosen.held_cells(which))
+    grid = np.zeros(len(VALUES) ** 2)
+    rule = np.zeros(len(VALUES) ** 2)
+    shown = [t for t in triples if chosen.shows(t[0], t[1:], which)]
+    for record, attacker, blocker in shown:
         rows, rules = grid_records(record, attacker, blocker, which, variant)
         dies = readout.at_card("dies", blocker if which == "blocker" else attacker)
-        cells = common.predict_all(probe_model, [cell for row in rows for cell in row], dies)
-        grid += np.reshape(cells, grid.shape)
-        rule += rules
-    grid /= max(len(triples), 1)
-    rule /= max(len(triples), 1)
-    return grid, rule
+        cells = [cell for row in rows for cell in row]
+        grid[held] += np.asarray(
+            common.predict_all(probe_model, [cells[i] for i in held], dies), dtype=float)
+        rule += rules.ravel()
+    blank = np.ones(grid.shape, dtype=bool)
+    blank[held] = False
+    grid[blank] = rule[blank] = np.nan
+    count = max(len(shown), 1)
+    return np.reshape(grid / count, (8, 8)), np.reshape(rule / count, (8, 8))
 
 
 def _print_grid(variant: str, which: str, grid: np.ndarray, rule: np.ndarray) -> None:

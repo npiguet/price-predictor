@@ -24,6 +24,13 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 
+#: ``combat damage step -> the phase a record of it carries``: a ``combat`` record's
+#: substep and phase always agree.
+STEP_PHASES: dict[str, str] = {
+    "first_strike": "combat_first_strike_damage",
+    "regular": "combat_damage",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class BoardEdit:
@@ -45,8 +52,10 @@ class BoardEdit:
         )
 
     def set_step(self, step: str) -> BoardEdit:
-        """The record as a snapshot of the given combat damage step."""
-        return self.edit_global(combat_substep=step)
+        """The record as a snapshot of the given combat damage step
+        (``CombatSubstep``'s spelling): its substep and the phase a record of
+        that step carries (:data:`STEP_PHASES`), both of which the model reads."""
+        return self.edit_global(phase=STEP_PHASES[step], combat_substep=step)
 
     def edit_global(self, **changes) -> BoardEdit:
         """The turn structure with ``changes`` (``active``, ``phase``, ...)."""

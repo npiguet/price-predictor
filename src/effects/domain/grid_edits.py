@@ -23,12 +23,15 @@ The grids:
 - ``damage``: a single-target damage resolution with a literal amount, its
   amount by its target's toughness (1..8 each), reading the target's death.
   The amount is edited in the encoded text under a key of its own, as a
-  lethality copy edits it (:func:`~effects.domain.lethality_counterfactuals.amount_edit`).
+  lethality copy edits it (:func:`~effects.domain.lethality_counterfactuals.amount_edit`),
+  so a record qualifies only where the edit takes on both surfaces' texts.
 - ``combat/<variant>/<blocker|attacker>`` and ``combat-several/…``: a
   one-on-one block (or one pair of a combat of several blocks), the striker's
   power by the struck creature's toughness, under a variant granting one
   creature a damage-step keyword (:data:`VARIANTS`), reading the struck
-  creature's death.
+  creature's death. Every cell is a board a record could show: a snapshot
+  of its damage step, phase and substep both, and for a double striker's
+  second hit a blocker the first hit left alive (:class:`Variant`).
 - ``evasion``: an attacker keyword (or protection quality) row by a blocker
   trait column, reading the blocker's ``may_block``.
 
@@ -110,28 +113,90 @@ class AbilityTexts(Protocol):
 
 # ── the combat grid ─────────────────────────────────────────────────────
 
-#: Keywords that change who dies in a damage step; a qualifying pair carries none.
+#: Keywords that change who dies in a damage step; a qualifying pair carries none,
+#: nor a protection of any quality (:func:`changes_the_step`).
 COMBAT_KEYWORDS = frozenset({
     "first_strike", "double_strike", "deathtouch", "indestructible", "wither", "infect",
-    "trample", "lifelink", "protection", "banding", "shadow",
+    "trample", "lifelink", "banding", "shadow",
 })
 #: What a combat grid reads: combats with one blocked attacker, or with several.
 BLOCKS: tuple[str, ...] = ("one", "several")
 #: The frozen combat grids' name prefix for each.
 GRID_PREFIX: dict[str, str] = {"one": "combat/", "several": "combat-several/"}
-#: ``variant -> (creature granted the keyword or None, keyword, damage step, blocker
-#: carries the attacker's first-step damage)``. A record covers one damage step, so a
-#: first or double striker is read in the first-strike step, where it deals its damage
-#: and the creature it fights deals none, and a double striker's second hit in the
-#: regular step, on a blocker already marked with the first.
-VARIANTS: dict[str, tuple[str | None, str | None, str, bool]] = {
-    "none": (None, None, "regular", False),
-    "attacker-deathtouch": ("attacker", "deathtouch", "regular", False),
-    "blocker-indestructible": ("blocker", "indestructible", "regular", False),
-    "attacker-first-strike": ("attacker", "first_strike", "first_strike", False),
-    "blocker-first-strike": ("blocker", "first_strike", "first_strike", False),
-    "attacker-double-strike": ("attacker", "double_strike", "first_strike", False),
-    "attacker-double-strike-second-hit": ("attacker", "double_strike", "regular", True),
+
+
+def changes_the_step(keywords) -> bool:
+    """Whether ``keywords`` hold one that changes who dies in a damage step:
+    one of :data:`COMBAT_KEYWORDS`, or a protection, spelled by its quality
+    (``protection_from_red``), which prevents the damage it names (702.16e)."""
+    return bool(keywords & COMBAT_KEYWORDS) or any(
+        keyword.startswith("protection") for keyword in keywords)
+
+
+@dataclass(frozen=True, slots=True)
+class Variant:
+    """One combat grid variant: the creature granted a damage-step keyword
+    (``attacker``, ``blocker``, or None for no grant), the keyword, the damage
+    step its cells are snapshots of (``CombatSubstep``'s spelling), and
+    whether the blocker carries the attacker's first-strike damage.
+
+    A record covers one damage step, so a first or double striker is read in
+    the first-strike step, where it deals its damage and the creature it
+    fights deals none, and a double striker's second hit in the regular step,
+    on a blocker already marked with the first.
+    """
+
+    holder: str | None
+    keyword: str | None
+    step: str
+    carried: bool = False
+
+    def base(self, record, attacker: str, blocker: str) -> BoardEdit:
+        """The record's pair cleared of damage, in this variant's step, the
+        keyword granted to its holder."""
+        board = BoardEdit(record).clear_damage(attacker, blocker).set_step(self.step)
+        if self.keyword is None:
+            return board
+        holder = attacker if self.holder == "attacker" else blocker
+        return board.grant_keyword(holder, self.keyword)
+
+    def survives_first_hit(self, attacker_power: int, blocker_toughness: int) -> bool:
+        """Whether the blocker is still on the battlefield to strike in the
+        step read: a carried first hit at least its toughness destroyed it in
+        the first-strike step (704.5g, lethal damage), a board no record shows."""
+        return not self.carried or attacker_power < blocker_toughness
+
+    def held_cells(self, which: str) -> tuple[int, ...]:
+        """The cells a grid of this variant read at ``which`` holds, as
+        indices into its 8 x 8 square (power row by toughness column): every
+        cell but, read at the blocker, those whose first hit is lethal, the
+        cell's power being the attacker's and its toughness the blocker's."""
+        square = [(power, toughness) for power in VALUES for toughness in VALUES]
+        return tuple(index for index, (power, toughness) in enumerate(square)
+                     if which != "blocker" or self.survives_first_hit(power, toughness))
+
+    def shows(self, record, pair: tuple[str, str], which: str) -> bool:
+        """Whether a grid of this variant read at ``which`` can edit the
+        record's ``(attacker, blocker)``: read at the attacker, every cell
+        keeps the record's own attacker power and blocker toughness, so the
+        record qualifies only where the first hit leaves the blocker alive."""
+        if which == "blocker":
+            return True
+        attacker, blocker = pair
+        return self.survives_first_hit(record.state.entity(attacker).pt.total[0],
+                                       record.state.entity(blocker).pt.total[1])
+
+
+#: The combat grid's variants by name.
+VARIANTS: dict[str, Variant] = {
+    "none": Variant(None, None, "regular"),
+    "attacker-deathtouch": Variant("attacker", "deathtouch", "regular"),
+    "blocker-indestructible": Variant("blocker", "indestructible", "regular"),
+    "attacker-first-strike": Variant("attacker", "first_strike", "first_strike"),
+    "blocker-first-strike": Variant("blocker", "first_strike", "first_strike"),
+    "attacker-double-strike": Variant("attacker", "double_strike", "first_strike"),
+    "attacker-double-strike-second-hit": Variant(
+        "attacker", "double_strike", "regular", carried=True),
 }
 
 
@@ -205,7 +270,7 @@ def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: Keywords
         if (entity is None or entity.pt is None or not entity.on_battlefield
                 or not entity.is_creature):
             return False
-        if keywords_of(entity) & COMBAT_KEYWORDS:
+        if changes_the_step(keywords_of(entity)):
             return False
     if blocker.combat is None or tuple(blocker.combat.blocking) != (attacker_id,):
         return False
@@ -236,18 +301,18 @@ def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: Keywords
 
 def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
     """The 8 x 8 edited records of one combat grid, row by row (the striker's
-    power, then the struck creature's toughness), and the rule's answer for each."""
-    holder, keyword, step, carried = VARIANTS[variant]
-    base = BoardEdit(record).clear_damage(attacker, blocker).set_step(step)
-    if keyword is not None:
-        base = base.grant_keyword(attacker if holder == "attacker" else blocker, keyword)
+    power, then the struck creature's toughness), and the rule's answer for
+    each; the grid holds the cells :meth:`Variant.held_cells` names."""
+    chosen = VARIANTS[variant]
+    step = chosen.step
+    base = chosen.base(record, attacker, blocker)
     striker, struck = (attacker, blocker) if which == "blocker" else (blocker, attacker)
     rows, rules = [], []
     for power in VALUES:
         row, rule = [], []
         for toughness in VALUES:
             cell = base.set_power(striker, power).set_toughness(struck, toughness)
-            if carried:
+            if chosen.carried:
                 cell = cell.set_marked_damage(blocker, side_of(cell.record, attacker)[0][0])
             edited = cell.record
             row.append(edited)
@@ -418,23 +483,47 @@ def label(name: str | None) -> str:
 def damage_target(lines, keywords_of: KeywordsOf):
     """``choose(record) -> (record, creature) | None`` for single-target
     damage resolutions with a literal amount (the lethality copies'
-    qualification); ``lines.line_or_none(key)`` is the acting line."""
+    qualification) that both surfaces' texts state (:func:`_edits_on_both_surfaces`);
+    ``lines.line_or_none(key)`` is the acting line, ``lines.prose_for(key)``
+    its prose."""
     from effects.domain.effect_targets import derive_targets
     from effects.domain.lethality_counterfactuals import qualify
 
     def choose(record):
         if not record.ability:
             return None
-        line = lines.line_or_none(record.ability[0])
+        key = record.ability[0]
+        line = lines.line_or_none(key)
         if line is None:
             return None
         qualified = qualify(record, line, derive_targets(record), keywords_of, lines=lines)
-        if (qualified is None or qualified.effect.kind != "damage"
-                or qualified.effect.stated != "text" or len(qualified.hit) != 1):
+        if not _one_text_damage_hit(qualified) or not _edits_on_both_surfaces(
+                record, qualified.effect, line, lines.prose_for(key)):
             return None
         return record, qualified.hit[0]
 
     return choose
+
+
+def _one_text_damage_hit(qualified) -> bool:
+    """A lethality copy's qualification of damage whose amount the script
+    states, hitting one creature."""
+    return (qualified is not None and qualified.effect.kind == "damage"
+            and qualified.effect.stated == "text" and len(qualified.hit) == 1)
+
+
+def _edits_on_both_surfaces(record, effect, line, prose: str | None) -> bool:
+    """Whether the amount edit takes on the text each surface encodes the
+    line from (``ability_encoder.encoding_text``): the script surface reads its
+    script, the prose surface its prose, and a line with no prose its script
+    reading on both. A prose that does not state the amount (its cost sentence
+    alone) would leave every cell reading the real text against outcomes that
+    vary by amount."""
+    from effects.domain.lethality_counterfactuals import amount_edit
+
+    texts = (line.script_text, prose) if prose else (line.script_text,)
+    return all(amount_edit(record, effect, line, text, effect.amount).key is not None
+               for text in texts)
 
 
 def damage_cells(record, entity: str, texts: AbilityTexts) -> list[CellRead]:
@@ -442,8 +531,8 @@ def damage_cells(record, entity: str, texts: AbilityTexts) -> list[CellRead]:
     an amount toughness by toughness: the target's toughness set (and its
     marked damage cleared), the acting text's amount edited under a key of its
     own, read at the target for its death. Where the encoded text does not
-    state the amount (a prose surface whose line words it otherwise), every
-    amount reads the real text, as the grid scripts always have."""
+    state the amount, every amount reads the real text; :func:`damage_target`
+    qualifies no such record."""
     from effects.domain.lethality_counterfactuals import amount_edit, stated_effect
 
     key = record.ability[0]
@@ -499,19 +588,26 @@ class CombatGrid:
     variant: str
     which: str
     blocks: _BlockMemo
-    cells: tuple[str, ...] = field(default_factory=_square_cells)
 
     @property
     def name(self) -> str:
         return f"{GRID_PREFIX[self.blocks.blocks]}{self.variant}/{self.which}"
 
+    @property
+    def cells(self) -> tuple[str, ...]:
+        """The ``power x toughness`` cells the variant holds (:meth:`Variant.held_cells`)."""
+        square = _square_cells()
+        return tuple(square[index] for index in VARIANTS[self.variant].held_cells(self.which))
+
     def qualify(self, record) -> GridQualification | None:
         pair = self.blocks(record)
-        if pair is None:
+        variant = VARIANTS[self.variant]
+        if pair is None or not variant.shows(record, pair, self.which):
             return None
-        attacker, blocker = pair
-        _, rule = grid_records(record, attacker, blocker, self.which, self.variant)
-        return GridQualification((attacker, blocker), tuple(float(v) for v in rule.ravel()))
+        _, rule = grid_records(record, *pair, self.which, self.variant)
+        flat = rule.ravel()
+        return GridQualification(pair, tuple(
+            float(flat[index]) for index in variant.held_cells(self.which)))
 
 
 @dataclass
@@ -597,19 +693,27 @@ class GridEdits:
             return [CellRead(evasion_cell(record, attacker, blocker, row, column)[0],
                              blocker, "may_block")
                     for row in ATTACKER_KEYWORDS for column in BLOCKER_TRAITS]
-        prefix, variant, which = grid.split("/")
-        if f"{prefix}/" not in GRID_PREFIX.values():
-            raise KeyError(f"no grid {grid!r}")
-        rows, _ = grid_records(record, attacker, blocker, which, variant)
-        read = blocker if which == "blocker" else attacker
-        return [CellRead(cell, read, "dies") for row in rows for cell in row]
+        return _combat_cells(grid, record, (attacker, blocker))
+
+
+def _combat_cells(grid: str, record, pair: tuple[str, str]) -> list[CellRead]:
+    """A combat grid's held cells of one record, read at the struck creature."""
+    prefix, variant, which = grid.split("/")
+    if f"{prefix}/" not in GRID_PREFIX.values():
+        raise KeyError(f"no grid {grid!r}")
+    rows, _ = grid_records(record, *pair, which, variant)
+    attacker, blocker = pair
+    read = blocker if which == "blocker" else attacker
+    square = [cell for row in rows for cell in row]
+    return [CellRead(square[index], read, "dies")
+            for index in VARIANTS[variant].held_cells(which)]
 
 
 __all__ = [
     "ATTACKER_KEYWORDS", "BLOCKER_TRAITS", "BLOCKS", "COMBAT_KEYWORDS", "EVASION_KEYWORDS",
     "GRID_PREFIX", "OTHER_CREATURE_TYPES", "PROTECTION_ROWS", "VALUES", "VARIANTS",
     "AbilityTexts", "CellRead", "CombatGrid", "DamageGrid", "EvasionGrid", "GridEdits",
-    "GridQualification", "TextOverride", "damage_cells",
+    "GridQualification", "TextOverride", "Variant", "changes_the_step", "damage_cells",
     "damage_target", "evasion_cell", "evasion_pair", "grid_block", "grid_records",
     "grid_sources", "label", "protection_quality", "side_of",
 ]

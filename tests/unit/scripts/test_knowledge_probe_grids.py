@@ -152,6 +152,26 @@ class TestCombatGrid:
         assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
         assert np.array_equal(rule, LETHAL_STEP)
 
+    def test_a_second_hit_grid_reads_only_boards_where_the_blocker_survived(
+        self, records, monkeypatch,
+    ):
+        """Read at the blocker, the cells whose first hit is lethal are NaN;
+        read at the attacker, a block whose attacker power reaches its
+        blocker's toughness is left out (``grid_edits.Variant``)."""
+        record, attacker, blocker = one_on_one(records)
+        monkeypatch.setattr(combat_grid.common, "predict_all",
+                            lambda model, cells, read: [0.5] * len(cells))
+        variant = "attacker-double-strike-second-hit"
+        grid, rule = combat_grid._mean_grids(None, [(record, attacker, blocker)],
+                                             variant, "blocker")
+        lethal = np.array([[p >= t for t in range(1, 9)] for p in range(1, 9)])
+        assert np.array_equal(np.isnan(grid), lethal) and np.array_equal(np.isnan(rule), lethal)
+        toughness = record.state.entity(blocker).pt.total[1]
+        lethal_block = BoardEdit(record).set_power(attacker, toughness).record
+        grid, _ = combat_grid._mean_grids(None, [(lethal_block, attacker, blocker)],
+                                          variant, "attacker")
+        assert not np.isnan(grid).any() and grid.max() == 0.0
+
 
 # ── the evasion grid ────────────────────────────────────────────────────
 

@@ -31,12 +31,21 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     Refs,
 )
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.builders import (
+    curated_fixture_records,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
         "target creature. | ValidTgts$ Creature")
 PROSE = "Lightning Bolt deals 3 damage to target creature."
 KEY = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+#: The fixture's one damage grid record: an activation dealing 2 to any target.
+CULTIST = "cardsfolder/s/skirsdag_cultist.txt"
+#: The double striker's second hit, read at the blocker it lands on.
+SECOND_HIT_AT_BLOCKER = "attacker-double-strike-second-hit/blocker"
 
 
 def _creature(entity_id: str, *, colors=("R",), power=2, toughness=3):
@@ -71,6 +80,20 @@ class _Texts:
         return self.line
 
 
+class _ProseAlone:
+    """A sidecar lookup whose lines read ``prose`` on the prose surface."""
+
+    def __init__(self, sidecars, prose: str) -> None:
+        self.sidecars = sidecars
+        self.prose = prose
+
+    def prose_for(self, key):
+        return self.prose
+
+    def __getattr__(self, name):
+        return getattr(self.sidecars, name)
+
+
 class TestTheDamageGrid:
     def test_its_cells_are_amount_by_toughness_read_at_the_target_for_its_death(self):
         record = _record(_creature("E1"))
@@ -96,9 +119,21 @@ class TestTheDamageGrid:
         cells = damage_cells(_record(_creature("E1")), "E1", _Texts(PROSE))
         assert "deals 5 damage" in cells[4 * 8].texts[0].text
 
-    def test_a_text_that_does_not_state_the_amount_reads_the_real_text(self):
-        cells = damage_cells(_record(_creature("E1")), "E1", _Texts("Deal some damage."))
-        assert all(cell.texts == () and cell.record.ability == (KEY,) for cell in cells)
+    def test_a_record_whose_prose_is_the_cost_sentence_alone_is_no_damage_grid_record(self):
+        """Skirsdag Cultist's real activation: on the prose surface a line whose
+        prose is its cost sentence alone states no amount the cells could edit,
+        while its script deals 2, so its cells would read the real text against
+        outcomes that vary by amount."""
+        from effects.domain.grid_edits import DamageGrid
+        from effects.infrastructure.converted_trees import SourceTrees
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, curated_fixture_records
+
+        sidecars = SourceTrees.of(list(GEN3_SIDECAR_FOLDERS)).sidecar_cache()
+        record = next(r for r in curated_fixture_records()
+                      if r.ability and r.ability[0].script_file == CULTIST
+                      and DamageGrid(sidecars, _no_keywords).qualify(r) is not None)
+        cost_only = _ProseAlone(sidecars, "sacrifice a creature.")
+        assert DamageGrid(cost_only, _no_keywords).qualify(record) is None
 
 
 class TestTheEditor:
@@ -110,7 +145,28 @@ class TestTheEditor:
         assert len(sources["evasion"].cells) == len(ATTACKER_KEYWORDS) * len(BLOCKER_TRAITS)
         for name, grid in sources.items():
             if name.startswith(tuple(GRID_PREFIX.values())):
-                assert len(grid.cells) == 64
+                assert len(grid.cells) == (28 if name.endswith(SECOND_HIT_AT_BLOCKER) else 64)
+
+    def test_a_second_hit_read_at_the_blocker_holds_only_the_cells_it_survives(self):
+        """A blocker whose toughness the first hit reaches died in the
+        first-strike step (704.5g, lethal damage) and strikes no more: no
+        record shows that board, so the grid holds the 28 cells where the
+        attacker's power is below the blocker's toughness, the editor's too."""
+        from effects.domain.records import CombatPayload, RecordKind
+
+        sources = {grid.name: grid for grid in grid_sources(None, _no_keywords)}
+        record = _record(_creature("A"), _creature("B"), kind=RecordKind.COMBAT,
+                         payload=CombatPayload(blocks={"A": ("B",)}), ability=None)
+        for prefix in GRID_PREFIX.values():
+            name = f"{prefix}{SECOND_HIT_AT_BLOCKER}"
+            cells = GridEdits(_Texts(BOLT)).cells(name, record, ("A", "B"))
+            assert len(cells) == len(sources[name].cells) == 28
+            assert sources[name].cells == tuple(
+                f"{p}x{t}" for p in VALUES for t in VALUES if p < t)
+            for cell in cells:
+                power = cell.record.state.entity("A").pt.total[0]
+                assert power < cell.record.state.entity("B").pt.total[1]
+                assert cell.record.state.entity("B").damage == power
 
     @pytest.mark.parametrize("which", ["blocker", "attacker"])
     def test_a_combat_grid_reads_the_struck_creatures_death(self, which):
@@ -145,6 +201,9 @@ class _Lines:
 
     def line_or_none(self, key):
         return SimpleNamespace(script_text=BOLT, role_spans=())
+
+    def prose_for(self, key):
+        return PROSE
 
 
 def _no_keywords(entity) -> frozenset[str]:
@@ -240,16 +299,17 @@ class TestTheEvasionGridsPair:
 
 
 class TestTheCombatGridsPair:
-    def _combat(self, *extra_events):
+    def _combat(self, *extra_events, attacker_power: int = 2):
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import CombatPayload, RecordKind
         from effects.domain.state_snapshot import CombatStatus
 
-        attacker = replace(_creature("A", power=2, toughness=3),
+        attacker = replace(_creature("A", power=attacker_power, toughness=3),
                            combat=CombatStatus(attacking="P1", blocked_by=("B",)))
         blocker = replace(_creature("B", power=2, toughness=3),
                           combat=CombatStatus(blocking=("A",)))
-        events = (Event(type=EventType.DAMAGE_DEALT, subjects=("B",), params={"amount": 2}),
+        events = (Event(type=EventType.DAMAGE_DEALT, subjects=("B",),
+                        params={"amount": attacker_power}),
                   Event(type=EventType.DAMAGE_DEALT, subjects=("A",), params={"amount": 2}),
                   *extra_events)
         state = make_snapshot(
@@ -273,3 +333,53 @@ class TestTheCombatGridsPair:
         moved = Event(type=EventType.ZONE_CHANGE, subjects=("B",),
                       params={"from_zone": "battlefield", "to_zone": "stack"})
         assert grid_block(self._combat(moved), _no_keywords, "one") is None
+
+    def test_a_protected_creature_is_no_grid_pair(self):
+        """Protection prevents the damage its quality names (702.16e); the
+        package spells each quality as its own ``protection_from_<x>``."""
+        from effects.domain.grid_edits import grid_block
+
+        def protected(entity) -> frozenset[str]:
+            return frozenset({"protection_from_red"} if entity.id == "B" else ())
+
+        assert grid_block(self._combat(), protected, "one") is None
+
+    def test_a_second_hit_read_at_the_attacker_needs_a_blocker_the_first_hit_left_alive(self):
+        """Read at the attacker, the cells keep the record's own attacker power
+        and blocker toughness: where the power reaches the toughness the blocker
+        died in the first-strike step (704.5g, lethal damage) and strikes no
+        second time, so no cell is a board a record shows."""
+        from effects.domain.event_schema import Event, EventType
+
+        died = Event(type=EventType.ZONE_CHANGE, subjects=("B",),
+                     params={"from_zone": "battlefield", "to_zone": "graveyard"})
+        lethal = self._combat(died, attacker_power=3)
+        sources = {grid.name: grid for grid in grid_sources(None, _no_keywords)}
+        second_hit = sources["combat/attacker-double-strike-second-hit/attacker"]
+        assert sources["combat/none/attacker"].qualify(lethal) is not None
+        assert second_hit.qualify(lethal) is None
+        survived = second_hit.qualify(self._combat())
+        assert survived is not None and len(survived.outcomes) == 64
+
+
+class TestTheCombatGridsBoards:
+    @pytest.mark.parametrize(("variant", "phase", "substep"), [
+        ("attacker-first-strike", "combat_first_strike_damage", "first_strike"),
+        ("blocker-first-strike", "combat_first_strike_damage", "first_strike"),
+        ("attacker-double-strike", "combat_first_strike_damage", "first_strike"),
+        ("attacker-double-strike-second-hit", "combat_damage", "regular"),
+        ("none", "combat_damage", "regular"),
+    ])
+    def test_a_cell_is_a_snapshot_of_its_damage_step(self, variant, phase, substep):
+        """A real combat's cells: every real first-strike record is in the
+        ``combat_first_strike_damage`` phase, so a first-strike cell is too,
+        not a regular-step phase beside a first-strike substep."""
+        from effects.domain.grid_edits import grid_records
+        from effects.domain.records import RecordKind
+
+        record = next(r for r in curated_fixture_records()
+                      if r.kind is RecordKind.COMBAT and any(r.payload.blocks.values()))
+        attacker, (blocker, *_) = next((a, b) for a, b in record.payload.blocks.items() if b)
+        rows, _ = grid_records(record, attacker, blocker, "blocker", variant)
+        assert {(cell.state.global_.phase, cell.state.global_.combat_substep)
+                for row in rows for cell in row} == {(phase, substep)}

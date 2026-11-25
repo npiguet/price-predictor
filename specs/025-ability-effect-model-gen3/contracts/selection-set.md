@@ -26,7 +26,16 @@ selected against the one on disk); writing the same set again leaves the file as
    each copy weighed by its `curation.class_weight`; FR-059a). A
    grid keeps one record a game, then the fewest records by smallest keyed hash that bring its
    worst-case standard error to 0.09, at most 512, both recorded in `settings`. The probe items come
-   from the probe scripts through ports (`scripts/effect_knowledge_probes/selection.py`).
+   from the probe scripts through ports (`scripts/effect_knowledge_probes/selection.py`). Every grid
+   cell is a board a record could show (`domain/grid_edits.py`):
+   - a combat cell is a snapshot of its damage step, phase and substep both;
+   - a pair carrying any protection (`protection_from_<quality>`) qualifies no combat grid;
+   - a double striker's second hit holds, read at the blocker, the 28 cells whose attacker power is
+     below the blocker's toughness, and qualifies, read at the attacker, only a block whose attacker
+     power is below its blocker's toughness: a blocker the first hit destroys deals no second-step
+     damage;
+   - the damage grid qualifies a record only where the amount edit takes on both surfaces' texts,
+     the line's script and its prose.
 3. Balance with r = 4 by seeded draw: rule-test polarities, probe types (against the smallest type
    that meets the item target), record-drawn grid cells.
 4. Compute each item's worst-case standard error (research Decision E4; a rule test's or a binary probe's clusters by game: `n₊` and `n₋` are the distinct games among its positive and among its negative rows; a deviance item's under both
