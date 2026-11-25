@@ -82,8 +82,8 @@ def _scan_stratum(args, context: common.ProbeContext, stratum: str) -> dict[str,
     progress(f"board subsets: scanning {stratum}")
     subsets = board_probe.collect(
         record_walk.records(
-            [context.stratum_dir(stratum)],
-            shards=args.board_shards or board_probe.SHARDS_PER_STRATUM),
+            context.stratum_shards(stratum)[
+                :args.board_shards or board_probe.SHARDS_PER_STRATUM]),
         context.sidecars(),
         per_subset=args.board_records or board_probe.RECORDS_PER_SUBSET)
     progress("  " + ", ".join(f"{name} {len(rows)}" for name, rows in subsets.items()))
@@ -95,7 +95,7 @@ def board_subsets(args, context: common.ProbeContext) -> dict[str, dict[str, lis
     if args.no_board:
         return {}
     return {stratum: _scan_stratum(args, context, stratum)
-            for stratum in common.STRATA if context.stratum_dir(stratum).exists()}
+            for stratum in common.STRATA if context.stratum_shards(stratum)}
 
 
 # ── the ladders over the frozen probe items ─────────────────────────────
@@ -203,12 +203,12 @@ def validation_samples(context: common.ProbeContext, limit: int) -> list:
 @dataclass(frozen=True)
 class AblationInputs:
     """What the ablations read: the validation samples, the ability cache's lines and
-    the board subsets, and the corpus method C trains on."""
+    the board subsets, and the training shards method C trains on."""
 
     samples: list
     line_cache: list
     board_subsets: dict
-    corpus: Path
+    training_shards: tuple[Path, ...]
 
 
 def _method_b(args, scorecard: Scorecard, probe_model, inputs: AblationInputs) -> None:
@@ -234,4 +234,4 @@ def run_ablations(args, scorecard: Scorecard, probe_model, inputs: AblationInput
         _method_b(args, scorecard, probe_model, inputs)
     if args.method_c and inputs.samples:
         progress("method C: a shallow trunk on frozen e")
-        scorecard.method_c = method_c(args, probe_model, inputs.corpus, inputs.samples)
+        scorecard.method_c = method_c(args, probe_model, inputs.training_shards, inputs.samples)

@@ -92,8 +92,8 @@ class _Probing:
 
     def _observe_training(self) -> None:
         """The first ``--profile-shards`` training shards, for the observed-outcome labels."""
-        for record in record_walk.records([self.context.training_dir],
-                                          shards=self.args.profile_shards):
+        for record in record_walk.records(
+                self.context.stratum_shards("training")[:self.args.profile_shards]):
             self.outcomes.observe(record)
 
     def _line_level(self, scorecard: Scorecard, probe_model, act_hidden: dict) -> list:
@@ -137,7 +137,7 @@ class _Probing:
             scorecard.sweeps = run_sweeps(reads, probe_model)
         run_ablations(args, scorecard, probe_model, AblationInputs(
             validation_samples(context, args.ablation_records), items, subsets,
-            context.corpus))
+            context.stratum_shards("training")))
         scorecard.runtime = {
             "wall_seconds": time.time() - started,
             "peak_gpu_bytes": common.peak_gpu_bytes(),

@@ -241,8 +241,8 @@ def main() -> None:
     args, context = common.grid_run(__doc__, records=400, per_game=3)
     sidecars = context.sidecars()
     found = record_walk.qualifying(
-        context.validation_dirs(), lambda record: chosen(record, sidecars),
-        args.records, per_game=args.per_game, shards=args.shards)
+        context.validation_shards(args.shards), lambda record: chosen(record, sidecars),
+        args.records, per_game=args.per_game)
     rows = [row for record, anthem in found for row in items(record, anthem)]
     probe_model = context.model([row[1] for row in rows])
     common.heading(args, context, f"{len(found)} validation boards with an anthem keeping "

@@ -296,8 +296,8 @@ def main() -> None:
         options=lambda parser: parser.add_argument("--per-sweep", type=int, default=40))
     sidecars = context.sidecars()
     chosen = record_walk.qualifying(
-        context.validation_dirs(), lambda record: chosen_record(record, sidecars),
-        args.records, per_game=args.per_game, shards=args.shards)
+        context.validation_shards(args.shards), lambda record: chosen_record(record, sidecars),
+        args.records, per_game=args.per_game)
     probe_model = context.model([c[0] for c in chosen])
     common.heading(args, context,
                    f"{len(chosen)} validation resolutions naming a zone-moving API")

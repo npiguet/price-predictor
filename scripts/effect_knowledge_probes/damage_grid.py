@@ -39,23 +39,27 @@ def _options(parser) -> None:
                         help="where the corpus's selection set is (validation source)")
 
 
-def main() -> None:
-    from effect_knowledge_probes import halves
+def _pairs(args, context) -> list:
+    """``(record, entity)`` of the records the run reads."""
     from effect_knowledge_probes.selection import frozen_grid_records
     from effects.domain.damage_step_keywords import KeywordResolver
 
-    args, context = common.grid_run(__doc__, records=40, options=_options)
     if args.source == "validation":
         chosen = ("selection", "reporting") if args.half == "both" else (args.half,)
-        pairs = [(record, entities[0]) for record, entities in frozen_grid_records(
+        return [(record, entities[0]) for record, entities in frozen_grid_records(
             context, "damage", halves=chosen, reports_dir=args.probe_set_dir)]
-    else:
-        directory = (context.training_dir if args.source == "training"
-                     else context.stratum_dir("card-disjoint"))
-        sidecars = context.sidecars()
-        choose = damage_target(sidecars, KeywordResolver(sidecars).keywords_of)
-        pairs = record_walk.qualifying([directory], choose, args.records, per_game=None,
-                                       shards=args.shards)
+    stratum = "training" if args.source == "training" else "card-disjoint"
+    sidecars = context.sidecars()
+    choose = damage_target(sidecars, KeywordResolver(sidecars).keywords_of)
+    return record_walk.qualifying(
+        context.stratum_shards(stratum)[:args.shards], choose, args.records, per_game=None)
+
+
+def main() -> None:
+    from effect_knowledge_probes import halves
+
+    args, context = common.grid_run(__doc__, records=40, options=_options)
+    pairs = _pairs(args, context)
     records = [record for record, _ in pairs]
     probe_model = context.model(records)
     common.heading(args, context, f"{len(pairs)} {args.source} records")

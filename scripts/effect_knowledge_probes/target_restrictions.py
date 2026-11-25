@@ -310,8 +310,9 @@ def main() -> None:
             help="items of each label a restriction row needs"))
     sidecars = context.sidecars()
     chosen = record_walk.qualifying(
-        context.validation_dirs(), record_walk.with_record(lambda r: decision_items(r, sidecars)),
-        args.records, per_game=args.per_game, shards=args.shards)
+        context.validation_shards(args.shards),
+        record_walk.with_record(lambda r: decision_items(r, sidecars)),
+        args.records, per_game=args.per_game)
     probe_model = context.model([c[0] for c in chosen])
     common.heading(args, context, f"{len(chosen)} validation targeting decisions")
 

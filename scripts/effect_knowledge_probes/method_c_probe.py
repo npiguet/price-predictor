@@ -6,6 +6,7 @@ Nothing here does work at import time.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -36,10 +37,10 @@ def _shallow_model(probe_model, layers: int):
     return shallow
 
 
-def _stream(corpus: Path):
-    """The training stratum's rows as curated, copies included, forever."""
+def _stream(shards: Sequence[Path]):
+    """The listed training shards' rows as curated, copies included, forever."""
     while True:
-        yield from record_walk.records([Path(corpus) / "training"], distinct=False)
+        yield from record_walk.records(shards, distinct=False)
 
 
 def _train_step(shallow, optimizer, probe_model, chunk: list) -> None:
@@ -65,7 +66,7 @@ def _train_step(shallow, optimizer, probe_model, chunk: list) -> None:
     optimizer.step()
 
 
-def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
+def method_c(args, probe_model, training_shards: Sequence[Path], eval_records: list) -> dict:
     """Train a shallow trunk on frozen ``e`` and score it beside the full model.
 
     It trains on the training stratum as curated, copies included: method C
@@ -76,7 +77,7 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     layers = args.method_c_layers
     shallow = _shallow_model(probe_model, layers)
     optimizer = torch.optim.AdamW(shallow.parameters(), lr=3e-4, weight_decay=1e-4)
-    records, steps, started = _stream(corpus), 0, time.time()
+    records, steps, started = _stream(training_shards), 0, time.time()
     shallow.train()
     while steps < args.method_c_steps:
         _train_step(shallow, optimizer, probe_model, [next(records) for _ in range(16)])

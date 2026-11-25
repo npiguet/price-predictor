@@ -70,10 +70,6 @@ class TestProbeContext:
         context, manifest, corpus, _ = self._context(tmp_path, monkeypatch)
         assert context.corpus == corpus
         assert context.corpus_digest == manifest.digest()
-        assert context.validation_dirs() == [
-            corpus / "validation" / "card-disjoint",
-            corpus / "validation" / "game-disjoint",
-        ]
 
     def test_the_sidecars_read_the_variant_tree_the_corpus_recorded(
         self, tmp_path, monkeypatch,

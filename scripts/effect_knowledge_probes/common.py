@@ -201,10 +201,6 @@ def manifest_surface(manifest) -> Surface:
 # ── records ─────────────────────────────────────────────────────────────
 
 
-def stratum_dir(corpus: Path, stratum: str) -> Path:
-    return Path(corpus) / "validation" / stratum
-
-
 @dataclass(frozen=True)
 class GameFilter:
     """The games, and optionally the records, a probing run reads."""
@@ -396,9 +392,6 @@ class ProbeContext:
             self._sidecars = sidecar_cache(self.cards_folders, self.variant_scripts)
         return self._sidecars
 
-    def stratum_dir(self, stratum: str) -> Path:
-        return stratum_dir(self.corpus, stratum)
-
     def stratum_shards(self, stratum: str) -> tuple[Path, ...]:
         """The shards the manifest lists for ``stratum``, checked against the
         disk once per context (finding 11.4): a stale shard is refused, so no
@@ -410,13 +403,10 @@ class ProbeContext:
             self._listed = require_listed_shards(CorpusStore(self.corpus), self.manifest)
         return self._listed[stratum]
 
-    def validation_dirs(self) -> list[Path]:
-        """Both validation strata, card-disjoint first."""
-        return [self.stratum_dir(stratum) for stratum in STRATA]
-
-    @property
-    def training_dir(self) -> Path:
-        return Path(self.corpus) / "training"
+    def validation_shards(self, limit: int | None = None) -> list[Path]:
+        """The first ``limit`` listed shards of each validation stratum (all
+        when None), card-disjoint first."""
+        return [shard for stratum in STRATA for shard in self.stratum_shards(stratum)[:limit]]
 
     def model(self, records: list, *, vocab_path: Path | None = None,
               keyword_path: Path | None = None) -> ProbeModel:
@@ -490,7 +480,7 @@ def grid_run(doc: str, *, records: int, per_game: int | None = None,
     """A one-off probe's command line, parsed, and its checkpoint's context.
 
     Every grid reads ``--records`` qualifying records from at most ``--shards``
-    shards per directory, ``--per-game`` from one game where it takes more
+    listed shards per stratum, ``--per-game`` from one game where it takes more
     than one; ``options(parser)`` adds the grid's own arguments.
     """
     parser = argparse.ArgumentParser(description=doc.splitlines()[0])

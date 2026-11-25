@@ -136,8 +136,8 @@ def land_payable(sidecars):
 def main() -> None:
     args, context = common.grid_run(__doc__, records=300, per_game=2)
     records = record_walk.qualifying(
-        context.validation_dirs(), land_payable(context.sidecars()), args.records,
-        per_game=args.per_game, shards=args.shards)
+        context.validation_shards(args.shards), land_payable(context.sidecars()), args.records,
+        per_game=args.per_game)
     probe_model = context.model(records)
     common.heading(args, context, f"{len(records)} validation decisions with a land-payable cost")
 

@@ -170,7 +170,8 @@ class TestExtraction:
         (tmp_path / "training").mkdir()
         write_shard(tmp_path / "training" / "shard-00001.jsonl.gz", records[:24])
         args = SimpleNamespace(method_c_layers=layers, method_c_steps=2)
-        result = method_c(args, loaded, tmp_path, records[:16])
+        result = method_c(args, loaded, [tmp_path / "training" / "shard-00001.jsonl.gz"],
+                          records[:16])
         assert result["steps"] == 2 and result["layers"] == layers
         assert set(result["shallow"]) == set(result["full"])
         assert all(np.isfinite(v) for v in result["shallow"].values())
@@ -203,6 +204,6 @@ class TestGen3Only:
                 del data["generation"]
                 out.write(json.dumps(data) + "\n")
         with pytest.raises(OlderGenerationError, match="the record is gen-2 "):
-            next(record_walk.records([directory]))
+            next(record_walk.records(sorted(directory.iterdir())))
         with pytest.raises(OlderGenerationError, match="the record is gen-2 "):
             next(common.read_games(sorted(directory.iterdir()), {"any"}))

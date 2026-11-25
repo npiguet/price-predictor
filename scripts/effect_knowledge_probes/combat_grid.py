@@ -45,7 +45,7 @@ carries no damage assignment, so the grid edits none.
 ``--source validation`` (the default) reads the blocks the corpus's selection set froze
 for the combat grids in ``--half`` (``reporting`` by default, ``selection`` or ``both``) of
 both validation strata, one a game (the several-blocker grids are frozen as
-``combat-several/...``); ``--source training`` scans the first ``--shards`` training shards
+``combat-several/...``); ``--source training`` scans the first ``--shards`` listed training shards
 for ``--records`` blocks.
 """
 from __future__ import annotations
@@ -124,10 +124,10 @@ def _triples(args, context, resolver) -> list:
         # One block a game: a game repeats its creatures from combat to combat, and
         # forty blocks by one large attacker would read one board forty times.
         return record_walk.qualifying(
-            [context.training_dir],
+            context.stratum_shards("training")[:args.shards],
             record_walk.with_record(
                 lambda r: grid_block(r, resolver.keywords_of, args.blocks)),
-            args.records, shards=args.shards)
+            args.records)
     from effect_knowledge_probes.selection import frozen_grid_records
 
     halves = ("selection", "reporting") if args.half == "both" else (args.half,)

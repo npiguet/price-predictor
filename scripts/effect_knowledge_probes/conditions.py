@@ -712,9 +712,9 @@ def main() -> None:
     sidecars = context.sidecars()
     keywords_of = KeywordResolver(sidecars).keywords_of
     chosen = record_walk.qualifying(
-        context.validation_dirs(),
+        context.validation_shards(args.shards),
         lambda record: record_items(record, sidecars, keywords_of) or None,
-        args.records, per_game=args.per_game, shards=args.shards)
+        args.records, per_game=args.per_game)
     items = [item for found in chosen for item in found]
     probe_model = context.model([item.record for item in items])
     common.heading(args, context, f"{len(chosen)} validation records carrying a turn or "

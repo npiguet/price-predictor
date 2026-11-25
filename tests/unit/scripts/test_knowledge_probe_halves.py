@@ -99,8 +99,10 @@ def _context(frozen_corpus, sidecars, probe_model):
             provenance=SimpleNamespace(held_out_cards=()), training_settings={"seed": 1},
             model_config=probe_model.model.config),
         sidecars=lambda: sidecars,
-        stratum_shards=lambda name: (root / "validation" / name / "shard-00000.jsonl.gz",),
-        training_dir=root / "training", model=lambda records, **_: probe_model,
+        stratum_shards=lambda name: (
+            root / ("training" if name == "training" else f"validation/{name}")
+            / "shard-00000.jsonl.gz",),
+        model=lambda records, **_: probe_model,
     )
 
 
@@ -296,7 +298,7 @@ class TestLineProbesReadEachRecordOnce:
         assert sum(len(v) for v in outcomes.profiles.values()) == 1
 
     def test_the_training_walk_drops_repeats_unless_told_not_to(self, frozen_corpus):
-        directory = frozen_corpus.root / "training"
-        ids = [r.record_id for r in record_walk.records([directory])]
+        shards = [frozen_corpus.root / "training" / "shard-00000.jsonl.gz"]
+        ids = [r.record_id for r in record_walk.records(shards)]
         assert len(ids) == len(set(ids)) == 40
-        assert len(list(record_walk.records([directory], distinct=False))) == 80
+        assert len(list(record_walk.records(shards, distinct=False))) == 80
