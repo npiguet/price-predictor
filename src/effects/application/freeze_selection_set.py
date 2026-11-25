@@ -620,19 +620,19 @@ class _Assembly:
             by_hash = sorted((order, game, record_id, q)
                              for game, (order, record_id, q) in qualified.items())
             needed = grid_records_needed(
-                _mean_outcomes([q for *_, q in by_hash], len(grid.cells)),
+                _answers([q for *_, q in by_hash], len(grid.cells)),
                 target=self.limits.grid_target_error, cap=self.limits.grid_record_cap)
             chosen = sorted((game, record_id, q)
                             for _, game, record_id, q in by_hash[:max(needed, 1)])
             records = tuple(TaggedRecord(record_id, game, q.entities)
                             for game, record_id, q in chosen)
-            outcomes = _mean_outcomes([q for *_, q in chosen], len(grid.cells))
-            error = grid_standard_error([len(chosen)] * len(grid.cells), outcomes)
+            answers = _answers([q for *_, q in chosen], len(grid.cells))
+            error = grid_standard_error(answers)
             if not self._enters(stratum, half, GRIDS, grid.name, error):
                 continue
             errors.append(error)
             kept[grid.name] = FrozenGrid(
-                tuple(GridCell(cell, outcome) for cell, outcome in zip(grid.cells, outcomes)),
+                tuple(GridCell(cell, answer) for cell, answer in zip(grid.cells, answers)),
                 records)
         self.frozen_grids[stratum][half] = kept
         self._check(stratum, half, GRIDS, errors)
@@ -701,10 +701,10 @@ class _Assembly:
         )
 
 
-def _mean_outcomes(qualifications: Sequence[GridQualification], cells: int) -> list[float]:
-    """Each cell's rule outcome, averaged over a grid's records."""
-    return [sum(q.outcomes[c] for q in qualifications) / len(qualifications)
-            for c in range(cells)]
+def _answers(qualifications: Sequence[GridQualification],
+             cells: int) -> list[tuple[float, ...]]:
+    """Each cell's rule outcome for each of a grid's records, in their order."""
+    return [tuple(q.outcomes[c] for q in qualifications) for c in range(cells)]
 
 
 def _above(error: float, limits: FreezeThresholds) -> str:

@@ -10,7 +10,8 @@ probe-set file).
 `<probe-set-dir>/selection-set-<corpus digest>.json` (the directory the freeze is given, and every
 reader's `--reports-dir` or `--probe-set-dir`), canonical JSON, `digest` a sha256 over
 everything but itself. Fields as [data-model.md](../data-model.md#selectionset-new-replaces-the-frozen-probe-set).
-A reader refuses a missing file, one frozen for another corpus, or one edited since (`SelectionSetError`).
+A reader refuses a missing file, one frozen for another corpus, one edited since, or one whose grid
+cells hold no `answers`, frozen before grids kept each record's answer (`SelectionSetError`).
 A writer never replaces a set already at the path by another (`SelectionSetError`; checkpoints were
 selected against the one on disk); writing the same set again leaves the file as it is.
 
@@ -25,7 +26,8 @@ selected against the one on disk); writing the same set again leaves the file as
    departure) and the deviance sample (every copy, the smallest keyed hashes up to 16,384 a half,
    each copy weighed by its `curation.class_weight`; FR-059a). A
    grid keeps one record a game, then the fewest records by smallest keyed hash that bring its
-   worst-case standard error to 0.09, at most 512, both recorded in `settings`. The probe items come
+   worst-case standard error to 0.09, at most 512, both recorded in `settings`. Each cell keeps
+   the rule's outcome for each kept record (`answers`, in the grid's `records` order). The probe items come
    from the probe scripts through ports (`scripts/effect_knowledge_probes/selection.py`). Every grid
    cell is a board a record could show (`domain/grid_edits.py`):
    - a combat cell is a snapshot of its damage step, phase and substep both;
@@ -38,7 +40,8 @@ selected against the one on disk); writing the same set again leaves the file as
      the line's script and its prose.
 3. Balance with r = 4 by seeded draw: rule-test polarities, probe types (against the smallest type
    that meets the item target), record-drawn grid cells.
-4. Compute each item's worst-case standard error (research Decision E4; a rule test's or a binary probe's clusters by game: `n₊` and `n₋` are the distinct games among its positive and among its negative rows; a deviance item's under both
+4. Compute each item's worst-case standard error (research Decision E4, a grid's `B` over its
+   records' answers: `B = (1/C) Σ_c (1/N) Σ_r |ȳ − y_rc|`, `ȳ` the mean answer; a rule test's or a binary probe's clusters by game: `n₊` and `n₋` are the distinct games among its positive and among its negative rows; a deviance item's under both
    rule masks, for every shipped head's output terms, `√(Σ_g S_g²) / Σ_g S_g` with `S_g` summing over
    game g's copies the constant's loss times the copy's mask weight times its class weight, the
    constant fitted at the class weights). Leave out items above 0.1 and name them, a rule with one polarity only as such. A
@@ -60,7 +63,7 @@ no operator flag overrides them (research Decision E5).
 | component | item score | rescaled |
 |---|---|---|
 | probes | rung-3 AUC or R² per probe type | AUC → 2·AUC − 1; R² as is |
-| grids | per grid, MAE of cell-mean predicted probability against the rule's cell outcome | 1 − MAE / MAE(grid mean) |
+| grids | per grid, MAE of each record's predicted probability in each cell against the rule's outcome for that record there, averaged over the cell's records, then over the cells | 1 − MAE / MAE(grid mean), the grid mean's MAE taken against the same answers |
 | rule tests | per rule, mean over its outputs of the AUC ranking `fires` above `does_not_fire` | 2·AUC − 1 |
 | deviance | per output term of every shipped head, 1 − loss / constant loss, weighted under the run's `--rule-mask` | as is |
 
@@ -73,7 +76,9 @@ the frozen records' own targets differs most between `fires` and `does_not_fire`
 complement where the difference is negative; a count or delta takes the sign of the mean difference;
 an output no head carries, or one no `fires` record observes, is not read, and a rule left with none
 is left out. Every item is clipped below at −1. A component is the mean of its items, and a stratum score the mean
-of its four components. `control = W · card_disjoint + (1 − W) · game_disjoint`. The deviance
+of its four components; the grid component is the mean over the damage, combat and evasion grids of
+each grid's mean over its scored variants (`combat/…` and `combat-several/…` both being the combat
+grid's; `grid_edits.grid_of`), a grid with none scored left out. `control = W · card_disjoint + (1 − W) · game_disjoint`. The deviance
 component's items are the terms the loss denominators divide by: each per-entity field and the gate
 (item named by the field, `damage_taken`), each verdict field at `[ACT]`, each global field at
 `[GLOBAL]`, and each created-objects slot column summed over the slots plus the overflow flag (items

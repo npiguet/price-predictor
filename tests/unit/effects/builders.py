@@ -542,7 +542,6 @@ def fixture_selection_set(records, *, corpus_digest: str = "fixture"):
     halves = {"selection": games[::2], "reporting": games[1::2]}
     by_half = {half: [r for r in records if r.game_id in set(held)]
                for half, held in halves.items()}
-    cells = tuple(GridCell(f"{a}x{b}", float(a >= b)) for a in VALUES for b in VALUES)
     probes, grids, rules, samples, errors = {}, {}, {}, {}, {}
     for stratum in FIXTURE_STRATA:
         probes[stratum], grids[stratum], rules[stratum], samples[stratum] = {}, {}, {}, {}
@@ -555,8 +554,11 @@ def fixture_selection_set(records, *, corpus_digest: str = "fixture"):
                                     for i, r in enumerate(held[:10])),
             }
             damaged = [(r, creature(r)) for r in held if r.ability and creature(r) is not None]
+            kept = damaged[:2]
+            cells = tuple(GridCell(f"{a}x{b}", (float(a >= b),) * len(kept))
+                          for a in VALUES for b in VALUES)
             grids[stratum][half] = {"damage": FrozenGrid(cells, tuple(
-                TaggedRecord(r.record_id, r.game_id, (entity.id,)) for r, entity in damaged[:2]))}
+                TaggedRecord(r.record_id, r.game_id, (entity.id,)) for r, entity in kept))}
             tagged = [TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
                       for r in with_entities[:16]]
             rules[stratum][half] = {

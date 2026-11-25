@@ -209,7 +209,7 @@ class TestFreezeSelectionSet:
         (stratum / "shard-0.jsonl").write_text("".join(lines + lines[:1]), encoding="utf-8")
         rows = [json.loads(line) for line in lines]
         frozen = lambda ids: FrozenGrid(  # noqa: E731
-            (GridCell("1x1", 1.0),),
+            (GridCell("1x1", (1.0,) * len(ids)),),
             tuple(TaggedRecord(rows[i]["record_id"], rows[i]["game_id"], ("E1", "E2"))
                   for i in ids))
         selection = SelectionSet(

@@ -20,7 +20,8 @@ what the run's probes ask of it:
   interaction pairs and the observed outcomes of the line labels.
 
 :func:`score_grids` scores each frozen grid as the control score does: each
-cell's mean prediction against the rule's outcome there, ``1 − MAE / B``.
+record's prediction in each cell against the rule's answer for that record
+there, ``1 − MAE / B``.
 :func:`score_rule_tests` scores a half's rule tests through the control
 score's own scorer (``effects.application.control_score.score_half``), which
 reads the half's records itself.
@@ -305,23 +306,26 @@ def grid_predictions(probe_model, name: str, record, entities: Sequence[str]) ->
 
 def score_grids(probe_model, selection, read: HalfRead) -> dict[str, dict]:
     """``{grid: {"records", "score", "mae", "baseline"}}`` for each frozen grid
-    of the half: ``score`` is ``1 − MAE / B`` (NaN where the rule's outcome is
-    the same in every cell), ``mae`` the cell means' mean absolute error
-    against the rule, ``baseline`` B."""
-    from effects.domain.score_scales import grid_mean_error, grid_score
+    of the half: ``score`` is ``1 − MAE / B`` (NaN where the rule's answer is
+    the same for every record in every cell), ``mae`` the mean absolute error
+    of each record's prediction against its answer, ``baseline`` B."""
+    from effects.domain.score_scales import grid_error, grid_mean_error, grid_score
 
     frozen = selection.grids.get(read.stratum, {}).get(read.half, {})
     out: dict[str, dict] = {}
     for name in sorted(read.grids):
-        outcomes = np.array([cell.outcome for cell in frozen[name].cells], dtype=np.float64)
+        answers_of = frozen[name].record_answers()
         rows = [grid_predictions(probe_model, name, record, entities)
                 for record, entities in read.grids[name]]
-        means = np.nanmean(np.array(rows, dtype=np.float64), axis=0)
+        # Cells by records, each record's predictions beside its own answers.
+        predicted = np.array(rows, dtype=np.float64).T
+        answers = np.array([answers_of[record.record_id] for record, _ in read.grids[name]],
+                           dtype=np.float64).T
         out[name] = {
             "records": len(rows),
-            "score": float(grid_score(means, outcomes)),
-            "mae": float(np.mean(np.abs(means - outcomes))),
-            "baseline": float(grid_mean_error(outcomes)),
+            "score": float(grid_score(predicted, answers)),
+            "mae": float(grid_error(predicted, answers)),
+            "baseline": float(grid_mean_error(answers)),
         }
     return out
 

@@ -1305,7 +1305,10 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
   - the knowledge probes read at the model's own prediction, rung 3 of the gen-2 ladder:
     each probe type one score, averaged into one component;
   - the damage grid, the combat grid and the evasion grid, each scored against the rule's
-    outcome in every cell, averaged into one component;
+    outcome for every record in every cell, averaged into one component, each grid counting
+    equally. The combat grid's score is the mean of its variants' scores (the keyword
+    granted, the creature read, one block or several). A grid with no variant scored is
+    left out of the mean;
   - the rule tests (§ 14.4), each rule counting equally;
   - the mean of every output field's explained deviance, each field counting equally. The
     output fields are the ones § 13.2 divides, in every shipped head: the per-entity
@@ -1317,8 +1320,9 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
   - an AUC as 2 × AUC − 1;
   - an R² and an explained deviance as they are;
   - a grid as one minus the ratio of its error to the error of predicting the grid's mean
-    outcome in every cell, its error being the mean absolute difference between the
-    predicted probability and the rule's outcome over its cells.
+    outcome in every cell. An error is the mean absolute difference between the predicted
+    probability on a record edited into a cell and the rule's outcome for that record in
+    that cell, averaged over the cell's records, then over the grid's cells.
 - The stratum score is the mean of the four rescaled components, each counting equally.
 - The control score is the card-disjoint stratum score weighted by `--stratum-weight`,
   plus the game-disjoint stratum score weighted by one minus it.
@@ -1358,8 +1362,8 @@ Precision target, in each half of each stratum:
   and their labels alone, at the worst case the labels allow. An AUC's is Hanley–McNeil's
   at an AUC of 0.5: a rule with n test records of each polarity has a rescaled standard
   error of 2 · √((2n + 1) / (12n²)), which needs n ≥ 68.
-- A grid whose rule outcome is the same in every cell has no error baseline. Its standard
-  error is unbounded, and it is left out.
+- A grid whose rule outcome is the same for every record in every cell has no error
+  baseline. Its standard error is unbounded, and it is left out.
 - The freeze, and `build-corpus` where it can already tell, exit 1 when a component misses
   its target, naming the stratum, half and component. `build-corpus` exits only after
   writing the corpus and its manifest.

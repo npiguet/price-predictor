@@ -172,7 +172,7 @@ def _selection(records) -> SelectionSet:
                                     for i, r in enumerate(held[:10])),
             }
             grids[stratum][half] = {"grid": FrozenGrid(
-                (GridCell("low", 0.0), GridCell("high", 1.0)),
+                (GridCell("low", (0.0,) * 4), GridCell("high", (1.0,) * 4)),
                 tuple(TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
                       for r in with_entities[:4]))}
             tagged = [TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
@@ -458,7 +458,7 @@ def test_a_grid_cell_can_read_an_edited_ability_text(run, records):
     with_ability = [r for r in records if r.ability and r.state.entities
                     and r.game_id in set(selection.halves["card-disjoint"]["selection"])][:3]
     grids = {stratum: {**by_half, "selection": {"grid": FrozenGrid(
-        (GridCell("low", 0.0), GridCell("high", 1.0)),
+        (GridCell("low", (0.0,) * len(with_ability)), GridCell("high", (1.0,) * len(with_ability))),
         tuple(TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
               for r in with_ability))}} for stratum, by_half in selection.grids.items()}
     selection = replace(selection, grids=grids)

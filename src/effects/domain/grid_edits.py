@@ -125,6 +125,15 @@ BLOCKS: tuple[str, ...] = ("one", "several")
 GRID_PREFIX: dict[str, str] = {"one": "combat/", "several": "combat-several/"}
 
 
+def grid_of(name: str) -> str:
+    """The grid a frozen grid named ``name`` is a variant of: ``combat`` for
+    every ``combat/…`` and ``combat-several/…`` variant, else the name
+    itself (``damage``, ``evasion``)."""
+    if name.startswith(tuple(GRID_PREFIX.values())):
+        return "combat"
+    return name
+
+
 def changes_the_step(keywords) -> bool:
     """Whether ``keywords`` hold one that changes who dies in a damage step:
     one of :data:`COMBAT_KEYWORDS`, or a protection, spelled by its quality
@@ -714,6 +723,6 @@ __all__ = [
     "GRID_PREFIX", "OTHER_CREATURE_TYPES", "PROTECTION_ROWS", "VALUES", "VARIANTS",
     "AbilityTexts", "CellRead", "CombatGrid", "DamageGrid", "EvasionGrid", "GridEdits",
     "GridQualification", "TextOverride", "Variant", "changes_the_step", "damage_cells",
-    "damage_target", "evasion_cell", "evasion_pair", "grid_block", "grid_records",
+    "damage_target", "evasion_cell", "evasion_pair", "grid_block", "grid_of", "grid_records",
     "grid_sources", "label", "protection_quality", "side_of",
 ]

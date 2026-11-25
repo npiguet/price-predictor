@@ -426,7 +426,7 @@ def test_an_empty_grid_refuses_and_a_constant_grid_is_left_out() -> None:
         left = frozen.left_out[GD][half]["grids"]
         assert [item.item for item in left] == ["constant"]
         grid = frozen.grids[GD][half]["combat"]
-        assert [c.outcome for c in grid.cells] == [1.0, 0.0]
+        assert [c.answers for c in grid.cells] == [(1.0,) * 2, (0.0,) * 2]
         assert len({r.game_id for r in grid.records}) == len(grid.records)
 
 

@@ -13,6 +13,8 @@ from effects.domain.score_scales import (
     auc_standard_error,
     clipped,
     component_standard_error,
+    grid_error,
+    grid_mean_error,
     grid_score,
     grid_standard_error,
     loss_ratio_standard_error,
@@ -68,13 +70,36 @@ class TestRescaling:
         assert rescaled_auc(0.0) == -1.0
 
     def test_a_grid_is_one_minus_its_error_over_the_grid_means(self):
-        outcomes = [0.0, 0.0, 1.0, 1.0]  # mean 0.5, B = 0.5
-        assert grid_score(outcomes, outcomes) == 1.0
-        assert grid_score([0.5] * 4, outcomes) == 0.0
-        assert grid_score([0.25, 0.25, 0.75, 0.75], outcomes) == pytest.approx(0.5)
+        answers = [[0.0], [0.0], [1.0], [1.0]]  # one record a cell: mean 0.5, B = 0.5
+        assert grid_score(answers, answers) == 1.0
+        assert grid_score([[0.5]] * 4, answers) == 0.0
+        assert grid_score([[0.25], [0.25], [0.75], [0.75]], answers) == pytest.approx(0.5)
 
     def test_a_grid_with_a_constant_outcome_has_no_score(self):
-        assert math.isnan(grid_score([0.2, 0.9], [1.0, 1.0]))
+        assert math.isnan(grid_score([[0.2], [0.9]], [[1.0], [1.0]]))
+
+    def test_each_reading_is_scored_against_its_own_records_answer(self):
+        """Finding 12.6: in a cell whose answers differ between records, a
+        model reading the cell's base rate errs on every record, one reading
+        each record's answer on none."""
+        answers = [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 1.0, 0.0]]
+        base_rate = [[0.0] * 4, [0.5] * 4]
+        assert grid_score(answers, answers) == 1.0
+        assert grid_error(base_rate, answers) == pytest.approx(0.25)
+        assert grid_score(base_rate, answers) < grid_score(answers, answers)
+
+    def test_the_baseline_is_the_grid_mean_against_each_records_answer(self):
+        """``B = (1/C) Σ_c mean_r |ȳ − y_rc|``: ȳ = 0.25 errs by 0.25 on six
+        answers and 0.75 on two, B = 0.375 (the cell means' 0.25 would read
+        a base-rate model as a perfect one), so predicting ȳ scores 0."""
+        answers = [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 1.0, 0.0]]
+        assert grid_mean_error(answers) == pytest.approx(0.375)
+        assert grid_score([[0.25] * 4] * 2, answers) == pytest.approx(0.0)
+
+    def test_a_reading_that_is_not_finite_is_dropped_from_its_cell(self):
+        answers = [[0.0, 1.0], [1.0, 1.0]]
+        assert grid_error([[0.0, float("nan")], [1.0, 0.0]], answers) == pytest.approx(0.25)
+        assert math.isnan(grid_score([[float("nan")] * 2, [1.0, 1.0]], answers))
 
     def test_clipping_floors_at_minus_one_and_keeps_nan(self):
         assert clipped(-3.0) == -1.0
@@ -107,13 +132,19 @@ class TestStandardErrors:
     def test_the_grid_bound(self):
         """``(1/C) Σ_c 1/(2√N_c) / B``: four cells of 25 records give a spread
         of 0.1, over B = 0.5."""
-        assert grid_standard_error([25] * 4, [0.0, 0.0, 1.0, 1.0]) == pytest.approx(0.2)
+        answers = [[0.0] * 25, [0.0] * 25, [1.0] * 25, [1.0] * 25]
+        assert grid_standard_error(answers) == pytest.approx(0.2)
+
+    def test_the_grid_bound_reads_each_records_answer(self):
+        """Two cells of four records, answers (0, 0, 0, 0) and (1, 0, 1, 0):
+        a spread of 1/(2√4) = 0.25 over B = 0.375."""
+        answers = [[0.0] * 4, [1.0, 0.0, 1.0, 0.0]]
+        assert grid_standard_error(answers) == pytest.approx(2 / 3)
 
     def test_a_grid_with_a_constant_outcome_or_an_empty_cell_is_left_out(self):
-        assert grid_standard_error([25, 25], [1.0, 1.0]) == math.inf
-        assert grid_standard_error([25, 0], [0.0, 1.0]) == math.inf
-        with pytest.raises(ValueError):
-            grid_standard_error([25], [0.0, 1.0])
+        assert grid_standard_error([[1.0] * 25, [1.0] * 25]) == math.inf
+        assert grid_standard_error([[0.0] * 25, []]) == math.inf
+        assert grid_standard_error([]) == math.inf
 
     def test_the_loss_ratio_clusters_by_game(self):
         """One game holding every loss is no better than one record: the

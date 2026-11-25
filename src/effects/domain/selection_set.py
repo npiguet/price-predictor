@@ -11,7 +11,7 @@ stratum and each half of it:
 - ``probes``: the board-dependent probe items, by probe type, each a record,
   the entity it is read at (None at ``[ACT]``) and its label;
 - ``grids``: each edit grid's records (one per game), the entities the grid
-  edits, and its cells with the rule's mean outcome in each;
+  edits, and its cells with the rule's answer for each record in each;
 - ``rule_tests``: by rule and polarity, the rule-test records and the
   entities their tag names;
 - ``deviance_samples``: the records the explained deviance reads, copies
@@ -59,16 +59,17 @@ GRID_TARGET_ERROR = 0.09
 GRID_RECORD_CAP = 512
 
 
-def grid_records_needed(outcomes, *, target: float = GRID_TARGET_ERROR,
+def grid_records_needed(answers, *, target: float = GRID_TARGET_ERROR,
                         cap: int = GRID_RECORD_CAP) -> int:
     """How many records bring an edit grid's worst-case standard error
     ``1 / (2 √N B)`` (research E4) to ``target``, at most ``cap``; ``B`` is the
-    error of predicting the grid's mean outcome in every cell. A grid whose
-    outcome is the same in every cell (``B = 0``) needs none: no number of
-    records bounds its error."""
+    error of predicting the grid's mean outcome for every record in every
+    cell, over ``answers`` (per cell, the rule's answer for each record). A
+    grid whose answer is the same everywhere (``B = 0``) needs none: no
+    number of records bounds its error."""
     from effects.domain.score_scales import grid_mean_error
 
-    baseline = grid_mean_error(outcomes)
+    baseline = grid_mean_error(answers)
     if not baseline > 0 or not target > 0:
         return 0
     return min(cap, max(1, math.ceil((1.0 / (2.0 * target * baseline)) ** 2)))
@@ -141,27 +142,63 @@ class TaggedRecord:
 
 @dataclass(frozen=True, slots=True)
 class GridCell:
-    """One grid cell: its label and the rule's outcome there, averaged over the
-    grid's records."""
+    """One grid cell: its label and the rule's outcome there for each of the
+    grid's records (``answers``, in :attr:`FrozenGrid.records` order), which a
+    grid is scored against record by record."""
 
     cell: str
-    outcome: float
+    answers: tuple[float, ...]
 
     def to_json(self) -> dict:
-        return {"cell": self.cell, "outcome": self.outcome}
+        return {"cell": self.cell, "answers": _answer_string(self.answers)}
 
     @classmethod
     def from_json(cls, data: Mapping) -> GridCell:
-        return cls(data["cell"], float(data["outcome"]))
+        if "answers" not in data:
+            raise SelectionSetError(
+                f"grid cell {data.get('cell')} holds no answers: the set was frozen before "
+                "grids kept the rule's answer for each record; freeze it again")
+        return cls(data["cell"], _answers_of(data["cell"], data["answers"]))
+
+
+#: A grid answer as written: the rule's yes or no (a death, a legal block).
+_ANSWER_CHARACTERS = {0.0: "0", 1.0: "1"}
+
+
+def _answer_string(answers: Sequence[float]) -> str:
+    """A cell's answers as written, one ``0`` or ``1`` a record: a grid of
+    512 records holds tens of thousands of answers, which a JSON list would
+    write one a line."""
+    return "".join(_ANSWER_CHARACTERS[float(answer)] for answer in answers)
+
+
+def _answers_of(cell: str, text: str) -> tuple[float, ...]:
+    """A cell's answers read back from :func:`_answer_string`'s form."""
+    if set(text) - {"0", "1"}:
+        raise SelectionSetError(f"grid cell {cell}'s answers are not a string of 0s and 1s")
+    return tuple(float(character) for character in text)
 
 
 @dataclass(frozen=True, slots=True)
 class FrozenGrid:
     """An edit grid: every cell edits the same ``records``, so each cell holds
-    them all (FR-068a's cell balance holds by construction)."""
+    them all (FR-068a's cell balance holds by construction), with the rule's
+    answer for each."""
 
     cells: tuple[GridCell, ...]
     records: tuple[TaggedRecord, ...]
+
+    def __post_init__(self) -> None:
+        for cell in self.cells:
+            if len(cell.answers) != len(self.records):
+                raise SelectionSetError(
+                    f"grid cell {cell.cell} holds {len(cell.answers)} answer(s) for "
+                    f"{len(self.records)} records")
+
+    def record_answers(self) -> dict[str, tuple[float, ...]]:
+        """``record_id -> the rule's answer in each cell``, in cell order."""
+        return {row.record_id: tuple(cell.answers[index] for cell in self.cells)
+                for index, row in enumerate(self.records)}
 
     def to_json(self) -> dict:
         return {"cells": [c.to_json() for c in self.cells],
@@ -437,10 +474,18 @@ def load_selection_set(path: Path, corpus_digest: str) -> SelectionSet:
         raise SelectionSetError(
             f"{path} was frozen against corpus digest {data.get('corpus_digest')}, "
             f"not this corpus's {corpus_digest}")
-    selection = SelectionSet.from_json(data)
+    selection = _read_set(path, data)
     if data.get("digest") != selection.computed_digest():
         raise SelectionSetError(f"{path} does not match its own digest; it was edited")
     return selection
+
+
+def _read_set(path: Path, data: Mapping) -> SelectionSet:
+    """``data`` read back, a refusal of what it holds naming ``path``."""
+    try:
+        return SelectionSet.from_json(data)
+    except SelectionSetError as refused:
+        raise SelectionSetError(f"{path}: {refused}") from refused
 
 
 # ── the seeded balance ───────────────────────────────────────────────────

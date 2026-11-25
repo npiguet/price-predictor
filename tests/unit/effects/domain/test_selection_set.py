@@ -18,6 +18,7 @@ from effects.domain.selection_set import (
     SelectionSetError,
     TaggedRecord,
     balanced,
+    canonical_digest,
     deviance_by_head,
     deviance_head,
     deviance_item,
@@ -41,8 +42,8 @@ def _selection(**changes) -> SelectionSet:
         }}},
         probe_kinds={"dies": "binary"},
         grids={"game-disjoint": {"selection": {"combat": FrozenGrid(
-            (GridCell("1x1", 1.0), GridCell("1x2", 0.0)),
-            (TaggedRecord("r3", "g1", ("E1", "E2")),),
+            (GridCell("1x1", (1.0, 1.0)), GridCell("1x2", (0.0, 1.0))),
+            (TaggedRecord("r3", "g1", ("E1", "E2")), TaggedRecord("r6", "g2", ("E3", "E4"))),
         )}}},
         rule_tests={"game-disjoint": {"selection": {"704.5f": {
             "fires": (TaggedRecord("r4", "g1", ("E7",)),),
@@ -81,7 +82,7 @@ def test_digest_moves_with_any_field_and_ignores_itself() -> None:
 
 def test_record_ids_reads_every_distinct_record_of_a_half_once() -> None:
     assert _selection().record_ids("game-disjoint", "selection") == {
-        "r1", "r2", "r3", "r4", "r5"}
+        "r1", "r2", "r3", "r4", "r5", "r6"}
     assert _selection().record_ids("card-disjoint", "selection") == frozenset()
 
 
@@ -104,6 +105,29 @@ def test_load_refuses_missing_other_corpus_and_edited_files(tmp_path) -> None:
     data["r"] = 3
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(SelectionSetError, match="edited"):
+        load_selection_set(path, "abc123")
+
+
+def test_a_grid_cell_holds_the_rules_answer_for_each_grid_record() -> None:
+    grid = _selection().grids["game-disjoint"]["selection"]["combat"]
+    assert grid.record_answers() == {"r3": (1.0, 0.0), "r6": (1.0, 1.0)}
+    assert grid.cells[1].to_json() == {"cell": "1x2", "answers": "01"}
+    with pytest.raises(SelectionSetError, match="not a string of 0s and 1s"):
+        GridCell.from_json({"cell": "1x2", "answers": "0.5"})
+    with pytest.raises(SelectionSetError, match="1x1 holds 1 answer.* 2 records"):
+        FrozenGrid((GridCell("1x1", (1.0,)),), grid.records)
+
+
+def test_a_set_frozen_before_grids_held_each_records_answer_is_refused(tmp_path) -> None:
+    """No default reads a cell-mean grid: its cells name no ``answers``."""
+    path = selection_set_path(tmp_path, "abc123")
+    data = _selection().sealed().to_json()
+    for cell in data["grids"]["game-disjoint"]["selection"]["combat"]["cells"]:
+        cell["outcome"] = cell.pop("answers").count("1") / 2
+    data["digest"] = canonical_digest(data)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(SelectionSetError, match=(
+            r"selection-set-abc123\.json: grid cell 1x1 holds no answers")):
         load_selection_set(path, "abc123")
 
 

@@ -10,7 +10,8 @@ host half of every item it holds is prepared and cached —
 - the probe records, each read at its entity's slot (``[ACT]`` for a verdict
   probe) through :data:`~effects.domain.probe_readouts.READOUTS`;
 - the grid edits, each grid record edited into every cell by a
-  :class:`GridEditor` and read at the cell's entity;
+  :class:`GridEditor` and read at the cell's entity, beside the rule's
+  answer for that record there;
 - the rule-test records, read for each of the rule's effective outputs (the
   outputs the manifest's map names that its tagged records carry, E6): at
   the tag's outcome entities (their mean; research R1), or at the record for
@@ -33,14 +34,16 @@ swapped in (the averaged ones), only the device forward runs, through
 component     item score                                       rescaled
 ============  ===============================================  ===============
 probes        rung-3 AUC (binary) or R² (amount), per type     2·AUC − 1; R²
-grids         MAE of the cell means against the rule's cells   1 − MAE / B
+grids         MAE of each record's reading against its answer  1 − MAE / B
 rule tests    per rule, mean over its outputs of the AUC        2·AUC − 1
               ranking ``fires`` above ``does_not_fire``
 deviance      per output term, 1 − loss / constant loss        as is
 ============  ===============================================  ===============
 
-Every item is clipped below at −1, a component is the mean of its items, a
-stratum score the mean of its four components, and the control score
+Every item is clipped below at −1, a component is the mean of its items
+(the grids': the mean over the damage, combat and evasion grids of each
+one's mean over its variants, ``grid_edits.grid_of``), a stratum score the
+mean of its four components, and the control score
 ``W · card_disjoint + (1 − W) · game_disjoint`` with ``W = --stratum-weight``.
 A component with nothing to score — no item kept, none readable, or a
 deviance component every field of which falls at or below
@@ -141,7 +144,7 @@ from effects.domain.effect_head_layout import (
     active_fields,
 )
 from effects.domain.field_types import FieldType
-from effects.domain.grid_edits import CellRead, TextOverride
+from effects.domain.grid_edits import CellRead, TextOverride, grid_of
 from effects.domain.head_decoding import HeadReading, expected_magnitude, nonzero_direction_balance
 from effects.domain.loss_floor import constant_predictor_losses
 from effects.domain.probe_readouts import READOUTS, item_score
@@ -157,6 +160,7 @@ from effects.domain.score_scales import (
     auc,
     clipped,
     grid_score,
+    grouped_mean,
     rescaled_auc,
 )
 from effects.domain.selection_set import (
@@ -166,6 +170,7 @@ from effects.domain.selection_set import (
     GRIDS,
     PROBES,
     RULE_TESTS,
+    FrozenGrid,
     SelectionSet,
     deviance_items,
     error_of,
@@ -301,17 +306,24 @@ def mixed(card_disjoint: float, game_disjoint: float, weight: float) -> float:
     return weight * card_disjoint + (1.0 - weight) * game_disjoint
 
 
+#: How a component's items group before they are averaged: a grid's
+#: variants into the grid they are of, so the damage, combat and evasion grids
+#: weigh equally (root spec § 14.1); every other item is a group of its own.
+ITEM_GROUPS: dict[str, Callable[[str], str]] = {GRIDS: grid_of}
+
+
 def component_score(items: Mapping[str, float], *, stratum: str, component: str,
                     half: str = SELECTION, strict: bool = True) -> float:
-    """The mean of a component's items, each clipped below at −1; raises
-    :class:`ControlScoreError` when no item has a score, or is NaN then when
-    not ``strict``."""
-    scores = [clipped(value) for value in items.values() if not math.isnan(value)]
+    """The mean of a component's items, each clipped below at −1, grouped
+    first by :data:`ITEM_GROUPS` (a group with no scored item left out);
+    raises :class:`ControlScoreError` when no item has a score, or is NaN
+    then when not ``strict``."""
+    scores = {name: clipped(value) for name, value in items.items() if not math.isnan(value)}
     if not scores:
         if not strict:
             return math.nan
         raise ControlScoreError(stratum, half, component, "nothing to score this epoch")
-    return float(np.mean(scores))
+    return grouped_mean(scores, ITEM_GROUPS.get(component, str))
 
 
 def probe_item(kind: str, labels: Sequence[float], predictions: Sequence[float]) -> float:
@@ -850,9 +862,14 @@ class _ProbeItem:
 
 @dataclass
 class _GridItem:
-    outcomes: list[float]
     #: Per cell, the value positions of the grid's records.
     cells: list[list[int]]
+    #: Per cell, the rule's answer for each record at the same index of ``cells``.
+    answers: list[list[float]]
+
+    def add(self, cell: int, position: int, answer: float) -> None:
+        self.cells[cell].append(position)
+        self.answers[cell].append(answer)
 
 
 @dataclass
@@ -1089,14 +1106,9 @@ def _record_values(records: list[list[int]], values: np.ndarray) -> list[float]:
 
 
 def _grid_item(item: _GridItem, values: np.ndarray) -> float:
-    means = []
-    for positions in item.cells:
-        read = values[positions]
-        read = read[np.isfinite(read)]
-        if not read.size:
-            return math.nan
-        means.append(float(read.mean()))
-    return grid_score(means, item.outcomes)
+    """A grid's score: each record's reading in each cell against the rule's
+    answer for that record there (``score_scales.grid_score``)."""
+    return grid_score([values[positions] for positions in item.cells], item.answers)
 
 
 def _field_union(sets: Sequence[tuple[FieldSpec, ...]]) -> tuple[FieldSpec, ...]:
@@ -1148,12 +1160,7 @@ def _prepare_stratum(
                 for row in sides.get(polarity, ()):
                     requests[row.record_id].append(("rule", reading, polarity, row, held))
         cache.rules[rule] = readings
-    grid_records: dict[str, list[tuple[str, tuple[str, ...]]]] = defaultdict(list)
-    for name, grid in grids.items():
-        cache.grids[name] = _GridItem([cell.outcome for cell in grid.cells],
-                                      [[] for _ in grid.cells])
-        for row in grid.records:
-            grid_records[row.record_id].append((name, row.entities))
+    grid_records = _grid_requests(cache, grids)
 
     batcher = preparer.scoring_batcher()
     plain = _ChunkBuilder(batcher, chunk_records)
@@ -1167,13 +1174,7 @@ def _prepare_stratum(
                                                     copies=copies):
         if distinct:
             plain.add(record, _requests(record, requests.get(record.record_id, ()), cache))
-            for name, entities in grid_records.get(record.record_id, ()):
-                for cell, asked in zip(cache.grids[name].cells,
-                                       editor.cells(name, record, entities), strict=True):
-                    position = cache.position()
-                    cell.append(position)
-                    edited.add(asked.record, [_Request(asked.entity, _readout(asked.readout),
-                                                       position)], asked.texts)
+            _edit_grid_cells(cache, edited, editor, record, grid_records.get(record.record_id, ()))
             # One grid record's cells to a chunk: near copies, kept as their
             # differences (``host_cache``).
             edited.flush()
@@ -1219,6 +1220,40 @@ def _prepare_stratum(
         logger.info("Control score, %s: %d rule(s) have no output a head reads: %s", stratum,
                     len(cache.left_out[RULE_TESTS]), ", ".join(cache.left_out[RULE_TESTS][:12]))
     return cache
+
+
+#: ``record_id -> [(grid, entities, the rule's answer in each cell)]``.
+_GridRequests = dict[str, list[tuple[str, tuple[str, ...], tuple[float, ...]]]]
+
+
+def _grid_requests(cache: _StratumCache, grids: Mapping[str, FrozenGrid]) -> _GridRequests:
+    """What each record of the half's frozen grids is read for, each grid's
+    item opened in ``cache``."""
+    out: _GridRequests = defaultdict(list)
+    for name, grid in grids.items():
+        cache.grids[name] = _GridItem([[] for _ in grid.cells], [[] for _ in grid.cells])
+        answers = grid.record_answers()
+        for row in grid.records:
+            out[row.record_id].append((name, row.entities, answers[row.record_id]))
+    return out
+
+
+def _edit_grid_cells(cache: _StratumCache, edited: _ChunkBuilder, editor: GridEditor | None,
+                     record: EffectRecord,
+                     asked: Iterable[tuple[str, tuple[str, ...], tuple[float, ...]]]) -> None:
+    """One record edited into each cell of every grid ``asked`` names, each
+    cell read at its entity, its position and the record's answer there
+    held by the grid's item. With no ``editor`` the half holds no grid
+    (:func:`_prepare_stratum` refuses one), so nothing is asked."""
+    if editor is None:
+        return
+    for name, entities, answers in asked:
+        cells = editor.cells(name, record, entities)
+        for index, (cell, answer) in enumerate(zip(cells, answers, strict=True)):
+            position = cache.position()
+            cache.grids[name].add(index, position, answer)
+            edited.add(cell.record, [_Request(cell.entity, _readout(cell.readout), position)],
+                       cell.texts)
 
 
 def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache) -> list:

@@ -348,7 +348,7 @@ File `<probe-set-dir>/selection-set-<corpus digest>.json`, written by the freeze
 | `halves` | stratum → `selection` \| `reporting` → [game_id] |
 | `probes` | stratum → half → probe type → [{record_id, game_id, entity, label}] |
 | `probe_kinds` | probe type → `binary` \| `amount` |
-| `grids` | stratum → half → grid → {cells: [{cell, outcome}], records: [{record_id, game_id, entities}]} |
+| `grids` | stratum → half → grid → {cells: [{cell, answers}], records: [{record_id, game_id, entities}]}; a cell's `answers` are the rule's outcome for each of the grid's records, in `records` order, one `0` or `1` a record (`"0110…"`); a cell with no `answers` is refused (`SelectionSetError`) |
 | `rule_tests` | stratum → half → rule → {fires: [{record_id, game_id, entities}], does_not_fire: [...]}; `entities` are the tag's outcome entities |
 | `deviance_samples` | stratum → half → [{record_id, game_id, copy}] |
 | `standard_errors` | `stratum/half/component/item` → {hard, soft} for an output field, else a scalar; infinite written as null |

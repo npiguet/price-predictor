@@ -126,9 +126,14 @@ def _mean_probe_score(body: dict, kind: str) -> float | None:
 
 
 def _mean_grid_score(body: dict) -> float | None:
-    grids = [item["score"] for item in body.get("grids", {}).values()
-             if not math.isnan(item["score"])]
-    return sum(grids) / len(grids) if grids else None
+    """The grids as the control score weighs them: the damage, combat and
+    evasion grids equally, each the mean of its variants (``grid_edits.grid_of``)."""
+    from effects.domain.grid_edits import grid_of
+    from effects.domain.score_scales import grouped_mean
+
+    grids = {name: item["score"] for name, item in body.get("grids", {}).items()
+             if not math.isnan(item["score"])}
+    return grouped_mean(grids, grid_of) if grids else None
 
 
 def _one_half_scores(where: str, body: dict) -> dict[str, float]:
