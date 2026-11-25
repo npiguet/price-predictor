@@ -21,7 +21,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     run,
 )
-from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
+from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, CuratedShard
 from effects.domain.effect_head_layout import PER_ENTITY_FIELDS
 from effects.domain.sampling import SAMPLING_CLASSES, SamplingClass
 from effects.domain.selection_set import (
@@ -32,6 +32,7 @@ from effects.domain.selection_set import (
 )
 from effects.domain.shard_generation import UnacceptedGenerationError
 from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.curated_shards import CorpusShardsError
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import write_vocabulary
 
@@ -85,6 +86,7 @@ def _manifest(**overrides) -> CorpusManifest:
         rarity={}, sources=(), per_class={},
         per_stratum={"gate-one": 4096}, unique_texts={}, shortfall={},
         rule_counts=_RULE_COUNTS, rule_map_digest="map-digest",
+        shards={"training": (CuratedShard(name="t.jsonl.gz", records=1),)},
     )
     fields.update(overrides)
     return CorpusManifest(**fields)
@@ -183,6 +185,8 @@ def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
 
 def test_a_corpus_without_training_shards_is_refused(corpus, config, started):
     (corpus.training_dir / "t.jsonl.gz").unlink()
+    corpus.save(_manifest(shards={"training": ()}))
+    _freeze(corpus, config.reports_dir)
     with pytest.raises(MissingTrainingInputError, match="No training shards under"):
         run(config)
     assert not started
@@ -193,6 +197,70 @@ def test_a_corpus_without_validation_samples_is_refused(corpus, config, started)
     with pytest.raises(MissingTrainingInputError, match="has no validation samples"):
         run(config)
     assert not started
+
+
+# ── the shards the manifest lists (finding 11.4) ─────────────────────────
+
+
+def test_an_extra_training_shard_is_refused_by_name_before_any_step(
+    corpus, config, started, make_record,
+):
+    """A stale shard of an earlier build may hold games now in validation."""
+    write_shard(corpus.training_dir / "shard-00009.jsonl.gz",
+                [make_record(record_id="stale", game_id="gg")])
+    with pytest.raises(CorpusShardsError, match="training: shard-00009.jsonl.gz is not listed"):
+        run(config)
+    assert not started
+
+
+def test_a_missing_training_shard_is_refused_by_name(corpus, config, started):
+    (corpus.training_dir / "t.jsonl.gz").unlink()
+    write_shard(corpus.training_dir / "u.jsonl.gz", [])
+    with pytest.raises(CorpusShardsError, match="training: t.jsonl.gz is listed but absent"):
+        run(config)
+    assert not started
+
+
+def test_a_resized_training_shard_is_refused_with_both_counts(
+    corpus, config, started, make_record,
+):
+    write_shard(corpus.training_dir / "t.jsonl.gz", [
+        make_record(record_id="t0", game_id="tg"), make_record(record_id="t1", game_id="tg"),
+    ])
+    with pytest.raises(
+        CorpusShardsError, match=r"training: t.jsonl.gz holds 2 record\(s\), the manifest 1",
+    ):
+        run(config)
+    assert not started
+
+
+def test_a_shard_in_a_validation_stratum_the_manifest_does_not_list_is_refused(
+    corpus, config, started, make_record,
+):
+    stratum = corpus.directory / "validation" / "game-disjoint"
+    write_shard(stratum / "shard-00001.jsonl.gz", [make_record(record_id="v", game_id="gg")])
+    with pytest.raises(
+        CorpusShardsError, match="game-disjoint: shard-00001.jsonl.gz is not listed",
+    ):
+        run(config)
+    assert not started
+
+
+def test_a_manifest_listing_no_shards_is_refused_as_built_before_the_listing(
+    corpus, config, started,
+):
+    corpus.save(_manifest(shards={}))
+    _freeze(corpus, config.reports_dir)
+    with pytest.raises(CorpusShardsError, match="lists no shards"):
+        run(config)
+    assert not started
+
+
+def test_a_leftover_parts_directory_is_never_read(corpus, config, started, make_record):
+    write_shard(corpus.parts_dir / "training" / "p.jsonl.gz",
+                [make_record(record_id="old", game_id="gg")])
+    assert run(config) == 0
+    assert started[-1].training_shards == [corpus.training_dir / "t.jsonl.gz"]
 
 
 def test_a_manifest_without_per_rule_counts_is_refused(corpus, config, started):
@@ -490,6 +558,9 @@ def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
 
 def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(corpus, config, make_record):
     """FR-033: refused before any record is read."""
+    (corpus.training_dir / "t.jsonl.gz").unlink()
+    corpus.save(_manifest(shards={"training": (CuratedShard("gen1.jsonl.gz", 1),)}))
+    _freeze(corpus, config.reports_dir)
     _write_older_shard(corpus.training_dir / "gen1.jsonl.gz",
                        make_record(record_id="old", game_id="og"),
                        drop=("generation", "random_seat"))

@@ -178,11 +178,12 @@ def with_corpus_defaults(
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
     from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.curated_shards import require_listed_shards
     from effects.infrastructure.effect_model_store import (
         inference_files,
         load_effect_checkpoint,
     )
-    from effects.infrastructure.shard_io import iter_shards, require_generation
+    from effects.infrastructure.shard_io import require_generation
 
     main_path = Path(config.checkpoint)
     main = load_effect_checkpoint(main_path)
@@ -192,10 +193,13 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     corpus_path = resolve_corpus_path(
         main.provenance, corpus=config.corpus, checkpoint=main_path,
     )
-    manifest = CorpusStore(corpus_path).load()
+    store = CorpusStore(corpus_path)
+    manifest = store.load()
     check_corpus(main.provenance, actual_digest=manifest.digest())
-    # Before any record is read (FR-020, FR-033).
-    require_generation(iter_shards(Path(corpus_path)))
+    # The listed shards alone are read (finding 11.4), each checked before any
+    # record is (FR-020, FR-033).
+    listed = require_listed_shards(store, manifest)
+    require_generation(path for paths in listed.values() for path in paths)
     return EvaluationContext(
         with_corpus_defaults(config, manifest), main, files,
         corpus_path=corpus_path, manifest=manifest,

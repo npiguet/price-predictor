@@ -32,7 +32,9 @@ def _curated(root: Path, shard: Path) -> Path:
     its training shard and both validation samples, beside a manifest."""
     import shutil
 
+    from effects.domain.corpus_manifest import CuratedShard
     from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.curated_shards import count_records
     from tests.unit.effects.application.test_train_startup import _manifest
 
     store = CorpusStore(root / "corpus")
@@ -41,5 +43,6 @@ def _curated(root: Path, shard: Path) -> Path:
     shutil.copyfile(shard, store.training_dir / "t.jsonl.gz")
     for stratum in ("card-disjoint", "game-disjoint"):
         shutil.copyfile(shard, store.sample_path(stratum))
-    store.save(_manifest())
+    listed = CuratedShard("t.jsonl.gz", count_records(store.training_dir / "t.jsonl.gz"))
+    store.save(_manifest(shards={"training": (listed,)}))
     return store.directory

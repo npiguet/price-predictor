@@ -345,6 +345,17 @@ def test_the_curated_shards_round_trip_and_leave_the_digest_alone():
     assert listed.digest() == renamed.digest() == manifest().digest()
 
 
+def test_the_shard_listing_has_a_digest_of_its_own_that_names_and_counts_move():
+    """The listing is outside ``digest``, so a resume compares this one."""
+    one = CuratedShard(name="shard-00001.jsonl.gz", records=40)
+    base = manifest(shards={"training": (one,)})
+    renamed = manifest(shards={"training": (CuratedShard(name="a.jsonl.gz", records=40),)})
+    resized = manifest(shards={"training": (CuratedShard(name=one.name, records=41),)})
+    again = CorpusManifest.from_dict(json.loads(json.dumps(base.as_dict())))
+    assert base.shards_digest() == again.shards_digest()
+    assert len({base.shards_digest(), renamed.shards_digest(), resized.shards_digest()}) == 3
+
+
 def test_a_rule_row_s_drawn_count_stays_outside_the_digest():
     """``drawn`` reports which rule each added copy was drawn for; ``added`` holds
     the copies and decides, so changing ``drawn`` alone leaves the digest."""

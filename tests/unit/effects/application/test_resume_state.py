@@ -106,3 +106,23 @@ def test_the_training_settings_are_compared_as_recorded():
     settings = _settings(config, seed=7)
     assert "lethality_copies" not in settings
     assert settings["seed"] == 7
+
+
+def test_a_resume_against_another_shard_listing_is_a_mismatch():
+    """The listing sits outside the manifest's digest, so a rebuilt corpus
+    with the same decisions still moves the shards a resume would train on."""
+    config = TrainEffectModelConfig.unpathed()
+
+    def settings(listing_digest: str) -> dict:
+        return resume_settings(
+            RunSpec(
+                config, CorpusFacts(digest="d", shards_digest=listing_digest), seed=7,
+                tokenizer_hashes=tokenizer_hashes(config.tokenizer_files),
+            ),
+            training_settings={},
+        )
+
+    saved = settings("listing-a")
+    assert resume_mismatches(saved, settings("listing-a")) == []
+    mismatches = resume_mismatches(saved, settings("listing-b"))
+    assert [line.split(":")[0] for line in mismatches] == ["corpus_shards_digest"]

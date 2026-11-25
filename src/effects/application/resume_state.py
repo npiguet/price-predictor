@@ -67,6 +67,8 @@ def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
         "corpus_digest": spec.facts.digest,
         # Scores against another selection set do not compare (FR-069).
         "selection_set_digest": spec.facts.selection_set_digest,
+        # Outside the corpus digest: which shards the run trains on (11.4).
+        "corpus_shards_digest": spec.facts.shards_digest,
         **spec.tokenizer_hashes,
         **{name: getattr(config, name) for name in compared_flags()},
         **training_settings,

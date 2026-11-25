@@ -593,6 +593,16 @@ class CorpusManifest:
         payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
         return canonical_digest(payload).hex()
 
+    def shards_digest(self) -> str:
+        """A hash of the shard listing alone, which :meth:`digest` leaves out:
+        a resume compares it, so a rebuilt corpus deciding the same thing but
+        naming or sizing its shards differently is not trained on as the one
+        the run began on."""
+        return canonical_digest({
+            stratum: [asdict(shard) for shard in shards]
+            for stratum, shards in self.shards.items()
+        }).hex()
+
     def drift(self, current: tuple[SourceShard, ...]) -> ManifestDrift:
         """Shards added, removed and resized since the build, each sorted: what
         ``--verify`` reports (FR-144)."""

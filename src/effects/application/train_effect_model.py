@@ -27,7 +27,8 @@ from effects.domain.text_holdout import normalize_script_text
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.shard_io import iter_shards, require_generation
+from effects.infrastructure.curated_shards import require_listed_shards
+from effects.infrastructure.shard_io import require_generation
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,9 @@ class CorpusFacts:
     #: The digest of the selection set the control score reads, which every
     #: checkpoint records and a resume compares; empty without one.
     selection_set_digest: str = ""
+    #: The hash of the manifest's shard listing, which a resume compares
+    #: because the corpus digest leaves the listing out (finding 11.4).
+    shards_digest: str = ""
 
     @classmethod
     def of(cls, manifest) -> CorpusFacts:
@@ -343,6 +347,7 @@ class CorpusFacts:
             legality_mode_counts=manifest.legality_mode_counts,
             rule_outputs=manifest.effective_rule_outputs,
             digest=manifest.digest(),
+            shards_digest=manifest.shards_digest(),
             rule_map_digest=manifest.rule_map_digest,
             trained_classes=frozenset(
                 name for name, counts in manifest.per_class.items() if counts.kept
@@ -487,6 +492,28 @@ def with_variant_scripts(
     return replace(config, variant_scripts=tree)
 
 
+def _corpus_inputs(store: CorpusStore, manifest: CorpusManifest):
+    """The shards the manifest lists (each stratum's), the training ones among
+    them and the validation sample of each stratum; refuses a corpus lacking
+    training shards or samples, or whose shards are not the listed ones."""
+    corpus = store.directory
+    listed = require_listed_shards(store, manifest)
+    training_shards = list(listed[str(Stratum.TRAINING)])
+    if not training_shards:
+        raise MissingTrainingInputError(f"No training shards under {store.training_dir}.")
+    validation_samples = {
+        stratum: store.sample_path(stratum) for stratum in VALIDATION_STRATA
+    }
+    missing = [str(p) for p in validation_samples.values() if not p.exists()]
+    if missing:
+        raise MissingTrainingInputError(
+            f"The corpus at {corpus} has no validation samples "
+            f"({', '.join(missing)}). Rebuild it with a build-corpus that writes "
+            "validation/samples/."
+        )
+    return listed, training_shards, validation_samples
+
+
 def run(config: TrainEffectModelConfig) -> int:
     """Train the encoder and effect head jointly. Returns an exit code; a
     corpus it cannot train on is refused by exception, which the CLI maps to
@@ -510,21 +537,9 @@ def run(config: TrainEffectModelConfig) -> int:
     from effects.application.tokenizer_inputs import checked_tokenizer_hashes
 
     tokenizer_hashes = checked_tokenizer_hashes(config.tokenizer_files, manifest)
-    training_shards = iter_shards(store.training_dir)
-    if not training_shards:
-        raise MissingTrainingInputError(f"No training shards under {store.training_dir}.")
-    validation_samples = {
-        stratum: store.sample_path(stratum) for stratum in VALIDATION_STRATA
-    }
-    missing = [str(p) for p in validation_samples.values() if not p.exists()]
-    if missing:
-        raise MissingTrainingInputError(
-            f"The corpus at {config.corpus} has no validation samples "
-            f"({', '.join(missing)}). Rebuild it with a build-corpus that writes "
-            "validation/samples/."
-        )
+    listed, training_shards, validation_samples = _corpus_inputs(store, manifest)
     # Before any record is read (FR-020, FR-033).
-    require_generation(iter_shards(Path(config.corpus)))
+    require_generation(path for paths in listed.values() for path in paths)
     if not manifest.rule_counts:
         raise MissingTrainingInputError(
             f"The manifest of the corpus at {config.corpus} has no per-rule "

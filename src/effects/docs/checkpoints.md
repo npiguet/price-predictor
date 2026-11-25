@@ -28,4 +28,4 @@ Rules to respect when changing what a checkpoint or `resume.pt` holds, a loader,
 - A resume under a different seed, corpus, size, batching or layout digest is refused; a `resume.pt` that records no digest of a registered list is refused by its name. Every `TrainEffectModelConfig` field is compared except those in `resume_state.RESUME_MAY_CHANGE`, so a new flag is checked by default.
 - `--resume` decides under this run's patience and epochs whether anything is left, so a run that stopped early can be continued.
 - A new best epoch copies `resume.pt` to `resume-best.pt`, which another run directory can continue from.
-- A resume compares the selection set's digest with the one the run recorded.
+- A resume compares the selection set's digest with the one the run recorded, and `corpus_shards_digest`, the hash of the manifest's `shards` listing (`CorpusManifest.shards_digest`), which the corpus digest leaves out: a corpus rebuilt with the same decisions but other shards is refused, and so is a `resume.pt` recording none (`ResumeMismatchError`, "The resume file was written under other settings: corpus_shards_digest: resume file …, this run …").
