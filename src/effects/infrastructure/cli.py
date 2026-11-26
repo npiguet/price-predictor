@@ -308,18 +308,27 @@ def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = Non
     )
 
 
+def _variant_scripts_help(without: str = "no variant tree is read") -> str:
+    """The help of an optional ``--variant-scripts``; ``without`` says what
+    leaving it unset costs."""
+    return (
+        "The perturbed-script tree collect-variants wrote (usually "
+        f"an inputs run); unset, {without}"
+    )
+
+
 def _add_variant_scripts(
     parser: argparse.ArgumentParser, *,
-    without: str = "no variant tree is read",
+    help_text: str | None = None,
     path_type: Callable[[str], object] = _optional_path,
+    required: bool = False,
 ) -> None:
-    """``--variant-scripts``; ``without`` says what leaving it unset costs."""
+    """``--variant-scripts``, the one declaration every command uses. A command
+    that reads the tree to check or count it makes the flag ``required`` (an
+    empty value reads none), so a forgotten one cannot read as no variants."""
     parser.add_argument(
-        "--variant-scripts", type=path_type, default=None,
-        help=(
-            "The perturbed-script tree collect-variants wrote (usually "
-            f"an inputs run); unset, {without}"
-        ),
+        "--variant-scripts", type=path_type, required=required,
+        default=None, help=help_text or _variant_scripts_help(),
     )
 
 
@@ -741,7 +750,7 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
     _add_cards_folder(parser)
     add_config_flags(parser, BuildCorpusConfig, only=("vocab_path",))
     # A string rather than a path, as --vocab-path: the manifest records it.
-    _add_variant_scripts(parser, path_type=str, without=(
+    _add_variant_scripts(parser, path_type=str, help_text=_variant_scripts_help(
         "a variant line resolves to no ability text, so it escapes the rarity "
         "table and the per-text cap"
     ))
@@ -858,9 +867,8 @@ def _rule_counts_parser(subparsers) -> None:
         help="Counts file, inside an inputs run",
     )
     _add_cards_folder(parser)
-    parser.add_argument(
-        "--variant-scripts", type=_optional_path, required=True,
-        help="Variant sidecars the detectors read; empty reads none",
+    _add_variant_scripts(
+        parser, required=True, help_text="Variant sidecars the detectors read; empty reads none",
     )
     parser.add_argument(
         "--rules-dir", type=Path, default=Path("rules"),
@@ -936,12 +944,11 @@ def _validate_corpus_parser(subparsers) -> None:
     )
     add_config_flags(parser, Thresholds)
     _add_cards_folder(parser)
-    parser.add_argument(
-        "--variant-scripts", type=_optional_path, required=True,
-        help=("The perturbed-script tree whose keys a collect-variants corpus names; "
-              "a key in a tree not given fails the keyword-join check as unchecked; "
-              "empty reads none"),
-    )
+    _add_variant_scripts(parser, required=True, help_text=(
+        "The perturbed-script tree whose keys a collect-variants corpus names; "
+        "a key in a tree not given fails the keyword-join check as unchecked; "
+        "empty reads none"
+    ))
 
 
 @exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1})
@@ -1015,7 +1022,7 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     _add_cards_folder(parser)
-    _add_variant_scripts(parser, without=(
+    _add_variant_scripts(parser, help_text=_variant_scripts_help(
         "the tree the corpus's manifest records is read, if any"
     ))
     _add_variant(parser, help_text=(
@@ -1125,7 +1132,7 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         help="Baseline checkpoint to compare against; repeatable",
     )
     _add_cards_folder(parser, recorded=True)
-    _add_variant_scripts(parser, without=(
+    _add_variant_scripts(parser, help_text=_variant_scripts_help(
         "the tree the corpus's manifest records is read, if any"
     ))
     _add_recorded_tokenizer_paths(parser)
