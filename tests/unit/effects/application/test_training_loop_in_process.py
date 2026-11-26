@@ -194,7 +194,7 @@ def _shard(monkeypatch, directory, *, failing_at: int | None = None):
     run = SimpleNamespace(
         step=0, warmup=1, encoder=one_parameter_module(), model=model, training=None,
         # Averages nothing: these tests read the optimizer step alone.
-        average=WeightAverage({}, rate=1.0, warmup=1),
+        average=WeightAverage({}, rate=1.0, start=1),
         optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
     )
     loop._train_on_shard(

@@ -44,7 +44,8 @@ def test_every_flag_is_compared_unless_it_is_named_as_free():
 def test_the_compared_flags_are_the_ones_that_place_a_step():
     assert set(compared_flags()) == {
         "variant", "e_dim", "encoder_layers", "encoder_d_model",
-        "keyword_expand_p", "context_dropout", "curriculum_epoch", "batch_size",
+        "keyword_expand_p", "context_dropout", "curriculum_epoch",
+        "curriculum_rewarm_steps", "batch_size",
         "grad_accum", "steps_per_epoch", "shards_per_epoch", "withhold_keyword",
         "relation_values", "rule_mask", "deviance_floor", "ema_epochs",
         "stratum_weight",
@@ -53,7 +54,7 @@ def test_the_compared_flags_are_the_ones_that_place_a_step():
 
 @pytest.mark.parametrize("flag, value", [
     ("rule_mask", RuleMask.SOFT), ("deviance_floor", 0.05), ("ema_epochs", 2.0),
-    ("stratum_weight", 0.25), ("relation_values", "off"),
+    ("stratum_weight", 0.25), ("relation_values", "off"), ("curriculum_rewarm_steps", 100),
 ])
 def test_a_resume_changing_a_training_objective_flag_is_a_mismatch(flag, value):
     """Story 7 acceptance 5, for every flag contracts/cli.md lists."""

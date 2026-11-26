@@ -26,14 +26,36 @@ def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
     return max(1, int(epochs * steps_per_epoch * WARMUP_FRACTION))
 
 
-def learning_rate_at(step: int, *, warmup: int, scale: float = 1.0) -> float:
-    """Linear warmup, then constant, times ``--lr-scale``'s ``scale``: early
-    stopping ends the run, and a decay would make patience measure the
-    schedule instead of the model."""
+@dataclass(frozen=True)
+class Rewarm:
+    """The learning rate's second ramp, at the curriculum switch (finding
+    15.5): linear from 0 at step ``start`` to the scheduled rate ``steps``
+    later. The sparse columns had an exactly zero gradient until the switch,
+    so Adam's first updates of them would be several times the rate."""
+
+    start: int
+    steps: int
+
+    def factor(self, step: int) -> float:
+        """What the scheduled rate is multiplied by at ``step``: 1 before the
+        switch, ``(step - start) / steps`` within the ramp, 1 after it."""
+        if step < self.start:
+            return 1.0
+        return min(1.0, (step - self.start) / self.steps)
+
+
+def learning_rate_at(
+    step: int, *, warmup: int, scale: float = 1.0, rewarm: Rewarm | None = None,
+) -> float:
+    """Linear warmup, then constant, times ``--lr-scale``'s ``scale`` and the
+    curriculum's ``rewarm`` factor: early stopping ends the run, and a decay
+    would make patience measure the schedule instead of the model."""
     if step >= warmup:
         rate = LEARNING_RATE
     else:
         rate = LEARNING_RATE * (step + 1) / warmup
+    if rewarm is not None:
+        rate *= rewarm.factor(step)
     return rate * scale
 
 
@@ -63,6 +85,25 @@ class Curriculum:
         first-epoch curriculum, which leaves no earlier best measuring a
         different objective."""
         return self.epoch > 1 and epoch == self.epoch
+
+    def switch_step(self, steps_per_epoch: int) -> int | None:
+        """The run's training step (batches) the sparse group switches on at,
+        the first of ``epoch``; None at a first-epoch curriculum, which
+        switches nothing on."""
+        return (self.epoch - 1) * steps_per_epoch if self.epoch > 1 else None
+
+    def rewarm(self, *, steps_per_epoch: int, steps: int) -> Rewarm | None:
+        """The ``--curriculum-rewarm-steps`` ramp at the switch; None with no
+        switch or at 0 steps."""
+        switch = self.switch_step(steps_per_epoch)
+        return None if switch is None or steps <= 0 else Rewarm(switch, steps)
+
+    def average_start(self, *, warmup: int, steps_per_epoch: int) -> int:
+        """The training step the averaged weights start at: warmup's end, or
+        one epoch past the switch when that is later, so the average never
+        anchors on the weights from before the sparse group trained."""
+        switch = self.switch_step(steps_per_epoch)
+        return warmup if switch is None else max(warmup, switch + steps_per_epoch)
 
 
 #: What a stopper's state measures, written into ``resume.pt``: a resume file

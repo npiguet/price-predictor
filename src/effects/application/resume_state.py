@@ -113,8 +113,8 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
         "loss_denominators": (
             None if run.loss_denominators is None else run.loss_denominators.as_dict()
         ),
-        # ``state`` None while warmup lasts: the resumed run starts the
-        # average at warmup's end, as this one would have.
+        # ``state`` None before the average's start: the resumed run starts
+        # it there, as this one would have.
         "weight_average": run.average.state_dict(),
         # The stopper's own best, recorded under its data-model name too.
         "best_control_score": run.best_control_score,
@@ -181,8 +181,9 @@ def restore_resume(run: RunContext) -> int | None:
         torch.cuda.set_rng_state_all(state["rng"]["cuda"])
     epoch, run.step = state["epoch"], state["step"]
     # The run that started fixed its warmup from its own --epochs, which a
-    # resume may change.
-    run.warmup = run.average.warmup = state["warmup"]
+    # resume may change; the average's start follows from it and flags a
+    # resume compares, as the re-warm does from the step.
+    run.fix_warmup(state["warmup"])
     # Recomputed under this run's patience rather than read from the file, so
     # a run that stopped early continues when given more patience, or none
     # (FR-063f).

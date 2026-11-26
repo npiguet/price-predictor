@@ -5,7 +5,10 @@ table's parameters, updated after each optimizer step at rate
 ``grad_accum / (steps_per_epoch × ema_epochs)``: ``--steps-per-epoch`` counts
 batches, so the rate spans ``--ema-epochs`` epochs of optimizer steps. It
 starts from the weights at the end of warmup, since the warmup's weights are
-the least trained of the run and the average would carry them for epochs.
+the least trained of the run and the average would carry them for epochs, or
+one epoch after the curriculum switch when that is later
+(``Curriculum.average_start``): the weights from before the switch never
+trained the sparse columns.
 
 One copy of every parameter, on the parameters' device. Validation swaps the
 copy into the modules and back by exchanging the tensors' storage, so it adds
@@ -27,20 +30,21 @@ def average_rate(*, grad_accum: int, steps_per_epoch: int, ema_epochs: float) ->
 
 class WeightAverage:
     """The average over ``modules``' parameters, by module name and parameter
-    name; empty until :meth:`after_optimizer_step` reaches ``warmup``."""
+    name; empty until :meth:`after_optimizer_step` reaches ``start``."""
 
     def __init__(
-        self, modules: Mapping[str, torch.nn.Module | None], *, rate: float, warmup: int,
+        self, modules: Mapping[str, torch.nn.Module | None], *, rate: float, start: int,
     ) -> None:
         if not 0.0 < rate <= 1.0:
             raise ValueError(f"an average's rate is in (0, 1], not {rate}")
         self.rate = rate
-        self.warmup = warmup
+        #: The training step (batches) at or past which the average begins.
+        self.start = start
         self._parameters = {
             owner: dict(module.named_parameters())
             for owner, module in modules.items() if module is not None
         }
-        #: ``owner -> name -> averaged tensor``; None before warmup's end.
+        #: ``owner -> name -> averaged tensor``; None before ``start``.
         self._average: dict[str, dict[str, torch.Tensor]] | None = None
         #: The training step (batches) after which the average began.
         self.start_step: int | None = None
@@ -52,9 +56,9 @@ class WeightAverage:
     def after_optimizer_step(self, steps_taken: int) -> None:
         """Fold in the weights an optimizer step left, ``steps_taken`` being
         the run's training steps including this one: the first step at or
-        past warmup's end copies the weights, every later one lerps."""
+        past ``start`` copies the weights, every later one lerps."""
         if self._average is None:
-            if steps_taken >= self.warmup:
+            if steps_taken >= self.start:
                 self._start(steps_taken)
             return
         averaged, current = self._pairs()
@@ -108,7 +112,7 @@ class WeightAverage:
         )
 
     def state_dict(self) -> dict:
-        """``state`` (the averaged tensors, None before warmup's end) and
+        """``state`` (the averaged tensors, None before ``start``) and
         ``start_step``, as ``resume.pt`` carries them."""
         return {
             "state": (
@@ -122,7 +126,7 @@ class WeightAverage:
 
     def load_state_dict(self, state: Mapping | None) -> None:
         """Restore what :meth:`state_dict` wrote; None or an unstarted state
-        leaves the average to start at warmup's end, as the run it continues
+        leaves the average to start at ``start``, as the run it continues
         would have."""
         averaged = None if state is None else state.get("state")
         if averaged is None:

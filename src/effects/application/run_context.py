@@ -139,6 +139,12 @@ class RunContext:
     #: or the resumed run's; None until either sets it.
     loss_denominators: LossDenominators | None = None
 
+    def fix_warmup(self, warmup: int) -> None:
+        """Fix the run's warmup, and the averaged weights' start it decides,
+        at ``warmup``: a resume takes the one the run it continues fixed."""
+        self.warmup = warmup
+        self.average.start = average_start(self.spec.config, warmup)
+
     @property
     def best_control_score(self) -> float | None:
         """The best control score so far (FR-069), as ``resume.pt`` and every
@@ -183,6 +189,13 @@ def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,
         **layout_settings(),
     }
+
+
+def average_start(config: TrainEffectModelConfig, warmup: int) -> int:
+    """The training step the averaged weights start at under ``warmup``."""
+    return Curriculum(config.curriculum_epoch).average_start(
+        warmup=warmup, steps_per_epoch=config.steps_per_epoch,
+    )
 
 
 def epoch_fields(spec: RunSpec) -> dict[int, tuple[FieldSpec, ...]]:
@@ -236,11 +249,11 @@ def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) ->
             grad_accum=config.grad_accum, steps_per_epoch=config.steps_per_epoch,
             ema_epochs=config.ema_epochs,
         ),
-        warmup=warmup,
+        start=average_start(config, warmup),
     )
     logger.info(
         "Averaged weights: %.1f MB on %s, rate %.3g per optimizer step from step %d.",
-        average.nbytes() / 2**20, device, average.rate, warmup,
+        average.nbytes() / 2**20, device, average.rate, average.start,
     )
     return RunContext(
         spec=spec, device=device,

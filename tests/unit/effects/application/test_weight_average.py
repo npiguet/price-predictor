@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from effects.application.training_schedule import Curriculum
 from effects.application.weight_average import WeightAverage, average_rate
 
 
@@ -39,12 +40,12 @@ def test_the_rate_spans_ema_epochs_of_optimizer_steps():
 
 def test_a_rate_outside_zero_to_one_is_refused():
     with pytest.raises(ValueError):
-        WeightAverage(_modules(), rate=0.0, warmup=1)
+        WeightAverage(_modules(), rate=0.0, start=1)
 
 
-def test_nothing_is_averaged_before_warmup_ends_and_its_end_copies_the_weights():
+def test_nothing_is_averaged_before_the_start_and_the_start_copies_the_weights():
     modules = _modules()
-    average = WeightAverage(modules, rate=0.5, warmup=3)
+    average = WeightAverage(modules, rate=0.5, start=3)
     for steps_taken in (1, 2):
         _step(modules, 1.0)
         average.after_optimizer_step(steps_taken)
@@ -61,7 +62,7 @@ def test_nothing_is_averaged_before_warmup_ends_and_its_end_copies_the_weights()
 def test_each_later_step_lerps_toward_the_current_weights():
     modules = _modules()
     start = _weights(modules)
-    average = WeightAverage(modules, rate=0.25, warmup=1)
+    average = WeightAverage(modules, rate=0.25, start=1)
     average.after_optimizer_step(1)  # starts: the average is ``start``
     _step(modules, 4.0)
     average.after_optimizer_step(2)  # start + 0.25 * 4 = start + 1
@@ -74,7 +75,7 @@ def test_each_later_step_lerps_toward_the_current_weights():
 
 def test_reading_the_average_restores_the_trained_weights_bit_for_bit():
     modules = _modules()
-    average = WeightAverage(modules, rate=0.1, warmup=1)
+    average = WeightAverage(modules, rate=0.1, start=1)
     average.after_optimizer_step(1)
     _step(modules, 0.3)
     average.after_optimizer_step(2)
@@ -90,33 +91,33 @@ def test_reading_the_average_restores_the_trained_weights_bit_for_bit():
     assert params == [p for m in modules.values() for p in m.parameters()]
 
 
-def test_before_warmup_ends_the_current_weights_are_read():
+def test_before_the_start_the_current_weights_are_read():
     """Story 7 acceptance 4: such an epoch is validated on them."""
     modules = _modules()
-    average = WeightAverage(modules, rate=0.1, warmup=10)
+    average = WeightAverage(modules, rate=0.1, start=10)
     trained = _weights(modules)
     with average.applied() as averaged:
         assert not averaged
         assert all(torch.equal(v, _weights(modules)[k]) for k, v in trained.items())
 
 
-def test_the_state_round_trips_and_an_unstarted_one_starts_at_warmups_end():
+def test_the_state_round_trips_and_an_unstarted_one_starts_at_its_start():
     modules = _modules()
-    average = WeightAverage(modules, rate=0.5, warmup=1)
+    average = WeightAverage(modules, rate=0.5, start=1)
     average.after_optimizer_step(1)
     _step(modules, 2.0)
     average.after_optimizer_step(2)
     saved = average.state_dict()
     assert saved["start_step"] == 1 and set(saved["state"]) == {"encoder", "model"}
 
-    restored = WeightAverage(modules, rate=0.5, warmup=1)
+    restored = WeightAverage(modules, rate=0.5, start=1)
     restored.load_state_dict(saved)
     with average.applied():
         expected = _weights(modules)
     with restored.applied():
         assert all(torch.equal(v, _weights(modules)[k]) for k, v in expected.items())
 
-    unstarted = WeightAverage(modules, rate=0.5, warmup=5)
+    unstarted = WeightAverage(modules, rate=0.5, start=5)
     unstarted.load_state_dict({"state": None, "start_step": None})
     assert not unstarted.started
     unstarted.after_optimizer_step(5)
@@ -125,9 +126,20 @@ def test_the_state_round_trips_and_an_unstarted_one_starts_at_warmups_end():
 
 def test_an_absent_module_is_left_out_and_a_foreign_state_refused():
     modules = {**_modules(), "identity_table": None}
-    average = WeightAverage(modules, rate=0.5, warmup=1)
+    average = WeightAverage(modules, rate=0.5, start=1)
     average.after_optimizer_step(1)
     assert set(average.state_dict()["state"]) == {"encoder", "model"}
     assert average.nbytes() == 4 * (3 * 2 + 2 + 2 * 1 + 1)
     with pytest.raises(ValueError, match="other parameters"):
         average.load_state_dict({"state": {"encoder": {}}, "start_step": 1})
+
+
+def test_the_average_starts_one_epoch_after_the_curriculum_switch():
+    """Finding 15.5, D10 c: at the defaults (warmup 10,000, the switch at the
+    first step of epoch 3 at 5,000 steps an epoch, step 10,000) the average starts at
+    step 15,000, not on the switch; with no switch, at warmup's end."""
+    assert Curriculum(3).average_start(warmup=10_000, steps_per_epoch=5000) == 15_000
+    assert Curriculum(2).average_start(warmup=10_000, steps_per_epoch=5000) == 10_000
+    assert Curriculum(2).average_start(warmup=100, steps_per_epoch=5000) == 10_000
+    for epoch in (0, 1):
+        assert Curriculum(epoch).average_start(warmup=10_000, steps_per_epoch=5000) == 10_000

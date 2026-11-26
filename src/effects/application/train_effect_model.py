@@ -98,8 +98,8 @@ def on_off(value: str) -> str:
 def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
     """Refuse the flags no run can train with, before any start-up work: a
     count below one fails minutes in (or writes nothing), a negative
-    ``--lr-scale`` ascends, and a ``--curriculum-epoch`` past ``--epochs``
-    never trains the sparse group."""
+    ``--lr-scale`` ascends, a ``--curriculum-epoch`` past ``--epochs``
+    never trains the sparse group, and a negative re-warm has no ramp."""
     for name in ("grad_accum", "batch_size", "steps_per_epoch", "epochs"):
         if getattr(config, name) < 1:
             raise ValueError(
@@ -110,10 +110,19 @@ def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
             f"--lr-scale must not be negative, got {config.lr_scale}: a negative "
             "factor makes the optimizer ascend."
         )
+    _require_runnable_curriculum(config)
+
+
+def _require_runnable_curriculum(config: TrainEffectModelConfig) -> None:
     if config.curriculum_epoch > config.epochs:
         raise ValueError(
             f"--curriculum-epoch {config.curriculum_epoch} is above --epochs "
             f"{config.epochs}: the sparse field group would never train."
+        )
+    if config.curriculum_rewarm_steps < 0:
+        raise ValueError(
+            f"--curriculum-rewarm-steps must not be negative, got "
+            f"{config.curriculum_rewarm_steps}: 0 turns the re-warm off."
         )
 
 
@@ -167,8 +176,9 @@ class TrainEffectModelConfig:
     )})
     ema_epochs: float = field(default=1.0, metadata={"help": (
         "Span of the averaged weights validation, stopping and checkpoints "
-        "read, in epochs: each optimizer step after warmup weighs grad-accum / "
-        "(steps-per-epoch x this) (default: %(default)s)"
+        "read, in epochs: each optimizer step after the average starts (warmup's "
+        "end, or one epoch after the curriculum switch when later) weighs "
+        "grad-accum / (steps-per-epoch x this) (default: %(default)s)"
     )})
     stratum_weight: float = field(default=0.5, metadata={"help": (
         "Card-disjoint share of the control score, in [0, 1]; the game-disjoint "
@@ -212,6 +222,11 @@ class TrainEffectModelConfig:
     curriculum_epoch: int = field(default=3, metadata={"help": (
         "Epoch whose first step enables the sparse field group (default: %(default)s)"
     )})
+    curriculum_rewarm_steps: int = field(default=500, metadata={"help": (
+        "Training steps over which the learning rate ramps linearly from 0 back "
+        "to the scheduled rate at the curriculum switch; 0 turns the re-warm off "
+        "(default: %(default)s)"
+    )})
     batch_size: int = 32
     grad_accum: int = 1
     steps_per_epoch: int = 5_000
@@ -228,7 +243,7 @@ class TrainEffectModelConfig:
     epochs: int = 40
     patience: int = field(default=5, metadata={"help": (
         "Epochs without a new best control score before stopping, counted from "
-        "warmup's end; 0 never stops early (default: %(default)s)"
+        "the averaged weights' start; 0 never stops early (default: %(default)s)"
     )})
     withhold_keyword: str | None = field(default=None, metadata={"help": (
         "Hold one implemented keyword's token out of training, always expanding "

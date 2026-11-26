@@ -386,16 +386,16 @@ def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
 # ── the averaged weights (T4, story 7 acceptance 4) ─────────────────────
 
 
-def test_the_average_starts_at_warmups_end_and_moves_every_optimizer_step(in_process):
-    """The fixture's warmup is one step, so both epochs end past it."""
+def test_the_average_starts_one_epoch_after_the_curriculum_switch(in_process):
+    """The fixture's warmup is one step and its switch step 7, so the average
+    starts at step 14, epoch 2's last, from that step's weights.
+    ``test_curriculum_resume.py`` sees it move in the epoch after."""
     average = in_process["average"]
-    assert average["start_step"] == 1
+    assert average["start_step"] == 14
     assert set(average["state"]) == {"encoder", "model"}
-    assert any(
-        not torch.equal(value, in_process["parameters"][f"{owner}.{name}"])
-        for owner, tensors in average["state"].items()
-        for name, value in tensors.items()
-    )
+    for owner, tensors in average["state"].items():
+        for name, value in tensors.items():
+            assert torch.equal(value, in_process["parameters"][f"{owner}.{name}"]), name
 
 
 def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_path, caplog):

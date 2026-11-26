@@ -30,7 +30,7 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
     run = SimpleNamespace(
         step=0, encoder=None, model=torch.nn.Module(), optimizer=None, training=None,
         # Averages nothing: these tests read the optimizer step alone.
-        average=WeightAverage({}, rate=1.0, warmup=1),
+        average=WeightAverage({}, rate=1.0, start=1),
     )
     for epoch in (1, 2):
         tally = EpochTally(running=torch.zeros(()))
@@ -51,7 +51,7 @@ def test_a_shard_ending_between_boundaries_still_reports_its_last_norms(monkeypa
     run = SimpleNamespace(
         step=0, encoder=None, model=torch.nn.Module(), training=None,
         # Averages nothing: these tests read the optimizer step alone.
-        average=WeightAverage({}, rate=1.0, warmup=1),
+        average=WeightAverage({}, rate=1.0, start=1),
         optimizer=torch.optim.SGD([{"params": [weight], "name": "head"}], lr=0.1),
     )
     tally = EpochTally(running=torch.zeros(()))

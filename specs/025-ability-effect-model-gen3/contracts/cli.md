@@ -620,7 +620,8 @@ target, a balance rule cannot be met or a grid cell is empty, naming stratum, ha
 |---|---|---|
 | `--rule-mask hard\|soft` | hard | mask on added copies |
 | `--deviance-floor F` | 0.04 | constant-prediction loss floor, in nats |
-| `--ema-epochs E` | 1 | span of the averaged weights |
+| `--ema-epochs E` | 1 | span of the averaged weights, from `max(end of warmup, curriculum switch + --steps-per-epoch)` |
+| `--curriculum-rewarm-steps N` | 500 | steps over which the learning rate ramps linearly from 0 back to the scheduled rate at the curriculum switch; 0 turns it off |
 | `--relation-values on\|off` | on | train the relation value tables |
 | `--stratum-weight W` | 0.5 | card-disjoint share of the control score, in [0, 1] |
 | `--patience N` | 5 | epochs without a new best control score |
@@ -632,8 +633,10 @@ Startup, exit 1 when:
 - a record lacks `generation: 3`;
 - the manifest has no per-rule counts;
 - no selection set exists for the corpus digest under `--reports-dir`, or the one there was frozen for another corpus or edited;
-- resuming with a changed `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` or
-  `--relation-values`.
+- `--curriculum-rewarm-steps` is negative;
+- resuming with a changed `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`,
+  `--relation-values` or `--curriculum-rewarm-steps`, or from a `resume.pt` that records no
+  `--curriculum-rewarm-steps` (refused by that name).
 
 During training, exit 1 when an epoch meets a component with nothing to score, naming stratum, half
 and component.
@@ -661,9 +664,6 @@ checkpoint's recorded `--rule-mask`, `--stratum-weight` and `--deviance-floor`, 
 also summed up by head), `rule-tests <stratum> reporting` per rule, and `reporting-half control` beside the checkpoint's `best_control_score`;
 without a set it prints that the reporting half is skipped.
 
-`scripts/effect_knowledge_probes/run.py --checkpoint PATH`:
-
-| Flag | Default | Meaning |
 Each check prints when it is made, the three gates first, and the last line is the verdict, which names only gates 1 and 3 (gate 2 routes and never enters it):
 
 | Last line | When |
@@ -674,6 +674,9 @@ Each check prints when it is made, the three gates first, and the last line is t
 
 A reported check that raises (the UMAP picture, a breakdown, the reporting half, a geometry check) prints `[skip] <check>: <ExceptionType>: <message>`, its traceback goes to the log, and the exit code stays 0; an exception in a gate fails the run. The reported checks the base spec lists and no code builds print `[todo]` on every run: scaling calibration, the identity variant on the game-disjoint split, the state-only floor per kind, the taxonomy comparison on held-out prediction and decodability, the no-state comparison on decodability, the ward canary and scaling calibration, and the shared-text, novel-combination and numeric-extrapolation strata, beside the three FR-116 checks.
 
+`scripts/effect_knowledge_probes/run.py --checkpoint PATH`:
+
+| Flag | Default | Meaning |
 |---|---|---|
 | `--half both\|selection\|reporting` | both | the selection set's halves read and reported |
 | `--probe-set-dir DIR` | `--reports-dir` | where the selection set is read |

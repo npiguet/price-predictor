@@ -6,7 +6,7 @@ The schedule is ``training_schedule``'s pure functions and corpus reading
 steps a ``RunReporter``'s. An epoch is a step count, not a pass over the
 corpus, and walks ``--shards-per-epoch`` shards one at a time. Validation,
 stopping and the saved checkpoints read the averaged weights
-(``weight_average``) once warmup has ended, and the best checkpoint is the
+(``weight_average``) once the average has started, and the best checkpoint is the
 epoch of the best control score on them (FR-069): the frozen selection set's
 selection halves, scored by ``control_score``, which the validator prepares
 once at startup.
@@ -24,7 +24,7 @@ from typing import NamedTuple
 import torch
 
 from effects.application.control_score import FrozenSelection
-from effects.application.denominator_pass import denominator_shards, loss_denominators
+from effects.application.denominator_pass import denominator_tasks, loss_denominators
 from effects.application.resume_state import restore_resume, run_seed, save_resume
 from effects.application.run_context import (
     RunContext,
@@ -64,7 +64,6 @@ from effects.application.training_schedule import (
     steps_per_shard,
 )
 from effects.application.validation_pass import ValidationSamples, Validator
-from effects.domain.effect_head_layout import PER_ENTITY_FIELDS
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     EffectCheckpoint,
@@ -202,6 +201,10 @@ class TrainingLoop:
         self.validator = Validator(config, self.device, self.losses)
         self.reporter = RunReporter(config, facts)
         self.curriculum = Curriculum(config.curriculum_epoch)
+        #: The learning rate's ramp at the curriculum switch; None for none.
+        self.rewarm = self.curriculum.rewarm(
+            steps_per_epoch=config.steps_per_epoch, steps=config.curriculum_rewarm_steps,
+        )
         self._record_seed_and_device()
 
     def _record_seed_and_device(self) -> None:
@@ -236,11 +239,7 @@ class TrainingLoop:
             if first_epoch is None:
                 return 0
         if run.loss_denominators is None:
-            run.loss_denominators = loss_denominators(
-                run.preparer, denominator_shards(self.training_shards, seed=self.spec.seed),
-                fields=PER_ENTITY_FIELDS, batch_size=self.config.batch_size,
-                floor=self.config.deviance_floor, read=load_shard,
-            )
+            run.loss_denominators = self._loss_denominators(run)
         self.losses.use_denominators(run.loss_denominators)
 
         run.pool = self._start_workers(settings, run, first_epoch=first_epoch)
@@ -257,15 +256,28 @@ class TrainingLoop:
                 run.pool.close()
         return self._exit_code(run)
 
+    def _loss_denominators(self, run: RunContext):
+        """The startup pre-pass's denominators, over training steps prepared
+        as an epoch's are (finding 15.4)."""
+        tasks = denominator_tasks(
+            self.training_shards, seed=self.spec.seed,
+            steps_per_epoch=self.config.steps_per_epoch,
+            shards_per_epoch=self.config.shards_per_epoch,
+        )
+        return loss_denominators(
+            run.preparer, tasks, floor=self.config.deviance_floor, read=load_shard,
+        )
+
     def _exit_code(self, run: RunContext) -> int:
         """1 when no epoch set a best control score, so no checkpoint was
         written for this run's objective; ``resume.pt`` stays for a resume."""
         if run.stopper.best_score is not None:
             return 0
         logger.error(
-            "The run ended with no best epoch: no epoch past warmup's end (step "
-            "%d of %d) had a finite control score, so no checkpoint was written "
-            "for the current field set. Train longer, or resume.", run.step, run.warmup,
+            "The run ended with no best epoch: no epoch past the averaged weights' "
+            "start (step %d of %d) had a finite control score, so no checkpoint "
+            "was written for the current field set. Train longer, or resume.",
+            run.step, run.average.start,
         )
         return 1
 
@@ -289,8 +301,9 @@ class TrainingLoop:
         started = time.perf_counter()
         self._train_epoch(epoch, run, tally)
         trained = time.perf_counter() - started
-        # An epoch ending before warmup does has no average yet: it is
-        # validated on the current weights and is no best candidate.
+        # An epoch ending before the average starts (warmup's end, or one
+        # epoch past the curriculum switch) is validated on the current
+        # weights and is no best candidate.
         with run.average.applied() as averaged:
             scores = self.validator.epoch(run, samples, run.fields[epoch])
             best = self._save_epoch(epoch, run, scores.control.control, averaged=averaged)
@@ -463,7 +476,9 @@ class TrainingLoop:
         ))
 
     def _set_learning_rate(self, run: RunContext) -> float:
-        rate = learning_rate_at(run.step, warmup=run.warmup, scale=self.config.lr_scale)
+        rate = learning_rate_at(
+            run.step, warmup=run.warmup, scale=self.config.lr_scale, rewarm=self.rewarm,
+        )
         for group in run.optimizer.param_groups:
             group["lr"] = rate
         return rate

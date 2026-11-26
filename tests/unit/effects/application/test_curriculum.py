@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from effects.application.training_schedule import ControlScoreStopper, Curriculum
+import pytest
+
+from effects.application.training_schedule import (
+    LEARNING_RATE,
+    ControlScoreStopper,
+    Curriculum,
+    learning_rate_at,
+)
 from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, FieldGroup
 from effects.domain.sampling import SamplingClass
 
@@ -49,3 +56,33 @@ def test_the_loop_resets_the_stopper_when_the_curriculum_switches():
     assert curriculum.resets_at(2) is True
     assert curriculum.resets_at(3) is False
     assert Curriculum(1).resets_at(1) is False
+
+
+# ── the re-warm at the switch (finding 15.5, D10 a) ──
+
+
+def test_the_rate_re_warms_linearly_from_zero_at_the_switch():
+    """At the defaults (5,000 steps an epoch, warmup 10,000, the switch at
+    epoch 3) the switch is step 10,000; 250 steps into a 500-step re-warm the
+    rate is half the full one."""
+    rewarm = Curriculum(3).rewarm(steps_per_epoch=5000, steps=500)
+    rate = lambda step: learning_rate_at(step, warmup=10_000, rewarm=rewarm)  # noqa: E731
+    assert rate(9_999) == LEARNING_RATE
+    assert rate(10_000) == 0.0
+    assert rate(10_250) == pytest.approx(LEARNING_RATE / 2)
+    assert rate(10_500) == rate(20_000) == LEARNING_RATE
+
+
+def test_the_re_warm_multiplies_the_scheduled_rate():
+    """A switch inside warmup ramps the warmup's own rate, and ``--lr-scale``
+    scales both."""
+    rewarm = Curriculum(2).rewarm(steps_per_epoch=1000, steps=500)
+    assert learning_rate_at(1250, warmup=10_000, scale=0.5, rewarm=rewarm) == pytest.approx(
+        learning_rate_at(1250, warmup=10_000) * 0.5 * 0.5)
+
+
+def test_no_re_warm_without_a_switch_or_at_zero_steps():
+    assert Curriculum(3).rewarm(steps_per_epoch=5000, steps=0) is None
+    for epoch in (0, 1):
+        assert Curriculum(epoch).rewarm(steps_per_epoch=5000, steps=500) is None
+    assert learning_rate_at(10_000, warmup=10_000, rewarm=None) == LEARNING_RATE

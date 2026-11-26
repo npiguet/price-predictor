@@ -1275,6 +1275,11 @@ added.
   records, with that denominator clamped below at `--deviance-floor`.
 - The constant prediction is computed under the same distribution as the field's own
   loss.
+- The records are a seeded sample of training steps, prepared as training prepares them:
+  the rarity-weighted draw, the lethality copies and the rule mask. Each sampled shard is
+  read for the steps an epoch gives a shard, until 768 steps are planned. The draws are
+  keyed by the run's seed and an epoch no training epoch has, so any worker count draws
+  the same sample.
 
 ## 13.3 Counts and amounts
 
@@ -1287,13 +1292,20 @@ spec's Poisson. Gate 1's deviance margin reads the negative binomial deviance.
   epochs: each optimizer step moves the average toward the current weights by
   `--grad-accum` / (`--steps-per-epoch` × `--ema-epochs`), with `--steps-per-epoch`
   counting micro-batches.
-- The average starts from the weights at the end of the learning-rate warmup.
+- The average starts from the weights at step `max(end of warmup, curriculum switch +
+  --steps-per-epoch)`, the switch being the first step of `--curriculum-epoch`. A run with
+  no switch (`--curriculum-epoch` 1 or below) starts it at the end of warmup.
+- At the curriculum switch the learning rate re-warms: the scheduled rate is multiplied by
+  `(step - switch) / --curriculum-rewarm-steps` until that factor reaches 1. A
+  `--curriculum-rewarm-steps` of 0 re-warms nothing.
 - Validation, stopping and the saved checkpoints use the averaged weights. An epoch that
-  ends before the warmup does is validated on the current weights, and is neither a best
-  candidate nor counted by `--patience`.
+  ends before the average starts is validated on the current weights, and is neither a
+  best candidate nor counted by `--patience`.
 - `resume.pt` carries the averaged weights and the step they started from.
 - A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-epochs`,
-  `--stratum-weight` or `--relation-values`.
+  `--stratum-weight`, `--relation-values` or `--curriculum-rewarm-steps`. The re-warm and
+  the average's start follow from the step, the warmup `resume.pt` records and flags a
+  resume compares, so `resume.pt` stores nothing more for them.
 
 # 14. Checkpoint selection and evaluation
 
