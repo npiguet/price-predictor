@@ -29,6 +29,10 @@ _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
 @pytest.fixture(scope="module")
 def rows() -> list[RecordResult]:
+    return fixture_rows()
+
+
+def fixture_rows() -> list[RecordResult]:
     """One row per real fixture record, with a deterministic made-up loss."""
     sidecars = SidecarCache({
         "cardsfolder": _FIXTURES / "gen3-sidecars" / "cardsfolder",

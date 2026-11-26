@@ -20,7 +20,7 @@ from tests.unit.effects.application import test_breakdowns
 @pytest.fixture(scope="module")
 def rows():
     """``test_breakdowns``' fixture records, one scored row each."""
-    return test_breakdowns.rows._get_wrapped_function()()
+    return test_breakdowns.fixture_rows()
 
 
 def _checks(rows):

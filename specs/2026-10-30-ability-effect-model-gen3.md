@@ -1275,6 +1275,11 @@ added.
   records, with that denominator clamped below at `--deviance-floor`.
 - The constant prediction is computed under the same distribution as the field's own
   loss.
+- The records are a seeded sample of training steps, prepared as training prepares them:
+  the rarity-weighted draw, the lethality copies and the rule mask. Each sampled shard is
+  read for the steps an epoch gives a shard, until 768 steps are planned. The draws are
+  keyed by the run's seed and an epoch no training epoch has, so any worker count draws
+  the same sample.
 
 ## 13.3 Counts and amounts
 
@@ -1287,13 +1292,20 @@ spec's Poisson. Gate 1's deviance margin reads the negative binomial deviance.
   epochs: each optimizer step moves the average toward the current weights by
   `--grad-accum` / (`--steps-per-epoch` × `--ema-epochs`), with `--steps-per-epoch`
   counting micro-batches.
-- The average starts from the weights at the end of the learning-rate warmup.
+- The average starts from the weights at step `max(end of warmup, curriculum switch +
+  --steps-per-epoch)`, the switch being the first step of `--curriculum-epoch`. A run with
+  no switch (`--curriculum-epoch` 1 or below) starts it at the end of warmup.
+- At the curriculum switch the learning rate re-warms: the scheduled rate is multiplied by
+  `(step - switch) / --curriculum-rewarm-steps` until that factor reaches 1. A
+  `--curriculum-rewarm-steps` of 0 re-warms nothing.
 - Validation, stopping and the saved checkpoints use the averaged weights. An epoch that
-  ends before the warmup does is validated on the current weights, and is neither a best
-  candidate nor counted by `--patience`.
+  ends before the average starts is validated on the current weights, and is neither a
+  best candidate nor counted by `--patience`.
 - `resume.pt` carries the averaged weights and the step they started from.
 - A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-epochs`,
-  `--stratum-weight` or `--relation-values`.
+  `--stratum-weight`, `--relation-values` or `--curriculum-rewarm-steps`. The re-warm and
+  the average's start follow from the step and those flags, so `resume.pt` stores nothing
+  more for them.
 
 # 14. Checkpoint selection and evaluation
 
@@ -1587,5 +1599,6 @@ Printed output
 | checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, the best control score, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's map content hash and the selection set's digest; record the input layout `gen-3` and a sha256 digest of every ordered name list that fixes a row or column of the model's tables (the relation types in table order (§ 10.3), every input vocabulary, each output head's fields and classes), and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, with a different digest, or recording no digest of a list |
 | `resume.pt` | every epoch | adds the averaged weights, the loss denominators and the best control score |
 | knowledge-probe scorecards | per checkpoint | add the selection set's digest and, per stratum and half, the probes of § 14.5 and the rule tests |
+| `breakdowns.csv` in `--output` | by `evaluate-effect-model` | every breakdown line's field means with the records each read, columns `check,qualifier,field,value,records`; the console prints each line's totals |
 
 Run results land in the gen-3 record's Result section, never in this spec.
