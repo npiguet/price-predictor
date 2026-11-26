@@ -334,7 +334,8 @@ def score_grids(probe_model, selection, read: HalfRead) -> dict[str, dict]:
 
 
 #: A stratum's rule tests where the half holds none.
-NO_RULE_TESTS: dict = {"rules": {}, "left_out": [], "component": float("nan")}
+NO_RULE_TESTS: dict = {"rules": {}, "left_out": [], "left_out_outputs": [],
+                       "component": float("nan")}
 
 
 def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, dict]:
@@ -344,8 +345,10 @@ def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, di
     over the map's outputs a head reads of ``2·AUC − 1`` (``fires`` ranked
     above ``does_not_fire``, the category and direction read off the records'
     own targets), clipped below at −1; ``left_out`` the rules with no output
-    a head reads or no finite reading of both polarities; ``component`` their
-    mean, NaN with none. Each distinct record is read once, so no rule mask
+    a head reads, no output whose targets differ between the polarities, or no
+    reading of both polarities; ``left_out_outputs`` the ``rule/output`` names
+    of constant outputs of rules that keep others; ``component`` their mean,
+    NaN with none. Each distinct record is read once, so no rule mask
     weighs anything here."""
     from effects.application.control_score import score_half
     from effects.application.freeze_selection_set import stratum_reader
@@ -360,7 +363,10 @@ def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, di
         mask=None,
         stratum_weight=0.5, deviance_floor=0.0, components=(RULE_TESTS,))
     return {stratum: {"rules": dict(score.items.get(RULE_TESTS, {})),
-                      "left_out": list(score.left_out.get(RULE_TESTS, ())),
+                      "left_out": [name for name in score.left_out.get(RULE_TESTS, ())
+                                   if "/" not in name],
+                      "left_out_outputs": [name for name in score.left_out.get(RULE_TESTS, ())
+                                           if "/" in name],
                       "component": score.components[RULE_TESTS]}
             for stratum, score in scored.strata.items()}
 

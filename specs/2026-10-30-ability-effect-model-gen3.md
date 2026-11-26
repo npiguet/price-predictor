@@ -1318,7 +1318,8 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
     columns. A field whose constant-prediction loss is at or below `--deviance-floor` is
     left out of the mean.
 - Each score is rescaled so that 0 is no better than its baseline and 1 is perfect, then
-  clipped below at −1:
+  clipped below at −1. An item with any reading of the model that is not finite scores −1, and
+  the epoch log counts those readings per stratum:
   - an AUC as 2 × AUC − 1;
   - an R² and an explained deviance as they are;
   - a grid as one minus the ratio of its error to the error of predicting the grid's mean
@@ -1398,6 +1399,9 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
   output is read conditionally, at the entities its targets mark affected.
 - A rule test's score is the AUC with which that prediction ranks the records where the
   outcome happens above those where it does not, averaged over the rule's outputs.
+- A rule-test output whose mean target differs between `fires` and `does_not_fire` by less than
+  1e-6 is not read and is named in the scored half's left-out items; a rule with no output left is
+  left out.
 - A rule whose test records in a stratum hold one polarity only is left out of that
   stratum's rule-test component.
 - For a rule whose effective outputs are all per-entity, only test records naming an outcome

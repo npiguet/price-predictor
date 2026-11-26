@@ -230,6 +230,7 @@ class RunReporter:
         )
         logger.info("epoch %d | %s", epoch, format_control(scores.control, best))
         logger.info("epoch %d | %s", epoch, format_deviance(scores.control))
+        logger.info("epoch %d | %s", epoch, format_non_finite(scores.control))
         logger.info(
             "epoch %d | control score scored in %.1fs, %.2f of the epoch's %.0fs of "
             "training (research E2 targets at most 0.2)", epoch, scores.control_seconds,
@@ -281,6 +282,14 @@ def format_control(control, best: float | None) -> str:
         parts.append(f"{stratum} {values} score {score.score:.3f}")
     shown = "none" if best is None else f"{best:.3f}"
     return " | ".join([*parts, f"control {control.control:.3f}", f"best {shown}"])
+
+
+def format_non_finite(control) -> str:
+    """The readings of each stratum this epoch that were not finite, each
+    scored at the floor with its item: ``non-finite readings: card-disjoint 0
+    | game-disjoint 3``."""
+    parts = [f"{stratum} {score.non_finite}" for stratum, score in sorted(control.strata.items())]
+    return "non-finite readings: " + " | ".join(parts)
 
 
 def format_deviance(control) -> str:

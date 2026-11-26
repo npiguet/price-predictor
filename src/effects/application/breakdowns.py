@@ -336,6 +336,8 @@ def half_score_checks(
         detail = f"{games.get(stratum, 0)} games; score = the mean of the four components"
         if missing:
             detail += f"; nothing to score in {', '.join(missing)}"
+        if scored.non_finite:
+            detail += f"; {scored.non_finite} non-finite reading(s) scored at -1"
         checks.append(CheckResult(where, CheckStatus.REPORTED, detail, {
             **dict(scored.components), "score": scored.score}))
         for component in COMPONENTS:

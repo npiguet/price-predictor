@@ -96,10 +96,14 @@ class TestRescaling:
         assert grid_mean_error(answers) == pytest.approx(0.375)
         assert grid_score([[0.25] * 4] * 2, answers) == pytest.approx(0.0)
 
-    def test_a_reading_that_is_not_finite_is_dropped_from_its_cell(self):
+    def test_a_reading_that_is_not_finite_makes_the_grid_error_infinite_and_scores_the_floor(self):
         answers = [[0.0, 1.0], [1.0, 1.0]]
-        assert grid_error([[0.0, float("nan")], [1.0, 0.0]], answers) == pytest.approx(0.25)
-        assert math.isnan(grid_score([[float("nan")] * 2, [1.0, 1.0]], answers))
+        reads = [[0.0, float("nan")], [1.0, 0.0]]
+        assert math.isinf(grid_error(reads, answers))
+        assert grid_score(reads, answers) == -1.0
+
+    def test_a_cell_with_no_record_is_nothing_to_score(self):
+        assert math.isnan(grid_error([[], [1.0]], [[], [1.0]]))
 
     def test_clipping_floors_at_minus_one_and_keeps_nan(self):
         assert clipped(-3.0) == -1.0

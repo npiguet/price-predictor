@@ -515,7 +515,9 @@ class TestTheReportingHalf:
         for stratum in STRATA:
             assert set(score.strata[stratum].components) == set(COMPONENTS)
             assert set(score.strata[stratum].items[RULE_TESTS]) == {"r.board"}
-        assert score.strata["card-disjoint"].left_out[RULE_TESTS] == ("r.unread",)
+        left_out = score.strata["card-disjoint"].left_out[RULE_TESTS]
+        assert "r.unread" in left_out
+        assert any(name.startswith("r.board/") for name in left_out)  # a constant target
 
     def test_a_training_run_still_reads_the_selection_half(self, run, records):
         """The validator names no half: the default is the selection half."""

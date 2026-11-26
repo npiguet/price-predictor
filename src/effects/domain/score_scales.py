@@ -114,15 +114,18 @@ def grid_mean_error(answers) -> float:
 def grid_error(predicted, answers) -> float:
     """A grid's MAE, ``(1/C) Σ_c mean_r |p_rc − y_rc|``: ``predicted`` and
     ``answers`` hold, per cell, each record's reading and the rule's answer
-    for that record. A reading that is not finite is dropped from its cell;
-    NaN when a cell has none left."""
-    errors = []
+    for that record. Infinite when any reading is not finite (a model that
+    overflows is worse than any finite error); NaN when a cell holds no
+    record, which is nothing to score."""
+    errors, unreadable = [], False
     for read, answer in zip(_cells(predicted), _cells(answers), strict=True):
-        kept = np.isfinite(read)
-        if not kept.any():
+        if not read.size:
             return float("nan")
-        errors.append(float(np.abs(read[kept] - answer[kept]).mean()))
-    return float(np.mean(errors)) if errors else float("nan")
+        unreadable = unreadable or not np.isfinite(read).all()
+        errors.append(float(np.abs(read - answer).mean()))
+    if not errors:
+        return float("nan")
+    return float("inf") if unreadable else float(np.mean(errors))
 
 
 def grid_score(predicted, answers) -> float:
@@ -131,11 +134,17 @@ def grid_score(predicted, answers) -> float:
     and ``B`` is :func:`grid_mean_error` over the same answers. NaN when the
     answer is the same for every record in every cell (``B = 0``), a grid the
     precision target leaves out (:func:`grid_standard_error` is infinite
-    there)."""
+    there); :data:`SCORE_FLOOR` when a reading is not finite."""
     baseline = grid_mean_error(answers)
     if not baseline > 0:
         return float("nan")
-    return 1.0 - grid_error(predicted, answers) / baseline
+    error = grid_error(predicted, answers)
+    return SCORE_FLOOR if math.isinf(error) else 1.0 - error / baseline
+
+
+def non_finite(values) -> int:
+    """How many of a model's readings ``values`` are not finite."""
+    return int(np.count_nonzero(~np.isfinite(np.asarray(values, dtype=np.float64))))
 
 
 def grouped_mean(scores: Mapping[str, float], group: Callable[[str], str]) -> float:

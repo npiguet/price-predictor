@@ -157,10 +157,12 @@ from effects.domain.rule_mask import (
 )
 from effects.domain.sampling import SamplingClass
 from effects.domain.score_scales import (
+    SCORE_FLOOR,
     auc,
     clipped,
     grid_score,
     grouped_mean,
+    non_finite,
     rescaled_auc,
 )
 from effects.domain.selection_set import (
@@ -196,6 +198,9 @@ FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 #: card beside a training run's state, and runs several times faster than
 #: chunks of a training batch's size (T160).
 CHUNK_RECORDS = 128
+#: The least a rule-test output's mean target must differ between the
+#: polarities (in its most different category) for the output to be read.
+MIN_DIFFERENCE = 1e-6
 
 
 class ControlScoreError(RuntimeError):
@@ -277,6 +282,9 @@ class StratumScore:
     items: Mapping[str, Mapping[str, float]]
     #: ``component -> items read but left out this epoch, with why``.
     left_out: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: The model readings (and deviance terms) this epoch that were not
+    #: finite; each was scored at the floor (:data:`SCORE_FLOOR`) with its item.
+    non_finite: int = 0
 
     @property
     def score(self) -> float:
@@ -328,7 +336,11 @@ def component_score(items: Mapping[str, float], *, stratum: str, component: str,
 
 def probe_item(kind: str, labels: Sequence[float], predictions: Sequence[float]) -> float:
     """A probe type on the common scale: ``2·AUC − 1`` for a binary one, R²
-    for an amount; NaN where it cannot be scored."""
+    for an amount; :data:`SCORE_FLOOR` when any prediction is not finite (an
+    overflowing model is scored at the floor, never on the rows it can read);
+    NaN where it cannot be scored."""
+    if non_finite(predictions):
+        return SCORE_FLOOR
     score = item_score(kind, labels, predictions)
     return rescaled_auc(score) if kind == BINARY and not math.isnan(score) else score
 
@@ -336,10 +348,13 @@ def probe_item(kind: str, labels: Sequence[float], predictions: Sequence[float])
 def rule_item(outputs: Iterable[tuple[Sequence[float], Sequence[float]]]) -> float:
     """A rule test on the common scale: the mean over its outputs of
     ``2·AUC − 1``, ``fires`` ranked above ``does_not_fire``; each output is
-    ``(fires readings, does_not_fire readings)``, and one without a finite
-    reading of both polarities is left out. NaN with none left."""
+    ``(fires readings, does_not_fire readings)``, and one without a reading
+    of both polarities is left out. NaN with none left; :data:`SCORE_FLOOR`
+    when any reading is not finite."""
     scores = []
     for fires, does_not in outputs:
+        if non_finite(fires) or non_finite(does_not):
+            return SCORE_FLOOR
         value = auc([True] * len(fires) + [False] * len(does_not), [*fires, *does_not])
         if not math.isnan(value):
             scores.append(rescaled_auc(value))
@@ -351,13 +366,13 @@ def explained_deviance(parts: Mapping[str, float], floor: Mapping[str, float], *
     """``1 − loss / constant loss`` per item of ``kept`` the pass scored (an
     output term of any shipped head, ``selection_set.deviance_item``), leaving
     out each whose constant-prediction loss is at or below ``deviance_floor``
-    (FR-068)."""
+    (FR-068). A term whose loss is not finite scores :data:`SCORE_FLOOR`."""
     out = {}
     for name in kept:
         loss, constant = parts.get(name), floor.get(name)
         if loss is None or constant is None or constant <= deviance_floor:
             continue
-        out[name] = 1.0 - loss / constant
+        out[name] = 1.0 - loss / constant if math.isfinite(loss) else SCORE_FLOOR
     return out
 
 
@@ -642,9 +657,16 @@ class _OutputReading:
         self.sums[polarity] = vector if held is None else held + vector
         self.counts[polarity] += 1
 
+    def positions(self) -> list[int]:
+        """Every value position this output's records are read at."""
+        return [position for record in (*self.fires, *self.does_not) for position in record]
+
     def settle(self) -> bool:
         """Choose the category and direction from the targets; False when no
-        ``fires`` record observed the output."""
+        ``fires`` record observed the output, or when no category's mean
+        target differs between the polarities by :data:`MIN_DIFFERENCE`: such
+        an output decides nothing about the rule, and its AUC would enter the
+        rule's mean at full weight."""
         if not self.counts[FIRES]:
             return False
         fires = self.sums[FIRES] / self.counts[FIRES]
@@ -653,7 +675,7 @@ class _OutputReading:
         difference = fires - does_not
         self.candidate = int(np.argmax(np.abs(difference)))
         self.sign = -1.0 if difference[self.candidate] < 0 else 1.0
-        return True
+        return bool(abs(difference[self.candidate]) >= MIN_DIFFERENCE)
 
     def __call__(self, heads: _Heads, rows: torch.Tensor,
                  columns: torch.Tensor) -> torch.Tensor:
@@ -867,6 +889,9 @@ class _GridItem:
     #: Per cell, the rule's answer for each record at the same index of ``cells``.
     answers: list[list[float]]
 
+    def positions(self) -> list[int]:
+        return [position for cell in self.cells for position in cell]
+
     def add(self, cell: int, position: int, answer: float) -> None:
         self.cells[cell].append(position)
         self.answers[cell].append(answer)
@@ -889,6 +914,8 @@ class _StratumCache:
     kept_items: frozenset[str] = frozenset()
     left_out: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     floors: dict[tuple, dict[str, float]] = field(default_factory=dict)
+    #: The deviance terms the last epoch found with a loss that is not finite.
+    unreadable_terms: int = 0
 
     def position(self) -> int:
         self.values += 1
@@ -1040,6 +1067,7 @@ class ControlScorer:
             {component: {name: clipped(value) for name, value in by_item.items()
                          if not math.isnan(value)} for component, by_item in items.items()},
             {component: names for component, names in left_out.items() if names},
+            non_finite(values[_scored_positions(cache)]) + cache.unreadable_terms,
         )
 
     def _values(self, cache: _StratumCache, forward: RecordForward) -> np.ndarray:
@@ -1061,6 +1089,8 @@ class ControlScorer:
 
     def _deviance(self, cache: _StratumCache, forward: RecordForward,
                   losses: StepLossComputer, fields: tuple[FieldSpec, ...]) -> dict[str, float]:
+        """The deviance items; ``cache.unreadable_terms`` takes the number of
+        kept terms whose loss is not finite."""
         if not cache.steps:
             return {}
         names = {spec.name for spec in fields}
@@ -1078,8 +1108,10 @@ class ControlScorer:
         if kept is not None:
             cache.floors[key] = deviance_items(
                 constant_predictor_losses(kept.sample, fields=fields, weighted=True))
-        explained = explained_deviance(parts.means(), cache.floors[key],
+        means = parts.means()
+        explained = explained_deviance(means, cache.floors[key],
                                        kept=cache.kept_items, deviance_floor=self.deviance_floor)
+        cache.unreadable_terms = non_finite([means[name] for name in explained])
         if not explained and self.strict:
             raise ControlScoreError(
                 cache.stratum, cache.half, DEVIANCE,
@@ -1093,16 +1125,21 @@ def _device_of(forward: RecordForward) -> torch.device:
     return materializer.device if materializer is not None else torch.device("cpu")
 
 
+def _scored_positions(cache: _StratumCache) -> np.ndarray:
+    """The value positions an item of the cache reads: a left-out output's
+    readings, taken but scored by nothing, are not among them."""
+    held = [item.positions for item in cache.probes.values()]
+    held += [item.positions() for item in cache.grids.values()]
+    held += [reading.positions() for outputs in cache.rules.values()
+             for reading in outputs.values()]
+    return np.unique(np.concatenate([np.asarray(h, dtype=np.int64) for h in held]
+                                    or [np.empty(0, dtype=np.int64)]))
+
+
 def _record_values(records: list[list[int]], values: np.ndarray) -> list[float]:
-    """Each record's reading, the mean over its entities' finite readings;
-    a record with none is dropped."""
-    out = []
-    for positions in records:
-        read = values[positions]
-        read = read[np.isfinite(read)]
-        if read.size:
-            out.append(float(read.mean()))
-    return out
+    """Each record's reading, the mean over its entities' readings (not
+    finite when any is: :func:`rule_item` scores that at the floor)."""
+    return [float(values[positions].mean()) for positions in records if positions]
 
 
 def _grid_item(item: _GridItem, values: np.ndarray) -> float:
@@ -1199,14 +1236,7 @@ def _prepare_stratum(
     cache.chunks = plain.chunks + edited.chunks
     cache.steps = steps
     cache.kept_items = _kept_items(selection, stratum, mask, half=half)
-    for rule in list(cache.rules):
-        settled = {output: reading for output, reading in cache.rules[rule].items()
-                   if reading.settle()}
-        if settled:
-            cache.rules[rule] = settled
-        else:
-            del cache.rules[rule]
-            cache.left_out[RULE_TESTS].append(rule)
+    _settle_rules(cache)
     empty = [component for component, held in (
         (PROBES, cache.probes), (GRIDS, cache.grids), (RULE_TESTS, cache.rules),
         (DEVIANCE, cache.steps and cache.kept_items)) if component in components and not held]
@@ -1217,9 +1247,26 @@ def _prepare_stratum(
     for component in empty:
         logger.info("Control score, %s %s: no %s item to read.", stratum, half, component)
     if cache.left_out[RULE_TESTS]:
-        logger.info("Control score, %s: %d rule(s) have no output a head reads: %s", stratum,
+        logger.info("Control score, %s: %d rule(s) or output(s) are left out (no output a head "
+                    "reads, or a target the same in both polarities): %s", stratum,
                     len(cache.left_out[RULE_TESTS]), ", ".join(cache.left_out[RULE_TESTS][:12]))
     return cache
+
+
+def _settle_rules(cache: _StratumCache) -> None:
+    """Keep each rule's outputs whose targets settle a direction; name in
+    ``left_out`` a rule with none (``rule``) and an output of a rule that
+    keeps others (``rule/output``)."""
+    for rule in list(cache.rules):
+        outputs = cache.rules[rule]
+        settled = {output: reading for output, reading in outputs.items() if reading.settle()}
+        if settled:
+            cache.rules[rule] = settled
+            cache.left_out[RULE_TESTS] += [f"{rule}/{output}" for output in outputs
+                                           if output not in settled]
+        else:
+            del cache.rules[rule]
+            cache.left_out[RULE_TESTS].append(rule)
 
 
 #: ``record_id -> [(grid, entities, the rule's answer in each cell)]``.

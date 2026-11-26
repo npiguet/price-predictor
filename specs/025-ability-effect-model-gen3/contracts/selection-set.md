@@ -74,8 +74,8 @@ record gives no slot is counted and logged. The selection set
 records no scenario category, so an output's category, or member, is the one whose observed share in
 the frozen records' own targets differs most between `fires` and `does_not_fire`, read as its
 complement where the difference is negative; a count or delta takes the sign of the mean difference;
-an output no head carries, or one no `fires` record observes, is not read, and a rule left with none
-is left out. Every item is clipped below at −1. A component is the mean of its items, and a stratum score the mean
+an output no head carries, one no `fires` record observes, or one whose mean target differs between the polarities by less than 1e-6 (named `rule/output` in the scorer's left-out items; the freeze does not test it) is not read, and a rule left with none
+is left out. Every item is clipped below at −1, and an item with any non-finite reading of the model scores −1. A component is the mean of its items, and a stratum score the mean
 of its four components; the grid component is the mean over the damage, combat and evasion grids of
 each grid's mean over its scored variants (`combat/…` and `combat-several/…` both being the combat
 grid's; `grid_edits.grid_of`), a grid with none scored left out. `control = W · card_disjoint + (1 − W) · game_disjoint`. The deviance
