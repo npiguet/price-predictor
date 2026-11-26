@@ -179,18 +179,28 @@ class RecordForward:
                 )
 
 
+@dataclass(frozen=True)
+class EntityScoring:
+    """What :func:`entity_chunks` runs a pass with: the forward, the batcher
+    that prepares each chunk, and the head fields whose targets are read."""
+
+    forward: RecordForward
+    batcher: SurfaceBatcher
+    fields: tuple[FieldSpec, ...]
+
+
 def entity_chunks(
-    records, forward: RecordForward, batcher: SurfaceBatcher,
-    fields: tuple[FieldSpec, ...], *, size: int = BATCH_RECORDS,
+    records, scoring: EntityScoring, *, size: int = BATCH_RECORDS,
 ) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
     """``(chunk, gathered, targets)`` per chunk of ``records``, on the host,
     ``gathered`` aligned column for column with the unmasked targets: gate 1's
     margins and the evaluation's breakdowns read one pass."""
-    for chunk in forward.records(records, batcher, size=size):
+    for chunk in scoring.forward.records(records, scoring.batcher, size=size):
         yield (chunk.records, chunk.at_entities(),
-               per_entity_targets(chunk.records, chunk.surfaces, fields))
+               per_entity_targets(chunk.records, chunk.surfaces, scoring.fields))
 
 
 __all__ = [
-    "BATCH_RECORDS", "ForwardOutputs", "RecordChunk", "RecordForward", "entity_chunks",
+    "BATCH_RECORDS", "EntityScoring", "ForwardOutputs", "RecordChunk", "RecordForward",
+    "entity_chunks",
 ]

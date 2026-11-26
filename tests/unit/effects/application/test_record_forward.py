@@ -13,7 +13,7 @@ import pytest
 import torch
 
 from effects.application import record_forward
-from effects.application.record_forward import RecordForward, entity_chunks
+from effects.application.record_forward import EntityScoring, RecordForward, entity_chunks
 from effects.application.step_loss import StepLoss
 from effects.application.surface_batching import Materializer
 from effects.application.validation_pass import score_steps
@@ -44,7 +44,8 @@ class TestEntityChunks:
         the per-entity head at each surface's entities and the unmasked targets."""
         chosen = records[:40]
         fields = tuple(run.fields[1])
-        got = list(entity_chunks(chosen, _forward(run), _batcher(run), fields, size=16))
+        got = list(entity_chunks(
+            chosen, EntityScoring(_forward(run), _batcher(run), fields), size=16))
 
         assert [len(chunk) for chunk, _, _ in got] == [16, 16, 8]
         assert [r.record_id for chunk, _, _ in got for r in chunk] == [

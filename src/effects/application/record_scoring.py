@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import torch
 
 from effects.application.breakdowns import TOTAL, RecordResult
-from effects.application.record_forward import entity_chunks
+from effects.application.record_forward import EntityScoring, entity_chunks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
 from effects.domain.effect_losses import GATE_TERM, per_entity_loss
@@ -41,7 +41,7 @@ def score_records(
     results: list[RecordResult] = []
     dispersion = runnable.model.per_entity_dispersion().detach().cpu()
     for chunk, gathered, targets in entity_chunks(
-            records, runnable.forward(), runnable.batcher, runnable.fields):
+            records, EntityScoring(runnable.forward(), runnable.batcher, runnable.fields)):
         scored = _ChunkOutputs(gathered, targets, runnable.fields, dispersion)
         for row, record in enumerate(chunk):
             results.append(grouping.result(record, _record_losses(row, scored)))

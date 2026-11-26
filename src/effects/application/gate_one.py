@@ -17,7 +17,7 @@ import torch
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
 from effects.application.model_loading import Runnable
-from effects.application.record_forward import entity_chunks
+from effects.application.record_forward import EntityScoring, entity_chunks
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -107,7 +107,7 @@ def measure(
         own_log_dispersion=_dispersion(runnable),
     )
     for _chunk, gathered, targets in entity_chunks(
-            records, runnable.forward(), runnable.batcher, runnable.fields):
+            records, EntityScoring(runnable.forward(), runnable.batcher, runnable.fields)):
         margins.add(gathered, targets)
     return margins.metrics()
 
