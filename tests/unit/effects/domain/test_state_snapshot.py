@@ -249,16 +249,28 @@ class TestTheGen3FactsRead:
 
         return [_entity_from_json(e) for e in java_golden_entities()]
 
-    def test_every_card_names_its_owner_face_and_history(self):
-        entities = self._entities()
+    @staticmethod
+    def _assert_each_names_its_owner_face_and_history(entities: list[EntityState]) -> None:
         assert all(e.owner in ("P0", "P1") for e in entities)
         assert all(e.face_state in set(FaceState) for e in entities)
         assert all(isinstance(e.history, CardHistory) for e in entities)
+
+    @staticmethod
+    def _assert_the_tiered_chose_nothing(entities: list[EntityState]) -> None:
         tiered = [e for e in entities if e.role is None]
         assert all(e.chosen == CardChoices() and e.in_tiers for e in tiered)
+
+    @staticmethod
+    def _assert_a_gone_target_has_no_zone_or_rank(entities: list[EntityState]) -> None:
         # A target as cast that has ceased to exist since: no zone, no rank.
         gone = [e for e in entities if e.role == "last_known"]
         assert gone and all(e.zone is None and e.order_rank is None for e in gone)
+
+    def test_every_card_names_its_owner_face_and_history(self):
+        entities = self._entities()
+        self._assert_each_names_its_owner_face_and_history(entities)
+        self._assert_the_tiered_chose_nothing(entities)
+        self._assert_a_gone_target_has_no_zone_or_rank(entities)
         assert any(e.history.entered_this_turn for e in entities)
 
     def test_every_face_the_collector_names_reads_as_its_face_state(self):
@@ -344,13 +356,17 @@ class TestTheGen3FactsRead:
         made = next(made for made in effects if made.source_lines)
         assert made.source_lines[0].script_file == "cardsfolder/p/prodigal_pyromancer.txt"
 
-    def test_links_end_at_refs_or_lines(self):
-        links = [link for state in self._states() for link in state.links]
+    @staticmethod
+    def _assert_targets_links_start_at_a_line(links: list[Link]) -> None:
         targets = [link for link in links if link.type == "targets"]
         assert targets and all(isinstance(link.from_, LineRef) and link.index >= 0
                                for link in targets)
         # Arc Trail's second target sits at index 1 across its chain.
         assert any(link.index == 1 for link in targets)
+
+    def test_links_end_at_refs_or_lines(self):
+        links = [link for state in self._states() for link in state.links]
+        self._assert_targets_links_start_at_a_line(links)
         assert all(link.index is None for link in links if link.type != "targets")
         assert {"controls", "owns", "attacks", "blocks"} <= {link.type for link in links}
 
@@ -392,21 +408,14 @@ class TestTheGen3FixtureRead:
     def test_a_creature_stripped_of_its_abilities_lists_no_line(self):
         """Acceptance 2: a creature an Aura's ``RemoveAllAbilities$`` static
         applies to (Enchanted River's Grasp, Witness Protection) keeps no line."""
-        stripped = [
-            e for state in self._states() for host in state.entities
-            for line in host.lines or ()
-            if line.kind == LineKind.STATIC and line.affected and line.keys
-            and _removes_all_abilities(line.keys[0])
-            for e in state.entities if e.id in line.affected and "creature" in e.types]
+        stripped = [e for state in self._states() for e in _creatures_stripped_in(state)]
         assert stripped and all(e.lines == () for e in stripped)
 
     def test_flying_granted_by_another_permanent_s_static_is_listed_on_it(self):
         """Acceptance 3."""
         granted = [line for e in self._permanents() for line in e.keyword_lines
-                   if line.keyword == "flying" and line.granted and line.keys
-                   and line.keys[0].trait_kind == "static"
-                   and line.keys[0].script_file not in {
-                       k.script_file for own in e.lines if not own.granted for k in own.keys}]
+                   if _is_flying_granted_by_a_static(line)
+                   and line.keys[0].script_file not in _own_scripts(e)]
         assert granted
 
     def test_ward_and_annihilator_carry_their_own_instance_s_value(self):
@@ -428,12 +437,16 @@ class TestTheGen3FixtureRead:
         assert any(line.granted and line.keys == () and line.fragment
                    for e in self._permanents() for line in e.keyword_lines)
 
-    def test_floating_effects_of_both_kinds_and_delayed_triggers_read(self):
-        states = self._states()
-        effects = [made for state in states for made in state.global_.floating_effects]
+    @staticmethod
+    def _assert_both_kinds_of_floating_effect_read(effects: list) -> None:
         assert {made.id[0] for made in effects} == {"E", "F"}
         assert all(made.duration in set(EffectDuration) for made in effects)
         assert any(made.source_lines for made in effects)
+
+    def test_floating_effects_of_both_kinds_and_delayed_triggers_read(self):
+        states = self._states()
+        effects = [made for state in states for made in state.global_.floating_effects]
+        self._assert_both_kinds_of_floating_effect_read(effects)
         assert any(state.global_.delayed_triggers for state in states)
         assert any(state.global_.dungeons for state in states)
         assert any(state.global_.day_night is not None for state in states)
@@ -478,6 +491,29 @@ class TestTheGen3FixtureRead:
         face_down = [e for state in self._states() for e in state.entities
                      if e.face_state == FaceState.FACE_DOWN and e.role is None]
         assert face_down and any(e.real_face is not None for e in face_down)
+
+
+def _is_flying_granted_by_a_static(line) -> bool:
+    return bool(line.keyword == "flying" and line.granted and line.keys
+                and line.keys[0].trait_kind == "static")
+
+
+def _own_scripts(entity: EntityState) -> set[str]:
+    """The script files of the lines the entity has of its own, not granted."""
+    return {k.script_file for own in entity.lines if not own.granted for k in own.keys}
+
+
+def _strips_what_it_affects(line: CardLine) -> bool:
+    """Whether the fixture static ``line`` is keyed, affects something and strips every
+    ability."""
+    return bool(line.kind == LineKind.STATIC and line.affected and line.keys
+                and _removes_all_abilities(line.keys[0]))
+
+
+def _creatures_stripped_in(state: StateSnapshot) -> list[EntityState]:
+    return [e for host in state.entities for line in host.lines or ()
+            if _strips_what_it_affects(line)
+            for e in state.entities if e.id in line.affected and "creature" in e.types]
 
 
 def _removes_all_abilities(key: ProvenanceKey) -> bool:
