@@ -160,3 +160,59 @@ def test_a_checkpoint_recording_no_training_flag_is_refused_by_its_name():
     assert _recorded(0.3, "stratum_weight") == 0.3
     with pytest.raises(ValueError, match="stratum_weight"):
         _recorded(None, "stratum_weight")
+
+
+# ── the reported checks the base spec lists and nothing builds (finding 13.8) ──
+
+
+def test_every_unbuilt_reported_check_of_the_base_spec_is_a_todo_line():
+    from types import SimpleNamespace
+
+    from effects.application.evaluate_effect_model import _unmeasured_checks
+
+    main = SimpleNamespace(provenance=SimpleNamespace(withheld_keyword="flying"))
+    checks = _unmeasured_checks(main)
+
+    assert {check.status for check in checks} == {CheckStatus.NOT_IMPLEMENTED}
+    assert {check.name for check in checks} == {
+        "matched-real-vs-fork", "probe-diff", "role-polarity",
+        "scaling-calibration", "identity-game-disjoint", "state-only-floor",
+        "taxonomy-comparison held-out-prediction",
+        "taxonomy-comparison decodability",
+        "no-state-comparison decodability", "no-state-comparison ward-canary",
+        "no-state-comparison scaling-calibration",
+        "shared-text-stratum", "novel-combination-stratum",
+        "numeric-extrapolation-stratum",
+    }
+
+
+def test_a_check_the_code_builds_is_not_listed_as_unbuilt():
+    from effects.application.unbuilt_checks import NOT_IMPLEMENTED_CHECKS
+
+    for built in ("ward-canary", "nearest-neighbour", "umap", "decodability",
+                  "zero-shot-keyword", "comparison"):
+        assert built not in NOT_IMPLEMENTED_CHECKS
+
+
+# ── a reported check that raises is a skip line ──
+
+
+def test_a_reported_check_that_raises_becomes_a_skip_naming_it_and_the_exception(caplog):
+    from effects.application.evaluate_effect_model import attempt
+
+    def draw():
+        raise ImportError("no matplotlib")
+
+    checks = attempt(CheckName.UMAP, draw)
+
+    assert [(c.name, c.status) for c in checks] == [("umap", CheckStatus.SKIPPED)]
+    assert checks[0].detail == "ImportError: no matplotlib"
+    assert "Traceback" in caplog.text
+
+
+def test_a_reported_check_that_returns_is_passed_through_as_a_list():
+    from effects.application.evaluate_effect_model import attempt
+
+    one = not_implemented(CheckName.PROBE_DIFF)
+    assert attempt("a", lambda: one) == [one]
+    assert attempt("a", lambda: [one, one]) == [one, one]

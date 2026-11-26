@@ -12,6 +12,7 @@ the scorer training selected it with (FR-070), its rule tests per rule
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from effects.application.breakdown_table import BREAKDOWNS_CSV, write_breakdowns_csv
@@ -35,6 +36,7 @@ from effects.application.geometry_checks import (
 )
 from effects.application.record_scoring import score_records
 from effects.application.umap_check import check_umap
+from effects.application.unbuilt_checks import NOT_IMPLEMENTED_CHECKS, not_implemented
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     CheckName,
@@ -49,31 +51,6 @@ from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import read_shard
 
 logger = logging.getLogger(__name__)
-
-#: What each unbuilt FR-116 check would measure. Never reported as a skip: the
-#: corpus holds the records these read, so a skip would send an operator after
-#: data that is already there.
-NOT_IMPLEMENTED_CHECKS: dict[CheckName, str] = {
-    CheckName.MATCHED_REAL_VS_FORK: (
-        "it would compare each fork's observed outcome with the real record "
-        "it mirrors"
-    ),
-    CheckName.PROBE_DIFF: (
-        "it would re-run gate 2's canary over real and probe-fork combat "
-        "pairs joined by mirror_of, for probed keywords only"
-    ),
-    CheckName.ROLE_POLARITY: (
-        "it would compare the predicted mana-pool sign for {R} in cost "
-        "position against effect position"
-    ),
-}
-
-
-def not_implemented(name: CheckName) -> CheckResult:
-    return CheckResult(
-        name, CheckStatus.NOT_IMPLEMENTED,
-        f"not implemented; {NOT_IMPLEMENTED_CHECKS[name]}",
-    )
 
 
 def breakdown_records(context: EvaluationContext) -> dict[str, list]:
@@ -121,12 +98,31 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
     )]
 
 
-def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
-    """Load the checkpoints, run every check, and report."""
+def attempt(
+    name: str, produce: Callable[[], CheckResult | list[CheckResult]],
+) -> list[CheckResult]:
+    """A reported check's results; one that raises becomes a skip line naming
+    it and the exception, its traceback going to the log, because a picture or
+    a breakdown that cannot be drawn must not take the gate verdicts with it.
+    A gate is never wrapped: its failure fails the run."""
+    try:
+        produced = produce()
+    except Exception as error:
+        logger.warning("the reported check %s raised", name, exc_info=True)
+        return [CheckResult(name, CheckStatus.SKIPPED, f"{type(error).__name__}: {error}")]
+    return produced if isinstance(produced, list) else [produced]
+
+
+def run(
+    config: EvaluateEffectModelConfig, report: EvaluationReport | None = None,
+) -> EvaluationReport:
+    """Load the checkpoints, run every check, and report. Each check lands in
+    ``report`` (whose ``echo`` prints it) the moment it is made, the gates
+    first."""
     context = load_context(config)
     variants = load_baselines(config, context.main)
 
-    report = EvaluationReport()
+    report = report if report is not None else EvaluationReport()
     sidecars = _sidecar_index(context)
     cached = _load_cache(context, sidecars)
     report.add(run_gate_three(cached, config.abilities_root))
@@ -137,9 +133,9 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     report.add(gate_two.check)
 
     logger.info("breakdowns: scoring both validation strata")
-    report.extend(run_breakdowns(context))
+    report.extend(attempt(CheckName.BREAKDOWNS, lambda: run_breakdowns(context)))
     logger.info("the reporting half: scoring each validation stratum's")
-    report.extend(run_reporting_half(context))
+    report.extend(attempt(CheckName.REPORTING_HALF, lambda: run_reporting_half(context)))
     report.extend(_geometry_checks(context, cached, sidecars))
     report.extend(_unmeasured_checks(context.main))
     return report
@@ -231,23 +227,27 @@ def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
     return run_gate_one(context, variants[Baseline.IDENTITY])
 
 
-def _geometry_checks(context: EvaluationContext, cached, sidecars) -> list[CheckResult]:
-    """The e-geometry checks, all reported, none gating."""
+def _geometry_checks(context: EvaluationContext, cached, sidecars) -> Iterator[CheckResult]:
+    """The e-geometry checks, all reported, none gating, each yielded as it is
+    made; one that raises is a skip line."""
     logger.info("reported checks: ward, neighbours, UMAP, decodability, baselines")
-    checks = [
-        check_ward(cached),
-        check_nearest_neighbours(cached, NEIGHBOUR_QUERIES),
-        check_umap(cached, context.config.output_dir),
-        check_decodability(
+    steps = [
+        (CheckName.WARD_CANARY, lambda: check_ward(cached)),
+        (CheckName.NEAREST_NEIGHBOUR,
+         lambda: check_nearest_neighbours(cached, NEIGHBOUR_QUERIES)),
+        (CheckName.UMAP, lambda: check_umap(cached, context.config.output_dir)),
+        (CheckName.DECODABILITY, lambda: check_decodability(
             cached, Path(context.config.win_rates),
-            held_out_cards=context.main.provenance.held_out_cards,
-        ),
+            held_out_cards=context.main.provenance.held_out_cards)),
     ]
     for variant in (Baseline.NO_STATE, Baseline.TAXONOMY):
-        checks.append(check_baseline_geometry(
-            cached, _load_cache(context, sidecars, variant), variant,
+        steps.append((
+            CheckName.baseline_comparison(variant),
+            lambda variant=variant: check_baseline_geometry(
+                cached, _load_cache(context, sidecars, variant), variant),
         ))
-    return checks
+    for name, step in steps:
+        yield from attempt(name, step)
 
 
 def _unmeasured_checks(main) -> list[CheckResult]:

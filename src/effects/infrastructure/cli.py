@@ -1148,11 +1148,16 @@ def _baseline_checkpoint(value: str):
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import run as evaluate
     from effects.application.evaluation_context import EvaluateEffectModelConfig
+    from effects.domain.evaluation_report import EvaluationReport
 
-    print(evaluate(config_from_args(
+    # Each check prints as it is made, so a late failure leaves the gate
+    # verdicts on the console and in the log; the closing line is the verdict.
+    report = EvaluationReport(echo=lambda text: print(text, flush=True))
+    evaluate(config_from_args(
         EvaluateEffectModelConfig, args,
         baseline_checkpoints=dict(args.baseline_checkpoints or []),
-    )).render())
+    ), report)
+    print(report.verdict_line(), flush=True)
     # A failed gate is a result to record, not a reason to stop: the sweep runs
     # every arm's probes after evaluation whatever the verdicts.
     return 0

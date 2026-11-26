@@ -664,6 +664,16 @@ without a set it prints that the reporting half is skipped.
 `scripts/effect_knowledge_probes/run.py --checkpoint PATH`:
 
 | Flag | Default | Meaning |
+Each check prints when it is made, the three gates first, and the last line is the verdict, which names only gates 1 and 3 (gate 2 routes and never enters it):
+
+| Last line | When |
+|---|---|
+| `SHIPS` | gates 1 and 3 both ran and both passed |
+| `GATES FAILED: <gates>` | a gate failed; `(not measured: <gates>)` follows when the other gate was skipped |
+| `GATES NOT MEASURED: <gates>` | no gate failed and a gate was skipped (no identity checkpoint, no ability cache) |
+
+A reported check that raises (the UMAP picture, a breakdown, the reporting half, a geometry check) prints `[skip] <check>: <ExceptionType>: <message>`, its traceback goes to the log, and the exit code stays 0; an exception in a gate fails the run. The reported checks the base spec lists and no code builds print `[todo]` on every run: scaling calibration, the identity variant on the game-disjoint split, the state-only floor per kind, the taxonomy comparison on held-out prediction and decodability, the no-state comparison on decodability, the ward canary and scaling calibration, and the shared-text, novel-combination and numeric-extrapolation strata, beside the three FR-116 checks.
+
 |---|---|---|
 | `--half both\|selection\|reporting` | both | the selection set's halves read and reported |
 | `--probe-set-dir DIR` | `--reports-dir` | where the selection set is read |

@@ -17,8 +17,10 @@ from effects.domain.damage_step_keywords import (
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
+    CheckResult,
     CheckStatus,
     EvaluationReport,
+    KeywordVerdict,
     Margin,
     gate_verdict,
 )
@@ -72,11 +74,12 @@ class TestMargin:
 
 
 class TestReport:
-    def test_a_report_ships_when_no_gate_blocks(self):
+    def test_a_report_ships_when_both_blocking_gates_passed(self):
         report = EvaluationReport()
         report.add(evaluate_gate_one(
             GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
         ))
+        report.add(_gate("gate-3", CheckStatus.PASS))
         report.add(not_implemented(CheckName.ROLE_POLARITY))
         assert report.ships
 
@@ -93,7 +96,8 @@ class TestReport:
             for row in DAMAGE_STEP_KEYWORDS
         ]
         report.add(evaluate_gate_two(report.keyword_verdicts))
-        assert report.ships
+        assert not report.blocking_failures
+        assert "gate-2" not in report.verdict_line()
 
     def test_the_render_names_every_check_and_the_verdict(self):
         report = EvaluationReport()
@@ -119,3 +123,67 @@ class TestReport:
         rendered = report.render()
         assert "mean_pairwise_cosine=" in rendered
         assert "top_component_share=" in rendered
+
+
+def _gate(name: str, status: CheckStatus) -> CheckResult:
+    return CheckResult(name, status, "detail")
+
+
+class TestTheVerdictLine:
+    """`SHIPS` is said only of gates that were measured and held (finding 11.10)."""
+
+    def _verdict(self, *checks: CheckResult) -> str:
+        report = EvaluationReport()
+        report.extend(checks)
+        return report.render().splitlines()[-1]
+
+    def test_both_blocking_gates_passing_ships(self):
+        assert self._verdict(
+            _gate("gate-1", CheckStatus.PASS), _gate("gate-3", CheckStatus.PASS),
+        ) == "SHIPS"
+
+    def test_both_blocking_gates_skipped_is_not_measured(self):
+        assert self._verdict(
+            _gate("gate-1", CheckStatus.SKIPPED), _gate("gate-3", CheckStatus.SKIPPED),
+        ) == "GATES NOT MEASURED: gate-1, gate-3"
+
+    def test_a_gate_that_never_ran_is_not_measured_either(self):
+        assert self._verdict(
+            _gate("gate-3", CheckStatus.PASS),
+        ) == "GATES NOT MEASURED: gate-1"
+
+    def test_a_failed_gate_wins_and_names_the_unmeasured_one(self):
+        assert self._verdict(
+            _gate("gate-1", CheckStatus.SKIPPED), _gate("gate-3", CheckStatus.FAIL),
+        ) == "GATES FAILED: gate-3 (not measured: gate-1)"
+
+    def test_a_failed_gate_beside_a_passed_one_names_only_itself(self):
+        assert self._verdict(
+            _gate("gate-1", CheckStatus.FAIL), _gate("gate-3", CheckStatus.PASS),
+        ) == "GATES FAILED: gate-1"
+
+    def test_gate_two_never_enters_the_verdict(self):
+        assert self._verdict(
+            _gate("gate-1", CheckStatus.PASS), _gate("gate-2", CheckStatus.SKIPPED),
+            _gate("gate-3", CheckStatus.PASS),
+        ) == "SHIPS"
+
+
+class TestAnnouncingAsProduced:
+    def test_each_check_is_announced_once_when_added_and_the_verdict_after(self):
+        said: list[str] = []
+        report = EvaluationReport(echo=said.append)
+        report.add(_gate("gate-3", CheckStatus.PASS))
+        report.extend([_gate("umap", CheckStatus.REPORTED)])
+
+        assert said == ["[PASS] gate-3: detail", "[----] umap: detail"]
+        assert report.verdict_line() == "GATES NOT MEASURED: gate-1"
+
+    def test_the_keyword_lines_follow_gate_two_whenever_it_is_added(self):
+        said: list[str] = []
+        report = EvaluationReport(echo=said.append)
+        report.keyword_verdicts = [
+            KeywordVerdict("flying", 300, 0.9, False, "direction agreement 90.0%")]
+        report.add(_gate("gate-2", CheckStatus.REPORTED))
+        assert said[0].splitlines()[0] == "[----] gate-2: detail"
+        assert "flying" in said[0].splitlines()[1]
