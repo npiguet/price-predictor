@@ -284,14 +284,21 @@ class FieldSpec:
         value = written.get(self.name)
         if value is not None:
             return value
-        if (
-            self.silent is None or self.name in unknown
-            or not self.scope.covers(scope) or record_class not in self.silent_by
-        ):
+        if not self._takes_silent(unknown, record_class, scope):
             return None
         if self.type.per_member:
             return [self.silent] * self.arity
         return self.silent
+
+    def _takes_silent(
+        self, unknown: frozenset[str] | set[str], record_class: SamplingClass,
+        scope: FieldScope,
+    ) -> bool:
+        """Whether an entity of ``scope`` in a ``record_class`` record takes
+        this field's silent value."""
+        if self.silent is None or self.name in unknown:
+            return False
+        return self.scope.covers(scope) and record_class in self.silent_by
 
 
 #: The counter type named for the generated field every counter type the
@@ -510,13 +517,19 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
               supervised_by=_DECLARATIONS, gated=False),
 )
 
+
+def _field_slices() -> tuple[dict[str, tuple[int, int]], int]:
+    """Every field's slice in head order, and the vector's width."""
+    slices: dict[str, tuple[int, int]] = {}
+    offset = 1  # index 0 is the affected/unaffected gate
+    for spec in PER_ENTITY_FIELDS:
+        slices[spec.name] = (offset, offset + spec.width)
+        offset += spec.width
+    return slices, offset
+
+
 #: ``{field name: (start, end)}`` into the per-entity head's output vector.
-FIELD_SLICES: dict[str, tuple[int, int]] = {}
-_offset = 1  # index 0 is the affected/unaffected gate
-for _spec in PER_ENTITY_FIELDS:
-    FIELD_SLICES[_spec.name] = (_offset, _offset + _spec.width)
-    _offset += _spec.width
-PER_ENTITY_WIDTH = _offset
+FIELD_SLICES, PER_ENTITY_WIDTH = _field_slices()
 GATE_INDEX = 0
 
 FIELDS_BY_NAME: dict[str, FieldSpec] = {s.name: s for s in PER_ENTITY_FIELDS}
@@ -526,12 +539,22 @@ GATE_TERM = "gate"
 #: The per-entity head's loss terms in the order a per-term vector holds them:
 #: the gate, then every field in head order.
 PER_ENTITY_TERMS: tuple[str, ...] = (GATE_TERM, *(str(s.name) for s in PER_ENTITY_FIELDS))
+
+
+def _dispersed_fields() -> tuple[str, ...]:
+    return tuple(str(s.name) for s in PER_ENTITY_FIELDS if s.type.has_magnitude)
+
+
 #: The per-entity fields a negative binomial scores, each with a learned
 #: log-dispersion, in head order (FR-063).
-DISPERSED_FIELDS: tuple[str, ...] = tuple(
-    str(s.name) for s in PER_ENTITY_FIELDS if s.type.has_magnitude
-)
-DISPERSION_INDEX: dict[str, int] = {name: i for i, name in enumerate(DISPERSED_FIELDS)}
+DISPERSED_FIELDS: tuple[str, ...] = _dispersed_fields()
+
+
+def _dispersion_index() -> dict[str, int]:
+    return {name: i for i, name in enumerate(DISPERSED_FIELDS)}
+
+
+DISPERSION_INDEX: dict[str, int] = _dispersion_index()
 
 #: Created-objects head (FR-078): K group slots plus one overflow flag.
 CREATED_OBJECT_SLOTS = 4
@@ -571,17 +594,21 @@ class CreatedSlot:
 CREATED_SLOT_WIDTH = CreatedSlot.KEYWORDS + len(KEYWORDS_CHANGED)
 CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 
+def _created_slot_columns() -> tuple[str, ...]:
+    return (
+        "present", "scripted", "count", "power", "toughness",
+        *(f"counters_{name.lower()}" for name in COUNTER_TYPES), "counters_other",
+        "other_controller",
+        *(f"kind_{kind}" for kind in CREATED_KINDS),
+        *(f"type_{name}" for name in CARD_TYPES),
+        *(f"subtype_{name}" for name in SUBTYPES_CHANGED),
+        *(f"keyword_{name}" for name in KEYWORDS_CHANGED),
+    )
+
+
 #: A slot's columns by name, in :class:`CreatedSlot` order. A column is one
 #: field of the created-objects head, the same over every slot.
-CREATED_SLOT_COLUMNS: tuple[str, ...] = (
-    "present", "scripted", "count", "power", "toughness",
-    *(f"counters_{name.lower()}" for name in COUNTER_TYPES), "counters_other",
-    "other_controller",
-    *(f"kind_{kind}" for kind in CREATED_KINDS),
-    *(f"type_{name}" for name in CARD_TYPES),
-    *(f"subtype_{name}" for name in SUBTYPES_CHANGED),
-    *(f"keyword_{name}" for name in KEYWORDS_CHANGED),
-)
+CREATED_SLOT_COLUMNS: tuple[str, ...] = _created_slot_columns()
 #: The overflow flag after the slots: more groups than slots were created.
 CREATED_OVERFLOW = "overflow"
 #: The created-objects head's loss terms, in the order a per-term vector holds
@@ -695,10 +722,17 @@ VERDICT_BITS: tuple[str, ...] = (
 #: One column per check a candidate can fail, in :class:`PlayabilityCheck`
 #: order, ``script_restriction`` and ``land_play_limit`` included.
 FAILED_CHECKS: tuple[str, ...] = tuple(check.value for check in PlayabilityCheck)
+
+
+def _resolution_outcomes() -> tuple[str, ...]:
+    return tuple(
+        outcome.value for outcome in ResolutionOutcome
+        if outcome is not ResolutionOutcome.COUNTERED)
+
+
 #: The effect half's outcomes (FR-052, root § 11.2): ``countered`` is no class,
 #: a countered item writing no effect half.
-RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
-    outcome.value for outcome in ResolutionOutcome if outcome is not ResolutionOutcome.COUNTERED)
+RESOLUTION_OUTCOMES: tuple[str, ...] = _resolution_outcomes()
 REPLACEMENT_RESULTS: tuple[str, ...] = tuple(result.value for result in RewriteResult)
 
 VERDICT_LAYOUT = RecordHeadLayout((
@@ -747,31 +781,49 @@ GLOBAL_LAYOUT = RecordHeadLayout((
 ))
 GLOBAL_WIDTH = GLOBAL_LAYOUT.width
 
+
+def _value_slices() -> tuple[dict[str, tuple[int, int]], int]:
+    """Every value target's slice, and the offset the next block starts at."""
+    slices: dict[str, tuple[int, int]] = {}
+    offset = 0
+    for name, field_type in VALUE_TARGETS:
+        slices[name] = (offset, offset + field_type.width(1))
+        offset += field_type.width(1)
+    return slices, offset
+
+
 #: ``target -> (start, end)`` into the value head's output (FR-058), each
 #: target as wide as a per-entity field of its type.
-VALUE_SLICES: dict[str, tuple[int, int]] = {}
-_value_offset = 0
-for _name, _type in VALUE_TARGETS:
-    VALUE_SLICES[_name] = (_value_offset, _value_offset + _type.width(1))
-    _value_offset += _type.width(1)
+VALUE_SLICES, _value_end = _value_slices()
 
 #: Steps of the at-least targets (FR-058b): whether each stated amount is at
 #: least k for k = 1 … 40, the board's thermometer length, which pushes ``e``
 #: to carry amounts in the code the board side carries.
 AT_LEAST_STEPS = THERMOMETER_STEPS
+
+
+def _at_least_slices(offset: int) -> tuple[dict[str, tuple[int, int]], int]:
+    """Every at-least block from ``offset`` on, and the head's width."""
+    slices: dict[str, tuple[int, int]] = {}
+    for name, field_type in VALUE_TARGETS:
+        if field_type.has_magnitude:
+            slices[name] = (offset, offset + AT_LEAST_STEPS)
+            offset += AT_LEAST_STEPS
+    return slices, offset
+
+
 #: ``amount target -> (start, end)`` of its at-least block, after every
 #: :data:`VALUE_SLICES` block so the earlier layout of the head is a prefix.
-AT_LEAST_SLICES: dict[str, tuple[int, int]] = {}
-for _name, _type in VALUE_TARGETS:
-    if _type.has_magnitude:
-        AT_LEAST_SLICES[_name] = (_value_offset, _value_offset + AT_LEAST_STEPS)
-        _value_offset += AT_LEAST_STEPS
-VALUE_WIDTH = _value_offset
+AT_LEAST_SLICES, VALUE_WIDTH = _at_least_slices(_value_end)
+
+
+def _value_dispersed() -> tuple[str, ...]:
+    return tuple(name for name, field_type in VALUE_TARGETS if field_type.has_magnitude)
+
+
 #: The value head's targets a negative binomial scores, one learned
 #: log-dispersion each.
-VALUE_DISPERSED: tuple[str, ...] = tuple(
-    name for name, field_type in VALUE_TARGETS if field_type.has_magnitude
-)
+VALUE_DISPERSED: tuple[str, ...] = _value_dispersed()
 
 
 def active_fields(
