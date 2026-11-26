@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from effects.domain.corpus_curation import game_disjoint_draw
@@ -38,10 +40,10 @@ def rule(**overrides) -> PlacementRule:
     return PlacementRule(**values)
 
 
-def census(inventories, *, held=HELD, random_seat=(), text_games=None, keyword=()):
+def census(inventories, *, held=HELD, text_games=None):
     return GameCensus(
         games=frozenset(GAMES), held_out=frozenset(held),
-        random_seat=frozenset(random_seat), keyword_combat=frozenset(keyword),
+        random_seat=frozenset(), keyword_combat=frozenset(),
         held_out_text_games=text_games if text_games is not None else {"t": set(held)},
         inventories=inventories,
     )
@@ -56,7 +58,9 @@ def alternating(rule_id: str, games=GAMES) -> dict[str, dict]:
     return out
 
 
-def polarities_in(strata, inventories, stratum, half, rule_id) -> set:
+def polarities_in(strata, inventories, cell, rule_id) -> set:
+    """The polarities ``rule_id`` has in the games of ``cell``, a (stratum, half)."""
+    stratum, half = cell
     return {
         polarity for game in strata.halves[stratum][half]
         for (found, polarity) in inventories.get(game, {}) if found == rule_id
@@ -72,7 +76,7 @@ def test_both_polarities_land_in_both_halves_of_both_strata():
     strata = place_games(census(inventories), rule())
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
         for half in Half:
-            assert polarities_in(strata, inventories, stratum, half, "704.5f") == {FIRES, NOT}
+            assert polarities_in(strata, inventories, (stratum, half), "704.5f") == {FIRES, NOT}
     assert strata.left_out_of_half == {}
 
 
@@ -95,7 +99,8 @@ def test_a_random_seat_game_naming_a_held_out_card_is_card_disjoint():
     held-out card, random-seat games included; the random seat casts held-out
     cards the AI never casts."""
     seat_held = sorted(HELD)[:3]
-    strata = place_games(census(alternating("704.5f"), random_seat=seat_held), rule())
+    strata = place_games(
+        replace(census(alternating("704.5f")), random_seat=frozenset(seat_held)), rule())
     for game in seat_held:
         assert strata.stratum_of(game) is Stratum.CARD_DISJOINT
         assert strata.half_of(game) is not None
@@ -105,7 +110,8 @@ def test_the_game_disjoint_stratum_keeps_only_forge_ai_games():
     """FR-059: a random-seat game naming no held-out card trains, even one
     gen-2's draw would have placed."""
     seat_drawn = ids_drawn(0.0, 0.01)
-    strata = place_games(census(alternating("704.5f"), random_seat=seat_drawn), rule())
+    strata = place_games(
+        replace(census(alternating("704.5f")), random_seat=frozenset(seat_drawn)), rule())
     assert not set(seat_drawn) & strata.game_disjoint
     for game in seat_drawn:
         assert strata.stratum_of(game) is Stratum.TRAINING
@@ -124,7 +130,8 @@ def test_a_short_cell_promotes_a_pool_game_and_never_one_outside_the_pool():
 def test_the_base_draw_is_gen_2s():
     base = set(ids_drawn(0.0, 0.01))
     keyword = ids_drawn(0.01, 0.15)[-1]
-    strata = place_games(census({}, keyword=[keyword]), rule(min_games_per_half=0))
+    strata = place_games(
+        replace(census({}), keyword_combat=frozenset([keyword])), rule(min_games_per_half=0))
     assert strata.game_disjoint == base | {keyword}
 
 

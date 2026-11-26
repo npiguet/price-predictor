@@ -53,19 +53,21 @@ def normalize_keyword(raw: str) -> str:
     """
     name, colon, rest = raw.partition(":")
     name = _spelled(name)
-    if colon:
-        detailed = DETAILED_KEYWORDS.get(f"{name}:{_spelled(rest)}")
-        if detailed is not None:
-            return detailed
-    if colon and name in QUALITY_KEYWORDS:
-        parts = rest.split(":")
-        if len(parts) > 1 and parts[1].strip():
-            quality = _spelled(parts[1])
-        else:
-            quality = _spelled(parts[0].rsplit(".", 1)[-1])
-        if quality:
-            return f"{name}_from_{quality}"
-    return name
+    if not colon:
+        return name
+    detailed = DETAILED_KEYWORDS.get(f"{name}:{_spelled(rest)}")
+    if detailed is not None:
+        return detailed
+    quality = _quality_of(rest) if name in QUALITY_KEYWORDS else ""
+    return f"{name}_from_{quality}" if quality else name
+
+
+def _quality_of(rest: str) -> str:
+    """The quality a protection's or hexproof's part after the first ``:`` names."""
+    parts = rest.split(":")
+    if len(parts) > 1 and parts[1].strip():
+        return _spelled(parts[1])
+    return _spelled(parts[0].rsplit(".", 1)[-1])
 
 
 def overlay_keyword(raw: str) -> str:

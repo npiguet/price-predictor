@@ -49,58 +49,66 @@ class HeadInput(StrEnum):
     MASKED_TOKENS = "masked_tokens"
 
 
-def _verdict(model, hidden, target, mask, *, scale=None) -> torch.Tensor:
+def _verdict(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
+    target, mask = targets
     return verdict_loss(
         model.verdict(hidden).float(), target, mask,
         log_dispersion=model.verdict_dispersion(), scale=scale,
     )
 
 
-def _created_objects(model, hidden, target, mask, known=None, *, scale=None) -> torch.Tensor:
+def _created_objects(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
+    target, mask, known = targets
     return created_objects_loss(
         model.created_objects(hidden).float(), target, mask, known,
         log_dispersion=model.created_objects_dispersion(), scale=scale,
     )
 
 
-def _global(model, hidden, target, mask, *, scale=None) -> torch.Tensor:
+def _global(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
+    target, mask = targets
     return global_loss(
         model.global_outputs(hidden).float(), target, mask,
         log_dispersion=model.global_dispersion(), scale=scale,
     )
 
 
-def _verdict_terms(model, hidden, target, mask) -> torch.Tensor:
+def _verdict_terms(model, hidden, targets: tuple) -> torch.Tensor:
+    target, mask = targets
     return record_head_terms(
         model.verdict(hidden).float(), target, mask, VERDICT_LAYOUT,
         log_dispersion=model.verdict_dispersion(),
     )
 
 
-def _created_objects_terms(model, hidden, target, mask, known=None) -> torch.Tensor:
+def _created_objects_terms(model, hidden, targets: tuple) -> torch.Tensor:
+    target, mask, known = targets
     return created_objects_terms(
         model.created_objects(hidden).float(), target, mask, known,
         log_dispersion=model.created_objects_dispersion(),
     )
 
 
-def _global_terms(model, hidden, target, mask) -> torch.Tensor:
+def _global_terms(model, hidden, targets: tuple) -> torch.Tensor:
+    target, mask = targets
     return record_head_terms(
         model.global_outputs(hidden).float(), target, mask, GLOBAL_LAYOUT,
         log_dispersion=model.global_dispersion(),
     )
 
 
-def _value(model, matrix, values, mask, rows) -> torch.Tensor:
-    """One row per line: ``rows`` names the row of ``matrix`` each reads, so a
-    text two lines share enters the head once per line, by row index."""
+def _value(model, matrix, targets: tuple) -> torch.Tensor:
+    """One row per line: the targets' ``rows`` name the row of ``matrix`` each
+    reads, so a text two lines share enters the head once per line, by row index."""
+    values, mask, rows = targets
     return value_loss(
         model.value_head(matrix[rows]).float(), values, mask,
         log_dispersion=model.value_dispersion(),
     )
 
 
-def _api(model, matrix, types, keys) -> torch.Tensor:
+def _api(model, matrix, targets: tuple) -> torch.Tensor:
+    types, keys = targets
     keyed = model.param_key_head is not None
     return api_loss(
         model.api_type_head(matrix).float(), types,
@@ -120,11 +128,11 @@ class HeadSpec:
     #: The ``TrainEffectModelConfig`` field holding a training-only head's
     #: weight; None for a shipped head.
     weight_field: str | None = None
-    #: ``(model, input, *targets) -> loss``, a shipped head's also taking its
+    #: ``(model, input, targets) -> loss``, a shipped head's also taking its
     #: loss denominators' reciprocals as ``scale`` (FR-062); None for the MLM
     #: head, whose second encoder pass the training loop runs itself.
     loss: Callable[..., torch.Tensor] | None = None
-    #: A shipped head's ``(model, input, *targets) -> per-term sums``, in
+    #: A shipped head's ``(model, input, targets) -> per-term sums``, in
     #: nats over the batch's records and unscaled, in its loss-denominator
     #: term order (``loss_denominators.HEAD_TERMS``): what the control
     #: score's explained deviance reads term by term.
