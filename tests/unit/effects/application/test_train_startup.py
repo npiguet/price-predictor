@@ -9,7 +9,7 @@ from __future__ import annotations
 import functools
 import logging
 import tempfile
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -480,25 +480,39 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
     assert "not divisible" in caplog.text
 
 
-@pytest.mark.parametrize("failure, code", [
-    ("MissingTrainingInputError", 1),
-    ("HoldoutMismatchError", 1),
-    ("UnacceptedGenerationError", 1),
-    ("ValidationGameInTrainingError", 1),
-    ("ResumeMismatchError", 1),
-    ("SelectionSetError", 1),
-    ("ControlScoreError", 1),
-    ("FileNotFoundError", 1),
-])
-def test_an_operator_error_out_of_training_exits_with_its_code(
-    tmp_path, monkeypatch, caplog, failure, code,
-):
-    """A refused corpus, a resume under other settings, and a missing manifest
-    or resume file end in one logged line, not a traceback."""
-    from effects.application import train_effect_model
-    from effects.infrastructure import cli, effect_model_store
+@dataclass(frozen=True)
+class _TrainCli:
+    """What a ``train-effect-model`` CLI test touches: the corpus directory the
+    arguments name, the patcher that swaps ``run`` and the log it reads."""
 
-    kind = {
+    tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch
+    caplog: pytest.LogCaptureFixture
+
+    def exit_code_when_run_refuses(self, kind) -> int:
+        """The CLI's exit code when ``run`` raises ``kind("refused for the test")``."""
+        from effects.application import train_effect_model
+        from effects.infrastructure import cli
+
+        def refuse(config):
+            raise kind("refused for the test")
+
+        self.monkeypatch.setattr(train_effect_model, "run", refuse)
+        with self.caplog.at_level(logging.ERROR):
+            return cli.run_train_effect_model(_train_args(self.tmp_path))
+
+
+@pytest.fixture
+def train_cli(tmp_path, monkeypatch, caplog):
+    return _TrainCli(tmp_path, monkeypatch, caplog)
+
+
+def _operator_error(failure: str):
+    """The exception class (or builder) a failure name stands for."""
+    from effects.application import train_effect_model
+    from effects.infrastructure import effect_model_store
+
+    return {
         "MissingTrainingInputError": train_effect_model.MissingTrainingInputError,
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
         "UnacceptedGenerationError": UnacceptedGenerationError,
@@ -509,13 +523,22 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
         "FileNotFoundError": FileNotFoundError,
     }[failure]
 
-    def refuse(config):
-        raise kind("refused for the test")
 
-    monkeypatch.setattr(train_effect_model, "run", refuse)
-    with caplog.at_level(logging.ERROR):
-        assert cli.run_train_effect_model(_train_args(tmp_path)) == code
-    assert "refused for the test" in caplog.text
+@pytest.mark.parametrize("failure, code", [
+    ("MissingTrainingInputError", 1),
+    ("HoldoutMismatchError", 1),
+    ("UnacceptedGenerationError", 1),
+    ("ValidationGameInTrainingError", 1),
+    ("ResumeMismatchError", 1),
+    ("SelectionSetError", 1),
+    ("ControlScoreError", 1),
+    ("FileNotFoundError", 1),
+])
+def test_an_operator_error_out_of_training_exits_with_its_code(train_cli, failure, code):
+    """A refused corpus, a resume under other settings, and a missing manifest
+    or resume file end in one logged line, not a traceback."""
+    assert train_cli.exit_code_when_run_refuses(_operator_error(failure)) == code
+    assert "refused for the test" in train_cli.caplog.text
 
 
 @pytest.mark.parametrize(
@@ -627,7 +650,7 @@ _LEGALITY_ONLY = frozenset(
 
 
 def test_a_manifest_with_no_legality_record_leaves_the_legality_fields_untrained(
-    corpus, config, started, reports, caplog,
+    corpus, config, started, caplog,
 ):
     """The classes that fix every epoch's field set are the manifest's
     training counts, not the validation samples' (finding 15.2): a class the
@@ -635,7 +658,7 @@ def test_a_manifest_with_no_legality_record_leaves_the_legality_fields_untrained
     supervises, and the run says so naming the manifest."""
     others = [name for name in SAMPLING_CLASSES if name is not SamplingClass.PLAYABILITY_LEGALITY]
     corpus.save(_manifest(per_class=_counted(*others)))
-    _freeze(corpus, reports)
+    _freeze(corpus, config.reports_dir)
     with caplog.at_level(logging.WARNING):
         assert run(config) == 0
 
@@ -646,10 +669,10 @@ def test_a_manifest_with_no_legality_record_leaves_the_legality_fields_untrained
 
 
 def test_a_manifest_counting_every_class_trains_the_legality_fields(
-    corpus, config, started, reports, caplog,
+    corpus, config, started, caplog,
 ):
     corpus.save(_manifest(per_class=_counted(*SAMPLING_CLASSES)))
-    _freeze(corpus, reports)
+    _freeze(corpus, config.reports_dir)
     with caplog.at_level(logging.WARNING):
         assert run(config) == 0
 
