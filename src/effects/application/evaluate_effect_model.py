@@ -46,7 +46,12 @@ from effects.domain.evaluation_report import (
 )
 from effects.domain.records import distinct_records
 from effects.domain.strata import VALIDATION_STRATA, Half
-from effects.infrastructure.ability_cache_store import SidecarIndex
+from effects.infrastructure.ability_cache_store import (
+    AbilityCacheStore,
+    SidecarIndex,
+    cache_stamp,
+    require_cache_stamp,
+)
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import read_shard
 
@@ -124,7 +129,7 @@ def run(
 
     report = report if report is not None else EvaluationReport()
     sidecars = _sidecar_index(context)
-    cached = _load_cache(context, sidecars)
+    cached = _load_cache(context, sidecars, variants)
     report.add(run_gate_three(cached, config.abilities_root))
     report.add(_gate_one(context, variants))
 
@@ -136,7 +141,7 @@ def run(
     report.extend(attempt(CheckName.BREAKDOWNS, lambda: run_breakdowns(context)))
     logger.info("the reporting half: scoring each validation stratum's")
     report.extend(attempt(CheckName.REPORTING_HALF, lambda: run_reporting_half(context)))
-    report.extend(_geometry_checks(context, cached, sidecars))
+    report.extend(_geometry_checks(context, cached, sidecars, variants))
     report.extend(_unmeasured_checks(context.main))
     return report
 
@@ -197,12 +202,44 @@ def _sidecar_index(context: EvaluationContext):
 
 
 def _load_cache(
-    context: EvaluationContext, sidecars, variant: Baseline = Baseline.FULL,
+    context: EvaluationContext, sidecars, variants: dict,
+    variant: Baseline = Baseline.FULL,
 ):
     """One variant's cache: a vector per unique text on the checkpoint's surface."""
-    root = context.config.abilities_root
-    logger.info("loading the %s ability cache under %s", variant, root)
-    return cached_vectors(sidecars, root, variant=variant)
+    logger.info("loading the %s ability cache under %s", variant, context.config.abilities_root)
+    return cached_vectors(sidecars, cache_store(context, variant, variants))
+
+
+def cache_store(
+    context: EvaluationContext, variant: Baseline, variants: dict,
+) -> AbilityCacheStore:
+    """``variant``'s cache, once its stamp names the checkpoint of that variant
+    this run holds (finding 11.7): the main one for ``full``, a
+    ``--variant-checkpoint`` for a baseline. The taxonomy cache is read without
+    one, compared on everything but the checkpoint, since no weights enter it;
+    any other baseline's needs its checkpoint."""
+    return require_cache_stamp(
+        context.config.abilities_root, lambda: _wanted_stamp(context, variant, variants),
+        variant=variant,
+    )
+
+
+def _wanted_stamp(context: EvaluationContext, variant: Baseline, variants: dict):
+    if variant in variants:
+        return _stamp_of(context, context.config.baseline_checkpoints[variant], variants[variant])
+    if variant not in (Baseline.FULL, Baseline.TAXONOMY):
+        return None
+    main = _stamp_of(context, context.config.checkpoint, context.main)
+    return main if variant == Baseline.FULL else main.without_checkpoint()
+
+
+def _stamp_of(context: EvaluationContext, path: Path, checkpoint):
+    from effects.infrastructure.vocabulary_file import vocabulary_surface
+
+    return cache_stamp(
+        Path(path), checkpoint, cards_folders=context.config.cards_folders,
+        surface=vocabulary_surface(context.tokenizer_files.vocab),
+    )
 
 
 def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
@@ -216,7 +253,9 @@ def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
     return run_gate_one(context, variants[Baseline.IDENTITY])
 
 
-def _geometry_checks(context: EvaluationContext, cached, sidecars) -> Iterator[CheckResult]:
+def _geometry_checks(
+    context: EvaluationContext, cached, sidecars, variants: dict,
+) -> Iterator[CheckResult]:
     """The e-geometry checks, all reported, none gating, each yielded as it is
     made; one that raises is a skip line."""
     logger.info("reported checks: ward, neighbours, UMAP, decodability, baselines")
@@ -233,7 +272,7 @@ def _geometry_checks(context: EvaluationContext, cached, sidecars) -> Iterator[C
         steps.append((
             CheckName.baseline_comparison(variant),
             lambda variant=variant: check_baseline_geometry(
-                cached, _load_cache(context, sidecars, variant), variant),
+                cached, _load_cache(context, sidecars, variants, variant), variant),
         ))
     for name, step in steps:
         yield from attempt(name, step)

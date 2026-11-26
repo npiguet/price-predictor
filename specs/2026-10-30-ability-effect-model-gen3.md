@@ -1574,6 +1574,15 @@ Startup validation
 - `evaluate-effect-model` refuses a `--variant-checkpoint NAME=PATH` whose checkpoint was
   trained as another variant than NAME, or records another corpus digest or withheld
   keyword than `--checkpoint`, naming both values.
+- `train-effect-model` and `evaluate-effect-model` refuse `--cards-folder` trees whose
+  sidecar digest differs from the corpus manifest's `sidecar_digest`, naming both digests.
+  `evaluate-effect-model --cards-folder` defaults to the folders the checkpoint recorded.
+- `encode-abilities` refuses `--variant identity` and `--variant state-only`: neither model
+  reads the encoder's output.
+- Every reader of the ability cache refuses a variant's cache with no stamp, or with a stamp
+  naming another checkpoint hash, encoding surface, vocabulary hash or sidecar digest than
+  its own, naming both values; the taxonomy cache is compared on everything but the
+  checkpoint hash.
 
 Exit codes
 
@@ -1616,6 +1625,7 @@ Printed output
 | checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, the best control score, the loss denominators, the run's settings as one dict that `resume.pt` holds too (every flag that shapes a step, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` and `--relation-values` included, and the variant-script tree the run read), the manifest's map content hash and the selection set's digest; record the input layout `gen-3` and a sha256 digest of every ordered name list that fixes a row or column of the model's tables (the relation types in table order (§ 10.3), every input vocabulary, each output head's fields and classes), and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, with a different digest, recording no digest of a list, or recording its settings in another shape |
 | `resume.pt` | every epoch | adds the averaged weights, the loss denominators and the best control score |
 | knowledge-probe scorecards | per checkpoint | add the selection set's digest and, per stratum and half, the probes of § 14.5 and the rule tests |
+| `ability-cache[.<variant>].stamp.json` in `--output-root` | by `encode-abilities`, after the variant's last cache file (removed before its first) | the sha256 of the checkpoint file, its vocabulary's encoding surface, its vocabulary hash and the sidecar digest of the `--cards-folder` trees the cache was encoded from |
 | `breakdowns.csv` in `--output` | by `evaluate-effect-model` | every breakdown line's field means with the records each read, columns `check,qualifier,field,value,records`; the console prints each line's totals |
 
 Run results land in the gen-3 record's Result section, never in this spec.

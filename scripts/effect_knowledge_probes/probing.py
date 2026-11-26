@@ -101,8 +101,9 @@ class _Probing:
         progress("line-level probes over the ability cache")
         self._observe_training()
         sidecars = self.context.sidecars()
-        items = common.line_items(self.context.cards_folders, probe_model.surface,
-                                  self.args.abilities_root)
+        checked = common.checked_cache(self.context, self.args.abilities_root,
+                                       probe_model.surface)
+        items = common.line_items(self.context.cards_folders, probe_model.surface, checked)
         cache = (items, common.acting_text_function(sidecars, probe_model.surface))
         held_out_cards = set(self.context.checkpoint.provenance.held_out_cards)
         line_labels = label_lines(items, self.outcomes, sidecars)

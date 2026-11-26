@@ -124,7 +124,7 @@ class TestLoadingTheCache:
     def test_every_variant_joins_the_sidecars_read_once(self, cache):
         """The evaluator reads the trees once for its three variants."""
         from effects.application.geometry_checks import cached_vectors
-        from effects.infrastructure.ability_cache_store import SidecarIndex
+        from effects.infrastructure.ability_cache_store import AbilityCacheStore, SidecarIndex
         from effects.infrastructure.sidecar_io import sidecar_paths
 
         cards, abilities = cache
@@ -147,7 +147,7 @@ class TestLoadingTheCache:
         for path in sidecar_paths(cards):
             path.unlink()
         for variant, loaded in expected.items():
-            joined = cached_vectors(index, abilities, variant=variant)
+            joined = cached_vectors(index, AbilityCacheStore(abilities, variant=variant))
             assert joined.texts == loaded.texts
             np.testing.assert_array_equal(joined.matrix, loaded.matrix)
             assert joined.by_prose == loaded.by_prose

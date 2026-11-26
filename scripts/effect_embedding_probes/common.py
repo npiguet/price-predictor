@@ -275,6 +275,7 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
         output=getattr(args, "output", None),
         variant_scripts=getattr(args, "variant_scripts", None),
     ))
+    require_cache_stamps(paths, loaded)
     if loaded.encoder_config.e_dim != paths.e_width:
         raise ValueError(
             f"{args.abilities_root} holds {paths.e_width}-wide e but "
@@ -283,6 +284,20 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
         )
     paths.out.mkdir(parents=True, exist_ok=True)
     return paths
+
+def require_cache_stamps(paths: ProbePaths, loaded) -> None:
+    """Refuse a shipping cache not stamped for ``loaded`` over the run's trees,
+    and a taxonomy cache stamped for other trees, surface or vocabulary (no
+    weights enter it, so its checkpoint is not compared; finding 11.7)."""
+    from effects.domain.baselines import Baseline
+    from effects.infrastructure.ability_cache_store import cache_stamp, require_cache_stamp
+
+    wanted = cache_stamp(paths.checkpoint, loaded, cards_folders=paths.cards_folders,
+                         surface=paths.surface)
+    require_cache_stamp(paths.abilities_root, wanted)
+    require_cache_stamp(paths.abilities_root, wanted.without_checkpoint(),
+                        variant=Baseline.TAXONOMY)
+
 
 # ── script parsing ──────────────────────────────────────────────────────
 

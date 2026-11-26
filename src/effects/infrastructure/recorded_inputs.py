@@ -36,24 +36,39 @@ def corpus_variant_tree(corpus: Path | str | None, given: Path | None) -> list[P
 
 
 def _provenance(checkpoint: Path):
-    """The provenance ``checkpoint`` recorded, or None where it cannot be read.
-    The weights are read once per manifest, not once per list that asks."""
+    """The provenance ``checkpoint`` recorded, or None where it cannot be read."""
+    loaded = _checkpoint(checkpoint)
+    return None if loaded is None else loaded.provenance
+
+
+def _checkpoint(checkpoint: Path):
+    """``checkpoint`` loaded, or None where it cannot be read. The weights are
+    read once per manifest, not once per list that asks."""
     try:
-        return _provenance_at(Path(checkpoint), Path(checkpoint).stat().st_mtime_ns)
+        return _checkpoint_at(Path(checkpoint), Path(checkpoint).stat().st_mtime_ns)
     except OSError:
         return None
 
 
 @functools.lru_cache(maxsize=2)
-def _provenance_at(checkpoint: Path, modified_ns: int):
-    """``checkpoint``'s provenance as of its modification time ``modified_ns``."""
+def _checkpoint_at(checkpoint: Path, modified_ns: int):
+    """``checkpoint`` as of its modification time ``modified_ns``."""
     try:
         from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
-        return load_effect_checkpoint(checkpoint).provenance
+        return load_effect_checkpoint(checkpoint)
     except Exception as failure:  # noqa: BLE001 — the command refuses it, in its own words
         logger.debug("checkpoint %s not read to list its inputs: %s", checkpoint, failure)
         return None
+
+
+def checkpoint_cards_folders(checkpoint: Path, given) -> list[Path]:
+    """The converted trees a command run on ``checkpoint`` reads: ``given``
+    (``--cards-folder``), else the folders the checkpoint recorded."""
+    if given:
+        return [Path(folder) for folder in given]
+    loaded = _checkpoint(checkpoint)
+    return [] if loaded is None else [Path(folder) for folder in loaded.cards_folders]
 
 
 def tokenizer_paths(

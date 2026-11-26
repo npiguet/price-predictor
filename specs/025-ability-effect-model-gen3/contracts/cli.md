@@ -631,6 +631,7 @@ target, a balance rule cannot be met or a grid cell is empty, naming stratum, ha
 Startup, exit 1 when:
 
 - a record lacks `generation: 3`;
+- the `--cards-folder` trees' sidecar digest is not the manifest's `sidecar_digest` (naming both);
 - the manifest has no per-rule counts;
 - no selection set exists for the corpus digest under `--reports-dir`, or the one there was frozen for another corpus or edited;
 - `--curriculum-rewarm-steps` is negative;
@@ -656,6 +657,8 @@ epoch's training seconds. Shard line adds `rel_k_norm` and `rel_v_norm` (pre-cli
 |---|---|---|
 | `--reports-dir DIR` | required | where the selection set frozen for the corpus is found, by the corpus digest, as on `train-effect-model` |
 | `--output DIR` | `<checkpoint stem>.evaluation/` beside `--checkpoint` | the directory the files the report names (the UMAP picture and its table) are written to, and the run directory |
+| `--cards-folder DIR` | the folders `--checkpoint` recorded | the converted trees read; repeatable; refused, exit 1, when their sidecar digest is not the corpus manifest's `sidecar_digest`, naming both |
+| `--abilities-root DIR` | required | the cache run `encode-abilities` wrote; each variant's cache is read only when its stamp names the checkpoint of that variant (`--checkpoint`, or the `--variant-checkpoint` of that name; none needed for `taxonomy`, compared on everything but the checkpoint hash), the vocabulary surface, the vocabulary hash and the trees' sidecar digest. The shipping cache unstamped or stamped otherwise exits 1, naming both values of each member; a baseline's prints its comparison as a `[skip]` line |
 
 Exit 1 unless every record carries `generation: 3`, or when
 the checkpoint's `input_layout` is not `gen-3`. It scores the reporting halves of the selection set

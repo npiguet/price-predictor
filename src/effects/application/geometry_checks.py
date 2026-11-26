@@ -38,7 +38,7 @@ from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import SourceTree
 
 if TYPE_CHECKING:
-    from effects.infrastructure.ability_cache_store import SidecarIndex
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore, SidecarIndex
 
 logger = logging.getLogger(__name__)
 
@@ -146,13 +146,11 @@ class CachedVectors:
         return len(self.by_text)
 
 
-def cached_vectors(
-    index: SidecarIndex, abilities_root: Path, *, variant: Baseline = Baseline.FULL,
-) -> CachedVectors:
-    """One variant's cache over sidecars already read. Only a ``cardsfolder``
-    source contributes a pooled per-card vector."""
+def cached_vectors(index: SidecarIndex, store: AbilityCacheStore) -> CachedVectors:
+    """One variant's cache (``store``, its stamp checked) over sidecars already
+    read. Only a ``cardsfolder`` source contributes a pooled per-card vector."""
     cached = CachedVectors()
-    for source, matrix in index.matrices(abilities_root, variant=variant):
+    for source, matrix in index.matrices(store):
         card = normalize_prose(source.card)
         for row, line in zip(matrix, source.lines):
             if line is None:

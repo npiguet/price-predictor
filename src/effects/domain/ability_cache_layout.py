@@ -16,11 +16,18 @@ The cache lives under a cache run (``output/effects/<gen>/cache/<run>/``) rather
 than beside the converted text, because the sealed pipeline's ``encode-cards --clean`` deletes
 every ``.npz`` under the converted card tree
 (``output/effects/gen3/converted/cardsfolder/``) and would take this one with it.
+
+Each variant's cache has a stamp beside it at the cache root
+(:func:`stamp_path`): a :class:`CacheStamp` naming the checkpoint, surface,
+vocabulary and converted trees it was encoded from, which every reader
+compares with the checkpoint it evaluates (finding 11.7).
 """
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -100,3 +107,56 @@ def pooled_card_vector(matrix: np.ndarray) -> np.ndarray:
     return np.concatenate(
         [matrix.mean(axis=0), matrix.max(axis=0)],
     ).astype(np.float32)
+
+
+class CacheStampError(ValueError):
+    """A cache with no stamp, a stamp missing a member, or one naming another
+    checkpoint, surface, vocabulary or conversion than the reader's."""
+
+
+def stamp_path(root: Path, variant: Baseline = Baseline.FULL) -> Path:
+    """The stamp of ``variant``'s cache under ``root``: ``ability-cache.stamp.json``
+    for ``full``, ``ability-cache.{variant}.stamp.json`` for a baseline, since
+    the variants share a root and each was encoded from its own checkpoint."""
+    infix = "" if variant == Baseline.FULL else f".{variant}"
+    return Path(root) / f"ability-cache{infix}.stamp.json"
+
+
+@dataclass(frozen=True, slots=True)
+class CacheStamp:
+    """What a cache was encoded from. A member None in a *wanted* stamp is not
+    compared: the reader holds no checkpoint of that variant."""
+
+    #: sha256 of the checkpoint file's bytes.
+    checkpoint_hash: str | None
+    #: The encoding surface of the checkpoint's vocabulary (``prose``, ``script``).
+    surface: str
+    #: The checkpoint's recorded vocabulary hash.
+    vocab_hash: str
+    #: The converted trees' sidecar digest (``SourceTrees.converted_sidecar_digest``).
+    sidecar_digest: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> CacheStamp:
+        """The stamp ``as_dict`` wrote; one missing a member is refused by its name."""
+        missing = [spec.name for spec in fields(cls) if spec.name not in data]
+        if missing:
+            raise CacheStampError(f"the cache stamp records no {', '.join(missing)}")
+        return cls(**{spec.name: data[spec.name] for spec in fields(cls)})
+
+    def without_checkpoint(self) -> CacheStamp:
+        """This stamp wanted with the checkpoint left uncompared."""
+        return CacheStamp(None, self.surface, self.vocab_hash, self.sidecar_digest)
+
+    def differences(self, wanted: CacheStamp) -> list[str]:
+        """Each member ``wanted`` states that this stamp records otherwise,
+        with both values."""
+        return [
+            f"{spec.name}: cache {getattr(self, spec.name)}, wanted {getattr(wanted, spec.name)}"
+            for spec in fields(self)
+            if getattr(wanted, spec.name) is not None
+            and getattr(self, spec.name) != getattr(wanted, spec.name)
+        ]

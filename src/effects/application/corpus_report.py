@@ -26,7 +26,6 @@ from effects.domain.sampling import SamplingClass
 from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 from effects.domain.text_holdout import normalize_script_text
 from effects.infrastructure.build_inputs import code_version
-from price_predictor.infrastructure.converted_provenance import sidecar_digest
 from price_predictor.infrastructure.forge_classpath import project_root
 
 if TYPE_CHECKING:
@@ -415,7 +414,7 @@ def _collection_fields(config: BuildCorpusConfig, outcome: BuildOutcome) -> dict
         "unsupervised_events": dict(sorted(totals.unsupervised.items())),
         "cut_games": len(totals.cut.games),
         "code_version": code_version(),
-        "sidecar_digest": sidecar_digest(config.source_trees.sidecar_roots()),
+        "sidecar_digest": config.source_trees.converted_sidecar_digest(),
         "join_gaps": _join_gaps(reading),
     }
 

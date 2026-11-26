@@ -22,7 +22,10 @@ from effects.infrastructure.card_sources import (
     load_converted_cards,
 )
 from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
-from price_predictor.infrastructure.converted_provenance import collection_conversion
+from price_predictor.infrastructure.converted_provenance import (
+    collection_conversion,
+    sidecar_digest,
+)
 
 if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards, HoldoutRule
@@ -66,6 +69,29 @@ class SourceTrees:
         """A fresh cache over these trees, for a caller that owns its tallies."""
         return SidecarCache(self.sidecar_roots())
 
+    def converted_sidecar_digest(self) -> str:
+        """The sidecar digest of the converted trees alone (``--cards-folder``),
+        as ``convert`` records it: ``build-corpus``'s manifest records it, the
+        ability cache's stamp too, and the trainer and the evaluator compare
+        it. The variant tree is left out: collections extend it, and a variant
+        added since moves no key a corpus joined."""
+        return sidecar_digest(sidecar_roots(self.cards_folders, None))
+
+    def require_sidecar_digest(self, recorded: str, *, corpus: Path | str) -> None:
+        """Refuse converted trees whose sidecars are not the ones ``corpus``'s
+        manifest recorded (finding 11.3): a reconverted tree joins the
+        records' keys to other lines without anything raising."""
+        found = self.converted_sidecar_digest()
+        if found != recorded:
+            # Both digests first: run.json's outcome keeps 300 characters.
+            raise SidecarsChangedError(
+                f"sidecars: corpus {recorded or '(none)'}, trees {found}: the converted "
+                f"trees {', '.join(map(str, self.cards_folders))} are not the ones the "
+                f"corpus {corpus} was built against (reconverted since, or another "
+                "tree). Name the trees the corpus read with --cards-folder, or "
+                "rebuild the corpus"
+            )
+
     def conversion(self, *, jar: Path | None = None) -> Conversion:
         """The one conversion the card trees come from, read from its
         ``run.json`` and checked against the connector JAR (by default the
@@ -78,6 +104,10 @@ class SourceTrees:
         """What is read from these trees; ``sidecars`` shares a cache already
         built over the same roots."""
         return ConvertedTrees(self.sidecar_roots(), sidecars)
+
+
+class SidecarsChangedError(RuntimeError):
+    """Converted trees whose sidecar digest is not the corpus manifest's."""
 
 
 def process_sidecars(roots: Mapping[str, Path]) -> SidecarCache:

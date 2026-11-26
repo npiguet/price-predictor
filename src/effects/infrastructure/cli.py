@@ -83,6 +83,8 @@ _EFFECT_MODEL_STORE = "effects.infrastructure.effect_model_store"
 _LAYOUT_REFUSED = "effects.domain.checkpoint_layout.CheckpointLayoutError"
 #: A corpus manifest of an older generation, or one missing a member.
 _MANIFEST_REFUSED = "effects.domain.corpus_manifest.ManifestError"
+#: Converted trees reconverted since the corpus was built (finding 11.3).
+_SIDECARS_CHANGED = "effects.infrastructure.converted_trees.SidecarsChangedError"
 
 
 def config_from_args(cls: type[_Config], args: argparse.Namespace, **overrides: Any) -> _Config:
@@ -217,11 +219,16 @@ class _AppendCardsFolder(argparse.Action):
         setattr(namespace, self.dest, (*chosen, Path(values)))
 
 
-def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
+def _add_cards_folder(
+    parser: argparse.ArgumentParser, *, recorded: bool = False,
+) -> None:
+    """``--cards-folder``; ``recorded`` defaults it to the folders the
+    checkpoint recorded instead of the converted defaults."""
+    default = None if recorded else DEFAULT_CARDS_FOLDER_PATHS
+    named = "the folders --checkpoint recorded" if recorded else " and ".join(DEFAULT_CARDS_FOLDERS)
     parser.add_argument(
         "--cards-folder", action=_AppendCardsFolder, dest="cards_folders",
-        default=DEFAULT_CARDS_FOLDER_PATHS,
-        help=f"Converted source tree; repeatable (default: {' and '.join(DEFAULT_CARDS_FOLDERS)})",
+        default=default, help=f"Converted source tree; repeatable (default: {named})",
     )
 
 
@@ -1000,6 +1007,7 @@ def _train_effect_model_parser(subparsers) -> None:
     MissingTrainingInputError: 1,
     _LAYOUT_REFUSED: 1,
     _MANIFEST_REFUSED: 1,
+    _SIDECARS_CHANGED: 1,
     HoldoutMismatchError: 1,
     ClosedListMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
@@ -1065,6 +1073,8 @@ def _encode_abilities_parser(subparsers) -> None:
 
 @exits_with({
     f"{_EFFECT_MODEL_STORE}.HashMismatchError": 1, FileNotFoundError: 1, _LAYOUT_REFUSED: 1,
+    # --variant identity or state-only, whose models read no cache (finding 11.7).
+    "effects.application.encode_abilities.UnencodedVariantError": 1,
 })
 def run_encode_abilities(args: argparse.Namespace) -> int:
     from effects.application.encode_abilities import EncodeAbilitiesConfig
@@ -1091,7 +1101,7 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         type=_baseline_checkpoint, default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
-    _add_cards_folder(parser)
+    _add_cards_folder(parser, recorded=True)
     _add_variant_scripts(parser, without=(
         "the tree the corpus's manifest records is read, if any"
     ))
@@ -1142,6 +1152,9 @@ def _baseline_checkpoint(value: str):
     f"{_EFFECT_MODEL_STORE}.SplitMismatchError": 1,
     BaselineVariantError: 1,
     CorpusMismatchError: 1,
+    _SIDECARS_CHANGED: 1,
+    # A cache with no stamp, or stamped for another checkpoint (finding 11.7).
+    "effects.domain.ability_cache_layout.CacheStampError": 1,
     FileNotFoundError: 1,
     # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).
     _LAYOUT_REFUSED: 1,
@@ -1266,6 +1279,23 @@ def _evaluated_inputs(args: argparse.Namespace) -> list[Path]:
     ]
 
 
+def _evaluated_trees(args: argparse.Namespace) -> list[Path]:
+    """The converted trees ``evaluate-effect-model`` reads: ``--cards-folder``,
+    else the folders the checkpoint recorded."""
+    from effects.infrastructure.recorded_inputs import checkpoint_cards_folders
+
+    return checkpoint_cards_folders(args.checkpoint, args.cards_folders)
+
+
+def _cache_stamps(args: argparse.Namespace) -> list[Path]:
+    """The stamp of each variant's cache the evaluation reads (finding 11.7)."""
+    from effects.domain.ability_cache_layout import stamp_path
+
+    variants = (Baseline.FULL, Baseline.NO_STATE, Baseline.TAXONOMY)
+    stamps = (stamp_path(args.abilities_root, variant) for variant in variants)
+    return [stamp for stamp in stamps if stamp.is_file()]
+
+
 def _encoded_inputs(args: argparse.Namespace) -> list[Path]:
     """What ``encode-abilities`` reads from its checkpoint: the vocabulary and
     the keyword table."""
@@ -1322,7 +1352,8 @@ RUN_MANIFESTS: ManifestTable = {
         inputs=(
             "checkpoint",
             lambda args: [path for _name, path in (args.baseline_checkpoints or [])],
-            *_SOURCE_TREES, _evaluated_inputs, "abilities_root", "win_rates", "reports_dir",
+            _evaluated_trees, "variant_scripts", _evaluated_inputs, "abilities_root",
+            _cache_stamps, "win_rates", "reports_dir",
         ),
     ),
 }

@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from effects.domain import default_paths
 from effects.domain.baselines import Baseline
 
 if TYPE_CHECKING:
@@ -77,7 +76,9 @@ class EvaluationContext:
 class EvaluateEffectModelConfig:
     checkpoint: Path = field(kw_only=True)
     baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
-    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
+    #: ``--cards-folder``; None reads the folders ``--checkpoint`` recorded
+    #: (:func:`with_checkpoint_defaults`), which the loaded context always holds.
+    cards_folders: tuple[Path, ...] | None = None
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
@@ -184,6 +185,23 @@ def with_corpus_defaults(
     )
 
 
+def with_checkpoint_defaults(
+    config: EvaluateEffectModelConfig, main, manifest: CorpusManifest, *,
+    corpus: Path | str = "the corpus",
+) -> EvaluateEffectModelConfig:
+    """``config`` reading the converted trees ``--cards-folder`` names, else
+    the ones ``main`` recorded, refused unless their sidecars are the ones
+    the corpus was built against (finding 11.3); and the corpus's variant
+    tree where none is named (:func:`with_corpus_defaults`)."""
+    from effects.infrastructure.converted_trees import SourceTrees
+
+    folders = tuple(Path(folder) for folder in (config.cards_folders or main.cards_folders))
+    SourceTrees.of(folders).require_sidecar_digest(
+        manifest.sidecar_digest, corpus=corpus,
+    )
+    return with_corpus_defaults(replace(config, cards_folders=folders), manifest)
+
+
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
     from effects.infrastructure.corpus_store import CorpusStore
@@ -210,7 +228,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     listed = require_listed_shards(store, manifest)
     require_generation(path for paths in listed.values() for path in paths)
     return EvaluationContext(
-        with_corpus_defaults(config, manifest), main, files,
+        with_checkpoint_defaults(config, main, manifest, corpus=corpus_path), main, files,
         corpus_path=corpus_path, manifest=manifest, shards=listed,
     )
 

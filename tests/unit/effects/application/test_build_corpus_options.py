@@ -14,7 +14,7 @@ from tests.unit.effects.builders import (
 
 
 def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
-    default_build, tmp_path,
+    default_build, shared_corpus, tmp_path,
 ):
     """The manifest's ``surface`` reaches the trainer (FR-141).
 
@@ -34,7 +34,7 @@ def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
 
     with pytest.raises(SurfaceMismatchError, match="prose"):
         train(TrainEffectModelConfig.unpathed(
-            corpus=str(default_build.directory),
+            corpus=str(default_build.directory), cards_folders=shared_corpus.cards,
             vocab_path=write_vocabulary(tmp_path / "vocab.txt", "script"),
         ))
 

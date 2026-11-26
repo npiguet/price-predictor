@@ -6,7 +6,9 @@ on, as well as by the cards that carry them.
 
 from __future__ import annotations
 
+import functools
 import logging
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,6 +33,7 @@ from effects.domain.selection_set import (
     write_selection_set,
 )
 from effects.domain.shard_generation import UnacceptedGenerationError
+from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.curated_shards import CorpusShardsError
 from effects.infrastructure.shard_io import write_shard
@@ -70,6 +73,16 @@ def _card_tree(root):
     return root
 
 
+@functools.cache
+def _card_tree_digest() -> str:
+    """The sidecar digest of :func:`_card_tree`, which names its files by
+    relative path and size alone: the manifest's, so the trainer reads the
+    config's tree as the one the corpus was built against (finding 11.3)."""
+    with tempfile.TemporaryDirectory() as root:
+        tree = _card_tree(Path(root) / "cardsfolder")
+        return SourceTrees.of((tree,)).converted_sidecar_digest()
+
+
 #: The survey's per-rule counts, as a gen-3 build writes them (FR-066).
 _RULE_COUNTS = {"records": 2, "rules": {"702.2": {"fires": {"forge_ai": 1}}}}
 
@@ -87,6 +100,7 @@ def _manifest(**overrides) -> CorpusManifest:
         per_stratum={"gate-one": 4096}, unique_texts={}, shortfall={},
         rule_counts=_RULE_COUNTS, rule_map_digest="map-digest",
         shards={"training": (CuratedShard(name="t.jsonl.gz", records=1),)},
+        sidecar_digest=_card_tree_digest(),
     )
     fields.update(overrides)
     return CorpusManifest(**fields)

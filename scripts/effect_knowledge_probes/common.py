@@ -148,22 +148,19 @@ def _add_sidecar_items(items: dict[str, LineItem], read: _SidecarRead,
         item.carriers.add(sidecar.card)
 
 
-def line_items(
-    cards_folders: Iterable[Path], surface: Surface, abilities_root: Path | None = None,
-) -> list[LineItem]:
+def line_items(cards_folders: Iterable[Path], surface: Surface, cache=None) -> list[LineItem]:
     """Every unique encoded text over the sidecar trees, with its cached ``e``.
 
     One item per text on the checkpoint's surface, since two lines that read the
-    same share one ``e``. ``abilities_root`` None reads labels only.
+    same share one ``e``. ``cache`` is the store :func:`checked_cache` gave;
+    None reads labels only.
     """
-    from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         converted_text_path,
         prose_lines,
         read_sidecar,
     )
 
-    cache = AbilityCacheStore(abilities_root) if abilities_root is not None else None
     items: dict[str, LineItem] = {}
     for path in sidecar_paths(cards_folders):
         sidecar = read_sidecar(path)
@@ -174,6 +171,17 @@ def line_items(
         rendered = prose_lines(converted_text_path(path))
         _add_sidecar_items(items, _SidecarRead(sidecar, rendered, matrix), surface)
     return list(items.values())
+
+
+def checked_cache(context: ProbeContext, abilities_root: Path, surface: Surface):
+    """The shipping cache under ``abilities_root``, once its stamp names the
+    probed checkpoint and trees (finding 11.7): ``CacheStampError`` otherwise."""
+    from effects.infrastructure.ability_cache_store import cache_stamp, require_cache_stamp
+
+    return require_cache_stamp(abilities_root, lambda: cache_stamp(
+        context.checkpoint_path, context.checkpoint,
+        cards_folders=context.cards_folders, surface=surface,
+    ))
 
 
 def acting_text_function(sidecars, surface: Surface):

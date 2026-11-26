@@ -774,12 +774,14 @@ def make_entity_targets(gate, fields=None, mask=None, index=None):
 
 def read_cache(abilities_root, sidecar_roots, *, surface, variant: str = "full"):
     """One variant's cache over freshly read sidecars, the way the evaluator
-    reads it: :func:`cached_vectors` over a ``SidecarIndex``."""
+    reads it: :func:`cached_vectors` over a ``SidecarIndex``, its stamp left
+    unchecked (the stamp's tests are ``test_encode_abilities_stamp.py``)."""
     from effects.application.geometry_checks import cached_vectors
-    from effects.infrastructure.ability_cache_store import SidecarIndex
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore, SidecarIndex
 
     return cached_vectors(
-        SidecarIndex(sidecar_roots, surface=surface), abilities_root, variant=variant,
+        SidecarIndex(sidecar_roots, surface=surface),
+        AbilityCacheStore(abilities_root, variant=variant),
     )
 
 

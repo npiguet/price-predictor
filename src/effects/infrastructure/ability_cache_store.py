@@ -1,13 +1,15 @@
 """Reading and writing the ability cache under the cache root a command names.
 
 The tree mirrors the source tree, so a provenance key's ``script_file`` locates
-its vectors without an index.
+its vectors without an index. Each variant's cache is read through its stamp
+(:func:`require_cache_stamp`), never by a bare :class:`AbilityCacheStore`.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,15 +19,22 @@ import numpy as np
 from effects.domain.ability_cache_layout import (
     ARRAY_KEY,
     CACHE_SUFFIX,
+    CacheStamp,
+    CacheStampError,
     cache_path_for,
+    stamp_path,
     validate_alignment,
     variant_of_cache_file,
 )
 from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceSidecar
+from price_predictor.infrastructure.atomic_write import write_atomically
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from effects.domain.ability_tokenizer import Surface
+    from effects.infrastructure.effect_model_store import EffectCheckpoint
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +93,83 @@ class AbilityCacheStore:
         return len(paths)
 
 
+def cache_stamp(
+    checkpoint_path: Path, checkpoint: EffectCheckpoint, *,
+    cards_folders: Sequence[Path | str], surface: Surface | str,
+) -> CacheStamp:
+    """The stamp a cache encoded from ``checkpoint`` over ``cards_folders`` on
+    ``surface`` carries: what ``encode-abilities`` writes and a reader wants."""
+    from effects.infrastructure.converted_trees import SourceTrees
+    from effects.infrastructure.effect_model_store import content_hash
+
+    return CacheStamp(
+        checkpoint_hash=content_hash(checkpoint_path), surface=str(surface),
+        vocab_hash=checkpoint.provenance.vocab_hash,
+        sidecar_digest=SourceTrees.of(cards_folders).converted_sidecar_digest(),
+    )
+
+
+def read_stamp(root: Path, variant: Baseline = Baseline.FULL) -> CacheStamp | None:
+    """The stamp of ``variant``'s cache under ``root``, or None when it has none."""
+    path = stamp_path(root, variant)
+    if not path.is_file():
+        return None
+    return CacheStamp.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def write_stamp(root: Path, stamp: CacheStamp, *, variant: Baseline = Baseline.FULL) -> None:
+    """Write ``variant``'s stamp atomically, after its last cache file."""
+    text = json.dumps(stamp.as_dict(), indent=2, sort_keys=True) + "\n"
+    write_atomically(
+        stamp_path(root, variant), lambda path: path.write_text(text, encoding="utf-8"),
+    )
+
+
+def remove_stamp(root: Path, variant: Baseline = Baseline.FULL) -> None:
+    """Remove ``variant``'s stamp before its first cache file is written, so a
+    run cut short leaves a cache no reader takes for a whole one."""
+    stamp_path(root, variant).unlink(missing_ok=True)
+
+
+def require_cache_stamp(
+    root: Path, wanted: CacheStamp | Callable[[], CacheStamp | None] | None, *,
+    variant: Baseline = Baseline.FULL,
+) -> AbilityCacheStore:
+    """``variant``'s cache under ``root``, once its stamp is ``wanted``'s
+    (finding 11.7). A root holding none of the variant's files needs no stamp;
+    files with no stamp, a stamp that differs, or a reader holding no
+    checkpoint of the variant (``wanted`` None) are refused. ``wanted`` may be
+    a function, called only when there are files, since a stamp hashes the
+    checkpoint file."""
+    store = AbilityCacheStore(root, variant=variant)
+    if store.written_files():
+        _require_stamp(root, wanted() if callable(wanted) else wanted, variant)
+    return store
+
+
+def _require_stamp(root: Path, wanted: CacheStamp | None, variant: Baseline) -> None:
+    """Refuse ``variant``'s cache files under ``root`` unless their stamp is ``wanted``."""
+    if wanted is None:
+        raise CacheStampError(
+            f"the {variant} cache under {root} was encoded from a {variant} checkpoint, "
+            f"which this run holds none of: pass --variant-checkpoint {variant}=PATH"
+        )
+    recorded = read_stamp(root, variant)
+    if recorded is None:
+        raise CacheStampError(
+            f"the {variant} cache under {root} has no stamp ({stamp_path(root, variant).name}), "
+            "so nothing names the checkpoint it was encoded from: re-encode it "
+            f"with encode-abilities --clean --variant {variant}"
+        )
+    differences = recorded.differences(wanted)
+    if differences:
+        raise CacheStampError(
+            f"{'; '.join(differences)}: the {variant} cache under {root} was not "
+            "encoded from this checkpoint over these trees; re-encode it, or "
+            "point --abilities-root at the cache this checkpoint wrote"
+        )
+
+
 def _load(path: Path) -> np.ndarray:
     with np.load(path) as data:
         return data[ARRAY_KEY]
@@ -137,14 +223,11 @@ class SidecarIndex:
         self.sources: tuple[IndexedSource, ...] = tuple(sources)
 
     def matrices(
-        self, abilities_root: Path, *, variant: Baseline = Baseline.FULL,
+        self, store: AbilityCacheStore,
     ) -> Iterator[tuple[IndexedSource, np.ndarray]]:
-        """Each source this variant's cache holds rows for, beside them, in
-        tree and path order; a cache whose rows do not match its sidecar is
-        skipped with a warning."""
-        store = AbilityCacheStore(abilities_root, variant=variant)
-        if not store.root.is_dir():
-            return
+        """Each source ``store`` holds rows for, beside them, in tree and path
+        order; a cache whose rows do not match its sidecar is skipped with a
+        warning. ``store`` comes from :func:`require_cache_stamp`."""
         for source in self.sources:
             matrix = store.read(source.script_file)
             if matrix is None:

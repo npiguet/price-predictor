@@ -170,3 +170,70 @@ class TestVariantCheckpointRefusals:
         with pytest.raises(RuntimeError, match="withheld keyword") as excinfo:
             self._load(monkeypatch, withheld_keyword=None)
         assert "flying" in str(excinfo.value)
+
+
+class TestTheTreesTheCheckpointRecorded:
+    """``--cards-folder`` defaults to the trees the checkpoint trained against,
+    and trees reconverted since the corpus was built are refused (finding 11.3):
+    a reconverted tree joins the records' keys to other lines in every gate."""
+
+    @staticmethod
+    def _tree(root: Path) -> Path:
+        from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+        from effects.infrastructure.sidecar_io import sidecar_path_for
+        from tests.unit.effects.builders import write_sidecar
+
+        script = "cardsfolder/s/shock.txt"
+        write_sidecar(ProvenanceSidecar(card="Shock", script_file=script, lines=(
+            SidecarLine(line_index=0, line_kind="spell",
+                        provenance=(ProvenanceKey(script, 0, "spell", 0),),
+                        script_text="SP$ DealDamage | NumDmg$ 2", prose_offset=0),
+        )), sidecar_path_for(root / "s" / "shock.txt"))
+        return root
+
+    def _resolved(self, tree: Path, *, flag=None, recorded_digest=None):
+        from effects.application.evaluation_context import (
+            EvaluateEffectModelConfig,
+            with_checkpoint_defaults,
+        )
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        digest = recorded_digest or SourceTrees.of((tree,)).converted_sidecar_digest()
+        manifest = SimpleNamespace(sidecar_digest=digest, variant_scripts_or=lambda given: given)
+        main = SimpleNamespace(cards_folders=(str(tree),))
+        config = EvaluateEffectModelConfig(
+            checkpoint=Path("main.pt"), abilities_root=Path("abilities"),
+            win_rates=Path("rates"), reports_dir=Path("reports"), cards_folders=flag,
+        )
+        return with_checkpoint_defaults(config, main, manifest)
+
+    def test_no_flag_reads_the_folders_the_checkpoint_recorded(self, tmp_path):
+        tree = self._tree(tmp_path / "cardsfolder")
+        assert self._resolved(tree).cards_folders == (tree,)
+
+    def test_a_named_folder_wins(self, tmp_path):
+        tree = self._tree(tmp_path / "cardsfolder")
+        named = self._tree(tmp_path / "copy" / "cardsfolder")
+        resolved = self._resolved(
+            tree, flag=(named,),
+            recorded_digest=self._digest(named),
+        )
+        assert resolved.cards_folders == (named,)
+
+    @staticmethod
+    def _digest(tree: Path) -> str:
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        return SourceTrees.of((tree,)).converted_sidecar_digest()
+
+    def test_a_reconverted_tree_is_refused_naming_both_digests(self, tmp_path):
+        from effects.infrastructure.converted_trees import SidecarsChangedError
+
+        tree = self._tree(tmp_path / "cardsfolder")
+        recorded = self._digest(tree)
+        sidecar = next(tree.rglob("*.provenance.json"))
+        sidecar.write_text(sidecar.read_text(encoding="utf-8") + " ", encoding="utf-8")
+        with pytest.raises(SidecarsChangedError) as excinfo:
+            self._resolved(tree, recorded_digest=recorded)
+        assert recorded in str(excinfo.value)
+        assert self._digest(tree) in str(excinfo.value)

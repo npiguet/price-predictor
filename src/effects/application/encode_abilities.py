@@ -12,7 +12,12 @@ from effects.domain import default_paths
 from effects.domain.baselines import Baseline, taxonomy_matrix
 from effects.domain.provenance import ProvenanceSidecar
 from effects.domain.tokenizer_files import TokenizerFiles
-from effects.infrastructure.ability_cache_store import AbilityCacheStore
+from effects.infrastructure.ability_cache_store import (
+    AbilityCacheStore,
+    cache_stamp,
+    remove_stamp,
+    write_stamp,
+)
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
@@ -23,6 +28,13 @@ from effects.infrastructure.sidecar_io import iter_sidecars, rendered_prose
 
 logger = logging.getLogger(__name__)
 
+#: The variants whose model reads no ``e`` the encoder writes: ``identity``'s
+#: comes from the free table its checkpoint carries, ``state-only`` zeroes it.
+UNENCODED_VARIANTS = frozenset({Baseline.IDENTITY, Baseline.STATE_ONLY})
+
+
+class UnencodedVariantError(ValueError):
+    """``encode-abilities --variant`` naming a variant whose model reads no cache."""
 
 
 @dataclass
@@ -44,6 +56,15 @@ class EncodeAbilitiesConfig:
     )})
     clean: bool = False
 
+    def __post_init__(self) -> None:
+        if self.variant in UNENCODED_VARIANTS:
+            raise UnencodedVariantError(
+                f"encode-abilities --variant {self.variant} would write the encoder's "
+                f"vectors, which the {self.variant} model never reads (identity reads "
+                "the free table its checkpoint carries, state-only zeroes every e): "
+                f"evaluate it with --variant-checkpoint {self.variant}=PATH, no cache"
+            )
+
     @property
     def source_trees(self) -> SourceTrees:
         """``--cards-folder`` and ``--variant-scripts`` as one value."""
@@ -57,7 +78,8 @@ class EncodeSummary:
 
 
 def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
-    """Encode every source under the configured trees; idempotent."""
+    """Encode every source under the configured trees; idempotent. The stamp
+    goes before the first file is written and is written after the last."""
     store = AbilityCacheStore(config.output_root, variant=config.variant)
     if config.clean:
         store.clean()
@@ -67,9 +89,6 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
     files = inference_files(
         checkpoint, vocab=config.vocab_path, keywords=config.keyword_definitions,
     )
-    e_dim = checkpoint.encoder_config.e_dim
-    provenance = checkpoint.provenance
-
     folders = config.source_trees.folders()
     # A relative default resolved from another directory names nothing, and
     # skipping it would write a cache missing whole trees and report success.
@@ -78,23 +97,43 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
         raise FileNotFoundError(f"no source tree at {', '.join(missing)}")
 
     sources, skipped = read_sources(folders)
-    if config.variant == Baseline.TAXONOMY:
-        matrices = (taxonomy_matrix(sidecar, e_dim) for _path, sidecar in sources)
-    else:
-        matrices = encode_tree(build_runner(checkpoint, files), sources)
+    remove_stamp(config.output_root, config.variant)
     rows = 0
-    for (_path, sidecar), matrix in zip(sources, matrices, strict=True):
+    for (_path, sidecar), matrix in zip(
+        sources, _matrices(config, checkpoint, files, sources), strict=True,
+    ):
         store.write(sidecar.script_file, matrix, sidecar)
         rows += matrix.shape[0]
+    write_stamp(config.output_root, _stamp(config, checkpoint, files), variant=config.variant)
 
     logger.info(
         "Encoded %d sources (%d ability rows; %d sidecars with no line skipped) "
         "into %s [variant=%s]%s",
         len(sources), rows, skipped, config.output_root, config.variant,
-        f", withheld keyword {provenance.withheld_keyword}"
-        if provenance.withheld_keyword else "",
+        f", withheld keyword {checkpoint.provenance.withheld_keyword}"
+        if checkpoint.provenance.withheld_keyword else "",
     )
     return EncodeSummary(sources=len(sources), rows=rows)
+
+
+def _matrices(config: EncodeAbilitiesConfig, checkpoint: EffectCheckpoint,
+              files: TokenizerFiles, sources):
+    """Each source's rows: the taxonomy's hash embedding, else the encoder's."""
+    if config.variant == Baseline.TAXONOMY:
+        e_dim = checkpoint.encoder_config.e_dim
+        return (taxonomy_matrix(sidecar, e_dim) for _path, sidecar in sources)
+    return encode_tree(build_runner(checkpoint, files), sources)
+
+
+def _stamp(config: EncodeAbilitiesConfig, checkpoint: EffectCheckpoint, files: TokenizerFiles):
+    """The stamp of this cache: the converted trees alone, the variant tree
+    being no tree a gate or probe reads the cache over."""
+    from effects.infrastructure.vocabulary_file import vocabulary_surface
+
+    return cache_stamp(
+        config.checkpoint, checkpoint, cards_folders=config.cards_folders,
+        surface=vocabulary_surface(files.vocab),
+    )
 
 
 def read_sources(

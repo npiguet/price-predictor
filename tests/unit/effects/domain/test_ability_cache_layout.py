@@ -125,3 +125,51 @@ class TestPooling:
 
     def test_the_pooled_vector_is_float32(self):
         assert pooled_card_vector(np.zeros((2, 4))).dtype == np.float32
+
+
+class TestTheStamp:
+    """The stamp ties a cache to the checkpoint, surface, vocabulary and
+    converted trees it was encoded from (finding 11.7)."""
+
+    _STAMP = dict(checkpoint_hash="c" * 64, surface="prose", vocab_hash="v" * 64,
+                  sidecar_digest="s" * 64)
+
+    def test_each_variant_has_a_stamp_file_of_its_own(self):
+        from effects.domain.ability_cache_layout import stamp_path
+        from effects.domain.baselines import BASELINES
+
+        paths = {stamp_path(ROOT, variant) for variant in BASELINES}
+        assert len(paths) == len(BASELINES)
+        assert stamp_path(ROOT, Baseline.FULL) == ROOT / "ability-cache.stamp.json"
+        assert stamp_path(ROOT, Baseline.TAXONOMY).name == "ability-cache.taxonomy.stamp.json"
+
+    def test_a_stamp_reads_back_from_what_it_writes(self):
+        from effects.domain.ability_cache_layout import CacheStamp
+
+        stamp = CacheStamp(**self._STAMP)
+        assert CacheStamp.from_dict(stamp.as_dict()) == stamp
+
+    def test_a_stamp_missing_a_member_is_refused_by_its_name(self):
+        from effects.domain.ability_cache_layout import CacheStamp, CacheStampError
+
+        recorded = CacheStamp(**self._STAMP).as_dict()
+        del recorded["sidecar_digest"]
+        with pytest.raises(CacheStampError, match="sidecar_digest"):
+            CacheStamp.from_dict(recorded)
+
+    def test_each_difference_names_both_values(self):
+        from effects.domain.ability_cache_layout import CacheStamp
+
+        cache = CacheStamp(**self._STAMP)
+        wanted = CacheStamp(**{**self._STAMP, "checkpoint_hash": "d" * 64, "surface": "script"})
+        assert cache.differences(wanted) == [
+            f"checkpoint_hash: cache {'c' * 64}, wanted {'d' * 64}",
+            "surface: cache prose, wanted script",
+        ]
+
+    def test_a_member_wanted_as_none_is_not_compared(self):
+        """A taxonomy cache read without its checkpoint: no weights enter it."""
+        from effects.domain.ability_cache_layout import CacheStamp
+
+        cache = CacheStamp(**self._STAMP)
+        assert cache.differences(cache.without_checkpoint()) == []

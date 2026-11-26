@@ -568,6 +568,8 @@ def run(config: TrainEffectModelConfig) -> int:
     store = CorpusStore(Path(config.corpus))
     manifest = store.load()
     config = with_variant_scripts(config, manifest)
+    # Reconverted since the build, the trees join the keys to other lines (11.3).
+    config.source_trees.require_sidecar_digest(manifest.sidecar_digest, corpus=config.corpus)
     require_matching_surface(
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
         corpus=config.corpus,
