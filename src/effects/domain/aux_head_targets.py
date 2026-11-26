@@ -78,11 +78,7 @@ def verdict_targets(record: EffectRecord) -> HeadRow | None:
             VERDICT_LAYOUT.put(row, VerdictField.MANA_PAID,
                                [float(paid.get(color, 0)) for color in COLORS])
         case ResolutionPayload(outcome=outcome):
-            created = sum(1 for event in events_of(record) if event.type in _EFFECT_OBJECTS)
-            VERDICT_LAYOUT.put(row, VerdictField.EFFECTS_CREATED, created)
-            if outcome in RESOLUTION_OUTCOMES:
-                VERDICT_LAYOUT.put(row, VerdictField.RESOLUTION_OUTCOME,
-                                   RESOLUTION_OUTCOMES.index(outcome))
+            _resolution_verdict(record, outcome, row)
         case RewritePayload(result=result) if result is not None:
             VERDICT_LAYOUT.put(row, VerdictField.REPLACEMENT_RESULT,
                                REPLACEMENT_RESULTS.index(result))
@@ -91,6 +87,14 @@ def verdict_targets(record: EffectRecord) -> HeadRow | None:
         case _:
             return None
     return row
+
+
+def _resolution_verdict(record: EffectRecord, outcome, row: HeadRow) -> None:
+    created = sum(1 for event in events_of(record) if event.type in _EFFECT_OBJECTS)
+    VERDICT_LAYOUT.put(row, VerdictField.EFFECTS_CREATED, created)
+    if outcome in RESOLUTION_OUTCOMES:
+        VERDICT_LAYOUT.put(row, VerdictField.RESOLUTION_OUTCOME,
+                           RESOLUTION_OUTCOMES.index(outcome))
 
 
 def _decision_verdict(record: EffectRecord, candidate: Candidate, row: HeadRow) -> None:
@@ -118,15 +122,22 @@ def mana_symbols(cost: str) -> dict[str, int] | None:
     layout does not list."""
     counts: dict[str, int] = {}
     for symbol in _SYMBOL.findall(cost):
-        symbol = symbol.strip().upper()
-        if symbol.isdigit():
-            if int(symbol):
-                counts["generic"] = counts.get("generic", 0) + int(symbol)
-            continue
-        if symbol not in MANA_SYMBOLS:
+        if not _count_symbol(counts, symbol.strip().upper()):
             return None
-        counts[symbol] = counts.get(symbol, 0) + 1
     return counts
+
+
+def _count_symbol(counts: dict[str, int], symbol: str) -> bool:
+    """Add one upper-cased symbol to ``counts``; False where the layout does
+    not list it."""
+    if symbol.isdigit():
+        if int(symbol):
+            counts["generic"] = counts.get("generic", 0) + int(symbol)
+        return True
+    if symbol not in MANA_SYMBOLS:
+        return False
+    counts[symbol] = counts.get(symbol, 0) + 1
+    return True
 
 
 def cost_adjustment(record: EffectRecord, candidate: Candidate) -> list[float] | None:
@@ -134,22 +145,11 @@ def cost_adjustment(record: EffectRecord, candidate: Candidate) -> list[float] |
     mana symbol kind (root spec § 11.2); None where the record cannot say:
     a land play, an ability or alternative cost (whose printed cost is not
     the card's), a face not up, or a cost or card the layout cannot spell."""
-    if candidate.land_play or not candidate.ability:
+    key = _cast_key(candidate)
+    if key is None:
         return None
-    key = candidate.ability[0]
-    # A card's cast is its first spell ability (a permanent's the implicit
-    # one); the later ones are its activated abilities, each with a cost of
-    # its own.
-    if key.trait_kind != TraitKind.SPELL or key.index_within_kind != 0:
-        return None
-    host = next(
-        (entity for entity in record.state.entities if entity.id == record.state.refs.source),
-        None,
-    )
-    if (
-        host is None or host.mana_cost is None or key.face != host.face
-        or host.zone == Zone.BATTLEFIELD
-    ):
+    host = _castable_host(record, key)
+    if host is None:
         return None
     charged = candidate.cost_after_adjustment.get("mana")
     if not isinstance(charged, str):
@@ -160,6 +160,34 @@ def cost_adjustment(record: EffectRecord, candidate: Candidate) -> list[float] |
     return [
         float(after.get(symbol, 0) - host.mana_cost.get(symbol, 0)) for symbol in MANA_SYMBOLS
     ]
+
+
+def _cast_key(candidate: Candidate):
+    """The provenance key of the candidate's cast, None where it is a land
+    play, has no ability or is not the card's first spell ability (a card's
+    cast is its first spell ability, a permanent's the implicit one; the later
+    ones are its activated abilities, each with a cost of its own)."""
+    if candidate.land_play or not candidate.ability:
+        return None
+    key = candidate.ability[0]
+    if key.trait_kind != TraitKind.SPELL or key.index_within_kind != 0:
+        return None
+    return key
+
+
+def _castable_host(record: EffectRecord, key):
+    """The source card whose printed cost the cast is read against; None where
+    it is missing, has no cost, is another face than the key's or is on the
+    battlefield."""
+    host = next(
+        (entity for entity in record.state.entities if entity.id == record.state.refs.source),
+        None,
+    )
+    if host is None or host.mana_cost is None:
+        return None
+    if key.face != host.face or host.zone == Zone.BATTLEFIELD:
+        return None
+    return host
 
 
 def supervises_created_objects(record: EffectRecord) -> bool:
@@ -188,14 +216,17 @@ def global_targets(record: EffectRecord) -> HeadRow | None:
         if event.type in _TURN_STRUCTURE:
             counts[event.type] += _turn_structure_count(event)
         elif event.type is EventType.DAY_NIGHT_CHANGED:
-            day_night = (
-                DayNightChange.BECAME_DAY if event.params.get("to") == "day"
-                else DayNightChange.BECAME_NIGHT
-            )
+            day_night = _day_night_of(event)
     row = GLOBAL_LAYOUT.blank()
     GLOBAL_LAYOUT.put(row, GlobalField.TURN_STRUCTURE_CHANGE, list(counts.values()))
     GLOBAL_LAYOUT.put(row, GlobalField.DAY_NIGHT_CHANGE, DAY_NIGHT_CHANGES.index(day_night))
     return row
+
+
+def _day_night_of(event) -> DayNightChange:
+    if event.params.get("to") == "day":
+        return DayNightChange.BECAME_DAY
+    return DayNightChange.BECAME_NIGHT
 
 
 def _turn_structure_count(event) -> float:
@@ -264,25 +295,26 @@ class CreatedGroup:
     @classmethod
     def of(cls, event_type: EventType, params: dict, actor: str) -> CreatedGroup | None:
         if event_type is EventType.TOKEN_CREATED:
-            script = params.get("token_script_id") or None
-            traits = params.get("characteristics") or {}
-            keywords = traits.get("keywords") or ()
-            if isinstance(keywords, str):
-                keywords = (keywords,)
-            controller = traits.get("controller")
-            counters = traits.get("counters")
-            return cls(
-                kind=CreatedKind.TOKEN, scripted=script is not None, id=str(script or ""),
-                power=traits.get("power"), toughness=traits.get("toughness"),
-                types=str(traits.get("types", "")), keywords=tuple(keywords),
-                other_controller=None if controller is None else controller != actor,
-                counters=dict(counters) if isinstance(counters, dict) else None,
-            )
+            return cls._token(params, actor)
         if event_type is EventType.CARD_MADE:
             return cls(kind=CreatedKind.CARD, scripted=False, id=str(params.get("card_name", "")))
         if event_type is EventType.CONTINUOUS_EFFECT_CREATED:
             return cls(kind=CreatedKind.EFFECT, scripted=False, id=str(params.get("layers", "")))
         return None
+
+    @classmethod
+    def _token(cls, params: dict, actor: str) -> CreatedGroup:
+        script = params.get("token_script_id") or None
+        traits = params.get("characteristics") or {}
+        controller = traits.get("controller")
+        counters = traits.get("counters")
+        return cls(
+            kind=CreatedKind.TOKEN, scripted=script is not None, id=str(script or ""),
+            power=traits.get("power"), toughness=traits.get("toughness"),
+            types=str(traits.get("types", "")), keywords=_keywords_of(traits),
+            other_controller=None if controller is None else controller != actor,
+            counters=dict(counters) if isinstance(counters, dict) else None,
+        )
 
     @property
     def key(self) -> tuple:
@@ -301,24 +333,24 @@ class CreatedGroup:
         target[base + CreatedSlot.POWER] = max(_number(self.power), 0.0)
         target[base + CreatedSlot.TOUGHNESS] = max(_number(self.toughness), 0.0)
         target[base + CreatedSlot.KIND + CREATED_KINDS.index(self.kind)] = 1.0
+        self._write_controller(target, known, base)
+        self._write_counters(target, known, base)
+        self._write_vocabularies(target, base)
+
+    def _write_controller(self, target: list[float], known: list[bool], base: int) -> None:
         if self.other_controller is None:
             known[base + CreatedSlot.OTHER_CONTROLLER] = False
         else:
             target[base + CreatedSlot.OTHER_CONTROLLER] = 1.0 if self.other_controller else 0.0
-        self._write_counters(target, known, base)
+
+    def _write_vocabularies(self, target: list[float], base: int) -> None:
         tokens = type_tokens(self.types)
-        for card_type in tokens:
-            index = vocabulary_slot(card_type, CARD_TYPES)
-            if index is not None:
-                target[base + CreatedSlot.TYPES + index] = 1.0
-        for subtype in subtypes_of(tokens):
-            index = vocabulary_slot(subtype, SUBTYPES_CHANGED)
-            if index is not None:
-                target[base + CreatedSlot.SUBTYPES + index] = 1.0
-        for keyword in self.keywords:
-            index = keyword_index(str(keyword))
-            if index is not None:
-                target[base + CreatedSlot.KEYWORDS + index] = 1.0
+        _mark_slots(target, base + CreatedSlot.TYPES,
+                    (vocabulary_slot(card_type, CARD_TYPES) for card_type in tokens))
+        _mark_slots(target, base + CreatedSlot.SUBTYPES,
+                    (vocabulary_slot(subtype, SUBTYPES_CHANGED) for subtype in subtypes_of(tokens)))
+        _mark_slots(target, base + CreatedSlot.KEYWORDS,
+                    (keyword_index(str(keyword)) for keyword in self.keywords))
 
     def _write_counters(self, target: list[float], known: list[bool], base: int) -> None:
         other = base + CreatedSlot.COUNTERS + len(COUNTER_TYPES)
@@ -333,6 +365,20 @@ class CreatedGroup:
                 if name in COUNTER_TYPES else other
             )
             target[column] += max(_number(amount), 0.0)
+
+
+def _mark_slots(target: list[float], start: int, indices) -> None:
+    """Set the column ``start + index`` of each index the vocabulary knows."""
+    for index in indices:
+        if index is not None:
+            target[start + index] = 1.0
+
+
+def _keywords_of(traits: dict) -> tuple:
+    keywords = traits.get("keywords") or ()
+    if isinstance(keywords, str):
+        keywords = (keywords,)
+    return tuple(keywords)
 
 
 def _number(value) -> float:
