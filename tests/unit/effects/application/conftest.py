@@ -17,6 +17,7 @@ from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 from effects.infrastructure.vocabulary_file import save_vocabulary
 from tests.unit.effects.application.build_corpus_support import CorpusFixture, _write_corpus
 from tests.unit.effects.application.geometry_checks_support import SourceRows, _write_source
+from tests.unit.effects.application.training_run_support import TrainingRunner
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
     FIXTURE_TRAINING_SHARDS,
@@ -37,6 +38,12 @@ def single_thread():
     torch.set_num_threads(1)
     yield
     torch.set_num_threads(before)
+
+
+@pytest.fixture
+def runner(monkeypatch, corpus, caplog):
+    """Runs of two real epochs on the fixture corpus (``training_run_support``)."""
+    return TrainingRunner(monkeypatch, corpus, caplog)
 
 
 @pytest.fixture(scope="module")

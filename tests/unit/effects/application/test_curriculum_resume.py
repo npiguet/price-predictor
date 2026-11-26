@@ -13,10 +13,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tests.unit.effects.application.test_training_loop_workers import (
-    _assert_same_average,
-    _run,
-)
+from tests.unit.effects.application.test_training_loop_workers import _assert_same_average
+from tests.unit.effects.application.training_run_support import RunPlan
 
 pytestmark = pytest.mark.usefixtures("single_thread")
 
@@ -25,13 +23,13 @@ REWARM = {"epochs": 3, "curriculum_rewarm_steps": 10}
 
 
 def test_a_run_interrupted_inside_the_re_warm_resumes_to_the_same_weights(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
-    whole = _run(monkeypatch, corpus, tmp_path / "whole", caplog, workers=0, **REWARM)
+    whole = runner.run(tmp_path / "whole", RunPlan(workers=0, config=REWARM))
     out = tmp_path / "interrupted"
-    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=2, **REWARM)
+    first = runner.run(out, RunPlan(workers=0, interrupt_after=2, config=REWARM))
     assert first["average"]["start_step"] == 12
-    second = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, **REWARM)
+    second = runner.run(out, RunPlan(workers=0, resume=True, config=REWARM))
 
     assert first["losses"] + second["losses"] == whole["losses"]
     for name, value in whole["parameters"].items():
@@ -46,7 +44,7 @@ def test_a_run_interrupted_inside_the_re_warm_resumes_to_the_same_weights(
 
 
 def test_a_resume_file_recording_no_re_warm_is_refused_by_name(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     """A ``resume.pt`` written before the flag existed (D19)."""
     from effects.infrastructure.effect_model_store import (
@@ -56,9 +54,9 @@ def test_a_resume_file_recording_no_re_warm_is_refused_by_name(
     )
 
     out = tmp_path / "older"
-    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1, **REWARM)
+    runner.run(out, RunPlan(workers=0, interrupt_after=1, config=REWARM))
     state = load_resume_state(out)
     del state["settings"]["curriculum_rewarm_steps"]
     save_resume_state(out, state)
     with pytest.raises(ResumeMismatchError, match="curriculum_rewarm_steps"):
-        _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, **REWARM)
+        runner.run(out, RunPlan(workers=0, resume=True, config=REWARM))

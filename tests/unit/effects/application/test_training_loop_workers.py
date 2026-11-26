@@ -16,19 +16,16 @@ leaves no process behind.
 
 from __future__ import annotations
 
-import functools
-import logging
 import multiprocessing
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
 
-from effects.application import run_context
 from effects.application import training_loop as loop_module
 from effects.application.run_context import preparer_settings
-from effects.application.step_loss import StepLossComputer
 from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
@@ -37,157 +34,21 @@ from effects.application.step_preparation import (
 )
 from effects.application.train_effect_model import ValidationGameInTrainingError
 from effects.application.training_schedule import Curriculum
-from effects.domain.ability_encoder import AbilityEncoder
-from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
-from effects.domain.split import (
-    CorpusSplit,
-)
 from effects.infrastructure.tensor_packing import pack, unpack
+from tests.unit.effects.application.training_run_support import (
+    SEED,
+    Capture,
+    RunPlan,
+    TrainingRunner,
+    every_record_selection,
+)
 from tests.unit.effects.builders import (
-    FIXTURE_RULE_OUTPUTS,
-    FIXTURE_TRAINING_SEED,
-    curated_fixture_records,
-    fixture_selection,
     fixture_training_config,
     make_training_loop,
 )
 
-SEED = FIXTURE_TRAINING_SEED
-
 pytestmark = pytest.mark.usefixtures("single_thread")
-
-
-@functools.cache
-def _selection():
-    """The control score's selection set over every fixture record: the
-    validation sample alone holds too few games for every component."""
-    return fixture_selection(curated_fixture_records())
-
-
-class _Interrupted(Exception):
-    """Stands in for the machine turning off after an epoch."""
-
-
-class _RecordedLosses(StepLossComputer):
-    """The real device half, noting every loss it computes, training's and
-    validation's, and pressing Ctrl+C on the ``interrupt_at``-th."""
-
-    def __init__(self, config, device, sink: list[float], interrupt_at) -> None:
-        super().__init__(config, device)
-        self.sink = sink
-        self.interrupt_at = interrupt_at
-        self.calls = 0
-
-    def device_loss(self, *args, **kwargs):
-        self.calls += 1
-        if self.calls == self.interrupt_at:
-            raise KeyboardInterrupt
-        computed = super().device_loss(*args, **kwargs)
-        self.sink.append(float(computed.total.detach()))
-        return computed
-
-
-def record_losses(loop, sink: list[float], *, interrupt_at=None) -> None:
-    """Swap ``loop``'s device half, training's and validation's, for one that
-    records into ``sink``."""
-    recorded = _RecordedLosses(loop.config, loop.device, sink, interrupt_at)
-    loop.losses = loop.validator.losses = recorded
-
-
-def _run(
-    monkeypatch, corpus, out: Path, caplog, *, workers: int, seed: int = SEED,
-    interrupt_after: int | None = None, resume: bool = False,
-    interrupt_at: int | None = None, **config,
-) -> dict:
-    """Two epochs end to end; every loss, the final weights, the share lines.
-
-    ``interrupt_after`` stops the run once that epoch's resume file is written,
-    as a machine turning off would; ``resume`` continues from that file.
-    ``interrupt_at`` presses Ctrl+C on that device loss, counted from 1.
-    """
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    # Gradient accumulation (6 steps, an even count, so each epoch ends on an
-    # optimizer step) and lethality copies on, so the equalities cover
-    # the micro-batch sum and the counterfactual draws.
-    config = {"grad_accum": 2, "lethality_copies": 2, "steps_per_epoch": 6, **config}
-    if interrupt_after is not None:
-        real_save = loop_module.save_resume
-
-        def save_then_stop(run, epoch, **kwargs):
-            real_save(run, epoch, **kwargs)
-            if epoch == interrupt_after:
-                raise _Interrupted
-
-        monkeypatch.setattr(loop_module, "save_resume", save_then_stop)
-    built: dict[str, torch.nn.Module] = {}
-    initial: dict[str, torch.Tensor] = {}
-    losses: list[float] = []
-
-    def encoder(config):
-        built["encoder"] = AbilityEncoder(config)
-        return built["encoder"]
-
-    def model(config):
-        # The trunk at a size a unit suite can train on a CPU; the workers
-        # never build it, so the patch reaches every run alike.
-        built["model"] = EffectModel(replace(
-            config, d_model=32, n_layers=1, n_heads=2, ff_dim=64,
-        ))
-        initial.update({
-            name: value.detach().clone()
-            for name, value in built["model"].state_dict().items()
-        })
-        return built["model"]
-
-    monkeypatch.setattr(run_context, "AbilityEncoder", encoder)
-    monkeypatch.setattr(run_context, "EffectModel", model)
-    caplog.clear()
-    with caplog.at_level(logging.INFO, logger="effects.application"):
-        loop = make_training_loop(
-            fixture_training_config(
-                corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
-                **config,
-            ),
-            split=CorpusSplit(
-                held_out_cards=(), card_disjoint_games=frozenset(),
-                game_disjoint_games=frozenset({corpus.held}),
-            ),
-            training_shards=corpus.shards,
-            validation_samples={
-                "card-disjoint": corpus.sample, "game-disjoint": corpus.sample,
-            },
-            selection=_selection(), rule_outputs=FIXTURE_RULE_OUTPUTS,
-        )
-        record_losses(loop, losses, interrupt_at=interrupt_at)
-        try:
-            code = loop.execute()
-        except _Interrupted:
-            code = None
-    monkeypatch.undo()
-    assert code in (0, None)
-    from effects.infrastructure.effect_model_store import load_resume_state
-
-    return {
-        # The averaged weights the last resume file holds, None without one.
-        "average": (
-            load_resume_state(out)["weight_average"]
-            if (out / "resume.pt").exists() else None
-        ),
-        "stopper": (
-            load_resume_state(out)["stopper"] if (out / "resume.pt").exists() else None
-        ),
-        "control": [m for m in caplog.messages if "| best " in m],
-        "losses": losses,
-        "parameters": {
-            f"{owner}.{name}": value.detach().clone()
-            for owner, module in built.items()
-            for name, value in module.state_dict().items()
-        },
-        "shares": [m for m in caplog.messages if "by rarity bucket" in m],
-        "workers": any("worker process" in m for m in caplog.messages),
-        "initial": initial,
-    }
 
 
 def _assert_same(first: dict, second: dict) -> None:
@@ -212,48 +73,8 @@ def _assert_same_average(first: dict, second: dict) -> None:
 @pytest.fixture(scope="module")
 def in_process(single_thread, corpus, tmp_path_factory):
     with pytest.MonkeyPatch.context() as monkeypatch:
-        handler = _Capture()
-        return _run(
-            monkeypatch, corpus, tmp_path_factory.mktemp("serial"), handler,
-            workers=0,
-        )
-
-
-class _Capture:
-    """``caplog`` for a module-scoped fixture, which cannot request it."""
-
-    def __init__(self) -> None:
-        self.messages: list[str] = []
-        self._handler = _ListHandler(self.messages)
-
-    def clear(self) -> None:
-        self.messages.clear()
-
-    def at_level(self, level, logger):
-        import contextlib
-
-        @contextlib.contextmanager
-        def scope():
-            target = logging.getLogger(logger)
-            previous = target.level
-            target.setLevel(level)
-            target.addHandler(self._handler)
-            try:
-                yield
-            finally:
-                target.removeHandler(self._handler)
-                target.setLevel(previous)
-
-        return scope()
-
-
-class _ListHandler(logging.Handler):
-    def __init__(self, sink: list[str]) -> None:
-        super().__init__()
-        self.sink = sink
-
-    def emit(self, record) -> None:
-        self.sink.append(record.getMessage())
+        runner = TrainingRunner(monkeypatch, corpus, Capture())
+        return runner.run(tmp_path_factory.mktemp("serial"), RunPlan(workers=0))
 
 
 def test_the_fixture_run_exercises_what_it_claims(in_process):
@@ -271,28 +92,26 @@ def test_the_fixture_run_exercises_what_it_claims(in_process):
 
 
 def test_worker_processes_train_exactly_what_the_in_process_path_trains(
-    monkeypatch, corpus, tmp_path, caplog, in_process,
+    runner, tmp_path, in_process,
 ):
-    workers = _run(monkeypatch, corpus, tmp_path / "two", caplog, workers=2)
+    workers = runner.run(tmp_path / "two", RunPlan(workers=2))
     assert workers["workers"] and not in_process["workers"]
     _assert_same(in_process, workers)
     assert not multiprocessing.active_children()
 
 
 def test_a_seed_repeats_its_run_whatever_the_worker_count(
-    monkeypatch, corpus, tmp_path, caplog, in_process,
+    runner, tmp_path, in_process,
 ):
-    first = _run(monkeypatch, corpus, tmp_path / "a", caplog, workers=3)
-    second = _run(monkeypatch, corpus, tmp_path / "b", caplog, workers=3)
+    first = runner.run(tmp_path / "a", RunPlan(workers=3))
+    second = runner.run(tmp_path / "b", RunPlan(workers=3))
     _assert_same(first, second)
     _assert_same(in_process, first)
 
 
-def test_another_seed_is_another_run(monkeypatch, corpus, tmp_path, caplog, in_process):
+def test_another_seed_is_another_run(runner, tmp_path, in_process):
     """So the equalities above are not the vacuous kind."""
-    other = _run(
-        monkeypatch, corpus, tmp_path / "other", caplog, workers=0, seed=SEED + 1,
-    )
+    other = runner.run(tmp_path / "other", RunPlan(workers=0, seed=SEED + 1))
     assert other["losses"] != in_process["losses"]
     assert any(
         not torch.equal(value, other["parameters"][name])
@@ -304,7 +123,7 @@ def test_another_seed_is_another_run(monkeypatch, corpus, tmp_path, caplog, in_p
 
 
 def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
-    monkeypatch, corpus, tmp_path, caplog, in_process,
+    runner, tmp_path, in_process,
 ):
     """Interrupted after epoch 1 and resumed, the run ends where it would have.
 
@@ -312,9 +131,9 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     early stopper's reset and the sparse fields' switch-on.
     """
     out = tmp_path / "interrupted"
-    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    first = runner.run(out, RunPlan(workers=0, interrupt_after=1))
     assert (out / "resume.pt").exists()
-    second = _run(monkeypatch, corpus, out, caplog, workers=2, resume=True)
+    second = runner.run(out, RunPlan(workers=2, resume=True))
 
     assert first["losses"] + second["losses"] == in_process["losses"]
     assert first["shares"] + second["shares"] == in_process["shares"]
@@ -327,7 +146,7 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
 
 
 def test_a_resume_reuses_the_loss_denominators_the_run_started_with(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     """FR-062: computed once at startup from the training shards, floored,
     kept in ``resume.pt`` and the checkpoint, and read back on resume rather
@@ -335,21 +154,21 @@ def test_a_resume_reuses_the_loss_denominators_the_run_started_with(
     from effects.infrastructure.effect_model_store import EffectModelStore, load_resume_state
 
     out = tmp_path / "denominators"
-    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
-    assert any("Loss denominators from" in m for m in caplog.messages)
+    runner.run(out, RunPlan(workers=0, interrupt_after=1))
+    assert any("Loss denominators from" in m for m in runner.caplog.messages)
     stored = load_resume_state(out)["loss_denominators"]
     values = [v for terms in stored["values"].values() for v in terms.values()]
     assert values and min(values) >= stored["floor"] == 0.04
     assert "gate" in stored["values"]["per_entity"]
 
-    _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
-    assert not any("Loss denominators from" in m for m in caplog.messages)
+    runner.run(out, RunPlan(workers=0, resume=True))
+    assert not any("Loss denominators from" in m for m in runner.caplog.messages)
     assert load_resume_state(out)["loss_denominators"] == stored
     assert EffectModelStore(out).load().loss_denominators == stored
 
 
 def test_a_resume_file_holding_keys_no_longer_written_resumes_the_same_run(
-    monkeypatch, corpus, tmp_path, caplog, in_process,
+    runner, tmp_path, in_process,
 ):
     """Resume files on disk still carry the ``finished`` flag and the noise
     state's ``step``, which nothing read; an interrupted run must continue
@@ -360,12 +179,12 @@ def test_a_resume_file_holding_keys_no_longer_written_resumes_the_same_run(
     )
 
     out = tmp_path / "older"
-    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    first = runner.run(out, RunPlan(workers=0, interrupt_after=1))
     state = load_resume_state(out)
     state["finished"] = False
     state["noise"]["step"] = state["step"]
     save_resume_state(out, state)
-    second = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
+    second = runner.run(out, RunPlan(workers=0, resume=True))
 
     assert first["losses"] + second["losses"] == in_process["losses"]
     for name, value in in_process["parameters"].items():
@@ -373,16 +192,15 @@ def test_a_resume_file_holding_keys_no_longer_written_resumes_the_same_run(
 
 
 def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
-    monkeypatch, corpus, tmp_path, caplog, in_process,
+    runner, tmp_path, in_process,
 ):
     """``--epochs`` may grow on resume, but the warmup was fixed by the run
     that started: at 40 epochs it would still be warming up through epoch 2."""
     out = tmp_path / "extended"
-    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
-    second = _run(
-        monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=40,
-        interrupt_after=2,
-    )
+    first = runner.run(out, RunPlan(workers=0, interrupt_after=1))
+    second = runner.run(out, RunPlan(
+        workers=0, resume=True, interrupt_after=2, config={"epochs": 40},
+    ))
 
     assert first["losses"] + second["losses"] == in_process["losses"]
     for name, value in in_process["parameters"].items():
@@ -404,11 +222,11 @@ def test_the_average_starts_one_epoch_after_the_curriculum_switch(in_process):
             assert torch.equal(value, in_process["parameters"][f"{owner}.{name}"]), name
 
 
-def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_path, caplog):
+def test_a_saved_checkpoint_holds_the_averaged_weights(runner, tmp_path):
     from effects.infrastructure.effect_model_store import EffectModelStore
 
     out = tmp_path / "averaged"
-    run = _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
+    run = runner.run(out, RunPlan(workers=0, config={"save_every_epoch": True}))
     saved = EffectModelStore(out / "epochs").load(out / "epochs" / "epoch-02.pt")
     averaged = run["average"]["state"]
     for name, value in saved.model_state.items():
@@ -420,11 +238,11 @@ def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_
     state = run["stopper"]
     assert saved.best_control_score == state["best"]
     assert saved.averaged and saved.control_score is not None
-    assert saved.selection_set_digest == _selection().digest
+    assert saved.selection_set_digest == every_record_selection().digest
 
 
 def test_an_epoch_ending_before_warmup_is_no_best_candidate(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     """Story 7 acceptance 4: at 40 epochs of 6 steps warmup lasts 12 steps,
     so epoch 1 is validated on the current weights, saves no best checkpoint
@@ -432,7 +250,7 @@ def test_an_epoch_ending_before_warmup_is_no_best_candidate(
     from effects.infrastructure.effect_model_store import load_resume_state
 
     out = tmp_path / "warming"
-    run = _run(monkeypatch, corpus, out, caplog, workers=0, epochs=40, interrupt_after=1)
+    run = runner.run(out, RunPlan(workers=0, interrupt_after=1, config={"epochs": 40}))
     assert run["losses"]
     state = load_resume_state(out)
     assert state["warmup"] == 12
@@ -444,20 +262,18 @@ def test_an_epoch_ending_before_warmup_is_no_best_candidate(
 
 
 def test_a_resume_across_warmup_starts_the_average_at_warmups_end(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     """Interrupted while warming up, the resumed run starts the average where
     the uninterrupted run does."""
-    whole = _run(
-        monkeypatch, corpus, tmp_path / "whole", caplog, workers=0, epochs=40,
-        interrupt_after=3,
-    )
+    whole = runner.run(tmp_path / "whole", RunPlan(
+        workers=0, interrupt_after=3, config={"epochs": 40},
+    ))
     out = tmp_path / "split"
-    _run(monkeypatch, corpus, out, caplog, workers=0, epochs=40, interrupt_after=1)
-    resumed = _run(
-        monkeypatch, corpus, out, caplog, workers=0, epochs=40, resume=True,
-        interrupt_after=3,
-    )
+    runner.run(out, RunPlan(workers=0, interrupt_after=1, config={"epochs": 40}))
+    resumed = runner.run(out, RunPlan(
+        workers=0, resume=True, interrupt_after=3, config={"epochs": 40},
+    ))
     assert whole["average"]["start_step"] == resumed["average"]["start_step"] == 12
     _assert_same_average(whole["average"], resumed["average"])
 
@@ -467,7 +283,7 @@ def test_a_resume_across_warmup_starts_the_average_at_warmups_end(
     ("stratum_weight", 0.25), ("relation_values", "off"),
 ])
 def test_a_resume_changing_a_training_objective_flag_is_refused(
-    monkeypatch, corpus, tmp_path, caplog, flag, value,
+    runner, tmp_path, flag, value,
 ):
     """Story 7 acceptance 5, for each flag contracts/cli.md lists."""
     from effects.domain.rule_mask import RuleMask
@@ -476,26 +292,26 @@ def test_a_resume_changing_a_training_objective_flag_is_refused(
     if flag == "rule_mask":
         value = RuleMask(value)
     out = tmp_path / "interrupted"
-    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    runner.run(out, RunPlan(workers=0, interrupt_after=1))
     with pytest.raises(ResumeMismatchError, match=flag):
-        _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, **{flag: value})
+        runner.run(out, RunPlan(workers=0, resume=True, config={flag: value}))
 
 
-def test_a_resume_under_another_seed_is_refused(monkeypatch, corpus, tmp_path, caplog):
+def test_a_resume_under_another_seed_is_refused(runner, tmp_path):
     from effects.infrastructure.effect_model_store import ResumeMismatchError
 
     out = tmp_path / "interrupted"
-    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    runner.run(out, RunPlan(workers=0, interrupt_after=1))
     with pytest.raises(ResumeMismatchError, match="seed"):
-        _run(monkeypatch, corpus, out, caplog, workers=0, seed=SEED + 1, resume=True)
+        runner.run(out, RunPlan(workers=0, seed=SEED + 1, resume=True))
 
 
 def test_resuming_a_run_that_reached_its_last_epoch_trains_nothing(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     out = tmp_path / "finished"
-    _run(monkeypatch, corpus, out, caplog, workers=0)
-    again = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
+    runner.run(out, RunPlan(workers=0))
+    again = runner.run(out, RunPlan(workers=0, resume=True))
     assert again["losses"] == []
 
 
@@ -512,48 +328,48 @@ def _stopped_early(out: Path) -> None:
 
 
 def test_a_run_stopped_early_stays_stopped_under_the_same_patience(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     out = tmp_path / "stopped"
-    _run(monkeypatch, corpus, out, caplog, workers=0)
+    runner.run(out, RunPlan(workers=0))
     _stopped_early(out)
-    again = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=3)
+    again = runner.run(out, RunPlan(workers=0, resume=True, config={"epochs": 3}))
     assert again["losses"] == []
 
 
 def test_a_run_stopped_early_continues_with_no_early_stopping(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     """``--patience 0`` reopens it and trains to ``--epochs`` (FR-063f)."""
     out = tmp_path / "stopped"
-    _run(monkeypatch, corpus, out, caplog, workers=0)
+    runner.run(out, RunPlan(workers=0))
     _stopped_early(out)
-    again = _run(
-        monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=3, patience=0,
-    )
+    again = runner.run(out, RunPlan(
+        workers=0, resume=True, config={"epochs": 3, "patience": 0},
+    ))
     assert again["losses"]  # it trained epoch 3
 
 
 def test_every_epoch_is_kept_and_the_best_one_s_resume_state(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     out = tmp_path / "kept"
-    _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
+    runner.run(out, RunPlan(workers=0, config={"save_every_epoch": True}))
     assert sorted(p.name for p in (out / "epochs").iterdir()) == [
         "epoch-01.pt", "epoch-02.pt"]
     assert (out / "resume-best.pt").exists()
 
 
-def test_a_zero_learning_rate_factor_trains_nothing(monkeypatch, corpus, tmp_path, caplog):
+def test_a_zero_learning_rate_factor_trains_nothing(runner, tmp_path):
     """The factor reaches every step's rate: at 0 no weight moves (FR-063f)."""
-    run = _run(monkeypatch, corpus, tmp_path / "frozen", caplog, workers=0, lr_scale=0.0)
+    run = runner.run(tmp_path / "frozen", RunPlan(workers=0, config={"lr_scale": 0.0}))
     for name, value in run["initial"].items():
         assert torch.equal(value, run["parameters"][f"model.{name}"]), name
 
 
-def test_resuming_without_a_resume_file_fails(monkeypatch, corpus, tmp_path, caplog):
+def test_resuming_without_a_resume_file_fails(runner, tmp_path):
     with pytest.raises(FileNotFoundError, match="resume"):
-        _run(monkeypatch, corpus, tmp_path / "empty", caplog, workers=0, resume=True)
+        runner.run(tmp_path / "empty", RunPlan(workers=0, resume=True))
 
 
 # ── the plumbing ────────────────────────────────────────────────────────
@@ -622,21 +438,35 @@ def _assert_tensors_equal(left, right, path="step") -> None:
     if isinstance(left, torch.Tensor):
         assert isinstance(right, torch.Tensor), path
         assert left.dtype == right.dtype and torch.equal(left, right), path
-    elif isinstance(left, dict):
-        assert left.keys() == right.keys(), path
-        for key in left:
-            _assert_tensors_equal(left[key], right[key], f"{path}.{key}")
-    elif isinstance(left, (list, tuple)):
-        assert len(left) == len(right), path
-        for index, (a, b) in enumerate(zip(left, right)):
-            _assert_tensors_equal(a, b, f"{path}[{index}]")
-    elif hasattr(left, "__dataclass_fields__"):
-        for name in left.__dataclass_fields__:
-            _assert_tensors_equal(
-                getattr(left, name), getattr(right, name), f"{path}.{name}",
-            )
-    else:
-        assert left == right, path
+        return
+    for part_left, part_right, part_path in _paired_parts(left, right, path):
+        _assert_tensors_equal(part_left, part_right, part_path)
+
+
+def _paired_parts(left, right, path: str) -> list[tuple[Any, Any, str]]:
+    """The parts of two non-tensor values, pairwise with their paths; a value
+    with no parts is compared whole."""
+    if isinstance(left, dict):
+        return _mapping_parts(left, right, path)
+    if isinstance(left, (list, tuple)):
+        return _sequence_parts(left, right, path)
+    if hasattr(left, "__dataclass_fields__"):
+        return [
+            (getattr(left, name), getattr(right, name), f"{path}.{name}")
+            for name in left.__dataclass_fields__
+        ]
+    assert left == right, path
+    return []
+
+
+def _mapping_parts(left: dict, right: dict, path: str) -> list[tuple[Any, Any, str]]:
+    assert left.keys() == right.keys(), path
+    return [(left[key], right[key], f"{path}.{key}") for key in left]
+
+
+def _sequence_parts(left, right, path: str) -> list[tuple[Any, Any, str]]:
+    assert len(left) == len(right), path
+    return [(a, b, f"{path}[{index}]") for index, (a, b) in enumerate(zip(left, right))]
 
 
 def _with_shards(corpus, shards):
@@ -647,32 +477,33 @@ def _with_shards(corpus, shards):
 
 
 def test_a_worker_exception_surfaces_with_its_traceback_and_no_process_survives(
-    monkeypatch, corpus, tmp_path, caplog,
+    runner, tmp_path,
 ):
     """An unreadable shard: raised at its own shard, in the training process,
     as the exception the in-process path raises, the worker's traceback
     attached."""
-    from effects.application import training_loop as loop_module
     from effects.domain.loss_denominators import LossDenominators
 
     missing = tmp_path / "missing.jsonl.gz"
     # The startup pre-pass would read the shard first, in this process.
-    monkeypatch.setattr(
+    runner.monkeypatch.setattr(
         loop_module, "loss_denominators",
         lambda *a, floor, **k: LossDenominators.of({}, floor=floor),
     )
     with pytest.raises(FileNotFoundError) as raised:
-        _run(monkeypatch, _with_shards(corpus, [missing]), tmp_path / "out", caplog, workers=2)
+        replace(runner, corpus=_with_shards(runner.corpus, [missing])).run(
+            tmp_path / "out", RunPlan(workers=2),
+        )
     notes = "".join(getattr(raised.value, "__notes__", ()))
     assert "Traceback" in notes and "step-preparation worker" in notes
     assert "missing.jsonl.gz" in str(raised.value)
-    assert any("preparing it failed" in m for m in caplog.messages)
+    assert any("preparing it failed" in m for m in runner.caplog.messages)
     assert not multiprocessing.active_children()
 
 
 @pytest.mark.parametrize("workers", [0, 2])
 def test_a_training_shard_holding_a_validation_game_is_refused(
-    monkeypatch, corpus, records, tmp_path, caplog, workers,
+    runner, records, tmp_path, workers,
 ):
     """The manifest places the game in a validation stratum, which build-corpus
     never writes into training/: the shard and the manifest disagree, and
@@ -682,18 +513,15 @@ def test_a_training_shard_holding_a_validation_game_is_refused(
 
     tainted = tmp_path / "tainted.jsonl.gz"
     write_shard(tainted, records)
-    with pytest.raises(ValidationGameInTrainingError, match=corpus.held):
-        _run(
-            monkeypatch, _with_shards(corpus, [tainted]), tmp_path / "out", caplog,
-            workers=workers,
+    with pytest.raises(ValidationGameInTrainingError, match=runner.corpus.held):
+        replace(runner, corpus=_with_shards(runner.corpus, [tainted])).run(
+            tmp_path / "out", RunPlan(workers=workers),
         )
     assert not multiprocessing.active_children()
 
 
-def test_an_interrupt_mid_shard_leaves_no_process_behind(
-    monkeypatch, corpus, tmp_path, caplog,
-):
+def test_an_interrupt_mid_shard_leaves_no_process_behind(runner, tmp_path):
     """Ctrl+C lands in the training loop with workers blocked on full queues."""
     with pytest.raises(KeyboardInterrupt):
-        _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2, interrupt_at=3)
+        runner.run(tmp_path / "out", RunPlan(workers=2, interrupt_at=3))
     assert not multiprocessing.active_children()
