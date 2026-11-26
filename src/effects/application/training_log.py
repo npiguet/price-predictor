@@ -3,6 +3,7 @@ numbers so a line's shape can be tested without a run behind it."""
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -19,15 +20,20 @@ def format_norms(norms: Mapping[str, float]) -> str:
     return f"\n  |g| {body} (clipped per group at {MAX_GRAD_NORM:g})"
 
 
+def _has_deviance(value: float, reference: float | None) -> bool:
+    return reference is not None and reference >= FLOOR_EPSILON and math.isfinite(value)
+
+
 def explained(name: str, value: float, floor: Mapping[str, float] | None) -> str:
     """``1 - loss/floor`` against the best constant prediction for the field
     (FR-127c): zero is the base rate, negative is worse than predicting it. A
-    field whose targets never vary reads ``n/a``."""
+    field whose targets never vary, or whose loss is not finite (a blown-up
+    run: ``round`` would raise), reads ``n/a``."""
     if floor is None:
         return ""
-    reference = floor.get(name)
-    if reference is None or reference < FLOOR_EPSILON:
+    if not _has_deviance(value, floor.get(name)):
         return " (n/a)"
+    reference = floor[name]
     return f" ({round(100.0 * (1.0 - value / reference))}%)"
 
 

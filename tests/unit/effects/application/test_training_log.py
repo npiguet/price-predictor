@@ -67,6 +67,14 @@ class TestExplainedDeviance:
         line = format_parts({"types_gained": 0.0}, floor={"types_gained": 0.0})
         assert "types_gained 0.000 (n/a)" in line
 
+    def test_a_field_whose_loss_is_not_finite_reads_not_applicable(self):
+        """``round(nan)`` raises; a blown-up field is logged, not raised on."""
+        line = format_parts({"a": math.nan, "b": math.inf, "c": -math.inf},
+                            floor={"a": 2.0, "b": 2.0, "c": 2.0})
+        assert "a nan (n/a)" in line
+        assert "b inf (n/a)" in line
+        assert "c -inf (n/a)" in line
+
     def test_the_per_shard_training_breakdown_is_unchanged(self):
         assert format_parts({"gate": 2.0}) == "\n  fields: gate 2.000"
 
@@ -136,6 +144,17 @@ class TestEpochSummariesOfBadEpochs:
         [summary] = parse_epoch_summaries([line])
 
         assert summary.epoch == 2 and math.isnan(summary.game_disjoint)
+
+    def test_a_non_finite_field_loss_is_kept_with_no_deviance(self) -> None:
+        parts = format_parts({"damage_taken": math.nan, "gate": math.inf, "zone": 1.0},
+                             {"damage_taken": 2.0, "gate": 2.0, "zone": 2.0})
+
+        [summary] = parse_epoch_summaries(_epoch_line(1, 3.0, parts).splitlines())
+
+        assert math.isnan(summary.fields["damage_taken"][0])
+        assert summary.fields["damage_taken"][1] is None
+        assert summary.fields["gate"] == (math.inf, None)
+        assert summary.fields["zone"] == (1.0, 50.0)
 
     def test_the_non_finite_readings_line_is_not_a_summary(self) -> None:
         line = "epoch 3 | non-finite readings: card-disjoint 0 | game-disjoint 3"
