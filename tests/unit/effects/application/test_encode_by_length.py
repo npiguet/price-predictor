@@ -15,7 +15,7 @@ import torch
 from effects.application import text_staging
 from effects.application.line_preparation import EncodedLine, collate_lines
 from effects.application.text_staging import encode_by_length
-from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
+from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig, EncoderInputs
 
 _VOCAB = 40
 _PAD = 0
@@ -54,7 +54,7 @@ _LENGTHS = [9, 2, 30, 5, 5, 17, 3, 12]
 
 def test_vectors_match_one_padded_batch(encoder, small_chunks):
     inputs = collate_lines(_lines(_LENGTHS), _PAD)
-    whole, _ = encoder(**inputs)
+    whole, _ = encoder(EncoderInputs(**inputs))
     grouped, hidden = encode_by_length(encoder, inputs, torch.device("cpu"))
     assert hidden is None
     torch.testing.assert_close(grouped, whole, rtol=1e-5, atol=1e-5)
@@ -62,7 +62,7 @@ def test_vectors_match_one_padded_batch(encoder, small_chunks):
 
 def test_token_outputs_match_at_every_real_position(encoder, small_chunks):
     inputs = collate_lines(_lines(_LENGTHS), _PAD)
-    _, whole = encoder(**inputs)
+    _, whole = encoder(EncoderInputs(**inputs))
     _, grouped = encode_by_length(encoder, inputs, torch.device("cpu"), hidden=True)
     assert grouped.shape == whole.shape
     real = inputs["attention_mask"].bool()
@@ -73,7 +73,7 @@ def test_gradient_matches_one_padded_batch(encoder, small_chunks):
     inputs = collate_lines(_lines(_LENGTHS), _PAD)
     weights = torch.randn(len(_LENGTHS), 8, generator=torch.Generator().manual_seed(1))
 
-    whole, _ = encoder(**inputs)
+    whole, _ = encoder(EncoderInputs(**inputs))
     (whole * weights).sum().backward()
     expected = {n: p.grad.clone() for n, p in encoder.named_parameters() if p.grad is not None}
     encoder.zero_grad()

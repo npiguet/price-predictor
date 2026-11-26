@@ -68,7 +68,7 @@ from effects.application.line_preparation import (  # noqa: E402
     collate_lines,
     prepare_line,
 )
-from effects.domain.ability_encoder import AbilityEncoder  # noqa: E402
+from effects.domain.ability_encoder import AbilityEncoder, EncoderInputs  # noqa: E402
 from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
@@ -219,7 +219,7 @@ class Readers:
             for start in range(0, len(order), BATCH):
                 chunk = order[start:start + BATCH]
                 lines = [prepare_line(self.tok, token_lists[i]) for i in chunk]
-                vectors, _ = self.encoder(**collate_lines(lines, self.tok.pad_id))
+                vectors, _ = self.encoder(EncoderInputs(**collate_lines(lines, self.tok.pad_id)))
                 out[chunk] = vectors.numpy()
         return out
 

@@ -20,7 +20,7 @@ from effects.application.line_preparation import (
     collate_lines,
     prepare_line,
 )
-from effects.domain.ability_encoder import AbilityEncoder
+from effects.domain.ability_encoder import AbilityEncoder, EncoderInputs
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
@@ -59,7 +59,7 @@ def _encode_rows(
         k: v.index_select(0, rows)[:, :width].to(device, non_blocking=True)
         for k, v in inputs.items()
     }
-    return encoder(**batch)
+    return encoder(EncoderInputs(**batch))
 
 
 def _padded_tokens(
@@ -89,7 +89,7 @@ def encode_by_length(
     chunks = _length_chunks(inputs["attention_mask"])
     if len(chunks) == 1:
         batch = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
-        vectors, tokens = encoder(**batch)
+        vectors, tokens = encoder(EncoderInputs(**batch))
         return vectors, tokens if hidden else None
     results = [_encode_rows(encoder, inputs, chunk, device) for chunk in chunks]
     order = torch.cat([rows for rows, _ in chunks])

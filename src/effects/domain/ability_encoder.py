@@ -80,6 +80,18 @@ class MonotoneNumberEmbedding(nn.Module):
         return self.base + scaled * self.direction
 
 
+@dataclass(frozen=True, slots=True)
+class EncoderInputs:
+    """A padded ``(batch, seq)`` batch of lines, ``[CLS]`` first, as
+    ``collate_lines`` lays it out. The roles and the numbers are optional."""
+
+    token_ids: torch.Tensor
+    attention_mask: torch.Tensor
+    role_ids: torch.Tensor | None = None
+    numbers: torch.Tensor | None = None
+    number_mask: torch.Tensor | None = None
+
+
 class AbilityEncoder(nn.Module):
     """Tokens of one ability line to its ``e`` vector."""
 
@@ -108,19 +120,14 @@ class AbilityEncoder(nn.Module):
         self.norm = nn.LayerNorm(config.d_model)
         self.to_e = nn.Linear(config.d_model, config.e_dim)
 
-    def forward(
-        self,
-        token_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        role_ids: torch.Tensor | None = None,
-        numbers: torch.Tensor | None = None,
-        number_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, inputs: EncoderInputs) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode a padded batch of ``(batch, seq)`` lines, ``[CLS]`` first.
 
         Returns ``(e, hidden)``: the ``(batch, e_dim)`` bottleneck and the
         ``(batch, seq, d_model)`` token outputs the MLM auxiliary reads.
         """
+        token_ids, attention_mask = inputs.token_ids, inputs.attention_mask
+        role_ids, numbers, number_mask = inputs.role_ids, inputs.numbers, inputs.number_mask
         batch, seq = token_ids.shape
         positions = torch.arange(seq, device=token_ids.device).unsqueeze(0)
         hidden = self.token_embedding(token_ids) + self.position_embedding(positions)

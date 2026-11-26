@@ -646,7 +646,7 @@ def _one_text_damage_hit(qualified) -> bool:
 
 def _edits_on_both_surfaces(record, effect, line, prose: str | None) -> bool:
     """Whether the amount edit takes on the text each surface encodes the
-    line from (``ability_encoder.encoding_text``): the script surface reads its
+    line from (``line_text.encoding_text``): the script surface reads its
     script, the prose surface its prose, and a line with no prose its script
     reading on both. A prose that does not state the amount (its cost sentence
     alone) would leave every cell reading the real text against outcomes that
