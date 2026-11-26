@@ -276,6 +276,11 @@ class TrainEffectModelConfig:
 
     def __post_init__(self) -> None:
         require_runnable_schedule(self)
+        self._require_encoder_shape()
+        self._require_positive_spans()
+        self._require_stratum_share()
+
+    def _require_encoder_shape(self) -> None:
         # Imported here because the encoder module loads torch (FR-062).
         from effects.domain.ability_encoder import ENCODER_N_HEADS
 
@@ -289,6 +294,8 @@ class TrainEffectModelConfig:
             raise ValueError(
                 f"--encoder-layers must be at least 1, got {self.encoder_layers}."
             )
+
+    def _require_positive_spans(self) -> None:
         if not self.deviance_floor > 0:
             raise ValueError(
                 f"--deviance-floor must be above zero, got {self.deviance_floor}: "
@@ -299,6 +306,8 @@ class TrainEffectModelConfig:
                 f"--ema-epochs must be above zero, got {self.ema_epochs}: it is "
                 "the span the averaged weights cover."
             )
+
+    def _require_stratum_share(self) -> None:
         if not 0.0 <= self.stratum_weight <= 1.0:
             raise ValueError(
                 f"--stratum-weight must be in [0, 1], got {self.stratum_weight}: "
@@ -598,13 +607,13 @@ def run(config: TrainEffectModelConfig) -> int:
         len(manifest.held_out_texts), len(manifest.held_out_cards),
     )
 
-    from effects.application.training_loop import TrainingLoop
+    from effects.application.training_loop import CorpusInputs, TrainingLoop
 
-    return TrainingLoop(
-        config, facts=facts, training_shards=training_shards,
-        validation_samples=validation_samples, selection=selection,
-        tokenizer_hashes=tokenizer_hashes,
-    ).execute()
+    return TrainingLoop(config, corpus=CorpusInputs(
+        facts=facts, training_shards=training_shards,
+        validation_samples=validation_samples, tokenizer_hashes=tokenizer_hashes,
+        selection=selection,
+    )).execute()
 
 
 def warn_untrained_classes(facts: CorpusFacts, manifest_path: Path) -> None:

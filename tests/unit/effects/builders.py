@@ -493,12 +493,11 @@ def make_training_loop(
     :func:`stub_validator`.
     """
     from effects.application.train_effect_model import CorpusFacts
-    from effects.application.training_loop import TrainingLoop
+    from effects.application.training_loop import CorpusInputs, TrainingLoop
     from effects.domain.split import HoldoutRule
     from effects.infrastructure.effect_model_store import tokenizer_hashes
 
-    return TrainingLoop(
-        config,
+    return TrainingLoop(config, corpus=CorpusInputs(
         facts=CorpusFacts(**{
             "holdout": HoldoutRule(), "rarity": {}, **facts,
         }),
@@ -506,7 +505,7 @@ def make_training_loop(
         validation_samples=validation_samples or {},
         selection=selection,
         tokenizer_hashes=tokenizer_hashes(config.tokenizer_files),
-    )
+    ))
 
 
 #: The strata a fixture selection set halves.

@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import NamedTuple
 
@@ -162,37 +162,53 @@ def _optimizer_step(optimizer, tables=None) -> dict[str, torch.Tensor]:
     return norms
 
 
+@dataclass(frozen=True)
+class CorpusInputs:
+    """What a run reads off its curated corpus: its facts, the training shards
+    and validation samples it names, the hashes of the tokenizer files and the
+    frozen selection set the control score is built from (a run without one is
+    refused at startup)."""
+
+    facts: CorpusFacts
+    training_shards: Sequence[Path]
+    validation_samples: Mapping[str, Path]
+    tokenizer_hashes: Mapping[str, str]
+    selection: FrozenSelection | None = None
+
+
+@dataclass(frozen=True)
+class EpochScope:
+    """What every shard and step of one epoch trains against: the run, the
+    epoch's tally and how many shards the epoch drew."""
+
+    run: RunContext
+    tally: EpochTally
+    drawn: int
+
+
 class TrainingLoop:
     """Owns one training run end to end: builds it, then trains, validates,
     reports and saves each epoch through its three collaborators."""
 
-    def __init__(
-        self,
-        config: TrainEffectModelConfig,
-        *,
-        facts: CorpusFacts,
-        training_shards: Sequence[Path],
-        validation_samples: Mapping[str, Path],
-        selection: FrozenSelection | None = None,
-        tokenizer_hashes: Mapping[str, str],
-    ) -> None:
+    def __init__(self, config: TrainEffectModelConfig, *, corpus: CorpusInputs) -> None:
         self.config = config
+        facts = corpus.facts
         #: The corpus's frozen selection set and its strata's readers, which the
         #: control score is built from; a run without one is refused at startup.
-        self.selection = selection
+        self.selection = corpus.selection
         self._relation_tables: dict[str, list[torch.Tensor]] | None = None
         #: Processes preparing steps; 0 prepares them in this one. Not a
         #: training setting: it moves where the host half runs, not what it
         #: computes.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
-        if selection is not None:
-            facts = replace(facts, selection_set_digest=selection.digest)
-        self.training_shards = list(training_shards)
-        self.validation_samples = dict(validation_samples)
+        if corpus.selection is not None:
+            facts = replace(facts, selection_set_digest=corpus.selection.digest)
+        self.training_shards = list(corpus.training_shards)
+        self.validation_samples = dict(corpus.validation_samples)
         self.spec = RunSpec(
             config, facts,
             run_seed(config),
-            tokenizer_hashes,
+            corpus.tokenizer_hashes,
         )
         torch.manual_seed(self.spec.seed)
         self.device = default_device()
@@ -233,28 +249,40 @@ class TrainingLoop:
             self.spec, StepPreparer(settings, truncations=self.reporter.truncations),
             device=self.device,
         )
-        first_epoch = 1
-        if self.config.resume:
-            first_epoch = restore_resume(run)
-            if first_epoch is None:
-                return 0
+        first_epoch = restore_resume(run) if self.config.resume else 1
+        if first_epoch is None:
+            return 0
+        self._use_denominators(run)
+
+        run.pool = self._start_workers(settings, run, first_epoch=first_epoch)
+        try:
+            self._run_epochs(run, samples, first_epoch)
+        finally:
+            self._close_pool(run)
+        return self._exit_code(run)
+
+    def _use_denominators(self, run: RunContext) -> None:
+        """Hand the device half the run's loss denominators, computing them
+        first when a resume did not restore them."""
         if run.loss_denominators is None:
             run.loss_denominators = self._loss_denominators(run)
         self.losses.use_denominators(run.loss_denominators)
 
-        run.pool = self._start_workers(settings, run, first_epoch=first_epoch)
-        try:
-            # After the workers start, so they prepare the first epoch's steps
-            # while this process prepares the control score's cache.
-            self.validator.prepare(run, self.selection,
-                                   rule_outputs=self.spec.facts.rule_outputs)
-            for epoch in range(first_epoch, self.config.epochs + 1):
-                if self._run_epoch(epoch, run, samples):
-                    break
-        finally:
-            if run.pool is not None:
-                run.pool.close()
-        return self._exit_code(run)
+    def _run_epochs(
+        self, run: RunContext, samples: ValidationSamples, first_epoch: int,
+    ) -> None:
+        # After the workers start, so they prepare the first epoch's steps
+        # while this process prepares the control score's cache.
+        self.validator.prepare(run, self.selection,
+                               rule_outputs=self.spec.facts.rule_outputs)
+        for epoch in range(first_epoch, self.config.epochs + 1):
+            if self._run_epoch(epoch, run, samples):
+                break
+
+    @staticmethod
+    def _close_pool(run: RunContext) -> None:
+        if run.pool is not None:
+            run.pool.close()
 
     def _loss_denominators(self, run: RunContext):
         """The startup pre-pass's denominators, over training steps prepared
@@ -320,12 +348,13 @@ class TrainingLoop:
 
     def _train_epoch(self, epoch: int, run: RunContext, tally: EpochTally) -> None:
         plan = self._epoch_plan(epoch, run)
+        scope = EpochScope(run, tally, plan.drawn)
         for task in plan.tasks:
             steps = (
                 local_steps(task, run.preparer, pin=self.is_cuda)
                 if run.pool is None else run.pool.shard()
             )
-            self._train_on_shard(task, steps, run, tally, of=plan.drawn)
+            self._train_on_shard(task, steps, scope)
             self._release_cache()
         if run.pool is not None and epoch < self.config.epochs:
             # Queued before validation so the workers prepare while this
@@ -429,10 +458,7 @@ class TrainingLoop:
         if self.is_cuda:
             torch.cuda.empty_cache()
 
-    def _train_on_shard(
-        self, task: ShardTask, steps: Iterator, run: RunContext,
-        tally: EpochTally, *, of: int,
-    ) -> None:
+    def _train_on_shard(self, task: ShardTask, steps: Iterator, scope: EpochScope) -> None:
         """Take ``task.budget`` steps on one shard.
 
         ``steps`` yields a ``ShardOpened``, each step's ``StepReady``, and
@@ -440,6 +466,7 @@ class TrainingLoop:
         the opening message; ``batch wait`` is the steps' wait for their
         preparation.
         """
+        run, tally, of = scope.run, scope.tally, scope.drawn
         stats = ShardStats(loss=torch.zeros((), device=self.device))
         started = time.perf_counter()
         opened = UNOPENED
@@ -462,7 +489,7 @@ class TrainingLoop:
                         # per-field decomposition has to be asked for.
                         due = reports_now(index=index, budget=task.budget)
                         index += 1
-                        self._train_step(message.prepared, run, tally, stats, due)
+                        self._train_step(message.prepared, scope, stats, due)
                     case _:
                         raise TypeError(f"unexpected shard message {type(message).__name__}")
         finally:
@@ -480,11 +507,11 @@ class TrainingLoop:
         return rate
 
     def _train_step(
-        self, prepared: DeviceStep, run: RunContext, tally: EpochTally,
-        stats: ShardStats, due: bool,
+        self, prepared: DeviceStep, scope: EpochScope, stats: ShardStats, due: bool,
     ) -> None:
         """One step's device half: forward, backward, and the optimizer on the
         accumulation boundary."""
+        run, tally = scope.run, scope.tally
         computed = self.losses.device_loss(
             prepared, run, run.training, LossRequest(step=run.step, report_parts=due),
         )
