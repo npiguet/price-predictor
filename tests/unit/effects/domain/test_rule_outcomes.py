@@ -4,6 +4,9 @@ conditions probe reads (500.1, 307.1, 702.61, T161)."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 import pytest
 
 from effects.domain.rule_outcomes import (
@@ -53,43 +56,84 @@ class TestLethal:
         assert shrink_lethal(1, 0, 1)
 
 
-class TestStepDeaths:
-    @pytest.mark.parametrize("attacker, blocker, keywords, step, expected", [
-        ((3, 3, 0), (2, 2, 0), ({}, {}), "regular", (False, True)),
-        ((2, 2, 0), (2, 3, 0), ({}, {}), "regular", (True, False)),
-        ((2, 2, 0), (1, 3, 1), ({}, {}), "regular", (False, True)),
-        ((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {}), "regular", (False, True)),
-        ((5, 5, 0), (5, 5, 0), ({}, {"indestructible"}), "regular", (True, False)),
-        ((3, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "first_strike", (False, True)),
-        ((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "first_strike", (False, False)),
-        ((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "regular", (True, False)),
-        ((5, 3, 0), (3, 3, 0), ({}, {"first_strike"}), "first_strike", (True, False)),
-        ((2, 2, 0), (1, 4, 0), ({"double_strike"}, {}), "first_strike", (False, False)),
-        ((2, 2, 0), (1, 4, 2), ({"double_strike"}, {}), "regular", (False, True)),
-        ((2, 2, 0), (0, 4, 0), ({}, {}), "first_strike", (False, False)),
-    ])
-    def test_the_rule(self, attacker, blocker, keywords, step, expected):
-        assert step_deaths(
-            attacker, blocker, BlockKeywords(frozenset(keywords[0]), frozenset(keywords[1])),
-            step) == expected
+@dataclass(frozen=True)
+class StepCase:
+    """One combat pairing: (power, toughness, damage) of each side, the keywords of each
+    side, the damage step, and which side dies."""
 
-    @pytest.mark.parametrize("attacker, blocker, keywords, step, expected", [
+    attacker: tuple[int, int, int]
+    blocker: tuple[int, int, int]
+    keywords: tuple[Any, Any]
+    step: str
+    expected: tuple[bool, bool]
+
+
+@dataclass(frozen=True)
+class BlockCase:
+    """One may-block question: the attacker's and blocker's keywords, the blocker's
+    colours and types, and the answer."""
+
+    attacker: tuple[str, ...]
+    blocker: tuple[str, ...]
+    colours: tuple[str, ...]
+    types: tuple[str, ...]
+    expected: bool
+
+
+def _step_params(cases):
+    """The cases as parametrize rows, under the ids pytest made when each case was five
+    parametrized arguments."""
+    return [pytest.param(case, id=f"attacker{i}-blocker{i}-keywords{i}-{case.step}-expected{i}")
+            for i, case in enumerate(cases)]
+
+
+def _block_params(cases):
+    return [pytest.param(case, id=f"attacker{i}-blocker{i}-colours{i}-types{i}-{case.expected}")
+            for i, case in enumerate(cases)]
+
+
+def _deaths(case: StepCase) -> tuple[bool, bool]:
+    return step_deaths(
+        case.attacker, case.blocker,
+        BlockKeywords(frozenset(case.keywords[0]), frozenset(case.keywords[1])), case.step)
+
+
+class TestStepDeaths:
+    @pytest.mark.parametrize("case", _step_params([
+        StepCase((3, 3, 0), (2, 2, 0), ({}, {}), "regular", (False, True)),
+        StepCase((2, 2, 0), (2, 3, 0), ({}, {}), "regular", (True, False)),
+        StepCase((2, 2, 0), (1, 3, 1), ({}, {}), "regular", (False, True)),
+        StepCase((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {}), "regular", (False, True)),
+        StepCase((5, 5, 0), (5, 5, 0), ({}, {"indestructible"}), "regular", (True, False)),
+        StepCase((3, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "first_strike", (False, True)),
+        StepCase((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "first_strike", (False, False)),
+        StepCase((2, 3, 0), (5, 3, 0), ({"first_strike"}, {}), "regular", (True, False)),
+        StepCase((5, 3, 0), (3, 3, 0), ({}, {"first_strike"}), "first_strike", (True, False)),
+        StepCase((2, 2, 0), (1, 4, 0), ({"double_strike"}, {}), "first_strike", (False, False)),
+        StepCase((2, 2, 0), (1, 4, 2), ({"double_strike"}, {}), "regular", (False, True)),
+        StepCase((2, 2, 0), (0, 4, 0), ({}, {}), "first_strike", (False, False)),
+    ]))
+    def test_the_rule(self, case):
+        assert _deaths(case) == case.expected
+
+    @pytest.mark.parametrize("case", _step_params([
         # 704.5f: toughness 0 or less is put into the graveyard, indestructible or not.
-        ((1, 1, 0), (0, 0, 0), ({}, {"indestructible"}), "regular", (False, True)),
-        ((1, -1, 0), (1, 2, 0), ({"indestructible"}, {}), "first_strike", (True, False)),
+        StepCase((1, 1, 0), (0, 0, 0), ({}, {"indestructible"}), "regular", (False, True)),
+        StepCase((1, -1, 0), (1, 2, 0), ({"indestructible"}, {}), "first_strike", (True, False)),
         # 702.2b: deathtouch needs damage dealt, and a 0-power source deals none.
-        ((0, 3, 0), (3, 3, 0), ({"deathtouch"}, {}), "regular", (True, False)),
-        ((0, 4, 0), (3, 3, 0), ({"deathtouch"}, {}), "regular", (False, False)),
+        StepCase((0, 3, 0), (3, 3, 0), ({"deathtouch"}, {}), "regular", (True, False)),
+        StepCase((0, 4, 0), (3, 3, 0), ({"deathtouch"}, {}), "regular", (False, False)),
         # 704.5g: indestructible stops lethal damage, deathtouch's included.
-        ((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {"indestructible"}), "regular", (False, False)),
+        StepCase((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {"indestructible"}), "regular",
+                 (False, False)),
         # 510.4: two first strikers deal damage together in the first-strike step.
-        ((3, 3, 0), (3, 3, 0), ({"first_strike"}, {"first_strike"}), "first_strike", (True, True)),
-        ((3, 3, 0), (3, 3, 0), ({"first_strike"}, {"first_strike"}), "regular", (False, False)),
-    ])
-    def test_the_hard_cases(self, attacker, blocker, keywords, step, expected):
-        assert step_deaths(
-            attacker, blocker, BlockKeywords(frozenset(keywords[0]), frozenset(keywords[1])),
-            step) == expected
+        StepCase((3, 3, 0), (3, 3, 0), ({"first_strike"}, {"first_strike"}), "first_strike",
+                 (True, True)),
+        StepCase((3, 3, 0), (3, 3, 0), ({"first_strike"}, {"first_strike"}), "regular",
+                 (False, False)),
+    ]))
+    def test_the_hard_cases(self, case):
+        assert _deaths(case) == case.expected
 
     @pytest.mark.parametrize("keywords, step, strikes", [
         (set(), "regular", True),
@@ -104,25 +148,26 @@ class TestStepDeaths:
 
 
 class TestMayBlock:
-    @pytest.mark.parametrize("attacker, blocker, colours, types, expected", [
-        ((), (), ("G",), ("creature",), True),
-        (("flying",), (), ("G",), ("creature",), False),
-        (("flying",), ("reach",), ("G",), ("creature",), True),
-        (("horsemanship",), ("flying",), ("G",), ("creature",), False),
-        (("fear",), (), ("B",), ("creature",), True),
-        (("fear",), (), ("G",), ("artifact", "creature"), True),
-        (("fear",), (), ("G",), ("creature",), False),
-        (("intimidate",), (), ("R",), ("creature",), True),
-        (("intimidate",), (), ("G",), ("creature",), False),
-        (("shadow",), (), ("G",), ("creature",), False),
-        ((), ("shadow",), ("G",), ("creature",), False),
-        (("unblockable",), ("reach",), ("G",), ("creature",), False),
-        (("protection_from_green",), (), ("G",), ("creature",), False),
-        (("protection_from_blue",), (), ("G",), ("creature",), True),
-    ])
-    def test_the_rule(self, attacker, blocker, colours, types, expected):
-        assert may_block(Combatant.made(attacker, ("R",)),
-                         Combatant.made(blocker, colours, types)) is expected
+    @pytest.mark.parametrize("case", _block_params([
+        BlockCase((), (), ("G",), ("creature",), True),
+        BlockCase(("flying",), (), ("G",), ("creature",), False),
+        BlockCase(("flying",), ("reach",), ("G",), ("creature",), True),
+        BlockCase(("horsemanship",), ("flying",), ("G",), ("creature",), False),
+        BlockCase(("fear",), (), ("B",), ("creature",), True),
+        BlockCase(("fear",), (), ("G",), ("artifact", "creature"), True),
+        BlockCase(("fear",), (), ("G",), ("creature",), False),
+        BlockCase(("intimidate",), (), ("R",), ("creature",), True),
+        BlockCase(("intimidate",), (), ("G",), ("creature",), False),
+        BlockCase(("shadow",), (), ("G",), ("creature",), False),
+        BlockCase((), ("shadow",), ("G",), ("creature",), False),
+        BlockCase(("unblockable",), ("reach",), ("G",), ("creature",), False),
+        BlockCase(("protection_from_green",), (), ("G",), ("creature",), False),
+        BlockCase(("protection_from_blue",), (), ("G",), ("creature",), True),
+    ]))
+    def test_the_rule(self, case):
+        assert may_block(Combatant.made(case.attacker, ("R",)),
+                         Combatant.made(case.blocker, case.colours, case.types)
+                         ) is case.expected
 
     @pytest.mark.parametrize("protection, blocker, expected", [
         (ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"), {"subtypes": ("goblin",)}, False),
