@@ -117,32 +117,59 @@ def collate_surfaces(
     caller to resolve on the device with
     :meth:`TrunkInputs.with_e`.
     """
-    batch = len(surfaces)
     width = max((len(s.slots) for s in surfaces), default=1)
-    features = {
-        kind: np.zeros((batch, width, size), dtype=np.float32)
-        for kind, size in widths.items()
-    }
-    slot_kinds = np.zeros((batch, width), dtype=np.int64)
-    positions = np.zeros((batch, width), dtype=np.int64)
-    e_vectors = np.zeros((batch, width, e_dim), dtype=np.float32)
-    e_rows = np.full((batch, width), -1, dtype=np.int64)
-    attention = np.zeros((batch, width), dtype=np.int64)
-    option_kinds = np.zeros((batch, width), dtype=np.int64)
-    relations = np.array(
-        [(row, i, j, r) for row, surface in enumerate(surfaces)
-         for i, j, r in surface.relations],
-        dtype=np.int64).reshape(-1, 4)
-
+    arrays = _SlotArrays.zeros((len(surfaces), width), e_dim=e_dim, widths=widths)
+    relations = _relations(surfaces)
     id_lists = _id_lists(surfaces, width)
-
     for row, surface in enumerate(surfaces):
+        arrays.fill(row, surface)
+    return arrays.inputs(relations, id_lists)
+
+
+@dataclass(frozen=True, slots=True)
+class _SlotArrays:
+    """One batch's per-slot arrays, ``(batch, width)`` or ``(batch, width,
+    size)``, filled a surface at a time and handed to torch once each."""
+
+    features: dict[SlotKind, np.ndarray]
+    slot_kinds: np.ndarray
+    positions: np.ndarray
+    e_vectors: np.ndarray
+    e_rows: np.ndarray
+    attention: np.ndarray
+    option_kinds: np.ndarray
+
+    @classmethod
+    def zeros(
+        cls, shape: tuple[int, int], *, e_dim: int, widths: dict[SlotKind, int],
+    ) -> _SlotArrays:
+        """Blank arrays of ``shape``: zero, and ``-1`` in ``e_rows``."""
+        return cls(
+            features={
+                kind: np.zeros((*shape, size), dtype=np.float32)
+                for kind, size in widths.items()
+            },
+            slot_kinds=np.zeros(shape, dtype=np.int64),
+            positions=np.zeros(shape, dtype=np.int64),
+            e_vectors=np.zeros((*shape, e_dim), dtype=np.float32),
+            e_rows=np.full(shape, -1, dtype=np.int64),
+            attention=np.zeros(shape, dtype=np.int64),
+            option_kinds=np.zeros(shape, dtype=np.int64),
+        )
+
+    def fill(self, row: int, surface) -> None:
+        """``surface``'s slots, written along ``row``."""
         slots = surface.slots
         filled = len(slots)
-        slot_kinds[row, :filled] = [int(slot.kind) for slot in slots]
-        positions[row, :filled] = [slot.position for slot in slots]
-        attention[row, :filled] = 1
-        option_kinds[row, :filled] = [int(slot.option) for slot in slots]
+        self.slot_kinds[row, :filled] = [int(slot.kind) for slot in slots]
+        self.positions[row, :filled] = [slot.position for slot in slots]
+        self.attention[row, :filled] = 1
+        self.option_kinds[row, :filled] = [int(slot.option) for slot in slots]
+        self._fill_columns(row, slots)
+
+    def _fill_columns(self, row: int, slots) -> None:
+        """Each slot's features and its ``e_row`` or ``e_vector``."""
+        features, e_rows, e_vectors = self.features, self.e_rows, self.e_vectors
         for column, slot in enumerate(slots):
             if slot.features and slot.kind in features:
                 values = slot.features
@@ -152,19 +179,29 @@ def collate_surfaces(
             elif slot.e_vector is not None:
                 e_vectors[row, column, : len(slot.e_vector)] = slot.e_vector
 
-    return TrunkInputs(
-        slot_features={
-            kind: torch.from_numpy(array) for kind, array in features.items()
-        },
-        slot_kinds=torch.from_numpy(slot_kinds),
-        positions=torch.from_numpy(positions),
-        e_vectors=torch.from_numpy(e_vectors),
-        attention_mask=torch.from_numpy(attention),
-        option_kinds=torch.from_numpy(option_kinds),
-        e_rows=torch.from_numpy(e_rows),
-        relations=torch.from_numpy(relations),
-        **{name: torch.from_numpy(array) for name, array in id_lists.items()},
-    )
+    def inputs(self, relations: np.ndarray, id_lists: dict[str, np.ndarray]) -> TrunkInputs:
+        """The arrays, the relations and the id lists as the trunk's inputs."""
+        return TrunkInputs(
+            slot_features={
+                kind: torch.from_numpy(array) for kind, array in self.features.items()
+            },
+            slot_kinds=torch.from_numpy(self.slot_kinds),
+            positions=torch.from_numpy(self.positions),
+            e_vectors=torch.from_numpy(self.e_vectors),
+            attention_mask=torch.from_numpy(self.attention),
+            option_kinds=torch.from_numpy(self.option_kinds),
+            e_rows=torch.from_numpy(self.e_rows),
+            relations=torch.from_numpy(relations),
+            **{name: torch.from_numpy(array) for name, array in id_lists.items()},
+        )
+
+
+def _relations(surfaces: list) -> np.ndarray:
+    """``(N, 4)`` long ``[batch row, from slot, to slot, relation type]``."""
+    return np.array(
+        [(row, i, j, r) for row, surface in enumerate(surfaces)
+         for i, j, r in surface.relations],
+        dtype=np.int64).reshape(-1, 4)
 
 
 #: The slot fields that are id lists, as ``(TrunkInputs field, Slot field)``.
@@ -233,27 +270,64 @@ def entity_target_tensors(
     """
     batch = len(surfaces)
     width = max((len(s.entity_slots) for s in surfaces), default=1)
-    gated = np.array(
+    gated = _gated(targets_per_surface, batch)
+    arrays = _TargetArrays.zeros((batch, width), fields)
+    for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
+        arrays.fill(row, surface, targets)
+    field_weights, gate_weight = arrays.rule_mask(surfaces, weights)
+    return EntityTargetBatch(
+        torch.from_numpy(arrays.gate),
+        arrays.field_targets(field_weights),
+        torch.from_numpy(arrays.mask),
+        entity_index(surfaces),
+        torch.from_numpy(gated),
+        gate_weight,
+    )
+
+
+def _gated(targets_per_surface: list[dict], batch: int) -> np.ndarray:
+    """``(batch,)`` bool: whether each record's targets train the gate."""
+    return np.array(
         [getattr(targets, "gated", True) for targets in targets_per_surface] or [True],
         dtype=np.bool_,
     )[:batch]
-    gate = np.zeros((batch, width), dtype=np.float32)
-    mask = np.zeros((batch, width), dtype=np.float32)
-    collected: dict[str, np.ndarray] = {}
-    present: dict[str, np.ndarray] = {}
 
-    for spec in fields:
-        shape = (batch, width, spec.arity) if spec.type.per_member else (batch, width)
-        collected[spec.name] = np.zeros(shape, dtype=np.float32)
-        present[spec.name] = np.zeros((batch, width), dtype=np.bool_)
 
-    for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
-        for column, slot_index in enumerate(surface.entity_slots):
-            mask[row, column] = 1
-            entry = targets.get(surface.slots[slot_index].subject_id)
-            if entry is None:
-                continue
-            gate[row, column] = 1.0 if entry.affected else 0.0
+@dataclass(frozen=True, slots=True)
+class _TargetArrays:
+    """One batch's per-entity target arrays, ``(batch, entities)`` (a
+    per-member field's values with a trailing ``arity``), filled a surface at
+    a time."""
+
+    fields: tuple[FieldSpec, ...]
+    gate: np.ndarray
+    mask: np.ndarray
+    collected: dict[str, np.ndarray]
+    present: dict[str, np.ndarray]
+
+    @classmethod
+    def zeros(cls, shape: tuple[int, int], fields: tuple[FieldSpec, ...]) -> _TargetArrays:
+        """Blank arrays of ``shape``: no entity real, affected or present."""
+        gate = np.zeros(shape, dtype=np.float32)
+        mask = np.zeros(shape, dtype=np.float32)
+        collected: dict[str, np.ndarray] = {}
+        present: dict[str, np.ndarray] = {}
+        for spec in fields:
+            values = (*shape, spec.arity) if spec.type.per_member else shape
+            collected[spec.name] = np.zeros(values, dtype=np.float32)
+            present[spec.name] = np.zeros(shape, dtype=np.bool_)
+        return cls(fields, gate, mask, collected, present)
+
+    def fill(self, row: int, surface, targets) -> None:
+        """``surface``'s entities' targets from ``targets``, along ``row``."""
+        fields, gate, collected, present = self.fields, self.gate, self.collected, self.present
+        slots = surface.slots
+        self.mask[row, : len(surface.entity_slots)] = 1
+        found = {
+            column: entry for column, slot_index in enumerate(surface.entity_slots)
+            if (entry := targets.get(slots[slot_index].subject_id)) is not None
+        }
+        for column, entry in found.items():
             for spec in fields:
                 value = entry.supervised(spec)
                 if value is None:
@@ -263,44 +337,52 @@ def entity_target_tensors(
                     collected[spec.name][row, column, : len(value)] = value
                 else:
                     collected[spec.name][row, column] = float(value)
-    field_weights, gate_weight = _rule_mask(surfaces, weights, fields, present, width)
-    return EntityTargetBatch(
-        torch.from_numpy(gate),
-        EntityFieldTargets(
-            {name: torch.from_numpy(values) for name, values in collected.items()},
-            {name: torch.from_numpy(rows) for name, rows in present.items()},
+            gate[row, column] = 1.0 if entry.affected else 0.0
+
+    def rule_mask(
+        self, surfaces: list, weights: list[CopyWeights] | None,
+    ) -> tuple[dict[str, torch.Tensor], torch.Tensor | None]:
+        """Each record's rule-mask weights (FR-061) as the batch carries them:
+        a field weighed zero cleared from ``present`` in place, the fractional
+        field weights by field, and the gate's per-entity weight, None where
+        every record is unmasked."""
+        if weights is None or all(copy.unmasked for copy in weights):
+            return {}, None
+        field_weights = self._field_weights(weights)
+        return field_weights, _gate_weights(surfaces, weights, self.mask.shape)
+
+    def _field_weights(self, weights: list[CopyWeights]) -> dict[str, torch.Tensor]:
+        """Each field's per-record weight, where any is fractional; a field
+        a record weighs zero cleared from ``present`` on its row."""
+        field_weights: dict[str, torch.Tensor] = {}
+        for spec in self.fields:
+            row_weights = np.array([copy.weight(spec.name) for copy in weights], dtype=np.float32)
+            self.present[spec.name][row_weights == 0] = False
+            if ((row_weights != 0) & (row_weights != 1)).any():
+                field_weights[spec.name] = torch.from_numpy(row_weights)
+        return field_weights
+
+    def field_targets(self, field_weights: dict[str, torch.Tensor]) -> EntityFieldTargets:
+        """The field arrays as tensors, beside ``field_weights``."""
+        return EntityFieldTargets(
+            {name: torch.from_numpy(values) for name, values in self.collected.items()},
+            {name: torch.from_numpy(rows) for name, rows in self.present.items()},
             field_weights,
-        ),
-        torch.from_numpy(mask),
-        entity_index(surfaces),
-        torch.from_numpy(gated),
-        gate_weight,
-    )
+        )
 
 
-def _rule_mask(
-    surfaces: list, weights: list[CopyWeights] | None, fields: tuple[FieldSpec, ...],
-    present: dict[str, np.ndarray], width: int,
-) -> tuple[dict[str, torch.Tensor], torch.Tensor | None]:
-    """Each record's rule-mask weights (FR-061) as the batch carries them:
-    a field weighed zero cleared from ``present`` in place, the fractional
-    field weights by field, and the gate's per-entity weight, None where
-    every record is unmasked."""
-    if weights is None or all(copy.unmasked for copy in weights):
-        return {}, None
-    field_weights: dict[str, torch.Tensor] = {}
-    for spec in fields:
-        row_weights = np.array([copy.weight(spec.name) for copy in weights], dtype=np.float32)
-        present[spec.name][row_weights == 0] = False
-        if ((row_weights != 0) & (row_weights != 1)).any():
-            field_weights[spec.name] = torch.from_numpy(row_weights)
-    gate_weight = np.ones((len(surfaces), width), dtype=np.float32)
+def _gate_weights(
+    surfaces: list, weights: list[CopyWeights], shape: tuple[int, ...],
+) -> torch.Tensor:
+    """``shape`` float: the gate's weight at each entity of a masked record,
+    one at an unmasked record's and at padding."""
+    gate_weight = np.ones(shape, dtype=np.float32)
     for row, (surface, copy) in enumerate(zip(surfaces, weights)):
         if copy.unmasked:
             continue
         for column, slot_index in enumerate(surface.entity_slots):
             gate_weight[row, column] = copy.gate_weight(surface.slots[slot_index].subject_id)
-    return field_weights, torch.from_numpy(gate_weight)
+    return torch.from_numpy(gate_weight)
 
 
 def per_entity_targets(
