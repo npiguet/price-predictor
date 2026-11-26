@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from effects.application.control_score import _OutputReading, decoder_of
+from effects.application.control_reads import OutputReading
 from effects.domain.cost_targets import is_cost_half, paid_entities
 from effects.domain.effect_head_layout import (
     FIELD_SLICES,
@@ -26,6 +26,7 @@ from effects.domain.effect_head_layout import (
     ZoneOutcome,
 )
 from effects.domain.effect_targets import derive_targets
+from effects.domain.head_decoding import decoder_of
 from effects.domain.rule_output_targets import entity_indicators
 from effects.domain.selection_set import RULE_TESTS, SelectionSet, TaggedRecord
 from effects.domain.surface_builder import has_card_slot
@@ -68,7 +69,7 @@ class TestTheSacrificedCreaturesZoneOutcome:
 
     def test_it_is_read_conditionally(self):
         targets, column = _sacrifice()
-        reading = _OutputReading(decoder_of(_ZONE))
+        reading = OutputReading(decoder_of(_ZONE))
         assert reading.at(targets, 0, column) is reading.conditional
 
     def test_the_conditional_reading_leaves_the_gate_out(self):
@@ -77,7 +78,7 @@ class TestTheSacrificedCreaturesZoneOutcome:
         start, _ = FIELD_SLICES[_ZONE]
         outputs[0, 0, start + _DIED] = 6.0
         heads = SimpleNamespace(gathered=outputs)
-        reading = _OutputReading(decoder_of(_ZONE))
+        reading = OutputReading(decoder_of(_ZONE))
         reading.candidate = _DIED
         rows = columns = torch.tensor([0])
         alone = float(reading.conditional(heads, rows, columns)[0])
@@ -90,7 +91,7 @@ def test_a_gated_records_entity_keeps_the_gated_reading(records):
     record = next(r for r in records if derive_targets(r).gated and r.state.entities)
     (surface,), targets = _batch(record)
     column = _column(surface, record.state.entities[0].id)
-    reading = _OutputReading(decoder_of(_ZONE))
+    reading = OutputReading(decoder_of(_ZONE))
     assert reading.at(targets, 0, column) is reading
 
 

@@ -16,7 +16,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from effects.application.control_score import ControlScorer, component_score
+from effects.application.control_items import component_score
+from effects.application.control_score import ControlScorer
 from effects.domain.selection_set import GRIDS, FrozenGrid, GridCell, TaggedRecord
 from tests.unit.effects.application.test_control_score import (
     RULE_OUTPUTS,

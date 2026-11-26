@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from effects.application.control_score import decoder_of
 from effects.domain.effect_head_layout import VERDICT_LAYOUT, VERDICT_WIDTH
+from effects.domain.head_decoding import decoder_of
 from tests.unit.effects.domain.signed_delta_fit_support import OPTIMUM_TARGETS, fitted_columns
 
 

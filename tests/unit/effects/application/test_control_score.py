@@ -14,24 +14,21 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from effects.application.control_score import (
-    CellRead,
-    ControlScore,
+from effects.application.control_items import (
     ControlScoreError,
-    ControlScorer,
-    StratumScore,
-    TextOverride,
-    _OutputReading,
     component_score,
-    decoder_of,
     explained_deviance,
     mixed,
     probe_item,
     rule_item,
-    selection_records,
 )
+from effects.application.control_reads import OutputReading
+from effects.application.control_score import ControlScore, ControlScorer, StratumScore
 from effects.application.record_forward import RecordForward
+from effects.application.stratum_records import selection_records
 from effects.domain.effect_head_layout import GATE_TERM, ZONE_OUTCOMES, ZoneOutcome
+from effects.domain.grid_edits import CellRead, TextOverride
+from effects.domain.head_decoding import decoder_of
 from effects.domain.selection_set import (
     COMPONENTS,
     DEVIANCE,
@@ -117,7 +114,7 @@ class TestLeftOut:
 
 class TestRuleReadout:
     def test_the_category_the_fires_records_show_more_is_read(self):
-        reading = _OutputReading(decoder_of("zone_outcome"))
+        reading = OutputReading(decoder_of("zone_outcome"))
         died = [1.0 if c == ZoneOutcome.DIED else 0.0 for c in ZONE_OUTCOMES]
         stayed = [0.0] * len(ZONE_OUTCOMES)
         for _ in range(3):
@@ -129,7 +126,7 @@ class TestRuleReadout:
 
     def test_an_absent_outcome_reads_the_complement(self):
         """Indestructible: the creature that fires the rule does not die."""
-        reading = _OutputReading(decoder_of("zone_outcome"))
+        reading = OutputReading(decoder_of("zone_outcome"))
         died = [1.0 if c == ZoneOutcome.DIED else 0.0 for c in ZONE_OUTCOMES]
         reading.observe("fires", [0.0] * len(ZONE_OUTCOMES))
         reading.observe("does_not_fire", died)
@@ -138,7 +135,7 @@ class TestRuleReadout:
         assert reading.sign == -1.0
 
     def test_an_output_no_fires_record_observes_is_not_read(self):
-        reading = _OutputReading(decoder_of("can_play"))
+        reading = OutputReading(decoder_of("can_play"))
         reading.observe("does_not_fire", [1.0])
         assert not reading.settle()
 
@@ -609,7 +606,7 @@ def test_a_rule_test_read_at_an_entity_with_no_slot_is_logged(run, records, capl
                          for rule, sides in by_rule.items()}
                   for half, by_rule in by_half.items()}
         for stratum, by_half in selection.rule_tests.items()}
-    with caplog.at_level("INFO", logger="effects.application.control_score"):
+    with caplog.at_level("INFO", logger="effects.application.control_stratum"):
         _prepare(run, records, replace(selection, rule_tests=rules))
     assert any("no slot" in message and "E-nowhere" in message
                for message in caplog.messages)

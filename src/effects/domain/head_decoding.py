@@ -1,22 +1,35 @@
 """Decoding the per-entity head's raw outputs into the quantities rules name,
-in one place so the gates and the probes read the same columns."""
+in one place so the gates and the probes read the same columns; and the
+control score's decoders (:func:`decoder_of`), one rule-test output's
+candidate readings over whichever shipped head carries it."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
 import torch
 
 from effects.domain.effect_head_layout import (
+    CREATED_OBJECT_SLOTS,
+    CREATED_SLOT_WIDTH,
     FIELD_SLICES,
     FIELDS_BY_NAME,
     GATE_INDEX,
+    GLOBAL_LAYOUT,
+    VERDICT_LAYOUT,
+    CreatedSlot,
     FieldSpec,
     FieldType,
     HeadField,
+    RecordHeadLayout,
     ZoneOutcome,
 )
 from effects.domain.field_types import DIRECTIONS, SIGNED_DIRECTIONS, Direction
+from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT
+
+if TYPE_CHECKING:
+    from effects.domain.entity_field_targets import EntityTargetBatch
 
 
 def field_outputs(outputs: torch.Tensor, spec: FieldSpec) -> torch.Tensor:
@@ -115,3 +128,162 @@ class HeadReading:
         return probabilities if conditional else (
             self.p_affected[..., None] * probabilities
         )
+
+
+class HeadOutputs(Protocol):
+    """One chunk's head outputs as a decoder reads them: the per-entity head
+    gathered at the chunk's asked slots, and the record heads
+    (``control_reads.Heads``)."""
+
+    gathered: torch.Tensor
+
+    @property
+    def verdict(self) -> torch.Tensor: ...
+
+    @property
+    def global_(self) -> torch.Tensor: ...
+
+    @property
+    def created(self) -> torch.Tensor: ...
+
+
+
+class Decoder:
+    """One rule-test output's candidate readings and the matching target
+    indicators: a candidate per category (or member), or one expected value.
+    Its targets are :attr:`output`'s, read by ``rule_output_targets``, the
+    definition the freeze leaves an output out by."""
+
+    #: The output the decoder reads, as the manifest's map names it.
+    output = ""
+    #: Whether the output is read at the tag's outcome entities rather than the record.
+    per_entity = False
+    #: Whether the candidates are probabilities of categories (else amounts).
+    categorical = True
+
+    def candidates(self, heads: HeadOutputs, rows: torch.Tensor,
+                   columns: torch.Tensor) -> torch.Tensor:
+        """``(asks, candidates)``: each ask's reading of every candidate."""
+        raise NotImplementedError
+
+    def conditional_candidates(self, heads: HeadOutputs, rows: torch.Tensor,
+                               columns: torch.Tensor) -> torch.Tensor:
+        """:meth:`candidates` read without the affected gate, where
+        :meth:`reads_conditionally` says so; the same reading elsewhere."""
+        return self.candidates(heads, rows, columns)
+
+    def reads_conditionally(self, targets: EntityTargetBatch, row: int, column: int) -> bool:
+        """Whether one entity's reading leaves the affected gate out."""
+        return False
+
+
+class _GateDecoder(Decoder):
+    output = GATE_OUTPUT
+    per_entity = True
+
+    def candidates(self, heads, rows, columns):
+        return torch.sigmoid(heads.gathered[rows, columns, GATE_INDEX].float()).unsqueeze(-1)
+
+
+class _EntityFieldDecoder(Decoder):
+    """A per-entity field, read unconditionally (gated by the affected gate,
+    a legality field ungated), except on a record that trains no gate (a cost
+    half, a playability record, a rewrite whose outcome is partly unknown),
+    where a gated field trains at the entities the gate's target marks and is
+    read conditionally, as training reads it (task G11b)."""
+
+    per_entity = True
+
+    def __init__(self, spec: FieldSpec) -> None:
+        self.spec = spec
+        self.output = spec.name
+        self.categorical = not spec.type.has_magnitude
+
+    def candidates(self, heads, rows, columns):
+        return self._read(heads, rows, columns, conditional=not self.spec.gated)
+
+    def conditional_candidates(self, heads, rows, columns):
+        return self._read(heads, rows, columns, conditional=True)
+
+    def _read(self, heads, rows, columns, *, conditional: bool) -> torch.Tensor:
+        outputs = heads.gathered[rows, columns]
+        spec = self.spec
+        if spec.type.has_magnitude:
+            return HeadReading(outputs).expected(spec.name, conditional=conditional).unsqueeze(-1)
+        start, end = FIELD_SLICES[spec.name]
+        read = outputs[:, start:end].float()
+        if spec.type is FieldType.CATEGORICAL:
+            value = torch.softmax(read, dim=-1)
+        else:
+            value = torch.sigmoid(read)
+        if not conditional:
+            value = HeadReading(outputs).p_affected.unsqueeze(-1) * value
+        return value
+
+    def reads_conditionally(self, targets, row, column):
+        return self.spec.gated and not bool(targets.gate_scored[row, column])
+
+
+class _RecordFieldDecoder(Decoder):
+    """A verdict or global field, read at the record."""
+
+    def __init__(self, layout: RecordHeadLayout, name: str, head: str) -> None:
+        self.layout, self.spec, self.head, self.output = layout, layout.by_name[name], head, name
+        self.categorical = not self.spec.type.has_magnitude
+
+    def _outputs(self, heads: HeadOutputs, rows: torch.Tensor) -> torch.Tensor:
+        """``(asks, members, member width)``."""
+        row_outputs = heads.verdict[rows] if self.head == "verdict" else heads.global_[rows]
+        start, end = self.layout.slices[self.spec.name]
+        spec = self.spec
+        return row_outputs[:, start:end].float().reshape(
+            -1, spec.count, spec.type.width(spec.arity))
+
+    def candidates(self, heads, rows, columns):
+        spec, members = self.spec, self._outputs(heads, rows)
+        if spec.type is FieldType.CATEGORICAL:
+            return torch.softmax(members[:, 0], dim=-1)
+        if spec.type is FieldType.BINARY:
+            return torch.sigmoid(members[..., 0])
+        value = expected_magnitude(_Magnitude(spec.type), members)
+        if spec.type.has_direction:
+            value = nonzero_direction_balance(_Magnitude(spec.type), members) * value
+        return value.sum(-1, keepdim=True)
+
+
+@dataclass(frozen=True)
+class _Magnitude:
+    """The type alone, standing in for a ``FieldSpec`` in the per-entity
+    head's decoders: a record field's member reads its columns the same way."""
+
+    type: FieldType
+    name: str = "record field"
+
+
+class _CreatedDecoder(Decoder):
+    """The created-objects head: its expected number of created groups, the
+    sum over its slots of the probability each is present."""
+
+    output = CREATED_OBJECTS_OUTPUT
+    categorical = False
+
+    def candidates(self, heads, rows, columns):
+        present = heads.created[rows][:, [slot * CREATED_SLOT_WIDTH + CreatedSlot.PRESENT
+                                          for slot in range(CREATED_OBJECT_SLOTS)]]
+        return torch.sigmoid(present.float()).sum(-1, keepdim=True)
+
+
+def decoder_of(output: str) -> Decoder | None:
+    """The decoder of an output the manifest's map names; None for a name no
+    shipped head carries."""
+    if output == GATE_OUTPUT:
+        return _GateDecoder()
+    if output == CREATED_OBJECTS_OUTPUT:
+        return _CreatedDecoder()
+    if output in FIELDS_BY_NAME:
+        return _EntityFieldDecoder(FIELDS_BY_NAME[output])
+    if output in VERDICT_LAYOUT.by_name:
+        return _RecordFieldDecoder(VERDICT_LAYOUT, output, "verdict")
+    if output in GLOBAL_LAYOUT.by_name:
+        return _RecordFieldDecoder(GLOBAL_LAYOUT, output, "global")
+    return None

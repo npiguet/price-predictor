@@ -13,16 +13,11 @@ import math
 import pytest
 
 from effects.application import breakdowns as bd
-from effects.application.control_score import (
-    ControlScore,
-    StratumScore,
-    _OutputReading,
-    decoder_of,
-    explained_deviance,
-    probe_item,
-    rule_item,
-)
+from effects.application.control_items import explained_deviance, probe_item, rule_item
+from effects.application.control_reads import OutputReading
+from effects.application.control_score import ControlScore, StratumScore
 from effects.application.run_reporter import format_non_finite
+from effects.domain.head_decoding import decoder_of
 from effects.domain.score_scales import grid_score
 from effects.domain.selection_set import PROBES, RULE_TESTS
 from tests.unit.effects.application.test_control_score import (
@@ -127,14 +122,14 @@ def test_an_epoch_with_one_infinite_rule_reading_marks_that_rule_down(run, score
 
 
 def test_an_output_whose_targets_are_the_same_in_both_polarities_is_not_settled():
-    reading = _OutputReading(decoder_of("can_play"))
+    reading = OutputReading(decoder_of("can_play"))
     reading.observe("fires", [1.0])
     reading.observe("does_not_fire", [1.0 + 1e-9])
     assert not reading.settle()
 
 
 def test_an_output_whose_targets_differ_is_settled():
-    reading = _OutputReading(decoder_of("can_play"))
+    reading = OutputReading(decoder_of("can_play"))
     reading.observe("fires", [1.0])
     reading.observe("does_not_fire", [0.0])
     assert reading.settle()

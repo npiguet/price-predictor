@@ -1025,7 +1025,7 @@ def _train_effect_model_parser(subparsers) -> None:
     # No selection set frozen for the corpus, or one frozen for another or
     # edited (E1); a control-score component with nothing to score (FR-068c).
     "effects.domain.selection_set.SelectionSetError": 1,
-    "effects.application.control_score.ControlScoreError": 1,
+    "effects.application.control_items.ControlScoreError": 1,
     # A missing manifest or resume file.
     FileNotFoundError: 1,
 })

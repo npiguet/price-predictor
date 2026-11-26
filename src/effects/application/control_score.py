@@ -57,7 +57,7 @@ unconditional ones gate 2 and the probes read (``HeadReading``: the gate's
 probability times the field's, a legality field ungated), except on a record
 that trains no gate (a cost half, a playability record, a rewrite whose outcome
 is partly unknown), where a field trains at the entities its targets mark
-affected and is read conditionally (:class:`_ConditionalRead`). The selection set
+affected and is read conditionally (``control_reads._ConditionalRead``). The selection set
 names a rule's records and their polarity, not the scenario's category, so
 the category is read off the frozen records' own targets once, at startup:
 the category (or, for a multi-member output, the member) whose observed share
@@ -111,130 +111,63 @@ from __future__ import annotations
 import logging
 import math
 import random
-from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 
-from effects.application.host_cache import host_bytes, pack, unpack
+from effects.application.control_items import (
+    SELECTION,
+    ControlScoreError,
+    component_score,
+    explained_deviance,
+    mixed,
+    probe_item,
+    rule_item,
+)
+from effects.application.control_reads import Heads
+from effects.application.control_stratum import (
+    GridEditor,
+    GridItem,
+    ScoringPreparer,
+    StratumCache,
+    prepare_stratum,
+)
+from effects.application.host_cache import host_bytes, unpack
 from effects.application.record_forward import RecordForward
-from effects.application.step_preparation import DeviceStep, scoring_step, stripped
+from effects.application.step_preparation import DeviceStep, scoring_step
+from effects.application.stratum_records import StratumReader
 from effects.application.surface_batching import SurfaceBatcher
 from effects.application.validation_pass import FieldParts, KeptTargets, score_steps
-from effects.domain.effect_head_layout import (
-    CREATED_OBJECT_SLOTS,
-    CREATED_SLOT_WIDTH,
-    FIELD_SLICES,
-    FIELDS_BY_NAME,
-    GATE_INDEX,
-    GLOBAL_LAYOUT,
-    VERDICT_LAYOUT,
-    CreatedSlot,
-    FieldSpec,
-    RecordHeadLayout,
-    active_fields,
-)
-from effects.domain.effect_targets import RecordTargets, derive_targets
-from effects.domain.field_types import FieldType
-from effects.domain.grid_edits import CellRead, TextOverride, grid_of
-from effects.domain.head_decoding import HeadReading, expected_magnitude, nonzero_direction_balance
+from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.loss_floor import constant_predictor_losses
-from effects.domain.probe_readouts import READOUTS, item_score
-from effects.domain.rule_mask import (
-    CREATED_OBJECTS_OUTPUT,
-    GATE_OUTPUT,
-    RuleMask,
-    copy_weights,
-    weighed_by_class,
-)
-from effects.domain.rule_output_targets import (
-    TargetMeans,
-    entity_indicators,
-    record_indicators,
-)
+from effects.domain.rule_mask import RuleMask, copy_weights, weighed_by_class
 from effects.domain.sampling import SamplingClass
-from effects.domain.score_scales import (
-    SCORE_FLOOR,
-    auc,
-    clipped,
-    grid_score,
-    grouped_mean,
-    non_finite,
-    rescaled_auc,
-)
+from effects.domain.score_scales import clipped, grid_score, non_finite
 from effects.domain.selection_set import (
-    BINARY,
     COMPONENTS,
     DEVIANCE,
     GRIDS,
     PROBES,
     RULE_TESTS,
-    FrozenGrid,
     SelectionSet,
     deviance_items,
-    error_of,
-    item_key,
 )
-from effects.domain.strata import Half, Stratum
-from effects.domain.surface_collation import entity_target_tensors
+from effects.domain.strata import Stratum
 
 if TYPE_CHECKING:
-    from effects.application.record_forward import ForwardOutputs
     from effects.application.step_loss import StepLossComputer
-    from effects.domain.entity_field_targets import EntityTargetBatch
     from effects.domain.records import EffectRecord
 
 logger = logging.getLogger(__name__)
 
-#: The half selection reads; the reporting half is the selected checkpoint's.
-SELECTION, REPORTING = str(Half.SELECTION), str(Half.REPORTING)
-#: The polarities a rule test ranks, ``fires`` first.
-FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 #: Records per prepared chunk of the probes', grids' and rule tests' forward,
 #: and per deviance step: forward passes only, so a chunk this large fits the
 #: card beside a training run's state, and runs several times faster than
 #: chunks of a training batch's size (T160).
 CHUNK_RECORDS = 128
-
-
-class ControlScoreError(RuntimeError):
-    """A component with nothing to score in one stratum's half (FR-068c)."""
-
-    def __init__(self, stratum: str, half: str, component: str, detail: str) -> None:
-        self.stratum, self.half, self.component = stratum, half, component
-        super().__init__(f"{stratum} {half}, {component}: {detail}")
-
-
-# ── the grid port ───────────────────────────────────────────────────────
-
-
-class GridEditor(Protocol):
-    """Edits a frozen grid's record into each of the grid's cells.
-
-    ``cells`` returns one :class:`CellRead` per cell, in the frozen grid's
-    cell order; ``entities`` are the ones the selection set froze for the
-    record.
-    """
-
-    def cells(self, grid: str, record: EffectRecord,
-              entities: tuple[str, ...]) -> Sequence[CellRead]: ...
-
-
-# ── the preparer port ───────────────────────────────────────────────────
-
-
-class ScoringPreparer(Protocol):
-    """What the scorer asks of a preparer: a training run's ``StepPreparer``,
-    or a saved checkpoint's :class:`CheckpointPreparer`."""
-
-    def scoring_batcher(self) -> SurfaceBatcher: ...
-
-    def prepare_scoring_step(self, records: Sequence[EffectRecord],
-                             fields: tuple[FieldSpec, ...], *,
-                             class_weighted: bool = False) -> DeviceStep: ...
 
 
 class CheckpointPreparer:
@@ -306,573 +239,6 @@ class ControlScore:
                      self.strata[str(Stratum.GAME_DISJOINT)].score, self.stratum_weight)
 
 
-def mixed(card_disjoint: float, game_disjoint: float, weight: float) -> float:
-    """The control score: ``weight · card_disjoint + (1 − weight) · game_disjoint``."""
-    return weight * card_disjoint + (1.0 - weight) * game_disjoint
-
-
-#: How a component's items group before they are averaged: a grid's
-#: variants into the grid they are of, so the damage, combat and evasion grids
-#: weigh equally (root spec § 14.1); every other item is a group of its own.
-ITEM_GROUPS: dict[str, Callable[[str], str]] = {GRIDS: grid_of}
-
-
-def component_score(items: Mapping[str, float], *, stratum: str, component: str,
-                    half: str = SELECTION, strict: bool = True) -> float:
-    """The mean of a component's items, each clipped below at −1, grouped
-    first by :data:`ITEM_GROUPS` (a group with no scored item left out);
-    raises :class:`ControlScoreError` when no item has a score, or is NaN
-    then when not ``strict``."""
-    scores = {name: clipped(value) for name, value in items.items() if not math.isnan(value)}
-    if not scores:
-        if not strict:
-            return math.nan
-        raise ControlScoreError(stratum, half, component, "nothing to score this epoch")
-    return grouped_mean(scores, ITEM_GROUPS.get(component, str))
-
-
-def probe_item(kind: str, labels: Sequence[float], predictions: Sequence[float]) -> float:
-    """A probe type on the common scale: ``2·AUC − 1`` for a binary one, R²
-    for an amount; :data:`SCORE_FLOOR` when any prediction is not finite (an
-    overflowing model is scored at the floor, never on the rows it can read);
-    NaN where it cannot be scored."""
-    if non_finite(predictions):
-        return SCORE_FLOOR
-    score = item_score(kind, labels, predictions)
-    return rescaled_auc(score) if kind == BINARY and not math.isnan(score) else score
-
-
-def rule_item(outputs: Iterable[tuple[Sequence[float], Sequence[float]]]) -> float:
-    """A rule test on the common scale: the mean over its outputs of
-    ``2·AUC − 1``, ``fires`` ranked above ``does_not_fire``; each output is
-    ``(fires readings, does_not_fire readings)``, and one without a reading
-    of both polarities is left out. NaN with none left; :data:`SCORE_FLOOR`
-    when any reading is not finite."""
-    scores = []
-    for fires, does_not in outputs:
-        if non_finite(fires) or non_finite(does_not):
-            return SCORE_FLOOR
-        value = auc([True] * len(fires) + [False] * len(does_not), [*fires, *does_not])
-        if not math.isnan(value):
-            scores.append(rescaled_auc(value))
-    return float(np.mean(scores)) if scores else math.nan
-
-
-def explained_deviance(parts: Mapping[str, float], floor: Mapping[str, float], *,
-                       kept: Iterable[str], deviance_floor: float) -> dict[str, float]:
-    """``1 − loss / constant loss`` per item of ``kept`` the pass scored (an
-    output term of any shipped head, ``selection_set.deviance_item``), leaving
-    out each whose constant-prediction loss is at or below ``deviance_floor``
-    (FR-068). A term whose loss is not finite scores :data:`SCORE_FLOOR`."""
-    out = {}
-    for name in kept:
-        loss, constant = parts.get(name), floor.get(name)
-        if loss is None or constant is None or constant <= deviance_floor:
-            continue
-        out[name] = 1.0 - loss / constant if math.isfinite(loss) else SCORE_FLOOR
-    return out
-
-
-# ── reading the heads ───────────────────────────────────────────────────
-
-
-class _Heads:
-    """One chunk's outputs, each head read once: the per-entity head at the
-    chunk's asked slots, the record heads on first use."""
-
-    def __init__(self, outputs: ForwardOutputs, index: torch.Tensor) -> None:
-        self.outputs = outputs
-        self.gathered = outputs.per_entity_at(index)
-        self._verdict = self._global = self._created = None
-
-    @property
-    def verdict(self) -> torch.Tensor:
-        if self._verdict is None:
-            self._verdict = self.outputs.verdict()
-        return self._verdict
-
-    @property
-    def global_(self) -> torch.Tensor:
-        if self._global is None:
-            self._global = self.outputs.global_outputs()
-        return self._global
-
-    @property
-    def created(self) -> torch.Tensor:
-        if self._created is None:
-            self._created = self.outputs.created_objects()
-        return self._created
-
-
-#: ``read(heads, rows, columns) -> (n,) tensor``: one value per asked chunk
-#: row and gathered column, every ask of one read in a chunk at once.
-Read = Callable[[_Heads, torch.Tensor, torch.Tensor], torch.Tensor]
-
-
-class _ReadoutRead:
-    """A :data:`READOUTS` answer at the asked rows and gathered columns (a
-    verdict readout ignores the columns)."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self.readout = READOUTS[name]
-
-    def __call__(self, heads: _Heads, rows: torch.Tensor, columns: torch.Tensor):
-        return self.readout(heads.gathered, heads.verdict, rows, columns)
-
-
-#: One read per readout, so a chunk's asks of one readout are read together.
-_READOUT_READS: dict[str, _ReadoutRead] = {}
-
-
-def _readout(name: str) -> Read:
-    read = _READOUT_READS.get(name)
-    if read is None:
-        read = _READOUT_READS[name] = _ReadoutRead(name)
-    return read
-
-
-class _Decoder:
-    """One rule-test output's candidate readings and the matching target
-    indicators: a candidate per category (or member), or one expected value.
-    Its targets are :attr:`output`'s, read by ``rule_output_targets``, the
-    definition the freeze leaves an output out by."""
-
-    #: The output the decoder reads, as the manifest's map names it.
-    output = ""
-    #: Whether the output is read at the tag's outcome entities rather than the record.
-    per_entity = False
-    #: Whether the candidates are probabilities of categories (else amounts).
-    categorical = True
-
-    def candidates(self, heads: _Heads, rows: torch.Tensor,
-                   columns: torch.Tensor) -> torch.Tensor:
-        """``(asks, candidates)``: each ask's reading of every candidate."""
-        raise NotImplementedError
-
-    def conditional_candidates(self, heads: _Heads, rows: torch.Tensor,
-                               columns: torch.Tensor) -> torch.Tensor:
-        """:meth:`candidates` read without the affected gate, where
-        :meth:`reads_conditionally` says so; the same reading elsewhere."""
-        return self.candidates(heads, rows, columns)
-
-    def reads_conditionally(self, targets: EntityTargetBatch, row: int, column: int) -> bool:
-        """Whether one entity's reading leaves the affected gate out."""
-        return False
-
-
-class _GateDecoder(_Decoder):
-    output = GATE_OUTPUT
-    per_entity = True
-
-    def candidates(self, heads, rows, columns):
-        return torch.sigmoid(heads.gathered[rows, columns, GATE_INDEX].float()).unsqueeze(-1)
-
-
-class _EntityFieldDecoder(_Decoder):
-    """A per-entity field, read unconditionally (gated by the affected gate,
-    a legality field ungated), except on a record that trains no gate (a cost
-    half, a playability record, a rewrite whose outcome is partly unknown),
-    where a gated field trains at the entities the gate's target marks and is
-    read conditionally, as training reads it (task G11b)."""
-
-    per_entity = True
-
-    def __init__(self, spec: FieldSpec) -> None:
-        self.spec = spec
-        self.output = spec.name
-        self.categorical = not spec.type.has_magnitude
-
-    def candidates(self, heads, rows, columns):
-        return self._read(heads, rows, columns, conditional=not self.spec.gated)
-
-    def conditional_candidates(self, heads, rows, columns):
-        return self._read(heads, rows, columns, conditional=True)
-
-    def _read(self, heads, rows, columns, *, conditional: bool) -> torch.Tensor:
-        outputs = heads.gathered[rows, columns]
-        spec = self.spec
-        if spec.type.has_magnitude:
-            return HeadReading(outputs).expected(spec.name, conditional=conditional).unsqueeze(-1)
-        start, end = FIELD_SLICES[spec.name]
-        read = outputs[:, start:end].float()
-        if spec.type is FieldType.CATEGORICAL:
-            value = torch.softmax(read, dim=-1)
-        else:
-            value = torch.sigmoid(read)
-        if not conditional:
-            value = HeadReading(outputs).p_affected.unsqueeze(-1) * value
-        return value
-
-    def reads_conditionally(self, targets, row, column):
-        return self.spec.gated and not bool(targets.gate_scored[row, column])
-
-
-class _RecordFieldDecoder(_Decoder):
-    """A verdict or global field, read at the record."""
-
-    def __init__(self, layout: RecordHeadLayout, name: str, head: str) -> None:
-        self.layout, self.spec, self.head, self.output = layout, layout.by_name[name], head, name
-        self.categorical = not self.spec.type.has_magnitude
-
-    def _outputs(self, heads: _Heads, rows: torch.Tensor) -> torch.Tensor:
-        """``(asks, members, member width)``."""
-        row_outputs = heads.verdict[rows] if self.head == "verdict" else heads.global_[rows]
-        start, end = self.layout.slices[self.spec.name]
-        spec = self.spec
-        return row_outputs[:, start:end].float().reshape(
-            -1, spec.count, spec.type.width(spec.arity))
-
-    def candidates(self, heads, rows, columns):
-        spec, members = self.spec, self._outputs(heads, rows)
-        if spec.type is FieldType.CATEGORICAL:
-            return torch.softmax(members[:, 0], dim=-1)
-        if spec.type is FieldType.BINARY:
-            return torch.sigmoid(members[..., 0])
-        value = expected_magnitude(_Magnitude(spec.type), members)
-        if spec.type.has_direction:
-            value = nonzero_direction_balance(_Magnitude(spec.type), members) * value
-        return value.sum(-1, keepdim=True)
-
-
-@dataclass(frozen=True)
-class _Magnitude:
-    """The type alone, standing in for a ``FieldSpec`` in the per-entity
-    head's decoders: a record field's member reads its columns the same way."""
-
-    type: FieldType
-    name: str = "record field"
-
-
-class _CreatedDecoder(_Decoder):
-    """The created-objects head: its expected number of created groups, the
-    sum over its slots of the probability each is present."""
-
-    output = CREATED_OBJECTS_OUTPUT
-    categorical = False
-
-    def candidates(self, heads, rows, columns):
-        present = heads.created[rows][:, [slot * CREATED_SLOT_WIDTH + CreatedSlot.PRESENT
-                                          for slot in range(CREATED_OBJECT_SLOTS)]]
-        return torch.sigmoid(present.float()).sum(-1, keepdim=True)
-
-
-def decoder_of(output: str) -> _Decoder | None:
-    """The decoder of an output the manifest's map names; None for a name no
-    shipped head carries."""
-    if output == GATE_OUTPUT:
-        return _GateDecoder()
-    if output == CREATED_OBJECTS_OUTPUT:
-        return _CreatedDecoder()
-    if output in FIELDS_BY_NAME:
-        return _EntityFieldDecoder(FIELDS_BY_NAME[output])
-    if output in VERDICT_LAYOUT.by_name:
-        return _RecordFieldDecoder(VERDICT_LAYOUT, output, "verdict")
-    if output in GLOBAL_LAYOUT.by_name:
-        return _RecordFieldDecoder(GLOBAL_LAYOUT, output, "global")
-    return None
-
-
-class _OutputReading:
-    """One rule's output in one stratum: the decoder, the target statistics
-    gathered at startup and the candidate and direction they settle on."""
-
-    def __init__(self, decoder: _Decoder) -> None:
-        self.decoder = decoder
-        self.means = TargetMeans()
-        self.candidate = 0
-        self.sign = 1.0
-        self.fires: list[list[int]] = []
-        self.does_not: list[list[int]] = []
-        self._conditional: _ConditionalRead | None = None
-
-    def observe(self, polarity: str, indicators: Sequence[float]) -> None:
-        self.means.observe(polarity == FIRES, indicators)
-
-    def positions(self) -> list[int]:
-        """Every value position this output's records are read at."""
-        return [position for record in (*self.fires, *self.does_not) for position in record]
-
-    def settle(self) -> bool:
-        """Choose the category and direction from the targets; False when no
-        ``fires`` record observed the output, or when no category's mean
-        target differs between the polarities by ``rule_output_targets.MIN_DIFFERENCE``: such
-        an output decides nothing about the rule, and its AUC would enter the
-        rule's mean at full weight (``TargetMeans.settle``, which the freeze
-        reads too)."""
-        direction = self.means.settle()
-        if direction is None:
-            return False
-        self.candidate, self.sign = direction.candidate, direction.sign
-        return True
-
-    def __call__(self, heads: _Heads, rows: torch.Tensor,
-                 columns: torch.Tensor) -> torch.Tensor:
-        """The settled reading at every ask of one chunk: a :data:`Read`."""
-        return self.sign * self.decoder.candidates(heads, rows, columns)[:, self.candidate]
-
-    def at(self, targets: EntityTargetBatch, row: int, column: int) -> Read:
-        """The read of one entity: this one, or :attr:`conditional` where the
-        decoder leaves the gate out there."""
-        if self.decoder.reads_conditionally(targets, row, column):
-            return self.conditional
-        return self
-
-    @property
-    def conditional(self) -> Read:
-        """The settled reading without the affected gate, one per output so
-        its asks gather into one group."""
-        if self._conditional is None:
-            self._conditional = _ConditionalRead(self)
-        return self._conditional
-
-
-class _ConditionalRead:
-    """An output's settled reading without the affected gate: a :data:`Read`."""
-
-    def __init__(self, reading: _OutputReading) -> None:
-        self.reading = reading
-
-    def __call__(self, heads: _Heads, rows: torch.Tensor,
-                 columns: torch.Tensor) -> torch.Tensor:
-        reading = self.reading
-        read = reading.decoder.conditional_candidates(heads, rows, columns)
-        return reading.sign * read[:, reading.candidate]
-
-
-class _Observation:
-    """One record's target indicators for one output, averaged over the
-    tag's entities once every entity of the record is read."""
-
-    def __init__(self, reading: _OutputReading, polarity: str) -> None:
-        self.reading, self.polarity = reading, polarity
-        self.seen: list[list[float]] = []
-
-    def add(self, indicators: list[float] | None) -> None:
-        if indicators is not None:
-            self.seen.append(indicators)
-
-    def close(self) -> None:
-        if self.seen:
-            self.reading.observe(self.polarity, np.mean(np.asarray(self.seen), axis=0))
-
-
-# ── the host cache ──────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class _ReadGroup:
-    """Every ask of one read in a chunk: rows, gathered columns, and the value
-    positions they fill."""
-
-    read: Read
-    rows: torch.Tensor
-    columns: torch.Tensor
-    positions: np.ndarray
-
-
-def _grouped(reads: Sequence[tuple[int, int, Read, int]]) -> tuple[_ReadGroup, ...]:
-    by_read: dict[int, list] = {}
-    for row, column, read, position in reads:
-        by_read.setdefault(id(read), [read, [], [], []])
-        held = by_read[id(read)]
-        held[1].append(row)
-        held[2].append(column)
-        held[3].append(position)
-    return tuple(_ReadGroup(read, torch.tensor(rows, dtype=torch.long),
-                            torch.tensor(columns, dtype=torch.long),
-                            np.asarray(positions, dtype=np.int64))
-                 for read, rows, columns, positions in by_read.values())
-
-
-@dataclass
-class _Chunk:
-    """One prepared chunk: its packed batch, the slots its per-entity reads
-    gather, and its reads grouped by read, each with the value positions it
-    fills."""
-
-    batch: object
-    index: torch.Tensor
-    groups: tuple[_ReadGroup, ...]
-
-    @property
-    def reads(self) -> int:
-        return sum(len(group.positions) for group in self.groups)
-
-    @property
-    def positions(self) -> np.ndarray:
-        return np.concatenate([group.positions for group in self.groups]) if self.groups else (
-            np.zeros(0, dtype=np.int64))
-
-
-@dataclass
-class _Request:
-    """A read one record asks for: at ``subject`` (None at the record), into
-    value ``position``, with the target observation it feeds, if any."""
-
-    subject: str | None
-    read: Read
-    position: int
-    observation: _Observation | None = None
-
-
-class _ChunkBuilder:
-    """Collects records with their requests and prepares them a chunk at a time."""
-
-    def __init__(self, batcher, size: int) -> None:
-        self.batcher = batcher
-        self.size = size
-        self.pending: list[tuple[EffectRecord, list[_Request]]] = []
-        self.chunks: list[_Chunk] = []
-        #: Requests at an entity the record's surface gives no slot, each
-        #: read nowhere: their count and a few of their refs.
-        self.unplaced = 0
-        self.unplaced_refs: list[str] = []
-        #: Rule-test requests at an entity where the record defines no target
-        #: for the output, each read nowhere.
-        self.untargeted = 0
-
-    def add(self, record: EffectRecord, requests: list[_Request],
-            texts: Sequence[TextOverride] = ()) -> None:
-        for edit in texts:
-            self.batcher.override_text(edit.key, edit.text, edit.like, script=edit.script,
-                                       role_spans=edit.role_spans)
-        if requests:
-            self.pending.append((record, requests))
-        if len(self.pending) >= self.size:
-            self.flush()
-
-    def flush(self) -> None:
-        if not self.pending:
-            return
-        records = [record for record, _ in self.pending]
-        batch = self.batcher.prepare(records)
-        surfaces = batch.surfaces
-        targets = None
-        if any(r.observation is not None and r.subject is not None
-               for _, requests in self.pending for r in requests):
-            targets = _RowTargets.of(records, surfaces)
-        columns = [{surface.slots[slot].subject_id: column
-                    for column, slot in enumerate(surface.entity_slots)} for surface in surfaces]
-        asked: list[dict[int, int]] = [{} for _ in records]
-        reads: list[tuple[int, int, Read, int]] = []
-        for row, (_, requests) in enumerate(self.pending):
-            observations = []
-            for request in requests:
-                if request.subject is None:
-                    reads.append((row, 0, request.read, request.position))
-                    continue
-                column = columns[row].get(request.subject)
-                if column is None:
-                    self.unplaced += 1
-                    if len(self.unplaced_refs) < 5:
-                        self.unplaced_refs.append(str(request.subject))
-                    continue
-                read = request.read
-                if request.observation is not None:
-                    read = self._observed(request, targets, row, column)
-                    if read is None:
-                        continue
-                    observations.append(request.observation)
-                gather = asked[row].setdefault(column, len(asked[row]))
-                reads.append((row, gather, read, request.position))
-            for observation in {id(o): o for o in observations}.values():
-                observation.close()
-        width = max([len(a) for a in asked] + [1])
-        index = torch.zeros((len(records), width), dtype=torch.long)
-        for row, (surface, gathered) in enumerate(zip(surfaces, asked)):
-            for column, at in gathered.items():
-                index[row, at] = surface.entity_slots[column]
-        self.chunks.append(_Chunk(pack(stripped(batch), rows=len(records)), index,
-                                  _grouped(reads)))
-        self.pending = []
-
-    def _observed(self, request: _Request, targets: _RowTargets,
-                  row: int, column: int) -> Read | None:
-        """A rule test's read of one entity, its target observed; None where
-        the record does not say what the output is there, so the reading
-        would compare nothing."""
-        observation = request.observation
-        reading = observation.reading
-        indicators = entity_indicators(reading.decoder.output, targets.derived[row],
-                                       request.subject)
-        if indicators is None:
-            self.untargeted += 1
-            return None
-        observation.add(indicators)
-        return reading.at(targets.batch, row, column)
-
-
-@dataclass(frozen=True)
-class _RowTargets:
-    """A chunk's targets: the per-entity batch a read chooses its gate by,
-    and each record's derived targets its indicators are read from."""
-
-    batch: EntityTargetBatch
-    derived: list[RecordTargets]
-
-    @classmethod
-    def of(cls, records: list[EffectRecord], surfaces: list) -> _RowTargets:
-        derived = [derive_targets(record) for record in records]
-        return cls(entity_target_tensors(surfaces, derived, tuple(FIELDS_BY_NAME.values())),
-                   derived)
-
-
-# ── items ───────────────────────────────────────────────────────────────
-
-
-@dataclass
-class _ProbeItem:
-    kind: str
-    labels: list[float] = field(default_factory=list)
-    positions: list[int] = field(default_factory=list)
-
-
-@dataclass
-class _GridItem:
-    #: Per cell, the value positions of the grid's records.
-    cells: list[list[int]]
-    #: Per cell, the rule's answer for each record at the same index of ``cells``.
-    answers: list[list[float]]
-
-    def positions(self) -> list[int]:
-        return [position for cell in self.cells for position in cell]
-
-    def add(self, cell: int, position: int, answer: float) -> None:
-        self.cells[cell].append(position)
-        self.answers[cell].append(answer)
-
-
-@dataclass
-class _StratumCache:
-    """One stratum's half, prepared."""
-
-    stratum: str
-    half: str = SELECTION
-    #: The components prepared and scored, in :data:`COMPONENTS` order.
-    components: tuple[str, ...] = COMPONENTS
-    values: int = 0
-    chunks: list[_Chunk] = field(default_factory=list)
-    probes: dict[str, _ProbeItem] = field(default_factory=dict)
-    grids: dict[str, _GridItem] = field(default_factory=dict)
-    rules: dict[str, dict[str, _OutputReading]] = field(default_factory=dict)
-    steps: list = field(default_factory=list)
-    kept_items: frozenset[str] = frozenset()
-    left_out: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
-    floors: dict[tuple, dict[str, float]] = field(default_factory=dict)
-    #: The deviance terms the last epoch found with a loss that is not finite.
-    unreadable_terms: int = 0
-
-    def position(self) -> int:
-        self.values += 1
-        return self.values - 1
-
-
-#: Reads one stratum: a fresh iterable of its shards in path order, each an
-#: iterable of its records in line order (``freeze_selection_set.stratum_reader``).
-StratumReader = Callable[[], Iterable[Iterable["EffectRecord"]]]
-
-
 @dataclass(frozen=True)
 class FrozenSelection:
     """What a training run's control score is built from: the corpus's
@@ -886,31 +252,10 @@ class FrozenSelection:
         return self.selection.digest
 
 
-def selection_records(
-    read: StratumReader, *, games: frozenset[str], records: frozenset[str],
-    copies: frozenset[tuple[str, int]],
-) -> Iterator[tuple[EffectRecord, bool, bool]]:
-    """``(record, distinct, copy)`` for every record of ``games`` that is the
-    first occurrence of a record in ``records`` (``distinct``) or a copy in
-    ``copies`` (``copy``), copies counted as the freeze counts them: a
-    record's earlier occurrences in the stratum, read in shard path order."""
-    occurrences: dict[str, int] = defaultdict(int)
-    for shard in read():
-        for record in shard:
-            copy = occurrences[record.record_id]
-            occurrences[record.record_id] += 1
-            if record.game_id not in games:
-                continue
-            distinct = copy == 0 and record.record_id in records
-            sampled = (record.record_id, copy) in copies
-            if distinct or sampled:
-                yield record, distinct, sampled
-
-
 class ControlScorer:
     """The control score's cache and its per-epoch scoring."""
 
-    def __init__(self, strata: dict[str, _StratumCache], *, stratum_weight: float,
+    def __init__(self, strata: dict[str, StratumCache], *, stratum_weight: float,
                  deviance_floor: float, strict: bool = True) -> None:
         self.strata = strata
         self.stratum_weight = stratum_weight
@@ -945,7 +290,7 @@ class ControlScorer:
         wanted = tuple(name for name in COMPONENTS if name in set(components))
         strata = {}
         for stratum in sorted(selection.halves):
-            strata[stratum] = _prepare_stratum(
+            strata[stratum] = prepare_stratum(
                 selection, stratum, readers[stratum], preparer=preparer, union=union,
                 rule_outputs=rule_outputs, mask=mask or "hard", editor=editor,
                 chunk_records=chunk_records, batch_size=batch_size or chunk_records,
@@ -986,7 +331,7 @@ class ControlScorer:
             self.stratum_weight,
         )
 
-    def _stratum(self, cache: _StratumCache, forward: RecordForward,
+    def _stratum(self, cache: StratumCache, forward: RecordForward,
                  losses: StepLossComputer, fields: tuple[FieldSpec, ...]) -> StratumScore:
         values = self._values(cache, forward)
         items = {
@@ -1016,7 +361,7 @@ class ControlScorer:
             non_finite(values[_scored_positions(cache)]) + cache.unreadable_terms,
         )
 
-    def _values(self, cache: _StratumCache, forward: RecordForward) -> np.ndarray:
+    def _values(self, cache: StratumCache, forward: RecordForward) -> np.ndarray:
         values = np.full(cache.values, np.nan)
         if not cache.chunks:
             return values
@@ -1026,7 +371,7 @@ class ControlScorer:
             for chunk, outputs in zip(cache.chunks, forward.prepared(batches)):
                 if not chunk.groups:
                     continue
-                heads = _Heads(outputs, chunk.index)
+                heads = Heads(outputs, chunk.index)
                 reads.append(torch.cat([group.read(heads, group.rows, group.columns).float()
                                         .reshape(-1) for group in chunk.groups]))
                 positions.append(chunk.positions)
@@ -1034,7 +379,7 @@ class ControlScorer:
             values[np.concatenate(positions)] = torch.cat(reads).cpu().numpy()
         return values
 
-    def _deviance(self, cache: _StratumCache, forward: RecordForward,
+    def _deviance(self, cache: StratumCache, forward: RecordForward,
                   losses: StepLossComputer, fields: tuple[FieldSpec, ...]) -> dict[str, float]:
         """The deviance items; ``cache.unreadable_terms`` takes the number of
         kept terms whose loss is not finite."""
@@ -1072,7 +417,7 @@ def _device_of(forward: RecordForward) -> torch.device:
     return materializer.device if materializer is not None else torch.device("cpu")
 
 
-def _scored_positions(cache: _StratumCache) -> np.ndarray:
+def _scored_positions(cache: StratumCache) -> np.ndarray:
     """The value positions an item of the cache reads: a left-out output's
     readings, taken but scored by nothing, are not among them."""
     held = [item.positions for item in cache.probes.values()]
@@ -1089,7 +434,7 @@ def _record_values(records: list[list[int]], values: np.ndarray) -> list[float]:
     return [float(values[positions].mean()) for positions in records if positions]
 
 
-def _grid_item(item: _GridItem, values: np.ndarray) -> float:
+def _grid_item(item: GridItem, values: np.ndarray) -> float:
     """A grid's score: each record's reading in each cell against the rule's
     answer for that record there (``score_scales.grid_score``)."""
     return grid_score([values[positions] for positions in item.cells], item.answers)
@@ -1101,210 +446,6 @@ def _field_union(sets: Sequence[tuple[FieldSpec, ...]]) -> tuple[FieldSpec, ...]
         for spec in specs:
             seen.setdefault(spec.name, spec)
     return tuple(seen.values())
-
-
-def _prepare_stratum(
-    selection: SelectionSet, stratum: str, read: StratumReader, *,
-    preparer: ScoringPreparer, union: tuple[FieldSpec, ...],
-    rule_outputs: Mapping[str, Sequence[str]], mask: str, editor: GridEditor | None,
-    chunk_records: int, batch_size: int, half: str = SELECTION,
-    components: tuple[str, ...] = COMPONENTS, strict: bool = True,
-) -> _StratumCache:
-    cache = _StratumCache(stratum, half=half, components=components)
-
-    def frozen(by_stratum, component, empty):
-        return by_stratum.get(stratum, {}).get(half, empty) if component in components else empty
-
-    probes = frozen(selection.probes, PROBES, {})
-    grids = frozen(selection.grids, GRIDS, {})
-    rule_tests = frozen(selection.rule_tests, RULE_TESTS, {})
-    samples = frozen(selection.deviance_samples, DEVIANCE, ())
-    if grids and editor is None:
-        raise ControlScoreError(stratum, half, GRIDS,
-                                "the selection set holds grids and no grid editor was given")
-
-    # What each record is read for.
-    requests: dict[str, list] = defaultdict(list)
-    for probe_type, rows in probes.items():
-        item = cache.probes[probe_type] = _ProbeItem(selection.probe_kinds[probe_type])
-        readout = _readout(probe_type)
-        for row in rows:
-            position = cache.position()
-            item.labels.append(row.label)
-            item.positions.append(position)
-            requests[row.record_id].append(("probe", row.entity, readout, position))
-    for rule, sides in rule_tests.items():
-        readings = {}
-        for output in rule_outputs.get(rule, ()):
-            decoder = decoder_of(output)
-            if decoder is None:
-                continue
-            reading = readings[output] = _OutputReading(decoder)
-            for polarity, held in ((FIRES, reading.fires), (DOES_NOT_FIRE, reading.does_not)):
-                for row in sides.get(polarity, ()):
-                    requests[row.record_id].append(("rule", reading, polarity, row, held))
-        cache.rules[rule] = readings
-    grid_records = _grid_requests(cache, grids)
-
-    batcher = preparer.scoring_batcher()
-    plain = _ChunkBuilder(batcher, chunk_records)
-    edited = _ChunkBuilder(preparer.scoring_batcher(), chunk_records)
-    sampled: list = []
-    steps: list = []
-    games = frozenset(selection.halves.get(stratum, {}).get(half, ()))
-    wanted = frozenset(requests) | frozenset(grid_records)
-    copies = frozenset((row.record_id, row.copy) for row in samples)
-    for record, distinct, copy in selection_records(read, games=games, records=wanted,
-                                                    copies=copies):
-        if distinct:
-            plain.add(record, _requests(record, requests.get(record.record_id, ()), cache))
-            _edit_grid_cells(cache, edited, editor, record, grid_records.get(record.record_id, ()))
-            # One grid record's cells to a chunk: near copies, kept as their
-            # differences (``host_cache``).
-            edited.flush()
-        if copy:
-            sampled.append(record)
-            if len(sampled) >= batch_size:
-                steps.append(_deviance_step(preparer, sampled, union))
-                sampled = []
-    plain.flush()
-    edited.flush()
-    if sampled:
-        steps.append(_deviance_step(preparer, sampled, union))
-    unplaced = plain.unplaced + edited.unplaced
-    if unplaced:
-        logger.info("Control score, %s %s: %d read(s) at an entity the record gives no slot, "
-                    "read nowhere (e.g. %s).", stratum, half, unplaced,
-                    ", ".join((plain.unplaced_refs + edited.unplaced_refs)[:5]))
-    if plain.untargeted:
-        logger.info("Control score, %s %s: %d rule-test read(s) at an entity where the record "
-                    "defines no target for the output, read nowhere.", stratum, half,
-                    plain.untargeted)
-    cache.chunks = plain.chunks + edited.chunks
-    cache.steps = steps
-    cache.kept_items = _kept_items(selection, stratum, mask, half=half)
-    _settle_rules(cache)
-    empty = [component for component, held in (
-        (PROBES, cache.probes), (GRIDS, cache.grids), (RULE_TESTS, cache.rules),
-        (DEVIANCE, cache.steps and cache.kept_items)) if component in components and not held]
-    if empty and strict:
-        detail = ("no deviance sample or no item the freeze kept" if empty[0] == DEVIANCE
-                  else "no item to read")
-        raise ControlScoreError(stratum, half, empty[0], detail)
-    for component in empty:
-        logger.info("Control score, %s %s: no %s item to read.", stratum, half, component)
-    if cache.left_out[RULE_TESTS]:
-        logger.info("Control score, %s: %d rule(s) or output(s) are left out (no output a head "
-                    "reads, or a target the same in both polarities): %s", stratum,
-                    len(cache.left_out[RULE_TESTS]), ", ".join(cache.left_out[RULE_TESTS][:12]))
-    return cache
-
-
-def _settle_rules(cache: _StratumCache) -> None:
-    """Keep each rule's outputs whose targets settle a direction; name in
-    ``left_out`` a rule with none (``rule``) and an output of a rule that
-    keeps others (``rule/output``)."""
-    for rule in list(cache.rules):
-        outputs = cache.rules[rule]
-        settled = {output: reading for output, reading in outputs.items() if reading.settle()}
-        if settled:
-            cache.rules[rule] = settled
-            cache.left_out[RULE_TESTS] += [f"{rule}/{output}" for output in outputs
-                                           if output not in settled]
-        else:
-            del cache.rules[rule]
-            cache.left_out[RULE_TESTS].append(rule)
-
-
-#: ``record_id -> [(grid, entities, the rule's answer in each cell)]``.
-_GridRequests = dict[str, list[tuple[str, tuple[str, ...], tuple[float, ...]]]]
-
-
-def _grid_requests(cache: _StratumCache, grids: Mapping[str, FrozenGrid]) -> _GridRequests:
-    """What each record of the half's frozen grids is read for, each grid's
-    item opened in ``cache``."""
-    out: _GridRequests = defaultdict(list)
-    for name, grid in grids.items():
-        cache.grids[name] = _GridItem([[] for _ in grid.cells], [[] for _ in grid.cells])
-        answers = grid.record_answers()
-        for row in grid.records:
-            out[row.record_id].append((name, row.entities, answers[row.record_id]))
-    return out
-
-
-def _edit_grid_cells(cache: _StratumCache, edited: _ChunkBuilder, editor: GridEditor | None,
-                     record: EffectRecord,
-                     asked: Iterable[tuple[str, tuple[str, ...], tuple[float, ...]]]) -> None:
-    """One record edited into each cell of every grid ``asked`` names, each
-    cell read at its entity, its position and the record's answer there
-    held by the grid's item. With no ``editor`` the half holds no grid
-    (:func:`_prepare_stratum` refuses one), so nothing is asked."""
-    if editor is None:
-        return
-    for name, entities, answers in asked:
-        cells = editor.cells(name, record, entities)
-        for index, (cell, answer) in enumerate(zip(cells, answers, strict=True)):
-            position = cache.position()
-            cache.grids[name].add(index, position, answer)
-            edited.add(cell.record, [_Request(cell.entity, _readout(cell.readout), position)],
-                       cell.texts)
-
-
-def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache) -> list:
-    """One record's reads: each probe item at its entity, each rule-test
-    output at the tag's outcome entities or at the record, with the target
-    observations the rule's category is settled from; a record-level output
-    the record supervises no target for is not read (a per-entity one is
-    dropped the same way once its targets are built, ``_ChunkBuilder``)."""
-    out: list[_Request] = []
-    for ask in asked:
-        if ask[0] == "probe":
-            _, entity, read, position = ask
-            out.append(_Request(entity, read, position))
-            continue
-        _, reading, polarity, row, held = ask
-        decoder = reading.decoder
-        if not decoder.per_entity:
-            indicators = record_indicators(decoder.output, record)
-            if indicators is None:
-                continue
-            position = cache.position()
-            held.append([position])
-            out.append(_Request(None, reading, position))
-            reading.observe(polarity, indicators)
-            continue
-        positions = []
-        observation = _Observation(reading, polarity)
-        for entity in row.entities:
-            position = cache.position()
-            positions.append(position)
-            out.append(_Request(entity, reading, position, observation))
-        if positions:
-            held.append(positions)
-    return out
-
-
-def _deviance_step(preparer: ScoringPreparer, sampled: list,
-                   union: tuple[FieldSpec, ...]) -> DeviceStep:
-    """One packed scoring step of deviance-sample copies, each weighed by its
-    ``class_weight`` (FR-059a)."""
-    return pack(preparer.prepare_scoring_step(sampled, union, class_weighted=True))
-
-
-def _kept_items(selection: SelectionSet, stratum: str, mask: str, *,
-                 half: str = SELECTION) -> frozenset[str]:
-    """The deviance items (every shipped head's output terms) the freeze
-    kept in ``half`` under ``mask``: those whose standard error is at most
-    the freeze's item target."""
-    limit = float(selection.settings.get("max_item_error", 0.1))
-    prefix = item_key(stratum, half, DEVIANCE, "")
-    kept = set()
-    for key, error in selection.standard_errors.items():
-        if not key.startswith(prefix) or not isinstance(error, dict):
-            continue
-        if error_of(error.get(mask)) <= limit:
-            kept.add(key[len(prefix):])
-    return frozenset(kept)
 
 
 # ── a saved checkpoint ──────────────────────────────────────────────────
@@ -1349,8 +490,6 @@ def score_half(
 
 
 __all__ = [
-    "CHECKPOINT_FIELDS", "CHUNK_RECORDS", "CellRead", "CheckpointPreparer", "ControlScore",
-    "ControlScoreError", "ControlScorer", "FrozenSelection", "GridEditor", "ScoringPreparer",
-    "StratumScore", "TextOverride", "component_score", "decoder_of", "explained_deviance",
-    "host_bytes", "mixed", "probe_item", "rule_item", "score_half", "selection_records",
+    "CHECKPOINT_FIELDS", "CHUNK_RECORDS", "CheckpointPreparer", "ControlScore",
+    "ControlScorer", "FrozenSelection", "StratumScore", "score_half",
 ]

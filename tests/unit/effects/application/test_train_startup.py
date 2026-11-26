@@ -447,7 +447,7 @@ def test_no_variant_tree_is_read_when_neither_names_one(config, started, caplog)
 
 def _control_score_error(detail: str):
     """FR-068c: an epoch's component with nothing to score."""
-    from effects.application.control_score import ControlScoreError
+    from effects.application.control_items import ControlScoreError
 
     return ControlScoreError("card-disjoint", "selection", "grids", detail)
 
