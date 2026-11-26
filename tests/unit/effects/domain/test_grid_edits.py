@@ -380,6 +380,6 @@ class TestTheCombatGridsBoards:
         record = next(r for r in curated_fixture_records()
                       if r.kind is RecordKind.COMBAT and any(r.payload.blocks.values()))
         attacker, (blocker, *_) = next((a, b) for a, b in record.payload.blocks.items() if b)
-        rows, _ = grid_records(record, attacker, blocker, "blocker", variant)
+        rows, _ = grid_records(record, (attacker, blocker), "blocker", variant)
         assert {(cell.state.global_.phase, cell.state.global_.combat_substep)
                 for row in rows for cell in row} == {(phase, substep)}

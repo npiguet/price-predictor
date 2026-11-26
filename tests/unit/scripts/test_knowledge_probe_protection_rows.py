@@ -69,7 +69,7 @@ class TestProtectionRows:
     @pytest.mark.parametrize("case", _CASES, ids=_case_id)
     def test_each_quality_is_granted_as_forge_writes_it_and_ruled(self, records, case):
         record, attacker, blocker = _gen3_block_pair(records)
-        cell, rule = evasion_grid.edited(record, attacker, blocker, case.row, case.column)
+        cell, rule = evasion_grid.edited(record, (attacker, blocker), case.row, case.column)
         lines = cell.state.entity(attacker).lines
         granted = [line.fragment for line in lines if line.granted and line.kind == "keyword"]
         assert len(granted) == 1
@@ -88,7 +88,7 @@ class TestProtectionRows:
         record, attacker, blocker = _gen3_block_pair(records)
         record = BoardEdit(record).edit_entity(
             blocker, lambda e: replace(e, subtypes=())).record
-        cell, rule = evasion_grid.edited(record, attacker, blocker,
+        cell, rule = evasion_grid.edited(record, (attacker, blocker),
                                          "protection-type-blocker", None)
         assert rule is True
 
@@ -96,6 +96,6 @@ class TestProtectionRows:
         from effect_knowledge_probes import readout
 
         record, attacker, blocker = _gen3_block_pair(records)
-        cells = [evasion_grid.edited(record, attacker, blocker, row, None)[0]
+        cells = [evasion_grid.edited(record, (attacker, blocker), row, None)[0]
                  for row in evasion_grid.PROTECTION_ROWS]
         probabilities(common.predict(probe_model, cells, readout.at_card("may_block", blocker)))

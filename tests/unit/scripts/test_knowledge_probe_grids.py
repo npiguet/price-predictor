@@ -95,38 +95,38 @@ class TestCombatGrid:
 
     def test_grid_rules_follow_the_keyword(self, records):
         record, attacker, blocker = one_on_one(records)
-        rows, rule = combat_grid.grid_records(record, attacker, blocker, "blocker", "none")
+        rows, rule = combat_grid.grid_records(record, (attacker, blocker), "blocker", "none")
         assert len(rows) == 8 and all(len(row) == 8 for row in rows)
         assert np.array_equal(rule, LETHAL_STEP)
         assert rows[2][5].state.entity(attacker).pt.total[0] == 3
         assert rows[2][5].state.entity(blocker).pt.total[1] == 6
         _, rule = combat_grid.grid_records(
-            record, attacker, blocker, "blocker", "attacker-deathtouch")
+            record, (attacker, blocker), "blocker", "attacker-deathtouch")
         assert rule.min() == 1.0
         _, rule = combat_grid.grid_records(
-            record, attacker, blocker, "blocker", "blocker-indestructible")
+            record, (attacker, blocker), "blocker", "blocker-indestructible")
         assert rule.max() == 0.0
 
     def test_a_first_striker_is_read_in_the_first_strike_step(self, records):
         record, attacker, blocker = one_on_one(records)
         rows, rule = combat_grid.grid_records(
-            record, attacker, blocker, "blocker", "attacker-first-strike")
+            record, (attacker, blocker), "blocker", "attacker-first-strike")
         assert rows[0][0].state.global_.combat_substep == "first_strike"
         assert np.array_equal(rule, LETHAL_STEP)
         _, rule = combat_grid.grid_records(
-            record, attacker, blocker, "attacker", "attacker-first-strike")
+            record, (attacker, blocker), "attacker", "attacker-first-strike")
         assert rule.max() == 0.0
         _, rule = combat_grid.grid_records(
-            record, attacker, blocker, "blocker", "blocker-first-strike")
+            record, (attacker, blocker), "blocker", "blocker-first-strike")
         assert rule.max() == 0.0
         _, rule = combat_grid.grid_records(
-            record, attacker, blocker, "attacker", "blocker-first-strike")
+            record, (attacker, blocker), "attacker", "blocker-first-strike")
         assert np.array_equal(rule, LETHAL_STEP)
 
     def test_a_double_strikers_second_hit_lands_on_the_first(self, records):
         record, attacker, blocker = one_on_one(records)
         rows, rule = combat_grid.grid_records(
-            record, attacker, blocker, "blocker", "attacker-double-strike-second-hit")
+            record, (attacker, blocker), "blocker", "attacker-double-strike-second-hit")
         assert rows[2][5].state.global_.combat_substep == "regular"
         assert rows[2][5].state.entity(blocker).damage == 3
         assert np.array_equal(rule, np.array([[float(2 * p >= t) for t in range(1, 9)]
@@ -149,7 +149,7 @@ class TestCombatGrid:
         assert combat_grid.single_block(marked, keyword_set) == (attacker, blocker)
         earlier = BoardEdit(record).set_marked_damage(blocker, power + 1).record
         assert combat_grid.single_block(earlier, keyword_set) is None
-        rows, rule = combat_grid.grid_records(marked, attacker, blocker, "attacker", "none")
+        rows, rule = combat_grid.grid_records(marked, (attacker, blocker), "attacker", "none")
         assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
         assert np.array_equal(rule, LETHAL_STEP)
 
@@ -207,23 +207,23 @@ class TestEvasionGrid:
 
     def test_a_cell_grants_the_keyword_and_the_trait_and_scores_them(self, records):
         record, attacker, blocker = block_pair(records)
-        cell, rule = evasion_grid.edited(record, attacker, blocker, "flying", None)
+        cell, rule = evasion_grid.edited(record, (attacker, blocker), "flying", None)
         assert "flying" in cell.state.entity(attacker).granted_temporary.keywords
         assert rule is False
-        cell, rule = evasion_grid.edited(record, attacker, blocker, "flying", "reach")
+        cell, rule = evasion_grid.edited(record, (attacker, blocker), "flying", "reach")
         assert "reach" in cell.state.entity(blocker).granted_temporary.keywords
         assert rule is True
-        _, rule = evasion_grid.edited(record, attacker, blocker, "intimidate", "shares-colour")
+        _, rule = evasion_grid.edited(record, (attacker, blocker), "intimidate", "shares-colour")
         assert rule is True
-        _, rule = evasion_grid.edited(record, attacker, blocker, "fear", "artifact")
+        _, rule = evasion_grid.edited(record, (attacker, blocker), "fear", "artifact")
         assert rule is True
 
     def test_protection_resolves_against_the_blockers_colour(self, records):
         record, attacker, blocker = block_pair(records)
-        cell, rule = evasion_grid.edited(record, attacker, blocker, "protection-blocker", None)
+        cell, rule = evasion_grid.edited(record, (attacker, blocker), "protection-blocker", None)
         assert "protection_from_green" in cell.state.entity(attacker).granted_temporary.keywords
         assert rule is False
-        cell, rule = evasion_grid.edited(record, attacker, blocker, "protection-other", None)
+        cell, rule = evasion_grid.edited(record, (attacker, blocker), "protection-other", None)
         granted = cell.state.entity(attacker).granted_temporary.keywords
         assert any(k.startswith("protection_from_") and k != "protection_from_green"
                    and k != "protection_from_red" for k in granted)

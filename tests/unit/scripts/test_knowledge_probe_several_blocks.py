@@ -73,7 +73,7 @@ class TestSeveralBlocks:
         record, first, second = _two_pairs(records, monkeypatch)
         attacker, blocker = combat_grid.several_blocks(record, _plain_keywords)
         other = second if (attacker, blocker) == first else first
-        rows, rule = combat_grid.grid_records(record, attacker, blocker, "blocker", "none")
+        rows, rule = combat_grid.grid_records(record, (attacker, blocker), "blocker", "none")
         assert np.array_equal(rule, np.array(
             [[float(p >= t) for t in range(1, 9)] for p in range(1, 9)]))
         cell = rows[2][4]

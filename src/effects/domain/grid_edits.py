@@ -240,25 +240,39 @@ def grid_block(record, keywords_of: KeywordsOf, blocks: str) -> tuple[str, str] 
     does not end the game (:func:`_real_combat`), it covers the regular
     damage step, and every pair qualifies as :func:`_clean_pair` says.
     """
+    if not _regular_step_combat(record):
+        return None
+    pairs = _lone_blocks(record.payload, blocks)
+    if pairs is None:
+        return None
+    targets = derive_targets(record)
+    if not all(_clean_pair(record, pair, keywords_of, targets) for pair in pairs):
+        return None
+    return pairs[0]
+
+
+def _regular_step_combat(record) -> bool:
+    """A real combat (:func:`_real_combat`) in the regular damage step, no
+    damage-step probe."""
     if not _real_combat(record):
-        return None
+        return False
     if record.state.global_.combat_substep != CombatSubstep.REGULAR:
-        return None
+        return False
     payload = record.payload
-    if not isinstance(payload, CombatPayload) or getattr(payload, "probed_keyword", None):
-        return None
+    return isinstance(payload, CombatPayload) and not getattr(payload, "probed_keyword", None)
+
+
+def _lone_blocks(payload: CombatPayload, blocks: str) -> list[tuple[str, str]] | None:
+    """Every ``(attacker, blocker)`` of the combat, in attacker id order, when
+    the combat is the kind ``blocks`` names and each blocked attacker has one
+    blocker; else None."""
     blocked = sorted((attacker, tuple(blockers))
                      for attacker, blockers in payload.blocks.items() if blockers)
     if not blocked or (len(blocked) == 1) != (blocks == "one"):
         return None
     if any(len(blockers) != 1 for _, blockers in blocked):
         return None
-    targets = derive_targets(record)
-    if not all(_clean_pair(record, attacker, blockers[0], keywords_of, targets)
-               for attacker, blockers in blocked):
-        return None
-    attacker_id, (blocker_id,) = blocked[0]
-    return attacker_id, blocker_id
+    return [(attacker, blockers[0]) for attacker, blockers in blocked]
 
 
 def _real_combat(record) -> bool:
@@ -272,52 +286,76 @@ def _real_combat(record) -> bool:
     return not (record.interventional or game_ends(record))
 
 
-def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: KeywordsOf,
-                targets) -> bool:
-    """Whether one blocked pair is a block a grid can edit: two creatures on
-    the battlefield, no damage-step keyword on either, the blocker blocking
-    this attacker alone, no damage but this step's own, and the real outcome
-    the rule's."""
+def _clean_pair(record, pair: tuple[str, str], keywords_of: KeywordsOf, targets) -> bool:
+    """Whether one blocked ``(attacker, blocker)`` is a block a grid can edit:
+    two creatures on the battlefield, no damage-step keyword on either, the
+    blocker blocking this attacker alone, no damage but this step's own, and
+    the real outcome the rule's."""
+    attacker_id, blocker_id = pair
     attacker = record.state.entity(attacker_id)
     blocker = record.state.entity(blocker_id)
-    for entity in (attacker, blocker):
-        if (entity is None or entity.pt is None or not entity.on_battlefield
-                or not entity.is_creature):
-            return False
-        if changes_the_step(keywords_of(entity)):
-            return False
-    if blocker.combat is None or tuple(blocker.combat.blocking) != (attacker_id,):
+    if not all(_plain_creature(entity, keywords_of) for entity in (attacker, blocker)):
         return False
-    if attacker.power <= 0 or blocker.power < 0:
+    return (_blocks_alone(blocker, attacker_id) and _both_strike(attacker, blocker)
+            and _marked_this_step(attacker, blocker)
+            and _outcome_is_the_rules(record, pair, targets))
+
+
+def _plain_creature(entity, keywords_of: KeywordsOf) -> bool:
+    """A creature on the battlefield with a power and toughness, carrying no
+    keyword that changes who dies in a damage step (:func:`changes_the_step`)."""
+    if entity is None or entity.pt is None:
         return False
-    # Marked damage is either none or this step's own, which the snapshot taken at
-    # the first damage event already shows; damage from earlier in the turn would
-    # make the cleared board in the grid a different board.
-    if attacker.damage not in (0, blocker.power):
+    if not (entity.on_battlefield and entity.is_creature):
         return False
-    if blocker.damage not in (0, attacker.power):
-        return False
-    # The real outcome must obey the rule on the board before the step, so
-    # prevention, regeneration or a replacement the board does not show cannot
-    # be what the grid reads.
+    return not changes_the_step(keywords_of(entity))
+
+
+def _blocks_alone(blocker, attacker_id: str) -> bool:
+    """The blocker blocks this attacker and no other."""
+    return blocker.combat is not None and tuple(blocker.combat.blocking) == (attacker_id,)
+
+
+def _both_strike(attacker, blocker) -> bool:
+    """The attacker deals damage, and the blocker's power is not negative."""
+    return attacker.power > 0 and blocker.power >= 0
+
+
+def _marked_this_step(attacker, blocker) -> bool:
+    """Marked damage is either none or this step's own, which the snapshot
+    taken at the first damage event already shows; damage from earlier in the
+    turn would make the cleared board in the grid a different board."""
+    return attacker.damage in (0, blocker.power) and blocker.damage in (0, attacker.power)
+
+
+def _outcome_is_the_rules(record, pair: tuple[str, str], targets) -> bool:
+    """The real outcome obeys the rule on the board before the step, so
+    prevention, regeneration or a replacement the board does not show cannot
+    be what the grid reads."""
     died = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
+    attacker_id, blocker_id = pair
     before = BoardEdit(record).clear_damage(attacker_id, blocker_id).record
     expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
-    for entity_id, should_die in zip((attacker_id, blocker_id), expected):
-        entry = targets.get(entity_id)
-        if entry is not None and HeadField.ZONE_OUTCOME in entry.unknown:
-            return False  # moved where no zone outcome names: not "stayed"
-        observed = entry is not None and entry.fields.get(HeadField.ZONE_OUTCOME) == died
-        if observed != should_die:
-            return False
-    return True
+    return all(_shows_the_death(targets.get(entity_id), should_die, died)
+               for entity_id, should_die in zip(pair, expected))
 
 
-def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
-    """The 8 x 8 edited records of one combat grid, row by row (the striker's
-    power, then the struck creature's toughness), and the rule's answer for
-    each; the grid holds the cells :meth:`Variant.held_cells` names."""
+def _shows_the_death(entry, should_die: bool, died: int) -> bool:
+    """Whether a creature's targets show the death the rule gives it (or its
+    staying): a creature moved where no zone outcome names shows neither."""
+    if entry is not None and HeadField.ZONE_OUTCOME in entry.unknown:
+        return False
+    observed = entry is not None and entry.fields.get(HeadField.ZONE_OUTCOME) == died
+    return observed == should_die
+
+
+def grid_records(record, pair: tuple[str, str], which: str, variant: str):
+    """The 8 x 8 edited records of one combat grid over the record's
+    ``(attacker, blocker)``, row by row (the striker's power, then the struck
+    creature's toughness), and the rule's answer for each; the grid holds the
+    cells :meth:`Variant.held_cells` names."""
     chosen = VARIANTS[variant]
+    attacker, blocker = pair
     step = chosen.step
     base = chosen.base(record, attacker, blocker)
     striker, struck = (attacker, blocker) if which == "blocker" else (blocker, attacker)
@@ -403,6 +441,13 @@ def protection_quality(row: str, attacker, blocker) -> ProtectionQuality:
         return ProtectionQuality(QualityKind.COLOUR, COLOUR_WORDS[first])
     if row == "protection-other":
         return ProtectionQuality(QualityKind.COLOUR, COLOUR_WORDS[_spare_colour(attacker, blocker)])
+    return _creature_type_quality(row, attacker, blocker)
+
+
+def _creature_type_quality(row: str, attacker, blocker) -> ProtectionQuality:
+    """A ``protection-type-…`` row's creature type: the blocker's first, or
+    for a blocker with none and for the ``-other`` row a spare type neither
+    creature has (:func:`_spare_creature_type`); any other row is refused."""
     other = _spare_creature_type(attacker, blocker)
     if row == "protection-type-blocker" and blocker.subtypes:
         return ProtectionQuality(QualityKind.CREATURE_TYPE, blocker.subtypes[0].lower())
@@ -411,29 +456,68 @@ def protection_quality(row: str, attacker, blocker) -> ProtectionQuality:
     raise KeyError(row)
 
 
-def evasion_cell(record, attacker_id: str, blocker_id: str, row: str | None,
-                 column: str | None):
-    """One evasion grid cell's record, and the rule's answer for it."""
+#: Blocker columns granting the blocker the keyword they name.
+_KEYWORD_TRAITS: tuple[str, ...] = ("flying", "reach", "horsemanship", "shadow")
+
+
+def _artifact_trait(board: BoardEdit, attacker, blocker_id: str) -> BoardEdit:
+    return board.add_type(blocker_id, "artifact")
+
+
+def _black_trait(board: BoardEdit, attacker, blocker_id: str) -> BoardEdit:
+    return board.set_colours(blocker_id, ("B",))
+
+
+def _shared_colour_trait(board: BoardEdit, attacker, blocker_id: str) -> BoardEdit:
+    """The blocker made the attacker's first colour other than black."""
+    shared = next(c for c in attacker.colors if c in COLOUR_WORDS and c != "B")
+    return board.set_colours(blocker_id, (shared,))
+
+
+#: The other blocker columns' edits; a column in neither changes nothing.
+_TRAIT_EDITS: dict[str, Callable[[BoardEdit, object, str], BoardEdit]] = {
+    "artifact": _artifact_trait,
+    "black": _black_trait,
+    "shares-colour": _shared_colour_trait,
+}
+
+
+def _with_trait(board: BoardEdit, attacker, blocker_id: str, column: str | None) -> BoardEdit:
+    """The board with the blocker given a blocker column's trait."""
+    if column in _KEYWORD_TRAITS:
+        return board.grant_keyword(blocker_id, column)
+    edit = _TRAIT_EDITS.get(column)
+    return board if edit is None else edit(board, attacker, blocker_id)
+
+
+def _granted_protections(row: str | None, attacker, blocker) -> tuple[ProtectionQuality, ...]:
+    """The protection an attacker row grants, resolved against the pair; none
+    for a keyword row or no row."""
+    if row not in PROTECTION_ROWS:
+        return ()
+    return (protection_quality(row, attacker, blocker),)
+
+
+def _with_row(board: BoardEdit, attacker_id: str, row: str | None,
+              granted: tuple[ProtectionQuality, ...]) -> BoardEdit:
+    """The board with the attacker given an attacker row: its protection, or
+    its keyword."""
+    if granted:
+        return board.grant_protection(attacker_id, granted[0])
+    if row is None:
+        return board
+    return board.grant_keyword(attacker_id, row)
+
+
+def evasion_cell(record, pair: tuple[str, str], row: str | None, column: str | None):
+    """One evasion grid cell's record over the record's ``(attacker,
+    blocker)``, and the rule's answer for it."""
+    attacker_id, blocker_id = pair
     attacker = record.state.entity(attacker_id)
-    board = BoardEdit(record)
-    if column in ("flying", "reach", "horsemanship", "shadow"):
-        board = board.grant_keyword(blocker_id, column)
-    elif column == "artifact":
-        board = board.add_type(blocker_id, "artifact")
-    elif column == "black":
-        board = board.set_colours(blocker_id, ("B",))
-    elif column == "shares-colour":
-        shared = next(c for c in attacker.colors if c in COLOUR_WORDS and c != "B")
-        board = board.set_colours(blocker_id, (shared,))
+    board = _with_trait(BoardEdit(record), attacker, blocker_id, column)
     blocker = board.record.state.entity(blocker_id)
-    granted: tuple[ProtectionQuality, ...] = ()
-    if row in PROTECTION_ROWS:
-        quality = protection_quality(row, attacker, blocker)
-        board = board.grant_protection(attacker_id, quality)
-        granted = (quality,)
-    elif row is not None:
-        board = board.grant_keyword(attacker_id, row)
-    record = board.record
+    granted = _granted_protections(row, attacker, blocker)
+    record = _with_row(board, attacker_id, row, granted).record
     a = record.state.entity(attacker_id)
     b = record.state.entity(blocker_id)
     rule = may_block(Combatant.of(a), Combatant.of(b), attacker_protections=granted)
@@ -450,38 +534,77 @@ def evasion_pair(record, keywords_of: KeywordsOf) -> tuple[str, str] | None:
     leaving a colour and a spare creature type neither has, which the
     ``-other`` protection rows grant (an Esper attacker against a red-green
     blocker leaves no colour)."""
+    attacker = _evasion_attacker(record, keywords_of)
+    if attacker is None:
+        return None
+    blockers = (record.state.entity(blocker_id) for blocker_id in record.payload.legal_blockers)
+    blocker = next((b for b in blockers if _evasion_blocker(b, attacker, keywords_of)), None)
+    return None if blocker is None else (attacker.id, blocker.id)
+
+
+def _evasion_attacker(record, keywords_of: KeywordsOf):
+    """The anchor attacker of a real block-legality record, where it can head
+    an evasion pair (:func:`_plain_attacker`); else None."""
     payload = record.payload
     if not isinstance(payload, PlayabilityBlockersPayload) or record.fork:
         return None
     if getattr(record, "what_if", False):
         return None
     attacker = record.state.entity(payload.anchor_attacker)
-    if attacker is None or "creature" not in attacker.types or not attacker.on_battlefield:
-        return None
-    if keywords_of(attacker) & EVASION_KEYWORDS or any(
-            k.startswith("protection") for k in keywords_of(attacker)):
-        return None
-    if not any(c != "B" for c in attacker.colors if c in COLOUR_WORDS):
-        return None
-    for blocker_id in payload.legal_blockers:
-        blocker = record.state.entity(blocker_id)
-        if (blocker is None or not blocker.on_battlefield or "creature" not in blocker.types
-                or "artifact" in blocker.types):
-            continue
-        if has_changeling(blocker):
-            # Every creature type (702.73a): protection from any creature type
-            # covers it (702.16f), which no row's label reads.
-            continue
-        colours = [c for c in blocker.colors if c in COLOUR_WORDS]
-        if not colours or "B" in colours or set(colours) & set(attacker.colors):
-            continue
-        if keywords_of(blocker) & EVASION_KEYWORDS:
-            continue
-        if _spare_colour(attacker, blocker) is None or _spare_creature_type(
-                attacker, blocker) is None:
-            continue
-        return attacker.id, blocker.id
-    return None
+    return attacker if _plain_attacker(attacker, keywords_of) else None
+
+
+def _plain_attacker(attacker, keywords_of: KeywordsOf) -> bool:
+    """A creature on the battlefield, with no evasion keyword or protection,
+    and a colour other than black."""
+    if attacker is None or "creature" not in attacker.types:
+        return False
+    if not attacker.on_battlefield or _evades(attacker, keywords_of):
+        return False
+    return any(c != "B" for c in attacker.colors if c in COLOUR_WORDS)
+
+
+def _evades(attacker, keywords_of: KeywordsOf) -> bool:
+    """The attacker carries an evasion keyword or a protection."""
+    if keywords_of(attacker) & EVASION_KEYWORDS:
+        return True
+    return any(k.startswith("protection") for k in keywords_of(attacker))
+
+
+def _evasion_blocker(blocker, attacker, keywords_of: KeywordsOf) -> bool:
+    """A legal blocker that pairs with the attacker (:func:`evasion_pair`)."""
+    if not _non_artifact_creature(blocker):
+        return False
+    if has_changeling(blocker):
+        # Every creature type (702.73a): protection from any creature type
+        # covers it (702.16f), which no row's label reads.
+        return False
+    if not _colours_apart(blocker, attacker):
+        return False
+    if keywords_of(blocker) & EVASION_KEYWORDS:
+        return False
+    return _leaves_spares(attacker, blocker)
+
+
+def _non_artifact_creature(blocker) -> bool:
+    """A creature on the battlefield that is no artifact."""
+    if blocker is None or not blocker.on_battlefield:
+        return False
+    return "creature" in blocker.types and "artifact" not in blocker.types
+
+
+def _colours_apart(blocker, attacker) -> bool:
+    """The blocker is coloured, not black, and shares no colour with the attacker."""
+    colours = [c for c in blocker.colors if c in COLOUR_WORDS]
+    if not colours or "B" in colours:
+        return False
+    return not set(colours) & set(attacker.colors)
+
+
+def _leaves_spares(attacker, blocker) -> bool:
+    """The pair leaves a colour and a spare creature type neither creature has."""
+    return (_spare_colour(attacker, blocker) is not None
+            and _spare_creature_type(attacker, blocker) is not None)
 
 
 def label(name: str | None) -> str:
@@ -549,15 +672,20 @@ def damage_cells(record, entity: str, texts: AbilityTexts) -> list[CellRead]:
     for amount in VALUES:
         edit = None if effect is None else amount_edit(
             record, AmountText(effect, line, texts.text_of(key)), amount)
-        overrides: tuple[TextOverride, ...] = ()
-        if edit is not None and edit.key is not None:
-            overrides = (TextOverride(edit.key, edit.text, key, script=edit.script,
-                                      role_spans=edit.role_spans),)
-        for board in edited:
-            cell = board if not overrides else replace(
-                board, ability=(edit.key, *board.ability[1:]))
-            cells.append(CellRead(cell, entity, "dies", overrides))
+        cells += _amount_cells(edit, key, edited, entity)
     return cells
+
+
+def _amount_cells(edit, key, boards: list, entity: str) -> list[CellRead]:
+    """One amount's cells, toughness by toughness: each board reading the
+    amount's edited text under its own key, or the real text where the edit
+    did not take."""
+    if edit is None or edit.key is None:
+        return [CellRead(board, entity, "dies", ()) for board in boards]
+    overrides = (TextOverride(edit.key, edit.text, key, script=edit.script,
+                              role_spans=edit.role_spans),)
+    return [CellRead(replace(board, ability=(edit.key, *board.ability[1:])), entity, "dies",
+                     overrides) for board in boards]
 
 
 # ── the freeze's grid sources ───────────────────────────────────────────
@@ -609,7 +737,7 @@ class CombatGrid:
         variant = VARIANTS[self.variant]
         if pair is None or not variant.shows(record, pair, self.which):
             return None
-        _, rule = grid_records(record, *pair, self.which, self.variant)
+        _, rule = grid_records(record, pair, self.which, self.variant)
         flat = rule.ravel()
         return GridQualification(pair, tuple(
             float(flat[index]) for index in variant.held_cells(self.which)))
@@ -630,11 +758,10 @@ class EvasionGrid:
         pair = evasion_pair(record, self.keywords_of)
         if pair is None:
             return None
-        attacker, blocker = pair
         outcomes = tuple(
-            float(evasion_cell(record, attacker, blocker, row, column)[1])
+            float(evasion_cell(record, pair, row, column)[1])
             for row in ATTACKER_KEYWORDS for column in BLOCKER_TRAITS)
-        return GridQualification((attacker, blocker), outcomes)
+        return GridQualification(pair, outcomes)
 
 
 @dataclass
@@ -693,7 +820,7 @@ class GridEdits:
             return damage_cells(record, entity, self.texts)
         attacker, blocker = entities
         if grid == "evasion":
-            return [CellRead(evasion_cell(record, attacker, blocker, row, column)[0],
+            return [CellRead(evasion_cell(record, (attacker, blocker), row, column)[0],
                              blocker, "may_block")
                     for row in ATTACKER_KEYWORDS for column in BLOCKER_TRAITS]
         return _combat_cells(grid, record, (attacker, blocker))
@@ -704,7 +831,7 @@ def _combat_cells(grid: str, record, pair: tuple[str, str]) -> list[CellRead]:
     prefix, variant, which = grid.split("/")
     if f"{prefix}/" not in GRID_PREFIX.values():
         raise KeyError(f"no grid {grid!r}")
-    rows, _ = grid_records(record, *pair, which, variant)
+    rows, _ = grid_records(record, pair, which, variant)
     attacker, blocker = pair
     read = blocker if which == "blocker" else attacker
     square = [cell for row in rows for cell in row]

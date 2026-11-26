@@ -146,7 +146,7 @@ def _mean_grids(probe_model, triples: list, variant: str, which: str):
     rule = np.zeros(len(VALUES) ** 2)
     shown = [t for t in triples if chosen.shows(t[0], t[1:], which)]
     for record, attacker, blocker in shown:
-        rows, rules = grid_records(record, attacker, blocker, which, variant)
+        rows, rules = grid_records(record, (attacker, blocker), which, variant)
         dies = readout.at_card("dies", blocker if which == "blocker" else attacker)
         cells = [cell for row in rows for cell in row]
         grid[held] += np.asarray(

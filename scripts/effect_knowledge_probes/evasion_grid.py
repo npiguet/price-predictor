@@ -85,7 +85,7 @@ def _grids(probe_model, triples: list):
 
 def _cell(probe_model, triples: list, read_may_block, edit: tuple):
     """What the rule allows and what the model predicts in one cell, per record."""
-    cells = [edited(record, a, b, *edit) for record, a, b in triples]
+    cells = [edited(record, (a, b), *edit) for record, a, b in triples]
     predictions = common.predict(probe_model, [c[0] for c in cells], read_may_block)
     return [c[1] for c in cells], predictions
 
