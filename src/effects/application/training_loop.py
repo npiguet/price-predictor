@@ -38,7 +38,7 @@ from effects.application.run_reporter import (
     ShardOutcome,
     ShardStats,
 )
-from effects.application.step_loss import StepLossComputer, read_back
+from effects.application.step_loss import LossRequest, StepLossComputer, read_back
 from effects.application.step_preparation import (
     DeviceStep,
     PreparerSettings,
@@ -486,7 +486,7 @@ class TrainingLoop:
         """One step's device half: forward, backward, and the optimizer on the
         accumulation boundary."""
         computed = self.losses.device_loss(
-            prepared, run, run.training, step=run.step, report_parts=due,
+            prepared, run, run.training, LossRequest(step=run.step, report_parts=due),
         )
         (computed.total / self.config.grad_accum).backward()
         self.losses.mlm_backward(computed, run.encoder, run.model)

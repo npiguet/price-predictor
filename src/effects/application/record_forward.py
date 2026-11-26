@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.step_loss import autocast_enabled
+from effects.application.step_loss import LossRequest, autocast_enabled
 from effects.domain.surface_collation import entity_index, per_entity_targets
 
 if TYPE_CHECKING:
@@ -171,12 +171,10 @@ class RecordForward:
         """Each scoring step and its losses, as validation scores them: the
         loss computer's own device half (which carries the autocast) under
         evaluation mode and no gradient."""
+        request = LossRequest(report_parts=report_parts, head_parts=head_parts)
         with self.running():
             for step in steps:
-                yield step, losses.device_loss(
-                    step, self, self.materializer, report_parts=report_parts,
-                    head_parts=head_parts,
-                )
+                yield step, losses.device_loss(step, self, self.materializer, request)
 
 
 @dataclass(frozen=True)

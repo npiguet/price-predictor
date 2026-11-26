@@ -6,8 +6,10 @@ training descends.
 
 from __future__ import annotations
 
+import operator
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import reduce
 from typing import Protocol
 
 import torch
@@ -93,15 +95,30 @@ def combine_terms(
     weights for backward alone. Summed in :data:`AUX_HEADS` order, which is
     part of what makes a run repeat bit for bit.
     """
-    shipped = loss
-    for spec in SHIPPED_HEADS:
-        if spec.head in terms:
-            shipped = shipped + terms[spec.head]
-    total = shipped
-    for spec in TRAINING_HEADS:
-        if spec.head in terms:
-            total = total + weights[spec.head] * terms[spec.head]
+    shipped = reduce(operator.add, (
+        terms[spec.head] for spec in SHIPPED_HEADS if spec.head in terms
+    ), loss)
+    total = reduce(operator.add, (
+        weights[spec.head] * terms[spec.head] for spec in TRAINING_HEADS
+        if spec.head in terms
+    ), shipped)
     return total, shipped
+
+
+@dataclass(frozen=True)
+class LossRequest:
+    """What one :meth:`StepLossComputer.device_loss` call is asked for.
+
+    ``step`` is a training step's place in the run, for the noise on ``e``;
+    ``report_parts`` keeps each per-entity field's term, stacked on the
+    device; ``head_parts`` each shipped record head's term too
+    (:meth:`StepLossComputer.record_head_parts`), which the control score's
+    deviance reads.
+    """
+
+    step: int | None = None
+    report_parts: bool = False
+    head_parts: bool = False
 
 
 class TrainedModules(Protocol):
@@ -143,22 +160,17 @@ class StepLossComputer:
 
     def device_loss(
         self, prepared: DeviceStep, modules: TrainedModules,
-        materializer: Materializer, *, step: int | None = None,
-        report_parts: bool = False, head_parts: bool = False,
+        materializer: Materializer, request: LossRequest = LossRequest(),
     ) -> StepLoss:
-        """One prepared step's losses: the device half.
+        """One prepared step's losses, as ``request`` asks: the device half.
 
-        ``step`` is a training step's place in the run, for the noise on ``e``;
-        ``report_parts`` keeps each per-entity field's term, stacked on the
-        device; ``head_parts`` each shipped record head's term too
-        (:meth:`record_head_parts`), which the control score's deviance reads.
         Autocast encloses ``materialize`` too, because the encoder's forward
         runs there; backward and the optimizer step stay outside it (bf16
         needs no grad scaler).
         """
         with self._autocast():
             batch, _surfaces, encoded = materializer.materialize(
-                prepared.batch, modules.encoder, step=step,
+                prepared.batch, modules.encoder, step=request.step,
             )
             hidden = modules.model(batch)
             targets = prepared.targets
@@ -170,12 +182,12 @@ class StepLossComputer:
                 fields=prepared.fields,
                 log_dispersion=modules.model.per_entity_dispersion(),
                 scale=None if self.scales is None else self.scales.per_entity,
-                report_parts=report_parts,
+                report_parts=request.report_parts,
             )
             terms = self.head_terms(prepared.heads, encoded, modules.model, hidden)
             extra = (self.record_head_parts(prepared.heads, modules.model, hidden,
                                             records=int(targets.gate.shape[0]))
-                     if head_parts else LossParts())
+                     if request.head_parts else LossParts())
         total, shipped = combine_terms(loss, terms, self.weights)
         return StepLoss(
             total=total, shipped=shipped, parts=parts, terms=terms,
@@ -210,17 +222,24 @@ class StepLossComputer:
         inputs = {HeadInput.TRUNK: hidden, HeadInput.ENCODED: encoded.matrix}
         terms: dict[str, torch.Tensor] = {}
         for spec in AUX_HEADS:
+            if spec.loss is None:
+                continue
             given = targets.get(spec.head)
             source = inputs.get(spec.reads)
-            if spec.loss is None or given is None or source is None:
+            if given is None or source is None:
                 continue
-            scale = {} if self.scales is None or not spec.shipped else {
-                "scale": self.scales.heads.get(spec.head),
-            }
             terms[spec.head] = spec.loss(
-                model, source, spec.to_device(given, self.device), **scale,
+                model, source, spec.to_device(given, self.device),
+                **self._scale_of(spec),
             )
         return terms
+
+    def _scale_of(self, spec) -> dict[str, torch.Tensor | None]:
+        """The ``scale`` keyword a shipped head's loss takes once denominators
+        are set; none otherwise."""
+        if self.scales is None or not spec.shipped:
+            return {}
+        return {"scale": self.scales.heads.get(spec.head)}
 
     def mlm_backward(self, loss: StepLoss, encoder, model) -> None:
         """The MLM term's forward and backward, after the main loss's backward
