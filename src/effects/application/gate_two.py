@@ -142,32 +142,41 @@ def read_field(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class PairedVectors:
+    """One perturbation's output vectors: ``present`` and ``stripped`` map a
+    subject id to its vector in the build as collected and in the twin with the
+    keyword removed."""
+
+    present: dict[str, torch.Tensor]
+    stripped: dict[str, torch.Tensor]
+
+
 def score_observation(
     row: DamageStepKeyword,
     participant: CombatParticipant,
-    present: dict[str, torch.Tensor],
-    stripped: dict[str, torch.Tensor],
+    vectors: PairedVectors,
     *,
     active: frozenset[str],
 ) -> tuple[bool, dict[str, bool]]:
     """Whether one perturbation moved every field it should have.
 
-    ``present`` and ``stripped`` map a subject id to its output vector in the
-    two builds. An effect agrees when present minus stripped has the row's
-    sign, so a prediction that did not move disagrees; an effect read at
-    several subjects (infect's counters on each creature its damage was dealt
-    to) agrees when it moves the rules' way at every one. An effect this combat
-    cannot show (infect's creature and player fields are exclusive) or a field
-    outside ``active`` is left unscored rather than counted against the keyword.
+    ``vectors`` holds each subject's output vector in the two builds. An
+    effect agrees when present minus stripped has the row's sign, so a
+    prediction that did not move disagrees; an effect read at several subjects
+    (infect's counters on each creature its damage was dealt to) agrees when it
+    moves the rules' way at every one. An effect this combat cannot show
+    (infect's creature and player fields are exclusive) or a field outside
+    ``active`` is left unscored rather than counted against the keyword.
     """
     per_effect: dict[str, bool] = {}
     for effect in row.effects:
         if effect.field not in active or not effect.observable(participant):
             continue
         moved = [
-            _moved(effect, present[subject], stripped[subject])
+            _moved(effect, vectors.present[subject], vectors.stripped[subject])
             for subject in participant.subjects(effect.subject)
-            if subject in present and subject in stripped
+            if subject in vectors.present and subject in vectors.stripped
         ]
         if moved:
             per_effect[effect.label] = all(moved)
@@ -289,8 +298,10 @@ class _Tally:
                 continue
             agreed, per_effect = score_observation(
                 row, participant,
-                _subject_vectors(surfaces[offset], outputs[offset], row, participant),
-                _subject_vectors(surfaces[twin], outputs[twin], row, participant),
+                PairedVectors(
+                    _subject_vectors(surfaces[offset], outputs[offset], row, participant),
+                    _subject_vectors(surfaces[twin], outputs[twin], row, participant),
+                ),
                 active=self.active,
             )
             self.scores[row.keyword].add(record.record_id, agreed, per_effect)

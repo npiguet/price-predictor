@@ -29,6 +29,7 @@ import torch
 
 from effects.application.gate_two import (
     KeywordScore,
+    PairedVectors,
     evaluate_gate_two,
     evaluate_keyword,
     read_field,
@@ -501,7 +502,7 @@ class TestScoreObservation:
         # Only the damage effect, so the zone effect cannot decide the verdict.
         row = _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken")
         return score_observation(
-            row, participant, base, stripped,
+            row, participant, PairedVectors(base, stripped),
             active=_ACTIVE,
         )
 
@@ -540,7 +541,7 @@ class TestScoreObservation:
         untouched[GATE_INDEX] = -4.0
         agreed, per_effect = score_observation(
             _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken"), participant,
-            {"B0": hit}, {"B0": untouched},
+            PairedVectors({"B0": hit}, {"B0": untouched}),
             active=_ACTIVE,
         )
         assert agreed
@@ -552,7 +553,7 @@ class TestScoreObservation:
         base = {"B0": _zone_and_damage(damage=3.0, died_logit=0.0)}
         stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=1.0)}
         agreed, per_effect = score_observation(
-            KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
+            KEYWORDS_BY_NAME["first_strike"], participant, PairedVectors(base, stripped),
             active=_ACTIVE,
         )
         # Damage moved the right way; the death probability moved the wrong way.
@@ -571,7 +572,7 @@ class TestScoreObservation:
         base = {"A": torch.zeros(PER_ENTITY_WIDTH), "P1": _player(poison=2.0, life=0.0)}
         stripped = {"A": torch.zeros(PER_ENTITY_WIDTH), "P1": _player(poison=0.0, life=-2.0)}
         agreed, per_effect = score_observation(
-            KEYWORDS_BY_NAME["infect"], participant, base, stripped,
+            KEYWORDS_BY_NAME["infect"], participant, PairedVectors(base, stripped),
             active=_ACTIVE,
         )
         assert set(per_effect) == {
@@ -585,7 +586,7 @@ class TestScoreObservation:
         base = {"B0": _wither_side(counters=2.0, damage=0.0)}
         stripped = {"B0": _wither_side(counters=0.0, damage=2.0)}
         agreed, per_effect = score_observation(
-            KEYWORDS_BY_NAME["infect"], participant, base, stripped,
+            KEYWORDS_BY_NAME["infect"], participant, PairedVectors(base, stripped),
             active=_ACTIVE,
         )
         assert set(per_effect) == {
@@ -600,7 +601,7 @@ class TestScoreObservation:
         participant = _participant(record, "A")
         vectors = {"P0": torch.zeros(PER_ENTITY_WIDTH)}
         agreed, per_effect = score_observation(
-            KEYWORDS_BY_NAME["lifelink"], participant, vectors, vectors,
+            KEYWORDS_BY_NAME["lifelink"], participant, PairedVectors(vectors, vectors),
             active=_ACTIVE,
         )
         assert per_effect == {}
@@ -612,7 +613,7 @@ class TestScoreObservation:
         base = {"B0": _zone_and_damage(damage=3.0, died_logit=1.0)}
         stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=0.0)}
         _agreed, per_effect = score_observation(
-            KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
+            KEYWORDS_BY_NAME["first_strike"], participant, PairedVectors(base, stripped),
             active=_ACTIVE - {"damage_taken"},
         )
         assert set(per_effect) == {"opponent.zone_outcome/died"}
