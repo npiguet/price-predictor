@@ -32,8 +32,7 @@ class TestUnimplementedChecks:
 # ── the reporting half (T169) ───────────────────────────────────────────
 
 
-def _context(tmp_path, *, rule_mask="soft", stratum_weight=0.25, deviance_floor=0.1,
-             best=0.4, selection_digest=None):
+def _context(tmp_path, selection_digest=None):
     """What ``run_reporting_half`` reads of an evaluation: the manifest's
     digest and map, the checkpoint's recorded flags, the loaded model."""
     from types import SimpleNamespace
@@ -48,9 +47,8 @@ def _context(tmp_path, *, rule_mask="soft", stratum_weight=0.25, deviance_floor=
             digest=lambda: "corpus-digest",
             rule_map={"r.board": SimpleNamespace(outputs=["gate", "zone_outcome"])},
             effective_rule_outputs={"r.board": ("zone_outcome",)}),
-        main=SimpleNamespace(scored_under=lambda: ScoringFlags(
-                                 rule_mask, stratum_weight, deviance_floor),
-                             control_score=best,
+        main=SimpleNamespace(scored_under=lambda: ScoringFlags("soft", 0.25, 0.1),
+                             control_score=0.4,
                              best_control_score=0.99,
                              selection_set_digest=selection_digest),
         corpus_path=tmp_path / "corpus", shards={"card-disjoint": (), "game-disjoint": ()},
