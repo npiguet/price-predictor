@@ -117,21 +117,29 @@ class TestEveryFixtureTargetFitsItsField:
     curated record of the gen-3 fixture."""
 
     def test_widths_and_classes(self):
-        from effects.domain.effect_head_layout import FIELD_SLICES
-        from effects.domain.field_types import FieldType
         from tests.unit.effects.builders import curated_fixture_records
 
         seen = set()
         for record in curated_fixture_records():
             for entry in derive_targets(record).values():
                 for name, value in entry.fields.items():
-                    spec = _spec(name)
-                    start, end = FIELD_SLICES[name]
-                    assert end - start == spec.width
-                    if spec.type is FieldType.MULTI_BINARY:
-                        assert len(value) == spec.arity, name
-                    elif spec.type is FieldType.CATEGORICAL:
-                        assert 0 <= value < spec.arity, name
+                    _assert_fits_its_field(name, value)
                     seen.add(name)
         assert {"target_legal", "attack_target_legal", "combat_requirement",
                 "face_after"} <= seen
+
+
+def _assert_fits_its_field(name, value):
+    """``value``, the target of field ``name``, has the shape its ``FieldSpec``
+    declares: its slice is the spec's width, a multi-binary target holds one
+    bit per class and a categorical one is a class index."""
+    from effects.domain.effect_head_layout import FIELD_SLICES
+    from effects.domain.field_types import FieldType
+
+    spec = _spec(name)
+    start, end = FIELD_SLICES[name]
+    assert end - start == spec.width
+    if spec.type is FieldType.MULTI_BINARY:
+        assert len(value) == spec.arity, name
+    elif spec.type is FieldType.CATEGORICAL:
+        assert 0 <= value < spec.arity, name
