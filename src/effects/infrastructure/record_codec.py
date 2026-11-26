@@ -63,6 +63,14 @@ _KNOWN_ENVELOPE_KEYS = frozenset({
 
 def record_to_dict(record: EffectRecord) -> dict:
     """One record's JSON-serializable dict form, envelope keys first."""
+    out = _identity_to_json(record) | _tags_to_json(record) | _contents_to_json(record)
+    for key, value in record.extra_fields.items():
+        out.setdefault(key, value)
+    return out
+
+
+def _identity_to_json(record: EffectRecord) -> dict:
+    """The envelope's ids, kind and flags, ``record_id`` to ``random_seat``."""
     out: dict = {
         "record_id": record.record_id,
         "generation": record.generation,
@@ -82,7 +90,12 @@ def record_to_dict(record: EffectRecord) -> dict:
     # A fork's record alone, beside the flag it says more about.
     if record.fork_kind is not None:
         out["fork_kind"] = record.fork_kind.value
-    out |= {"synthetic": record.synthetic, "random_seat": record.random_seat}
+    return out | {"synthetic": record.synthetic, "random_seat": record.random_seat}
+
+
+def _tags_to_json(record: EffectRecord) -> dict:
+    """The collection and curation tags, each only on a record that carries it."""
+    out: dict = {}
     # On a blockers record alone, the one kind that carries it.
     if record.what_if is not None:
         out["what_if"] = record.what_if
@@ -95,7 +108,12 @@ def record_to_dict(record: EffectRecord) -> dict:
         out["copy_dropped"] = dict(record.copy_dropped)
     if record.curation is not None:
         out["curation"] = _curation_to_json(record.curation)
-    out |= {
+    return out
+
+
+def _contents_to_json(record: EffectRecord) -> dict:
+    """The acting player and line, the snapshot and the payload."""
+    out = {
         "actor_player": record.actor_player,
         "ability": (
             _keys_to_json(record.ability) if record.ability is not None else None
@@ -107,8 +125,6 @@ def record_to_dict(record: EffectRecord) -> dict:
     if _is_observed_combat(record.payload):
         # The collector writes no probe member on an observed combat.
         del out["payload"]["probed_keyword"], out["payload"]["probed_entity"]
-    for key, value in record.extra_fields.items():
-        out.setdefault(key, value)
     return out
 
 
@@ -148,11 +164,23 @@ def check_gen3_payload_shape(data: dict) -> None:
         return
     payload = data.get("payload") or {}
     moment = data.get("moment")
-    if moment == Moment.ACTIVATION and ("events" not in payload or "outcome" in payload):
+    if moment == Moment.ACTIVATION:
+        _check_cost_half(payload)
+    if moment == Moment.RESOLUTION:
+        _check_effect_half(payload)
+
+
+def _check_cost_half(payload: dict) -> None:
+    """Refuse a cost half that is not ``{events, costs}``."""
+    if "events" not in payload or "outcome" in payload:
         raise SupersededPayloadError(
             "a gen-3 cost half is {events, costs}; this one is the superseded "
             f"{{{', '.join(payload)}}}")
-    if moment == Moment.RESOLUTION and "outcome" not in payload:
+
+
+def _check_effect_half(payload: dict) -> None:
+    """Refuse an effect half without ``outcome``."""
+    if "outcome" not in payload:
         raise SupersededPayloadError(
             "a gen-3 effect half carries outcome; this one, of the superseded "
             "shape, carries none")
