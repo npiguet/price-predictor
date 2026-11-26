@@ -40,7 +40,7 @@ from __future__ import annotations
 import re
 import sys
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -89,13 +89,20 @@ def retargeted(record, old: str, new: str):
 # ── which records qualify ───────────────────────────────────────────────
 
 
+def _is_plain_resolution(record) -> bool:
+    """Whether ``record`` is a real (unforked) resolution that names an ability."""
+    from effects.domain.records import Moment, RecordKind
+
+    if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
+        return False
+    return not record.fork and bool(record.ability)
+
+
 def chosen_record(record, sidecars):
     """``(record, apis, script text, targets)`` for a qualifying resolution, or None."""
     from effects.domain.effect_targets import derive_targets
-    from effects.domain.records import Moment, RecordKind
 
-    if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
-            or record.fork or not record.ability):
+    if not _is_plain_resolution(record):
         return None
     line = sidecars.line_or_none(record.ability[0])
     text = line.script_text if line is not None else None
@@ -136,121 +143,204 @@ def predict_all(probe_model, records) -> list[dict]:
 # ── the four reports ────────────────────────────────────────────────────
 
 
+def _count_of(targets, entity_id, field):
+    """The count ``field`` of ``entity_id``'s target entry, 0 where it has none."""
+    entry = targets.get(entity_id)
+    return (entry.fields.get(field) or 0) if entry is not None else 0
+
+
+def _lone_hit_of_two(hit, counts, players) -> bool:
+    """Whether exactly one of two players was affected and the model read both."""
+    if len(hit) != 1 or len(counts) != 2:
+        return False
+    return all(p in players for p in counts)
+
+
+class CountTally:
+    """What :func:`report_counts` reads for one API and its count field."""
+
+    def __init__(self, api: str, field: str) -> None:
+        self.api = api
+        self.field = field
+        self.labels: list[bool] = []
+        self.scores: list[float] = []
+        self.naming = self.single = self.right = 0
+        self.actual: list = []
+        self.predicted: list[float] = []
+
+    def add(self, record, apis, targets, reading) -> None:
+        counts = {}
+        for player in record.state.players:
+            value = _count_of(targets, player.id, self.field)
+            counts[player.id] = value
+            if player.id in reading["players"]:
+                self.labels.append(value > 0)
+                self.scores.append(reading["players"][player.id][self.field])
+        if self.api not in apis:
+            return
+        self.naming += 1
+        hit = [p for p, v in counts.items() if v > 0]
+        if _lone_hit_of_two(hit, counts, reading["players"]):
+            self._add_lone_hit(counts, hit[0], reading["players"])
+
+    def _add_lone_hit(self, counts, hit, players) -> None:
+        self.single += 1
+        other = next(p for p in counts if p != hit)
+        self.right += players[hit][self.field] > players[other][self.field]
+        self.actual.append(counts[hit])
+        self.predicted.append(players[hit][self.field])
+
+    def row(self) -> list:
+        share = f"{self.right / self.single:.2f}" if self.single else "n/a"
+        return [self.field, len(self.labels), sum(self.labels),
+                f"{auc(self.labels, self.scores):.3f}", self.naming, self.single, share,
+                common.fmt_mean(self.actual, 2), common.fmt_mean(self.predicted, 2)]
+
+
 def report_counts(chosen, readings) -> None:
     table = []
     for api, field in COUNT_FIELDS.items():
-        labels, scores = [], []
-        naming = single = right = 0
-        actual, predicted = [], []
+        tally = CountTally(api, field)
         for (record, apis, _, targets), reading in zip(chosen, readings):
-            counts = {}
-            for player in record.state.players:
-                entry = targets.get(player.id)
-                value = (entry.fields.get(field) or 0) if entry is not None else 0
-                counts[player.id] = value
-                if player.id in reading["players"]:
-                    labels.append(value > 0)
-                    scores.append(reading["players"][player.id][field])
-            if api not in apis:
-                continue
-            naming += 1
-            hit = [p for p, v in counts.items() if v > 0]
-            if len(hit) == 1 and len(counts) == 2 and all(
-                    p in reading["players"] for p in counts):
-                single += 1
-                other = next(p for p in counts if p != hit[0])
-                right += (reading["players"][hit[0]][field]
-                          > reading["players"][other][field])
-                actual.append(counts[hit[0]])
-                predicted.append(reading["players"][hit[0]][field])
-        share = f"{right / single:.2f}" if single else "n/a"
-        table.append([field, len(labels), sum(labels), f"{auc(labels, scores):.3f}", naming,
-                      single, share, common.fmt_mean(actual, 2),
-                      common.fmt_mean(predicted, 2)])
+            tally.add(record, apis, targets, reading)
+        table.append(tally.row())
     print("\ncard counts at each player: every player slot of every chosen record")
     print_table(["field", "player items", "affected", "AUC", "records naming the API",
                  "one player affected", "more predicted for that player", "actual, mean",
                  "predicted, mean"], table, "l" + "r" * 8)
 
 
-def report_zones(chosen, readings) -> None:
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
+def _zone_outcome(targets, entity_id):
+    from effects.domain.effect_head_layout import HeadField
 
-    stayed = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
-    rows = defaultdict(lambda: {"right": [], "top": [], "instead": defaultdict(int)})
-    moved = defaultdict(lambda: ([], []))
-    for (record, _, _, targets), reading in zip(chosen, readings):
+    entry = targets.get(entity_id)
+    return entry.fields.get(HeadField.ZONE_OUTCOME) if entry is not None else None
+
+
+class ZoneTally:
+    """What :func:`report_zones` reads: whether each card moved, and where it went."""
+
+    def __init__(self) -> None:
+        from effects.domain.effect_head_layout import ZONE_OUTCOMES, ZoneOutcome
+
+        self.outcomes = ZONE_OUTCOMES
+        self.stayed = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
+        self.rows = defaultdict(lambda: {"right": [], "top": [], "instead": defaultdict(int)})
+        self.moved = defaultdict(lambda: ([], []))
+
+    def add(self, record, targets, reading) -> None:
         for entity in record.state.entities:
-            if entity.id not in reading["cards"]:
-                continue
-            probs = reading["cards"][entity.id]
-            entry = targets.get(entity.id)
-            outcome = entry.fields.get(HeadField.ZONE_OUTCOME) if entry is not None else None
-            went = outcome is not None and outcome != stayed
-            moved[entity.zone][0].append(went)
-            moved[entity.zone][1].append(float(probs.sum() - probs[stayed]))
-            if not went:
-                continue
-            others = probs.copy()
-            others[stayed] = -1.0
-            top = int(np.argmax(others))
-            row = rows[(entity.zone, ZONE_OUTCOMES[outcome])]
-            row["right"].append(float(probs[outcome]))
-            row["top"].append(top == outcome)
-            if top != outcome:
-                row["instead"][ZONE_OUTCOMES[top]] += 1
+            if entity.id in reading["cards"]:
+                self._add_card(entity, reading["cards"][entity.id],
+                               _zone_outcome(targets, entity.id))
 
-    print("\nwhether a card moves, by the zone it starts in: every card slot of every "
-          "chosen record")
-    print_table(["zone before", "cards", "moved", "AUC"],
-                [[zone, len(moved[zone][0]), sum(moved[zone][0]), f"{auc(*moved[zone]):.3f}"]
-                 for zone in ORIGIN_ZONES if zone in moved], "lrrr")
+    def _add_card(self, entity, probs, outcome) -> None:
+        went = outcome is not None and outcome != self.stayed
+        self.moved[entity.zone][0].append(went)
+        self.moved[entity.zone][1].append(float(probs.sum() - probs[self.stayed]))
+        if went:
+            self._add_move(entity.zone, probs, outcome)
 
-    print("\nwhere a moved card goes, by the zone it starts in")
-    order = {z: i for i, z in enumerate(ORIGIN_ZONES)}
-    table = []
-    for (zone, outcome), row in sorted(rows.items(),
-                                       key=lambda kv: (order.get(kv[0][0], 99),
-                                                       -len(kv[1]["right"]))):
-        instead = max(row["instead"].items(), key=lambda kv: kv[1])[0] \
-            if row["instead"] else ""
-        table.append([zone, outcome, len(row["right"]), common.fmt_mean(row["right"], 2),
-                      common.fmt_mean(row["top"], 2), instead])
-    print_table(["zone before", "outcome", "cards", "P(outcome), mean",
-                 "top outcome other than stayed is right", "most often predicted instead"],
-                table, "llrrrl")
+    def _add_move(self, zone, probs, outcome) -> None:
+        others = probs.copy()
+        others[self.stayed] = -1.0
+        top = int(np.argmax(others))
+        row = self.rows[(zone, self.outcomes[outcome])]
+        row["right"].append(float(probs[outcome]))
+        row["top"].append(top == outcome)
+        if top != outcome:
+            row["instead"][self.outcomes[top]] += 1
+
+    def print_moved(self) -> None:
+        print("\nwhether a card moves, by the zone it starts in: every card slot of every "
+              "chosen record")
+        print_table(["zone before", "cards", "moved", "AUC"],
+                    [[zone, len(self.moved[zone][0]), sum(self.moved[zone][0]),
+                      f"{auc(*self.moved[zone]):.3f}"]
+                     for zone in ORIGIN_ZONES if zone in self.moved], "lrrr")
+
+    def print_destinations(self) -> None:
+        print("\nwhere a moved card goes, by the zone it starts in")
+        order = {z: i for i, z in enumerate(ORIGIN_ZONES)}
+        table = []
+        for (zone, outcome), row in sorted(self.rows.items(),
+                                           key=lambda kv: (order.get(kv[0][0], 99),
+                                                           -len(kv[1]["right"]))):
+            instead = max(row["instead"].items(), key=lambda kv: kv[1])[0] \
+                if row["instead"] else ""
+            table.append([zone, outcome, len(row["right"]), common.fmt_mean(row["right"], 2),
+                          common.fmt_mean(row["top"], 2), instead])
+        print_table(["zone before", "outcome", "cards", "P(outcome), mean",
+                     "top outcome other than stayed is right", "most often predicted instead"],
+                    table, "llrrrl")
+
+
+def report_zones(chosen, readings) -> None:
+    tally = ZoneTally()
+    for (record, _, _, targets), reading in zip(chosen, readings):
+        tally.add(record, targets, reading)
+    tally.print_moved()
+    tally.print_destinations()
 
 
 def _affected_player(record, targets, field):
-    hit = [p.id for p in record.state.players
-           if targets.get(p.id) is not None and (targets[p.id].fields.get(field) or 0) > 0]
+    hit = [p.id for p in record.state.players if _count_of(targets, p.id, field) > 0]
     return hit[0] if len(hit) == 1 else None
 
 
-def report_amounts(chosen, probe_model, per_sweep: int) -> None:
+def _amount_curve(record, targets, field, probe_model):
+    """The predicted count at the affected player for each amount, or None where the
+    record has no single affected player or its acting text has no literal count."""
+    player = _affected_player(record, targets, field)
+    if player is None:
+        return None
     batcher = probe_model.batcher
+    key = record.ability[0]
+    original = batcher.text_of(key)
+    if original is None or not _NUMCARDS_RE.search(original):
+        return None
+    curve = []
+    for amount in AMOUNTS:
+        with batcher.reading_as(key, sweeps.set_amount(original, "NumCards", amount)):
+            reading = common.predict(probe_model, [record],
+                                     lambda o, v, s, r: _read(o, s, r))[0]
+        curve.append(reading["players"].get(player, {}).get(field, float("nan")))
+    return curve
+
+
+@dataclass(frozen=True)
+class CountApi:
+    """A card-count API and the player count field it writes."""
+
+    api: str
+    field: str
+
+
+def _one_literal_count(api, apis, text) -> bool:
+    """Whether the chain names ``api`` and its text has exactly one ``NumCards$``."""
+    if api not in apis:
+        return False
+    return len(_NUMCARDS_RE.findall(text or "")) == 1
+
+
+def _amount_curves(count: CountApi, chosen, probe_model, per_sweep: int) -> list:
+    rows = []
+    for record, apis, text, targets in chosen:
+        if not _one_literal_count(count.api, apis, text):
+            continue
+        curve = _amount_curve(record, targets, count.field, probe_model)
+        if curve is None:
+            continue
+        rows.append(curve)
+        if len(rows) >= per_sweep:
+            break
+    return rows
+
+
+def report_amounts(chosen, probe_model, per_sweep: int) -> None:
     table = []
     for api, field in COUNT_FIELDS.items():
-        rows = []
-        for record, apis, text, targets in chosen:
-            if api not in apis or len(_NUMCARDS_RE.findall(text or "")) != 1:
-                continue
-            player = _affected_player(record, targets, field)
-            if player is None:
-                continue
-            key = record.ability[0]
-            original = batcher.text_of(key)
-            if original is None or not _NUMCARDS_RE.search(original):
-                continue
-            curve = []
-            for amount in AMOUNTS:
-                with batcher.reading_as(key, sweeps.set_amount(original, "NumCards", amount)):
-                    reading = common.predict(probe_model, [record],
-                                             lambda o, v, s, r: _read(o, s, r))[0]
-                curve.append(reading["players"].get(player, {}).get(field, float("nan")))
-            rows.append(curve)
-            if len(rows) >= per_sweep:
-                break
+        rows = _amount_curves(CountApi(api, field), chosen, probe_model, per_sweep)
         means = np.nanmean(np.asarray(rows), axis=0) if rows else [None] * len(AMOUNTS)
         table.append([api, len(rows), *("n/a" if m is None else f"{m:.2f}" for m in means)])
     print("\nthe amount: NumCards$ set to each value, predicted count at the affected "
@@ -258,32 +348,53 @@ def report_amounts(chosen, probe_model, per_sweep: int) -> None:
     print_table(["API", "records", *AMOUNTS], table, "lr" + "r" * len(AMOUNTS))
 
 
+def _handed_player(record, apis, targets, count: CountApi):
+    """The affected player of a two-player ``api`` record whose one player target is
+    that player, or None."""
+    if count.api not in apis or len(record.state.players) != 2:
+        return None
+    aimed = player_targets(record)
+    player = _affected_player(record, targets, count.field)
+    if len(aimed) != 1 or player != aimed[0]:
+        return None
+    return player
+
+
+def _handed_edits(count: CountApi, chosen, readings):
+    """``(edited records, [(reading before, player, other)])`` of the records the
+    target is handed over in."""
+    edited, index = [], []
+    for (record, apis, _, targets), reading in zip(chosen, readings):
+        player = _handed_player(record, apis, targets, count)
+        if player is None:
+            continue
+        other = next(p.id for p in record.state.players if p.id != player)
+        edited.append(retargeted(record, player, other))
+        index.append((reading, player, other))
+    return edited, index
+
+
+def _who_row(count: CountApi, edited, index, probe_model) -> list:
+    after = predict_all(probe_model, edited)
+    cells = defaultdict(list)
+    for (before, player, other), reading in zip(index, after):
+        cells["tb"].append(before["players"][player][count.field])
+        cells["ta"].append(reading["players"][player][count.field])
+        cells["ob"].append(before["players"][other][count.field])
+        cells["oa"].append(reading["players"][other][count.field])
+    return [count.api, len(edited),
+            *(common.fmt_mean(cells[k], 2) for k in ("tb", "ta", "ob", "oa"))]
+
+
 def report_who(chosen, readings, probe_model) -> None:
     table = []
     for api, field in COUNT_FIELDS.items():
-        edited, index = [], []
-        for (record, apis, _, targets), reading in zip(chosen, readings):
-            if api not in apis or len(record.state.players) != 2:
-                continue
-            aimed = player_targets(record)
-            player = _affected_player(record, targets, field)
-            if len(aimed) != 1 or player != aimed[0]:
-                continue
-            other = next(p.id for p in record.state.players if p.id != player)
-            edited.append(retargeted(record, player, other))
-            index.append((reading, player, other))
+        count = CountApi(api, field)
+        edited, index = _handed_edits(count, chosen, readings)
         if not edited:
             table.append([api, 0, "n/a", "n/a", "n/a", "n/a"])
             continue
-        after = predict_all(probe_model, edited)
-        cells = defaultdict(list)
-        for (before, player, other), reading in zip(index, after):
-            cells["tb"].append(before["players"][player][field])
-            cells["ta"].append(reading["players"][player][field])
-            cells["ob"].append(before["players"][other][field])
-            cells["oa"].append(reading["players"][other][field])
-        table.append([api, len(edited),
-                      *(common.fmt_mean(cells[k], 2) for k in ("tb", "ta", "ob", "oa"))])
+        table.append(_who_row(count, edited, index, probe_model))
     print("\nwho: the player target handed to the other player (rule: the count moves "
           "with it)")
     print_table(["API", "records", "targeted player, before", "after", "other player, before",
