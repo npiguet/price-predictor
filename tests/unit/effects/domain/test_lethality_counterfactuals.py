@@ -9,7 +9,7 @@ with the amount the labels used.
 from __future__ import annotations
 
 import random
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
@@ -53,13 +53,22 @@ def _creature(entity_id: str, toughness: int, *, damage: int = 0, **overrides) -
     )
 
 
-def _record(events, entities, *, x=None, targets=("E1",), source_x_paid=None) -> EffectRecord:
+@dataclass(frozen=True)
+class Scene:
+    """What a record's references say about the spell: its X, its targets, the X paid."""
+
+    x: int | None = None
+    targets: tuple[str, ...] = ("E1",)
+    source_x_paid: int | None = None
+
+
+def _record(events, entities, *, scene: Scene = Scene()) -> EffectRecord:
     state = make_snapshot(
         global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0", stack_size=1),
         players=(PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
                  PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0)),
-        entities=(make_entity("S1", "spell", zone="stack", x_paid=source_x_paid), *entities),
-        refs=Refs(targets=targets, source="S1", x=x),
+        entities=(make_entity("S1", "spell", zone="stack", x_paid=scene.source_x_paid), *entities),
+        refs=Refs(targets=scene.targets, source="S1", x=scene.x),
     )
     return make_record(
         record_id="r.0-0.1", run_id="r", game_id="r.0-0.1", state=state,
@@ -244,8 +253,8 @@ class TestQualify:
         assert _qualify(record).players == ("P1",)
 
     def test_a_paid_x_is_the_amount(self):
-        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4,
-                         source_x_paid=4)
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)],
+                         scene=Scene(x=4, source_x_paid=4))
         qualified = _qualify(record, BOLT.replace("NumDmg$ 3", "NumDmg$ X"))
         assert (qualified.effect.amount, qualified.effect.stated) == (4, "x")
 
@@ -299,8 +308,8 @@ class TestCopies:
         assert record.state.entity("E1").pt.base == (2, 2)
 
     def test_a_paid_x_is_edited_in_the_references_and_on_the_source_not_the_text(self):
-        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4,
-                         source_x_paid=4)
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)],
+                         scene=Scene(x=4, source_x_paid=4))
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
         for seed in range(6):
@@ -315,7 +324,7 @@ class TestCopies:
     def test_an_x_the_board_computes_keeps_its_amount_in_every_copy(self):
         """``refs.x`` from an ``SVar:X`` ("damage equal to the number of
         creatures you control"): no copy redraws it; the toughness moves."""
-        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], scene=Scene(x=4))
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
         assert qualified.effect.stated == "computed"
@@ -386,6 +395,42 @@ class TestTheProseSurface:
         ]
 
 
+def _assert_copy_moved_nothing_else(record: EffectRecord, copy) -> None:
+    state = copy.record.state
+    assert replace(
+        copy.record, record_id=record.record_id, ability=record.ability,
+        state=replace(state, entities=record.state.entities, refs=record.state.refs),
+        payload=record.payload,
+    ) == record
+    assert copy.record.payload == replace(record.payload, events=())
+    assert [replace(entity, pt=None, damage=0, x_paid=None) for entity in state.entities] == [
+        replace(entity, pt=None, damage=0, x_paid=None) for entity in record.state.entities
+    ]
+    assert replace(state.refs, x=None) == replace(record.state.refs, x=None)
+    if copy.edit.key is None:
+        assert copy.record.ability == record.ability
+    else:
+        assert copy.record.ability == (copy.edit.key,)
+        assert replace(copy.edit.key, script_file=KEY.script_file) == KEY
+
+
+def _copy_digest(copy) -> tuple:
+    state = copy.record.state
+    return (
+        copy.record.record_id,
+        None if copy.edit.key is None else copy.edit.key.script_file,
+        state.refs.x,
+        tuple((entity.id, entity.x_paid) for entity in state.entities
+              if entity.x_paid is not None),
+        tuple((entity.id, entity.pt.base, entity.damage)
+              for entity in state.entities if entity.pt is not None),
+        copy.edit.text, copy.edit.script,
+        tuple((span.start, span.end, span.role) for span in copy.edit.role_spans),
+        tuple((subject, entry.affected, sorted(entry.fields.items()))
+              for subject, entry in copy.targets.items()),
+    )
+
+
 class TestThePinnedOutput:
     """The whole of ``counterfactual``'s output for a seeded draw, on four
     real-shaped records: what any restructuring of it must leave unchanged."""
@@ -399,35 +444,8 @@ class TestThePinnedOutput:
     @staticmethod
     def _summary(record: EffectRecord, copy) -> tuple:
         """Everything the copy holds, having checked it moved nothing else."""
-        state = copy.record.state
-        assert replace(
-            copy.record, record_id=record.record_id, ability=record.ability,
-            state=replace(state, entities=record.state.entities, refs=record.state.refs),
-            payload=record.payload,
-        ) == record
-        assert copy.record.payload == replace(record.payload, events=())
-        assert [replace(entity, pt=None, damage=0, x_paid=None) for entity in state.entities] == [
-            replace(entity, pt=None, damage=0, x_paid=None) for entity in record.state.entities
-        ]
-        assert replace(state.refs, x=None) == replace(record.state.refs, x=None)
-        if copy.edit.key is None:
-            assert copy.record.ability == record.ability
-        else:
-            assert copy.record.ability == (copy.edit.key,)
-            assert replace(copy.edit.key, script_file=KEY.script_file) == KEY
-        return (
-            copy.record.record_id,
-            None if copy.edit.key is None else copy.edit.key.script_file,
-            state.refs.x,
-            tuple((entity.id, entity.x_paid) for entity in state.entities
-                  if entity.x_paid is not None),
-            tuple((entity.id, entity.pt.base, entity.damage)
-                  for entity in state.entities if entity.pt is not None),
-            copy.edit.text, copy.edit.script,
-            tuple((span.start, span.end, span.role) for span in copy.edit.role_spans),
-            tuple((subject, entry.affected, sorted(entry.fields.items()))
-                  for subject, entry in copy.targets.items()),
-        )
+        _assert_copy_moved_nothing_else(record, copy)
+        return _copy_digest(copy)
 
     def _copies(self, record: EffectRecord, text: str, line, seed: int) -> list[tuple]:
         targets = derive_targets(record)
@@ -453,7 +471,7 @@ class TestThePinnedOutput:
         record = _record(
             [_damage("E1", 10), _died("E1"), _damage("E2", 10), _died("E2"),
              _damage("E3", 10), *life],
-            [_creature("E1", 2), boosted, _creature("E3", 12)], targets=(),
+            [_creature("E1", 2), boosted, _creature("E3", 12)], scene=Scene(targets=()),
         )
         prose = self.SWEEP_PROSE
         each = prose.index("each")
@@ -478,7 +496,8 @@ class TestThePinnedOutput:
     def test_a_paid_x_with_a_player_hit(self):
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -4})
-        record = _record([_damage("E1", 4), life], [_creature("E1", 6)], x=4, source_x_paid=4)
+        record = _record([_damage("E1", 4), life], [_creature("E1", 6)],
+                         scene=Scene(x=4, source_x_paid=4))
         got = self._copies(record, text, _line(text), seed=31)
         assert got == PINNED_X
 
