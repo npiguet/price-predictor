@@ -127,7 +127,7 @@ def load_model(
         encoder=encoder,
         model=model,
         tokenizer=tokenizer,
-        identity_table=_identity_table(checkpoint, device),
+        identity_table=_checkpoint_identity_table(checkpoint, device),
         surface=tokenizer.surface,
         device=device,
         sidecars=sidecars,
@@ -141,7 +141,7 @@ def load_runnable(
     return load_model(checkpoint, files=files, sidecars=sidecars).runnable(records)
 
 
-def _identity_table(checkpoint, device) -> IdentityTable | None:
+def _checkpoint_identity_table(checkpoint, device) -> IdentityTable | None:
     """The identity baseline's learned ``e`` table; None for any other variant."""
     if not baseline_masks(checkpoint.variant).identity_embedding:
         return None

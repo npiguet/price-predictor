@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from effects.application.model_loading import _identity_table
+from effects.application.model_loading import _checkpoint_identity_table
 from effects.application.surface_batching import IDENTITY_TABLE_KEY, IdentityTable
 from effects.domain.baselines import Baseline
 
@@ -23,12 +23,12 @@ def _checkpoint(variant, extra):
 
 def test_an_identity_checkpoint_without_its_table_is_refused_by_the_tables_name():
     with pytest.raises(ValueError, match=IDENTITY_TABLE_KEY):
-        _identity_table(_checkpoint(Baseline.IDENTITY, {}), _CPU)
+        _checkpoint_identity_table(_checkpoint(Baseline.IDENTITY, {}), _CPU)
 
 
 def test_an_identity_checkpoint_rebuilds_the_table_it_trained():
     table = IdentityTable(["flying", "trample"], 4)
-    rebuilt = _identity_table(
+    rebuilt = _checkpoint_identity_table(
         _checkpoint(Baseline.IDENTITY, {IDENTITY_TABLE_KEY: table.state()}), _CPU,
     )
     assert rebuilt.texts == table.texts
@@ -36,4 +36,4 @@ def test_an_identity_checkpoint_rebuilds_the_table_it_trained():
 
 
 def test_every_other_variant_has_no_table():
-    assert _identity_table(_checkpoint(Baseline.FULL, {}), _CPU) is None
+    assert _checkpoint_identity_table(_checkpoint(Baseline.FULL, {}), _CPU) is None

@@ -251,7 +251,7 @@ def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) ->
     # The identity baseline's table replaces the encoder's output, so the
     # optimizer has to see it.
     identity_table = (
-        _identity_table(config, device) if masks.identity_embedding else None
+        _new_identity_table(config, device) if masks.identity_embedding else None
     )
     noise = NoiseState(config.e_noise, config.steps_per_epoch)
     warmup = warmup_steps(epochs=config.epochs, steps_per_epoch=config.steps_per_epoch)
@@ -290,7 +290,7 @@ def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) ->
     )
 
 
-def _identity_table(config: TrainEffectModelConfig, device: torch.device) -> IdentityTable:
+def _new_identity_table(config: TrainEffectModelConfig, device: torch.device) -> IdentityTable:
     """The identity baseline's table, one row per text the sidecars hold."""
     texts = known_texts(
         config.source_trees.sidecar_roots(),
