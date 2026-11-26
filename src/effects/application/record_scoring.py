@@ -6,7 +6,8 @@ split by row into the trainer's per-entity loss over each record alone.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import torch
@@ -36,33 +37,39 @@ def score_records(
     """
     # One resolver for the whole pass: it memoizes each key's keyword.
     resolver = runnable.keyword_resolver()
+    grouping = _Grouping(runnable.batcher, resolver, legality_mode_counts)
     results: list[RecordResult] = []
     dispersion = runnable.model.per_entity_dispersion().detach().cpu()
     for chunk, gathered, targets in entity_chunks(
             records, runnable.forward(), runnable.batcher, runnable.fields):
+        scored = _ChunkOutputs(gathered, targets, runnable.fields, dispersion)
         for row, record in enumerate(chunk):
-            results.append(_record_result(
-                record, runnable.batcher, resolver,
-                _record_losses(row, gathered, targets, runnable.fields, dispersion),
-                legality_mode_counts,
-            ))
+            results.append(grouping.result(record, _record_losses(row, scored)))
     return results
 
 
-def _record_losses(
-    row: int, gathered: torch.Tensor, targets: EntityTargetBatch, fields,
-    log_dispersion: torch.Tensor,
-) -> dict[str, float]:
+@dataclass(frozen=True)
+class _ChunkOutputs:
+    """One forward chunk: the head's outputs gathered per entity, the targets
+    they are scored against, the fields scored and the dispersions."""
+
+    gathered: torch.Tensor
+    targets: EntityTargetBatch
+    fields: Sequence
+    log_dispersion: torch.Tensor
+
+
+def _record_losses(row: int, chunk: _ChunkOutputs) -> dict[str, float]:
     """One record's per-entity loss by field: ``per_entity_loss`` on it alone,
     so the breakdowns cannot drift from what training minimized. A field with
     no supervised entity is left out rather than reported as zero, the gate
     included: a record that scores no gate entity (a playability record) has no
     ``gate`` key."""
     rows = slice(row, row + 1)
-    alone = targets.select(rows)
+    alone = chunk.targets.select(rows)
     _total, parts = per_entity_loss(
-        gathered[rows], alone, fields=fields,
-        log_dispersion=log_dispersion, report_parts=True,
+        chunk.gathered[rows], alone, fields=chunk.fields,
+        log_dispersion=chunk.log_dispersion, report_parts=True,
     )
     losses = parts.as_dict()
     if not bool(alone.gate_scored.any()):
@@ -71,29 +78,37 @@ def _record_losses(
     return losses
 
 
-def _record_result(
-    record, batcher: SurfaceBatcher, resolver: KeywordResolver,
-    losses: dict[str, float], legality_mode_counts: Mapping[str, int],
-) -> RecordResult:
-    """The grouping keys of one scored record, beside its losses."""
-    try:
-        family = effect_family(
-            record, batcher.sidecars, resolver=resolver,
-            legality_mode_counts=legality_mode_counts,
+@dataclass(frozen=True)
+class _Grouping:
+    """What names a record's grouping keys: the sidecars' batcher, the pass's
+    keyword resolver and the manifest's legality mode counts."""
+
+    batcher: SurfaceBatcher
+    resolver: KeywordResolver
+    legality_mode_counts: Mapping[str, int]
+
+    def result(self, record, losses: dict[str, float]) -> RecordResult:
+        """The grouping keys of one scored record, beside its losses."""
+        return RecordResult(
+            game_id=record.game_id,
+            subkind=record.subkind.value if record.subkind else None,
+            text=first_text(acting_keys(record), self.batcher.text_of),
+            family=self._family(record),
+            random_seat=bool(record.random_seat),
+            what_if=record.what_if,
+            keywords=record_keywords(record, self.batcher, self.resolver),
+            losses=losses,
         )
-    except KeyError:
-        # The sidecar does not describe the card the record names.
-        family = None
-    return RecordResult(
-        game_id=record.game_id,
-        subkind=record.subkind.value if record.subkind else None,
-        text=first_text(acting_keys(record), batcher.text_of),
-        family=family,
-        random_seat=bool(record.random_seat),
-        what_if=record.what_if,
-        keywords=record_keywords(record, batcher, resolver),
-        losses=losses,
-    )
+
+    def _family(self, record) -> str | None:
+        try:
+            return effect_family(
+                record, self.batcher.sidecars, resolver=self.resolver,
+                legality_mode_counts=self.legality_mode_counts,
+            )
+        except KeyError:
+            # The sidecar does not describe the card the record names.
+            return None
 
 
 def record_keywords(

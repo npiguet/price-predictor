@@ -18,7 +18,7 @@ class TestPerRecordLosses:
         import torch
 
         from effects.application.breakdowns import TOTAL
-        from effects.application.record_scoring import _record_losses
+        from effects.application.record_scoring import _ChunkOutputs, _record_losses
         from effects.domain.effect_head_layout import (
             DISPERSED_FIELDS,
             PER_ENTITY_FIELDS,
@@ -47,14 +47,14 @@ class TestPerRecordLosses:
             expected, _ = per_entity_loss(
                 outputs[row : row + 1], alone, fields=fields, log_dispersion=dispersion,
             )
-            losses = _record_losses(row, outputs, targets, fields, dispersion)
+            losses = _record_losses(row, _ChunkOutputs(outputs, targets, fields, dispersion))
             assert losses[TOTAL] == pytest.approx(float(expected), rel=1e-5)
 
     def test_a_record_with_nothing_affected_supervises_only_the_gate(self):
         import torch
 
         from effects.application.breakdowns import TOTAL
-        from effects.application.record_scoring import _record_losses
+        from effects.application.record_scoring import _ChunkOutputs, _record_losses
         from effects.domain.effect_head_layout import (
             DISPERSED_FIELDS,
             PER_ENTITY_FIELDS,
@@ -62,10 +62,10 @@ class TestPerRecordLosses:
         )
 
         outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
-        losses = _record_losses(
-            0, outputs, make_entity_targets(torch.zeros(1, 2)), PER_ENTITY_FIELDS,
+        losses = _record_losses(0, _ChunkOutputs(
+            outputs, make_entity_targets(torch.zeros(1, 2)), PER_ENTITY_FIELDS,
             torch.zeros(len(DISPERSED_FIELDS)),
-        )
+        ))
         assert set(losses) == {"gate", TOTAL}
 
     def test_a_record_that_trains_no_gate_has_no_gate_key(self):
@@ -74,7 +74,7 @@ class TestPerRecordLosses:
         import torch
 
         from effects.application.breakdowns import TOTAL
-        from effects.application.record_scoring import _record_losses
+        from effects.application.record_scoring import _ChunkOutputs, _record_losses
         from effects.domain.effect_head_layout import (
             DISPERSED_FIELDS,
             PER_ENTITY_FIELDS,
@@ -88,8 +88,12 @@ class TestPerRecordLosses:
         )
         outputs = torch.randn(2, 2, PER_ENTITY_WIDTH)
         dispersion = torch.zeros(len(DISPERSED_FIELDS))
-        playability = _record_losses(0, outputs, targets, PER_ENTITY_FIELDS, dispersion)
-        trained = _record_losses(1, outputs, targets, PER_ENTITY_FIELDS, dispersion)
+        playability = _record_losses(
+            0, _ChunkOutputs(outputs, targets, PER_ENTITY_FIELDS, dispersion),
+        )
+        trained = _record_losses(
+            1, _ChunkOutputs(outputs, targets, PER_ENTITY_FIELDS, dispersion),
+        )
         assert "gate" not in playability and playability[TOTAL] == 0.0
         assert "gate" in trained
 
@@ -102,7 +106,7 @@ class TestPerRecordLosses:
         from torch.nn import functional
 
         from effects.application.breakdowns import TOTAL
-        from effects.application.record_scoring import _record_losses
+        from effects.application.record_scoring import _ChunkOutputs, _record_losses
         from effects.domain.effect_head_layout import (
             DISPERSED_FIELDS,
             DISPERSION_INDEX,
@@ -159,7 +163,7 @@ class TestPerRecordLosses:
                         if spec.type.has_magnitude else None
                     ),
                 ))
-            losses = _record_losses(row, outputs, targets, fields, dispersion)
+            losses = _record_losses(row, _ChunkOutputs(outputs, targets, fields, dispersion))
             assert set(losses) == {*expected, TOTAL}
             for name, value in expected.items():
                 assert losses[name] == pytest.approx(value, rel=1e-6, abs=1e-6), name
