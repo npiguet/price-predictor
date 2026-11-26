@@ -30,7 +30,6 @@ from effects.domain.state_snapshot import (
     FaceState,
     TurnCounts,
     Zone,
-    normalize_counter_type,
 )
 
 # Each vocabulary's one-hot ends in an "other" slot. A checkpoint records the
@@ -213,7 +212,7 @@ def _counter_positions() -> dict[str, int]:
 
 def counter_id(counter_type: str) -> int:
     """A named counter's row of the counter table."""
-    index = _counter_positions().get(normalize_counter_type(counter_type))
+    index = _counter_positions().get(counter_type)
     return COUNTER_ROWS - 1 if index is None else index + 1
 
 

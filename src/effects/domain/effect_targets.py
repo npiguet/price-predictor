@@ -38,7 +38,7 @@ from effects.domain.effect_head_layout import (
     counter_delta_field,
     mana_field,
 )
-from effects.domain.event_schema import Event, EventType, signed_delta
+from effects.domain.event_schema import DamageType, Event, EventType, StateFlag, signed_delta
 from effects.domain.input_vocabularies import (
     CARD_TYPES,
     DESIGNATIONS,
@@ -66,7 +66,7 @@ from effects.domain.records import (
     is_game_end,
 )
 from effects.domain.sampling import SamplingClass, sampling_class
-from effects.domain.state_snapshot import COLORS, Zone, normalize_counter_type
+from effects.domain.state_snapshot import COLORS, Zone
 from effects.domain.surface_builder import has_card_slot
 
 #: The zone outcome each moving event implies; the record keeps destroy and
@@ -137,14 +137,14 @@ _LOOK_MODES: dict[str, LibraryEvent] = {
 
 #: ``state_flag_change`` flags that are outputs of their own (T123g), each to
 #: its binary field; ``class_level`` counts levels gained instead.
-_STATE_FLAG_FIELDS: dict[str, HeadField] = {
-    "door_unlocked": HeadField.DOOR_UNLOCKED,
-    "paired": HeadField.PAIRED,
-    "merged": HeadField.MERGED,
-    "entered_attacking": HeadField.ENTERED_IN_COMBAT,
-    "entered_blocking": HeadField.ENTERED_IN_COMBAT,
-    "city_blessing": HeadField.GAINED_CITY_BLESSING,
-    "dungeon_completed": HeadField.COMPLETED_DUNGEON,
+_STATE_FLAG_FIELDS: dict[StateFlag, HeadField] = {
+    StateFlag.DOOR_UNLOCKED: HeadField.DOOR_UNLOCKED,
+    StateFlag.PAIRED: HeadField.PAIRED,
+    StateFlag.MERGED: HeadField.MERGED,
+    StateFlag.ENTERED_ATTACKING: HeadField.ENTERED_IN_COMBAT,
+    StateFlag.ENTERED_BLOCKING: HeadField.ENTERED_IN_COMBAT,
+    StateFlag.CITY_BLESSING: HeadField.GAINED_CITY_BLESSING,
+    StateFlag.DUNGEON_COMPLETED: HeadField.COMPLETED_DUNGEON,
 }
 
 
@@ -377,13 +377,12 @@ def _apply_life_change(entry: EntityTargets, event: Event) -> None:
 
 #: Damage dealt as -1/-1 counters (wither, infect to a creature): the record's
 #: own ``counter_change`` adds them, and no damage is marked.
-_COUNTERS_DAMAGE = "m1m1_counters"
 
 
 def _apply_damage_dealt(entry: EntityTargets, event: Event) -> None:
     """Marked damage, never the damage dealt as -1/-1 counters
     (:meth:`_RecordPass._damage_as_counters` takes a deathtouch witherer's out)."""
-    if event.params.get("damage_type") == _COUNTERS_DAMAGE:
+    if event.params.get("damage_type") == DamageType.M1M1_COUNTERS:
         return
     entry.add(HeadField.DAMAGE_TAKEN, float(event.params.get("amount", 0)))
 
@@ -486,7 +485,7 @@ def _apply_restriction(entry: EntityTargets, event: Event) -> None:
 
 def _apply_state_flag(entry: EntityTargets, event: Event) -> None:
     flag = str(event.params.get("flag", ""))
-    if flag == "class_level":
+    if flag == StateFlag.CLASS_LEVEL:
         entry.add(HeadField.CLASS_LEVELS_GAINED, 1.0)
         return
     field = _STATE_FLAG_FIELDS.get(flag)
@@ -618,11 +617,11 @@ class _RecordPass:
         the marked damage."""
         counters: dict[str, list[float]] = defaultdict(list)
         for event in self.by_type[EventType.COUNTER_CHANGE]:
-            if normalize_counter_type(str(event.params.get("counter_type", ""))) == "M1M1":
+            if str(event.params.get("counter_type", "")) == "M1M1":
                 for subject in event.subjects:
                     counters[subject].append(signed_delta(event))
         for event in self.by_type[EventType.DAMAGE_DEALT]:
-            if event.params.get("damage_type") != "deathtouch":
+            if event.params.get("damage_type") != DamageType.DEATHTOUCH:
                 continue
             amount = float(event.params.get("amount", 0))
             for subject in event.subjects:

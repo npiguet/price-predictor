@@ -472,8 +472,7 @@ class _HoldsCounter:
     counter: str
 
     def __call__(self, entity: EntityState, lines: SidecarLookup | None, fires: bool) -> bool:
-        held = any(normalize_counter_type(name) == self.counter and n > 0
-                   for name, n in entity.counters.items())
+        held = entity.counters.get(self.counter, 0) > 0
         return held == fires
 
 

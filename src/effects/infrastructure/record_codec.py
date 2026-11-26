@@ -146,19 +146,32 @@ def _events_from_json(data: Any) -> tuple[Event, ...]:
 
 @owes(Site.EVENT)
 def _event_from_json(item: Any) -> Event:
-    """One event, with its counter type in this package's spelling.
+    """One event, with every counter type it names in this package's spelling:
+    its ``counter_type`` and a created token's ``characteristics.counters``.
 
     Normalized on read, like keywords, because collected shards carry Forge's
     printed spelling and cannot be rewritten.
     """
     event = Event.from_dict(item)
-    counter = event.params.get("counter_type")
+    params = event.params
+    counter = params.get("counter_type")
     if isinstance(counter, str):
-        return replace(
-            event,
-            params={**event.params, "counter_type": normalize_counter_type(counter)},
-        )
-    return event
+        params = {**params, "counter_type": normalize_counter_type(counter)}
+    traits = params.get("characteristics")
+    if isinstance(traits, dict) and isinstance(traits.get("counters"), dict):
+        traits = {**traits, "counters": _counters_from_json(traits["counters"])}
+        params = {**params, "characteristics": traits}
+    return event if params is event.params else replace(event, params=params)
+
+
+def _counters_from_json(counters: dict) -> dict[str, int]:
+    """A record's ``{counter type: count}`` map with each type in this
+    package's spelling, in the record's order; two spellings of one type add up."""
+    named: dict[str, int] = {}
+    for raw, count in counters.items():
+        name = normalize_counter_type(raw)
+        named[name] = named[name] + count if name in named else count
+    return named
 
 
 # ── snapshot ────────────────────────────────────────────────────────────
@@ -429,7 +442,7 @@ def _entity(data: dict, **facts) -> EntityState:
         colors=tuple(data["colors"]),
         mana_value=data["mana_value"],
         tapped=data["tapped"], sick=data["sick"],
-        damage=data["damage"], counters=dict(data["counters"]),
+        damage=data["damage"], counters=_counters_from_json(data["counters"]),
         combat=_optional(_combat_status_from_json, data["combat"]),
         attached_to=data["attached_to"],
         face_down=data["face_down"],
@@ -676,7 +689,7 @@ def _costs_from_json(data: dict) -> Costs:
         sacrificed=tuple(data.get("sacrificed", ())),
         discarded=tuple(data.get("discarded", ())),
         exiled=tuple(data.get("exiled", ())),
-        counters=dict(data.get("counters", {})),
+        counters=_counters_from_json(data.get("counters", {})),
         returned=tuple(data.get("returned", ())),
         revealed=tuple(data.get("revealed", ())),
         exerted=tuple(data.get("exerted", ())),

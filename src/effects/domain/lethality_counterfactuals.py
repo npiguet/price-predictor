@@ -59,7 +59,6 @@ from effects.domain.state_snapshot import (
     LineKind,
     StateSnapshot,
     Zone,
-    normalize_counter_type,
 )
 
 #: Amounts and toughnesses a copy draws from, uniformly: lethal a little more
@@ -316,7 +315,7 @@ def _creature_hit(entity: EntityState | None, entry: EntityTargets, found: State
     if set(fields) - rules.hit_fields:
         return _Hit.REFUSED
     if ("indestructible" in keywords_of(entity) or entity.id in attached
-            or any(normalize_counter_type(name) == SHIELD_COUNTER for name in entity.counters)):
+            or SHIELD_COUNTER in entity.counters):
         return _Hit.REFUSED
     zone = fields.get(HeadField.ZONE_OUTCOME, _STAYED)
     if zone not in (_STAYED, _DIED) or (zone == _DIED) != lethal(found.kind, found.amount, entity):

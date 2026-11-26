@@ -46,7 +46,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.domain.state_snapshot import COLORS, Zone, normalize_counter_type
+from effects.domain.state_snapshot import COLORS, Zone
 
 #: A record head's targets: one value per target column, one flag per field.
 HeadRow = tuple[list[float], list[bool]]
@@ -359,7 +359,7 @@ class CreatedGroup:
                 known[column] = False
             return
         for counter_type, amount in self.counters.items():
-            name = normalize_counter_type(str(counter_type))
+            name = str(counter_type)
             column = (
                 base + CreatedSlot.COUNTERS + COUNTER_TYPES.index(name)
                 if name in COUNTER_TYPES else other

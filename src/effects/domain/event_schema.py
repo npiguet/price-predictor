@@ -232,6 +232,31 @@ CAUSE_BEARING_TYPES: frozenset[EventType] = frozenset(
 )
 
 
+class DamageType(StrEnum):
+    """How a ``damage_dealt`` to a creature was dealt: its ``damage_type`` param,
+    in the spelling the connector writes (``BusEvents.damageType``)."""
+
+    NORMAL = "normal"
+    M1M1_COUNTERS = "m1m1_counters"
+    DEATHTOUCH = "deathtouch"
+    LOYALTY_LOSS = "loyalty_loss"
+
+
+class StateFlag(StrEnum):
+    """What a ``state_flag_change`` changed: its ``flag`` param, in the
+    connector's ``StateFlag`` order. ``CLASS_LEVEL`` carries the level reached as
+    its value, every other flag a bool."""
+
+    CLASS_LEVEL = "class_level"
+    DOOR_UNLOCKED = "door_unlocked"
+    PAIRED = "paired"
+    MERGED = "merged"
+    ENTERED_ATTACKING = "entered_attacking"
+    ENTERED_BLOCKING = "entered_blocking"
+    CITY_BLESSING = "city_blessing"
+    DUNGEON_COMPLETED = "dungeon_completed"
+
+
 class AttributionKind(StrEnum):
     """Which of the four things an event's ``attributed_to`` is saying.
 

@@ -13,7 +13,7 @@ from typing import Any
 
 from effects.domain.event_schema import Event, EventType, damage_source
 from effects.domain.records import EffectRecord
-from effects.domain.state_snapshot import EntityState, PlayerState, normalize_counter_type
+from effects.domain.state_snapshot import EntityState, PlayerState
 
 #: Where the check's move from the battlefield lands: the graveyard, or exile
 #: in its place.
@@ -59,7 +59,7 @@ class Touched:
             self.damage_sources.append(source)
 
     def counter_change(self, event: Event, params: Mapping[str, Any]) -> None:
-        counter = normalize_counter_type(str(params.get("counter_type", "")))
+        counter = str(params.get("counter_type", ""))
         self.counter_delta[counter] = self.counter_delta.get(counter, 0) + int(
             params.get("delta") or 0)
 

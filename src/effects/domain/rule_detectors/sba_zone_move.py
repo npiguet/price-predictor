@@ -107,7 +107,7 @@ from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.keyword_reading import KeywordReading
 from effects.domain.rule_detectors.sba_board import Board, Touched, game_ends, touched_by
 from effects.domain.rule_outcomes import damage_lethal
-from effects.domain.state_snapshot import EntityState, normalize_counter_type
+from effects.domain.state_snapshot import EntityState
 
 CHECKS = frozenset({
     "toughness_zero", "lethal_damage", "deathtouch_damage", "loyalty_zero", "defense_zero",
@@ -126,8 +126,7 @@ def _is_creature(entity: EntityState) -> bool:
 
 
 def _counter(entity: EntityState, name: str) -> int:
-    return sum(n for counter, n in entity.counters.items()
-               if normalize_counter_type(counter) == name)
+    return entity.counters.get(name, 0)
 
 
 def _spell_or_activation(record: EffectRecord) -> bool:

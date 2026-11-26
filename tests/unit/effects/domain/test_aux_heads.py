@@ -308,7 +308,7 @@ class TestCreatedObjects:
             params={"count": 1, "token_script_id": "g_x_x_hydra",
                     "characteristics": {"power": 0, "toughness": 0,
                                         "types": "Creature - Hydra",
-                                        "controller": "P1", "counters": {"+1/+1": 3}}},
+                                        "controller": "P1", "counters": {"P1P1": 3}}},
         )))
         assert known[CreatedSlot.OTHER_CONTROLLER] and target[CreatedSlot.OTHER_CONTROLLER] == 1.0
         assert target[CreatedSlot.COUNTERS] == 3.0  # P1P1 leads the counter list

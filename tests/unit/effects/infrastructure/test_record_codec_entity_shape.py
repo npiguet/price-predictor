@@ -58,7 +58,7 @@ from tests.unit.effects.infrastructure.record_codec_support import (
 
 def _reader_spellings(value):
     """A collector's JSON with exactly the spellings the reader normalizes:
-    the overlay keywords of an entity and every event's counter type."""
+    the overlay keywords of an entity and every counter type."""
     if isinstance(value, dict):
         return {k: _member_reader_spelling(k, v) for k, v in value.items()}
     if isinstance(value, list):
@@ -71,6 +71,8 @@ def _member_reader_spelling(k, v):
         return {**v, "keywords": [normalize_keyword(x) for x in v["keywords"]]}
     if k == "counter_type" and isinstance(v, str):
         return normalize_counter_type(v)
+    if k == "counters" and isinstance(v, dict):
+        return {normalize_counter_type(name): count for name, count in v.items()}
     return _reader_spellings(v)
 
 
@@ -194,7 +196,7 @@ class TestTheGen3EntityShape:
         entity = EntityState(
             id="E1", name="A", zone="battlefield", controller="P0", lines=lines,
             pt=PowerToughness(base=(5, 5), boosts=(1, 0), counters=(2, 2)),
-            counters={"+1/+1": 2, "LOYALTY": 3},
+            counters={"P1P1": 2, "LOYALTY": 3},
         )
         data = _entity_dict(entity)
         assert data["base_pt"] == [5, 5]

@@ -10,6 +10,7 @@ import pytest
 from effects.domain.event_schema import Event, EventType
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.outcome_event import FAMILY, acting_api
+from effects.domain.state_snapshot import normalize_counter_type
 from tests.unit.effects.domain.rule_detectors.builders import effect_halves
 
 
@@ -102,14 +103,15 @@ class TestT036Shapes:
     """The shapes where a declaration named an event the record writes another way."""
 
     def test_a_counter_type_compares_in_one_spelling(self, gen3_records):
-        """A record may write ``+1/+1`` or ``P1P1``. The fixture's counter
-        changes are loyalty and level, so a real one is edited to each spelling."""
+        """A record is written as ``+1/+1`` or ``P1P1`` and decodes to ``P1P1``; a
+        declaration may spell it either way. The fixture's counter changes are
+        loyalty and level, so a real one is edited to each spelling."""
         record = next(r for r in gen3_records if r.kind.value == "resolution"
                       and r.moment.value == "resolution" and any(
                           e.type is EventType.COUNTER_CHANGE for e in r.payload.events))
         for written in ("+1/+1", "P1P1"):
             events = tuple(
-                replace(e, params={**e.params, "counter_type": written})
+                replace(e, params={**e.params, "counter_type": normalize_counter_type(written)})
                 if e.type is EventType.COUNTER_CHANGE else e for e in record.payload.events)
             edited = replace(record, payload=replace(record.payload, events=events))
             for spelled in ("+1/+1", "P1P1", "p1p1"):

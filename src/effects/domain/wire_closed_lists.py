@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping
 
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import DamageType, EventType
 from effects.domain.records import ForkKind
 from effects.domain.relation_types import FAMILIES
 from effects.domain.state_snapshot import (
@@ -48,7 +48,7 @@ FORGE_PHASES: tuple[str, ...] = (
 
 #: A ``damage_dealt``'s ``damage_type`` (Forge's ``GameEventCardDamaged.DamageType``
 #: as ``BusEvents.damageType`` spells it). Pinned to that source by a test.
-DAMAGE_TYPES: tuple[str, ...] = ("normal", "m1m1_counters", "deathtouch", "loyalty_loss")
+DAMAGE_TYPES: tuple[str, ...] = tuple(str(damage_type) for damage_type in DamageType)
 #: A ``player_lost``'s ``reason``: Forge's ``GameLossReason`` names. Pinned to
 #: ``GameLossReason.java`` by a test.
 GAME_LOSS_REASONS: tuple[str, ...] = (

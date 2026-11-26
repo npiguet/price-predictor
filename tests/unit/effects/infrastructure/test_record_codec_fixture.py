@@ -33,11 +33,13 @@ from tests.unit.effects.builders import (
 
 def _spelling_free(value):
     """A record's JSON less the spellings the reader normalizes by design: an
-    entity's overlay keywords, an event's counter type and a contribution's
+    entity's overlay keywords, every counter type and a contribution's
     keywords (gen-3 writes a keyword's instance, ``ward:1``)."""
     if isinstance(value, dict):
         return {k: (None if k == "granted_temporary"
                     else normalize_counter_type(v) if k == "counter_type"
+                    else {normalize_counter_type(n): c for n, c in v.items()}
+                    if k == "counters" and isinstance(v, dict)
                     else [normalize_keyword(x) for x in v]
                     if k == "keywords" and "entity" in value
                     else _spelling_free(v))

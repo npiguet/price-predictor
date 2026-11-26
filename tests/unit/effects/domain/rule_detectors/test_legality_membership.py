@@ -260,7 +260,7 @@ class TestKeywordAndCounter:
     def test_a_carrier_on_the_side_its_counter_does_not_explain_is_not_counted(
             self, by_kind, gen3_sidecars):
         record, entity_id, keyword = self._carrier(by_kind, gen3_sidecars)
-        for counters, forbidden in (({}, True), ({"+1/+1": 2}, False)):
+        for counters, forbidden in (({}, True), ({"P1P1": 2}, False)):
             edited = self._edited(record, entity_id, counters=counters, forbidden=forbidden)
             found = FAMILY.match(edited, gen3_sidecars, self._declared(keyword))
             assert found is None, (counters, forbidden, found)

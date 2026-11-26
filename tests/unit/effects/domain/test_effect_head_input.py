@@ -603,7 +603,10 @@ class TestCollectorSpellings:
             assert self._phase_slot(_record(state=state))[-1] == 0.0
 
     def test_plus_one_counters_read_as_p1p1(self):
-        assert counter_rows(_entity("E1", counters={"+1/+1": 2})) == counter_rows(
+        from effects.infrastructure.record_codec import _counters_from_json
+
+        decoded = _counters_from_json({"+1/+1": 2})
+        assert counter_rows(_entity("E1", counters=decoded)) == counter_rows(
             _entity("E1", counters={"P1P1": 2}))
 
     def test_protection_from_a_colour_and_landwalk_set_their_flags(self):
@@ -943,7 +946,7 @@ class TestCardSlotInputs:
     def test_every_named_counter_has_a_row_of_its_own(self):
         from effects.domain.input_vocabularies import COUNTER_ROWS, counter_id
 
-        rows = dict(counter_rows(_entity("E1", counters={"OIL": 2, "+1/+1": 1, "ZZZ": 4})))
+        rows = dict(counter_rows(_entity("E1", counters={"OIL": 2, "P1P1": 1, "ZZZ": 4})))
         assert rows[counter_id("OIL")] == 2.0 and rows[counter_id("P1P1")] == 1.0
         assert rows[COUNTER_ROWS - 1] == 4.0
         assert len({counter_id("OIL"), counter_id("P1P1"), counter_id("ACORN")}) == 3

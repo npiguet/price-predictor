@@ -43,7 +43,7 @@ def same_value(found: Any, wanted: Any, name: str | None = None) -> bool:
     if not isinstance(found, str) or not isinstance(wanted, str):
         return found == wanted
     if name == "counter_type":
-        return normalize_counter_type(found) == normalize_counter_type(wanted)
+        return found == normalize_counter_type(wanted)
     return found.lower() == wanted.lower()
 
 

@@ -385,7 +385,7 @@ def _other_player(state: StateSnapshot, attacker: EntityState) -> str | None:
 
 
 def _loyalty(card: EntityState) -> int:
-    return sum(n for name, n in card.counters.items() if normalize_counter_type(name) == _LOYALTY)
+    return card.counters.get(_LOYALTY, 0)
 
 
 # ── the sides ───────────────────────────────────────────────────────────
