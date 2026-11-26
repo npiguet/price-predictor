@@ -47,16 +47,23 @@ from typing import Protocol
 import numpy as np
 
 from effects.domain.board_edits import BoardEdit
+from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
+from effects.domain.effect_targets import derive_targets
+from effects.domain.lethality_counterfactuals import amount_edit, qualify, stated_effect
+from effects.domain.records import CombatPayload, PlayabilityBlockersPayload, RecordKind
+from effects.domain.rule_detectors.sba_board import game_ends
 from effects.domain.rule_outcomes import (
     COLOUR_WORDS,
     BlockKeywords,
     Combatant,
     ProtectionQuality,
     QualityKind,
+    damage_lethal,
     has_changeling,
     may_block,
     step_deaths,
 )
+from effects.domain.state_snapshot import CombatSubstep
 
 #: Damage and toughness of the damage grid, power and toughness of the combat grid.
 VALUES: tuple[int, ...] = tuple(range(1, 9))
@@ -227,10 +234,6 @@ def grid_block(record, keywords_of: KeywordsOf, blocks: str) -> tuple[str, str] 
     does not end the game (:func:`_real_combat`), it covers the regular
     damage step, and every pair qualifies as :func:`_clean_pair` says.
     """
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.records import CombatPayload
-    from effects.domain.state_snapshot import CombatSubstep
-
     if not _real_combat(record):
         return None
     if record.state.global_.combat_substep != CombatSubstep.REGULAR:
@@ -258,9 +261,6 @@ def _real_combat(record) -> bool:
     state-based check returns at the game's end before it destroys any
     creature, so the outcome such a combat shows is not the rule's
     (decision D13)."""
-    from effects.domain.records import RecordKind
-    from effects.domain.rule_detectors.sba_board import game_ends
-
     if record.kind is not RecordKind.COMBAT or record.fork:
         return False
     return not (record.interventional or game_ends(record))
@@ -272,8 +272,6 @@ def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: Keywords
     the battlefield, no damage-step keyword on either, the blocker blocking
     this attacker alone, no damage but this step's own, and the real outcome
     the rule's."""
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
-
     attacker = record.state.entity(attacker_id)
     blocker = record.state.entity(blocker_id)
     for entity in (attacker, blocker):
@@ -446,8 +444,6 @@ def evasion_pair(record, keywords_of: KeywordsOf) -> tuple[str, str] | None:
     leaving a colour and a spare creature type neither has, which the
     ``-other`` protection rows grant (an Esper attacker against a red-green
     blocker leaves no colour)."""
-    from effects.domain.records import PlayabilityBlockersPayload
-
     payload = record.payload
     if not isinstance(payload, PlayabilityBlockersPayload) or record.fork:
         return None
@@ -496,9 +492,6 @@ def damage_target(lines, keywords_of: KeywordsOf):
     qualification) that both surfaces' texts state (:func:`_edits_on_both_surfaces`);
     ``lines.line_or_none(key)`` is the acting line, ``lines.prose_for(key)``
     its prose."""
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.lethality_counterfactuals import qualify
-
     def choose(record):
         if not record.ability:
             return None
@@ -529,8 +522,6 @@ def _edits_on_both_surfaces(record, effect, line, prose: str | None) -> bool:
     reading on both. A prose that does not state the amount (its cost sentence
     alone) would leave every cell reading the real text against outcomes that
     vary by amount."""
-    from effects.domain.lethality_counterfactuals import amount_edit
-
     texts = (line.script_text, prose) if prose else (line.script_text,)
     return all(amount_edit(record, effect, line, text, effect.amount).key is not None
                for text in texts)
@@ -543,8 +534,6 @@ def damage_cells(record, entity: str, texts: AbilityTexts) -> list[CellRead]:
     own, read at the target for its death. Where the encoded text does not
     state the amount, every amount reads the real text; :func:`damage_target`
     qualifies no such record."""
-    from effects.domain.lethality_counterfactuals import amount_edit, stated_effect
-
     key = record.ability[0]
     line = texts.line_of(key)
     effect = None if line is None else stated_effect(line, record)
@@ -654,8 +643,6 @@ class DamageGrid:
     cells: tuple[str, ...] = field(default_factory=_square_cells)
 
     def qualify(self, record) -> GridQualification | None:
-        from effects.domain.rule_outcomes import damage_lethal
-
         if record.fork or record.interventional:
             return None
         found = damage_target(self.lines, self.keywords_of)(record)

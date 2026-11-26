@@ -29,6 +29,16 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from effects.domain.effect_head_layout import (
+    FAILED_CHECKS,
+    FIELD_SLICES,
+    VERDICT_BITS,
+    VERDICT_LAYOUT,
+    HeadField,
+    VerdictField,
+    ZoneOutcome,
+)
+from effects.domain.input_layout import SlotKind
 from effects.domain.score_scales import auc, r_squared
 
 #: ``readout(outputs, verdict, row, slot)``: one answer, a scalar tensor.
@@ -36,6 +46,7 @@ Readout = Callable[[object, object, int, int], object]
 
 
 def _reading(outputs, row: int, slot: int):
+    # Local: head_decoding imports torch, and this module is torch-free.
     from effects.domain.head_decoding import HeadReading
 
     return HeadReading(outputs[row, slot])
@@ -46,35 +57,25 @@ def _affected(outputs, verdict, row: int, slot: int):
 
 
 def _dies(outputs, verdict, row: int, slot: int):
-    from effects.domain.effect_head_layout import ZoneOutcome
-
     return _reading(outputs, row, slot).p_zone(ZoneOutcome.TO_GRAVEYARD)
 
 
 def _damage_taken(outputs, verdict, row: int, slot: int):
-    from effects.domain.effect_head_layout import HeadField
-
     return _reading(outputs, row, slot).expected(HeadField.DAMAGE_TAKEN, conditional=True)
 
 
 def _pt_until_end_of_turn(outputs, verdict, row: int, slot: int):
-    from effects.domain.effect_head_layout import HeadField
-
     return _reading(outputs, row, slot).p_class(HeadField.PT_DURATION, "end_of_turn")
 
 
 def _may_block(outputs, verdict, row: int, slot: int):
     import torch
 
-    from effects.domain.effect_head_layout import FIELD_SLICES, HeadField
-
     return torch.sigmoid(outputs[row, slot, FIELD_SLICES[HeadField.BLOCKER_LEGAL][0]])
 
 
 def _affordable(outputs, verdict, row: int, slot: int):
     import torch
-
-    from effects.domain.effect_head_layout import VERDICT_BITS
 
     return torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")])
 
@@ -85,8 +86,6 @@ def _verdict_column(field: str, member: str | None = None) -> Readout:
 
     def read(outputs, verdict, row: int, slot: int):
         import torch
-
-        from effects.domain.effect_head_layout import VERDICT_LAYOUT
 
         start, _ = VERDICT_LAYOUT.slices[field]
         offset = 0 if member is None else VERDICT_LAYOUT.by_name[field].members.index(member)
@@ -102,16 +101,12 @@ def _legality_field(field: str) -> Readout:
     def read(outputs, verdict, row: int, slot: int):
         import torch
 
-        from effects.domain.effect_head_layout import FIELD_SLICES
-
         return torch.sigmoid(outputs[row, slot, FIELD_SLICES[field][0]])
 
     return read
 
 
 def _failed_check_readouts() -> dict[str, Readout]:
-    from effects.domain.effect_head_layout import FAILED_CHECKS, VerdictField
-
     return {f"failed_{check}": _verdict_column(VerdictField.FAILED_CHECKS, check)
             for check in FAILED_CHECKS}
 
@@ -156,8 +151,6 @@ def read(target: str, outputs, verdict, at: ReadAt) -> float:
 
 def card_slots(surface) -> dict[str, int]:
     """Each card entity's ``[CARD]`` slot in one record's surface."""
-    from effects.domain.input_layout import SlotKind
-
     slots: dict[str, int] = {}
     for index, slot in enumerate(surface.slots):
         if slot.kind is SlotKind.CARD and slot.entity_id is not None:
@@ -169,8 +162,6 @@ def entity_slots(surface) -> dict[str, int]:
     """Each card entity's ``[CARD]`` slot and each player's ``[PLAYER]`` slot
     in one record's surface: what a field scored at players as well as
     cards, such as ``target_legal``, is read at."""
-    from effects.domain.input_layout import SlotKind
-
     slots = card_slots(surface)
     for index, slot in enumerate(surface.slots):
         if slot.kind is SlotKind.PLAYER and slot.player_id is not None:

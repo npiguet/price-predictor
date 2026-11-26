@@ -24,6 +24,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 
+from effects.domain.state_snapshot import LineRef, PowerToughness
+
 #: ``combat damage step -> the phase a record of it carries``: a ``combat`` record's
 #: substep and phase always agree.
 STEP_PHASES: dict[str, str] = {
@@ -78,8 +80,6 @@ class BoardEdit:
     def remove_entity(self, entity_id: str) -> BoardEdit:
         """One object gone from the snapshot, with every link naming it: what
         a destroyed permanent leaves of the board it was on."""
-        from effects.domain.state_snapshot import LineRef
-
         def names(end) -> bool:
             return (end.entity if isinstance(end, LineRef) else end) == entity_id
 
@@ -95,8 +95,6 @@ class BoardEdit:
     def set_power(self, entity_id: str, power: int) -> BoardEdit:
         """Total power set; the base power absorbs the change, so boosts and
         counters keep their own channels."""
-        from effects.domain.state_snapshot import PowerToughness
-
         def edit(entity):
             pt = entity.pt or PowerToughness(base=(0, 0))
             base_p = power - pt.boosts[0] - pt.counters[0]
