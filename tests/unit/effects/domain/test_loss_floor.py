@@ -393,6 +393,16 @@ class TestEveryHead:
         assert "other_controller" in losses
         assert losses["scripted"] == 0.0  # never set: degenerate
 
+    def test_a_created_objects_head_without_a_mask_is_refused(self):
+        from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH
+        from effects.domain.loss_floor import constant_predictor_losses
+
+        target = torch.zeros(2, CREATED_OBJECTS_WIDTH)
+        with pytest.raises(ValueError, match="no mask"):
+            constant_predictor_losses(
+                _sample(2, {"created_objects": _created(target, None, None)}), fields=(),
+            )
+
     def test_a_head_no_record_supervises_is_absent(self):
         from effects.domain.loss_floor import PER_ENTITY, constant_predictor_losses
 

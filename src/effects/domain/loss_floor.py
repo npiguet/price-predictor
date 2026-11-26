@@ -193,12 +193,20 @@ def _weighted_sum(terms: torch.Tensor, weights: torch.Tensor | None) -> float:
     return float((terms.double() * weights.double().reshape(-1)).sum())
 
 
+def _mask_of(targets: RecordHeadTargets | CreatedTargets) -> torch.Tensor:
+    """The mask that selects the records supervising a head; every prepared
+    step sets it, a hand-built created-objects target may not."""
+    if targets.mask is None:
+        raise ValueError("the head's targets carry no mask of the records that supervise it")
+    return targets.mask
+
+
 def _supervising_rows(
     targets: RecordHeadTargets | CreatedTargets,
 ) -> RecordHeadTargets | CreatedTargets | None:
     """A head's targets cut to the records that supervise any of its terms;
     None for none. A created-objects cut always carries ``known``."""
-    mask = targets.mask.detach().bool().cpu()
+    mask = _mask_of(targets).detach().bool().cpu()
     rows = mask if mask.dim() == 1 else mask.any(-1)
     if not rows.any():
         return None
@@ -595,7 +603,7 @@ def _created_record_constant(
 
 def _created_rows(targets: CreatedTargets) -> tuple[torch.Tensor, torch.Tensor] | None:
     """The supervising records' ``(target, known)``, or None for none."""
-    target, mask = targets.target, targets.mask
+    target, mask = targets.target, _mask_of(targets)
     known = torch.ones_like(target) if targets.known is None else targets.known
     rows = mask.detach().bool().cpu()
     if not rows.any():
