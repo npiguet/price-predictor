@@ -42,16 +42,12 @@ final class Scan {
     }
 
     /**
-     * The scripts of the abilities the card's own enters triggers execute whose
-     * API is {@code api} ({@code ApiType} name): triggers that fire as the card
-     * itself enters ({@link Triggers#entersItself}), with the conditions a
-     * script adds to {@code ValidCard$ Card.Self} such as {@code +wasCastByYou}.
+     * The scripts of the abilities the given triggers (such as a card state's)
+     * execute whose API is {@code api} ({@code ApiType} name): triggers that
+     * fire as the card itself enters ({@link Triggers#entersItself}), with the
+     * conditions a script adds to {@code ValidCard$ Card.Self} such as
+     * {@code +wasCastByYou}.
      */
-    static List<Map<String, String>> entersTrigger(Card card, String api) {
-        return entersTrigger(card.getTriggers(), api);
-    }
-
-    /** {@link #entersTrigger(Card, String)} over the given triggers, such as a card state's. */
     static List<Map<String, String>> entersTrigger(Collection<Trigger> triggers, String api) {
         return triggers.stream()
                 .filter(Triggers::entersItself)
@@ -61,7 +57,7 @@ final class Scan {
     }
 
     /**
-     * Like {@link #entersTrigger(Card, String)}, but only a trigger whose
+     * Like {@link #entersTrigger(Collection, String)}, but only a trigger whose
      * {@code ValidCard} is exactly {@code Card.Self}: one with no condition
      * added.
      */

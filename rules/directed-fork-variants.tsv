@@ -1,7 +1,4 @@
 rule	variant
-104.2b	forty
-104.3d	nine
-104.4a	both_at_one
 111.10p	two_enchantments
 111.10v	mana_available
 118.12b	sanctuary_added
@@ -43,7 +40,6 @@ rule	variant
 702.71a	no_matching_value
 702.84a	card_in_hand
 702.98a	no_counter
-704.5b	empty
 704.5f	tougher
 712.14c	meld_pair
 712.4a	meld_pair

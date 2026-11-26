@@ -13,13 +13,11 @@ import com.pricepredictor.connector.effects.directed.rules.ConniveWithoutDraw;
 import com.pricepredictor.connector.effects.directed.rules.Dethrone;
 import com.pricepredictor.connector.effects.directed.rules.DiscoverNothingFound;
 import com.pricepredictor.connector.effects.directed.rules.DistinctTargets;
-import com.pricepredictor.connector.effects.directed.rules.DrawFromEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.ExploreEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.FinalChapterResolves;
 import com.pricepredictor.connector.effects.directed.rules.Improvise;
 import com.pricepredictor.connector.effects.directed.rules.JumpStartFromHand;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
-import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
 import com.pricepredictor.connector.effects.directed.rules.ManaValueSearch;
 import com.pricepredictor.connector.effects.directed.rules.Mayhem;
 import com.pricepredictor.connector.effects.directed.rules.Meld;
@@ -29,13 +27,11 @@ import com.pricepredictor.connector.effects.directed.rules.NoDamageToAGonePlanes
 import com.pricepredictor.connector.effects.directed.rules.OptionalSearch;
 import com.pricepredictor.connector.effects.directed.rules.PartnerWithSearch;
 import com.pricepredictor.connector.effects.directed.rules.PlottedFromHand;
-import com.pricepredictor.connector.effects.directed.rules.PoisonLoss;
 import com.pricepredictor.connector.effects.directed.rules.Prototype;
 import com.pricepredictor.connector.effects.directed.rules.SearchUnderMindcensor;
 import com.pricepredictor.connector.effects.directed.rules.SeveralExplore;
 import com.pricepredictor.connector.effects.directed.rules.SharedKeywords;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
-import com.pricepredictor.connector.effects.directed.rules.SimultaneousLoss;
 import com.pricepredictor.connector.effects.directed.rules.SkulkBlocker;
 import com.pricepredictor.connector.effects.directed.rules.SmallLibraryShuffle;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
@@ -77,9 +73,6 @@ public final class DirectedRules {
      * cover the ten operations (story 3, acceptance 3).
      */
     private static final DirectedRules REGISTERED = of(
-            LifeTotalWin.rule(),
-            PoisonLoss.rule(),
-            SimultaneousLoss.rule(),
             VirtuousRole.rule(),
             MutagenToken.rule(),
             OptionalSearch.rule(),
@@ -120,7 +113,6 @@ public final class DirectedRules {
             JumpStartFromHand.rule(),
             PlottedFromHand.rule(),
             WebSlinging.rule(),
-            DrawFromEmptyLibrary.rule(),
             ToughnessZero.rule(),
             Prototype.rule());
 

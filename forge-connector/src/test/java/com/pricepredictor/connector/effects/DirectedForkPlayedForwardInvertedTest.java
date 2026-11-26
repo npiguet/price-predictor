@@ -126,24 +126,6 @@ class DirectedForkPlayedForwardInvertedTest extends DirectedForkPlayedForwardSup
     }
 
     /**
-     * {@code counters}, 104.3d, inverted: B with no poison counter and Ichor
-     * Rats in A's hand. The fork's B has 9 and A is made to cast the Rats,
-     * whose enters trigger gives B its tenth: B loses.
-     */
-    @Test
-    void aNinthPoisonCounterLetsTheNextOneKill() throws Throwable {
-        Game game = bare(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        lands(game, active, "Swamp", 3);
-        TestBoard.inHand(game, active, "Ichor Rats");
-
-        List<String> fork = forkOf(game, PhaseType.MAIN1, "104.3d", "nine");
-
-        assertTrue(holding(fork, "player_lost").contains("resolution/resolution"),
-                "B's tenth poison counter loses it the game in the fork");
-    }
-
-    /**
      * {@code replace_card}, 701.42a, 712.4a and 712.14c, inverted, one
      * registration whichever of the three is listed: Graf Rats beside Hill
      * Giant as the first main phase begins. The fork's Giant is
