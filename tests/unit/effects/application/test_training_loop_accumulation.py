@@ -15,6 +15,7 @@ import torch
 
 from effects.application import training_loop as loop_module
 from effects.application.run_reporter import EpochTally, ShardStats
+from effects.application.training_loop import EpochScope
 from effects.application.weight_average import WeightAverage
 from tests.unit.effects.builders import StubLosses, make_cpu_training_loop
 
@@ -37,7 +38,7 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
         tally = EpochTally(running=torch.zeros(()))
         for _ in range(3):  # an epoch shortened to an odd count
             loop._train_step(
-                object(), run, tally, ShardStats(loss=torch.zeros(())), False,
+                object(), EpochScope(run, tally, 1), ShardStats(loss=torch.zeros(())), False,
             )
     # Two micro-steps per update in both epochs; the third of each is dropped.
     assert updates == [(1, 1), (2, 1)]
@@ -58,7 +59,7 @@ def test_a_shard_ending_between_boundaries_still_reports_its_last_norms(monkeypa
     tally = EpochTally(running=torch.zeros(()))
     stats = ShardStats(loss=torch.zeros(()))
     for index in range(3):  # shortened to an odd count
-        loop._train_step(object(), run, tally, stats, index == 2)
+        loop._train_step(object(), EpochScope(run, tally, 1), stats, index == 2)
     assert set(stats.norms) == {"head"}
 
 
@@ -84,7 +85,9 @@ def test_an_odd_epoch_whose_last_step_is_no_optimizer_step_still_starts_the_aver
     loop.reporter = MagicMock()
     for epoch in (1, 2):
         loop._train_epoch = lambda epoch, run, tally: [
-            loop._train_step(object(), run, tally, ShardStats(loss=torch.zeros(())), False)
+            loop._train_step(
+                object(), EpochScope(run, tally, 1), ShardStats(loss=torch.zeros(())), False,
+            )
             for _ in range(3)
         ]
         loop._run_epoch(epoch, run, None)

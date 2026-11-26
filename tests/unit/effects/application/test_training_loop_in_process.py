@@ -27,7 +27,7 @@ from effects.application.step_preparation import (
     StepReady,
 )
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.training_loop import local_steps
+from effects.application.training_loop import EpochScope, local_steps
 from effects.application.training_schedule import epoch_shards
 from effects.application.weight_average import WeightAverage
 from effects.domain.records import CombatPayload, RecordKind
@@ -198,8 +198,8 @@ def _shard(monkeypatch, directory, *, failing_at: int | None = None):
         optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
     )
     loop._train_on_shard(
-        task, local_steps(task, preparer, pin=False), run,
-        EpochTally(running=torch.zeros(())), of=1,
+        task, local_steps(task, preparer, pin=False),
+        EpochScope(run, EpochTally(running=torch.zeros(())), 1),
     )
     return marks
 
