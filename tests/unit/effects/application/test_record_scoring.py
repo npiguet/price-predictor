@@ -25,7 +25,7 @@ class TestPerRecordLosses:
             PER_ENTITY_WIDTH,
             FieldType,
         )
-        from effects.domain.effect_losses import per_entity_loss
+        from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
 
         torch.manual_seed(0)
         dispersion = torch.zeros(len(DISPERSED_FIELDS))
@@ -45,7 +45,8 @@ class TestPerRecordLosses:
                 mask[row : row + 1],
             )
             expected, _ = per_entity_loss(
-                outputs[row : row + 1], alone, fields=fields, log_dispersion=dispersion,
+                outputs[row : row + 1], alone,
+                EntityLossScoring(fields=fields, log_dispersion=dispersion),
             )
             losses = _record_losses(row, _ChunkOutputs(outputs, targets, fields, dispersion))
             assert losses[TOTAL] == pytest.approx(float(expected), rel=1e-5)

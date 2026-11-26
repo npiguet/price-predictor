@@ -38,7 +38,7 @@ from effects.domain.effect_head_layout import (
     HeadField,
     ZoneOutcome,
 )
-from effects.domain.effect_losses import per_entity_loss
+from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.sampling import SamplingClass
@@ -150,8 +150,13 @@ class TestACostHalfTrainsNoGate:
         outputs = torch.randn(1, targets.mask.shape[1], PER_ENTITY_WIDTH)
         fields = (FIELDS_BY_NAME[HeadField.ZONE_OUTCOME],)
         _, parts = per_entity_loss(
-            outputs, targets, fields=fields,
-            log_dispersion=torch.zeros(len(DISPERSED_FIELDS)), report_parts=True)
+            outputs, targets,
+            EntityLossScoring(
+                fields=fields,
+                log_dispersion=torch.zeros(len(DISPERSED_FIELDS)),
+                report_parts=True,
+            ),
+        )
         by_name = parts.as_dict()
         assert by_name["gate"] == 0.0
         assert by_name[HeadField.ZONE_OUTCOME] > 0.0

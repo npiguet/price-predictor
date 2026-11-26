@@ -165,13 +165,17 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
 
 def entity_loss_parts(model, batch, targets, fields) -> dict[str, float]:
     """The per-entity loss's terms when ``model`` reads one built ``batch``."""
-    from effects.domain.effect_losses import per_entity_loss
+    from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
 
     hidden = model(batch)
     gathered = model.per_entity_at(hidden, targets.index.to(hidden.device)).float()
     _total, parts = per_entity_loss(
-        gathered, targets.fields_on(gathered.device), fields=fields,
-        log_dispersion=model.per_entity_dispersion(), report_parts=True,
+        gathered, targets.fields_on(gathered.device),
+        EntityLossScoring(
+            fields=fields,
+            log_dispersion=model.per_entity_dispersion(),
+            report_parts=True,
+        ),
     )
     return parts.as_dict()
 

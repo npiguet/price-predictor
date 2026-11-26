@@ -83,7 +83,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 
 ## Losses
 
-- Every head reduces the same way (`effect_losses.per_row`): summed over a row's targets, averaged over the batch's rows.
+- Every head reduces the same way (`loss_rows.per_row`): summed over a row's targets, averaged over the batch's rows.
 - The affected gate trains on every entity with a slot (`model-layout.md` § Input slots) of a record that is neither a playability record nor a cost half (`RecordTargets.gated`, read as `EntityTargetBatch.gate_scored`). A field trains only where the gate's target fires and the field is present, on an ungated record too, where the gate's target marks the entities the fields train at. The legality fields are the exception: they train wherever present, gate or no gate.
 - A cost half trains what its payment did at the entities `payload.costs` names (`domain/cost_targets.py`, root spec § 11.6): a sacrificed or discarded card's zone outcome `died`, an exiled card's `exiled`, a returned permanent's `to_hand`, `tap_state` 1 or 0 for `tapped` or `untapped`, the counter deltas at the acting source when it is on the battlefield, and minus `life` at the source's controller. Nothing else of a cost half trains, the cast card's move to the stack included, and no field takes its silent value there; `revealed`, `exerted`, `convoked` and `delved` train nothing. A reader of a cost half's fields reads them conditionally, never through the gate.
 - A field is present where the record wrote it, or where it has a silent value, the record's sampling class supervises it and the entity is in the field's scope. Silent values are "nothing happened": zone stayed, no damage, no counters, no change.

@@ -39,13 +39,19 @@ from effects.domain.effect_head_layout import (
     CreatedSlot,
     RecordField,
 )
-from effects.domain.effect_losses import global_loss, record_head_loss, verdict_loss
 from effects.domain.event_schema import Event, EventType
 from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
 from effects.domain.field_types import FieldType
 from effects.domain.input_vocabularies import CARD_TYPES, MANA_SYMBOLS
 from effects.domain.output_vocabularies import SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey
+from effects.domain.record_head_losses import (
+    HeadScoring,
+    RecordHeadTargets,
+    global_loss,
+    record_head_loss,
+    verdict_loss,
+)
 from effects.domain.records import (
     Candidate,
     PlayabilityCheck,
@@ -341,7 +347,9 @@ class TestRecordHeadLosses:
             for m in range(end - start)
         ) / 3
         assert torch.allclose(
-            verdict_loss(prediction, target, mask, log_dispersion=dispersion),
+            verdict_loss(
+                prediction, RecordHeadTargets(target, mask), HeadScoring(log_dispersion=dispersion),
+            ),
             expected, rtol=1e-5,
         )
 
@@ -349,8 +357,10 @@ class TestRecordHeadLosses:
         prediction = torch.randn(2, GLOBAL_WIDTH)
         target = torch.zeros(2, GLOBAL_LAYOUT.target_width)
         mask = torch.zeros(2, len(GLOBAL_LAYOUT.fields), dtype=torch.bool)
-        assert float(global_loss(prediction, target, mask)) == 0.0
-        assert float(record_head_loss(prediction, target, mask.any(-1), GLOBAL_LAYOUT)) == 0.0
+        assert float(global_loss(prediction, RecordHeadTargets(target, mask), HeadScoring())) == 0.0
+        assert float(record_head_loss(
+            prediction, RecordHeadTargets(target, mask.any(-1)), GLOBAL_LAYOUT, HeadScoring(),
+        )) == 0.0
 
     def test_a_categorical_target_reads_its_class_index(self):
         prediction = torch.zeros(1, GLOBAL_WIDTH)
@@ -361,6 +371,8 @@ class TestRecordHeadLosses:
         mask = torch.zeros(1, 2, dtype=torch.bool)
         mask[0, GLOBAL_LAYOUT.index["day_night_change"]] = True
         target[0, column] = 1.0
-        right = float(global_loss(prediction, target, mask))
+        right = float(global_loss(prediction, RecordHeadTargets(target, mask), HeadScoring()))
         target[0, column] = 0.0
-        assert right < float(global_loss(prediction, target, mask))
+        assert right < float(
+            global_loss(prediction, RecordHeadTargets(target, mask), HeadScoring()),
+        )

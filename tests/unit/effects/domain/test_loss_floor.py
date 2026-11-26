@@ -14,7 +14,7 @@ from effects.domain.effect_head_layout import (
     GATE_TERM,
     PER_ENTITY_WIDTH,
 )
-from effects.domain.effect_losses import LossParts, per_entity_loss
+from effects.domain.effect_losses import EntityLossScoring, LossParts, per_entity_loss
 from effects.domain.field_kinds import fit_log_dispersion, negative_binomial
 from effects.domain.loss_floor import (
     PartsMean,
@@ -115,9 +115,12 @@ class TestConstantPredictorFloor:
         floor = constant_predictor_floor([batch], fields=fields)
         constant = constant_predictor_outputs([batch], fields=fields)
         _, reported = per_entity_loss(
-            constant.expand(2, 3, PER_ENTITY_WIDTH), batch, fields=fields,
-            log_dispersion=constant_predictor_dispersion([batch], fields=fields),
-            report_parts=True,
+            constant.expand(2, 3, PER_ENTITY_WIDTH), batch,
+            EntityLossScoring(
+                fields=fields,
+                log_dispersion=constant_predictor_dispersion([batch], fields=fields),
+                report_parts=True,
+            ),
         )
         parts = reported.as_dict()
 
@@ -137,8 +140,7 @@ class TestConstantPredictorFloor:
             (torch.tensor(values) * 2 - 1) * 20
         ).unsqueeze(-1)
         _, parts = per_entity_loss(
-            outputs, batch, fields=fields,
-            report_parts=True,
+            outputs, batch, EntityLossScoring(fields=fields, report_parts=True),
         )
 
         assert 1 - parts.as_dict()["tap_state"] / floor["tap_state"] > 0.99
@@ -290,8 +292,12 @@ class TestEveryHead:
         """``mana_paid`` holds a count per colour: each colour keeps its own
         mean, all of them one fitted dispersion."""
         from effects.domain.effect_head_layout import VERDICT_LAYOUT
-        from effects.domain.effect_losses import record_head_terms
         from effects.domain.loss_floor import constant_predictor_losses
+        from effects.domain.record_head_losses import (
+            HeadScoring,
+            RecordHeadTargets,
+            record_head_terms,
+        )
 
         generator = torch.Generator().manual_seed(9)
         members = VERDICT_LAYOUT.by_name["mana_paid"].count
@@ -314,7 +320,10 @@ class TestEveryHead:
             dispersion = torch.zeros(len(VERDICT_LAYOUT.dispersed))
             dispersion[VERDICT_LAYOUT.dispersion_index["mana_paid"]] = log_dispersion
             return float(record_head_terms(
-                outputs, target, mask, VERDICT_LAYOUT, log_dispersion=dispersion,
+                outputs,
+                RecordHeadTargets(target, mask),
+                VERDICT_LAYOUT,
+                HeadScoring(log_dispersion=dispersion),
             )[index]) / 200
 
         means = torch.log(paid.mean(0))

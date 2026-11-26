@@ -19,7 +19,7 @@ from effects.domain.effect_head_layout import (
     PER_ENTITY_FIELDS,
     PER_ENTITY_WIDTH,
 )
-from effects.domain.effect_losses import per_entity_loss
+from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.input_layout import Slot, SlotKind
 from effects.domain.surface_collation import entity_target_tensors
@@ -91,7 +91,10 @@ class TestTheGateMask:
             targets.gate, targets.fields, targets.mask, targets.index,
             torch.tensor([True, False]),
         )
-        loss, parts = per_entity_loss(outputs, targets, fields=(), report_parts=True)
+        loss, parts = per_entity_loss(
+            outputs, targets,
+            EntityLossScoring(fields=(), report_parts=True),
+        )
         expected = functional.binary_cross_entropy_with_logits(
             outputs[0, :, GATE_INDEX], gate[0], reduction="sum",
         ) / 2
@@ -119,7 +122,10 @@ class TestGateFreeFields:
         values = {"attack_target_legal": torch.tensor([[1.0, 0.0, 1.0]])}
         targets = make_entity_targets(torch.zeros(1, 3), fields_everywhere(values))
         spec = FIELDS_BY_NAME["attack_target_legal"]
-        _, parts = per_entity_loss(outputs, targets, fields=(spec,), report_parts=True)
+        _, parts = per_entity_loss(
+            outputs, targets,
+            EntityLossScoring(fields=(spec,), report_parts=True),
+        )
         start, _ = FIELD_SLICES[spec.name]
         expected = functional.binary_cross_entropy_with_logits(
             outputs[0, :, start], values["attack_target_legal"][0], reduction="sum",

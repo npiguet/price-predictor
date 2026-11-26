@@ -16,7 +16,7 @@ from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.record_forward import EntityScoring, entity_chunks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
-from effects.domain.effect_losses import GATE_TERM, per_entity_loss
+from effects.domain.effect_losses import GATE_TERM, EntityLossScoring, per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import first_text
@@ -68,8 +68,10 @@ def _record_losses(row: int, chunk: _ChunkOutputs) -> dict[str, float]:
     rows = slice(row, row + 1)
     alone = chunk.targets.select(rows)
     _total, parts = per_entity_loss(
-        chunk.gathered[rows], alone, fields=chunk.fields,
-        log_dispersion=chunk.log_dispersion, report_parts=True,
+        chunk.gathered[rows], alone,
+        EntityLossScoring(
+            fields=chunk.fields, log_dispersion=chunk.log_dispersion, report_parts=True,
+        ),
     )
     losses = parts.as_dict()
     if not bool(alone.gate_scored.any()):

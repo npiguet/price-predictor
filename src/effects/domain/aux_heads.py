@@ -15,15 +15,17 @@ from enum import StrEnum
 import torch
 
 from effects.domain.effect_head_layout import GLOBAL_LAYOUT, VERDICT_LAYOUT
-from effects.domain.effect_losses import (
-    api_loss,
+from effects.domain.record_head_losses import (
+    CreatedTargets,
+    HeadScoring,
+    RecordHeadTargets,
     created_objects_loss,
     created_objects_terms,
     global_loss,
     record_head_terms,
-    value_loss,
     verdict_loss,
 )
+from effects.domain.text_head_losses import api_loss, value_loss
 
 
 class Head(StrEnum):
@@ -50,50 +52,44 @@ class HeadInput(StrEnum):
 
 
 def _verdict(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
-    target, mask = targets
     return verdict_loss(
-        model.verdict(hidden).float(), target, mask,
-        log_dispersion=model.verdict_dispersion(), scale=scale,
+        model.verdict(hidden).float(), RecordHeadTargets(*targets),
+        HeadScoring(model.verdict_dispersion(), scale),
     )
 
 
 def _created_objects(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
-    target, mask, known = targets
     return created_objects_loss(
-        model.created_objects(hidden).float(), target, mask, known,
-        log_dispersion=model.created_objects_dispersion(), scale=scale,
+        model.created_objects(hidden).float(), CreatedTargets(*targets),
+        HeadScoring(model.created_objects_dispersion(), scale),
     )
 
 
 def _global(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
-    target, mask = targets
     return global_loss(
-        model.global_outputs(hidden).float(), target, mask,
-        log_dispersion=model.global_dispersion(), scale=scale,
+        model.global_outputs(hidden).float(), RecordHeadTargets(*targets),
+        HeadScoring(model.global_dispersion(), scale),
     )
 
 
 def _verdict_terms(model, hidden, targets: tuple) -> torch.Tensor:
-    target, mask = targets
     return record_head_terms(
-        model.verdict(hidden).float(), target, mask, VERDICT_LAYOUT,
-        log_dispersion=model.verdict_dispersion(),
+        model.verdict(hidden).float(), RecordHeadTargets(*targets), VERDICT_LAYOUT,
+        HeadScoring(model.verdict_dispersion()),
     )
 
 
 def _created_objects_terms(model, hidden, targets: tuple) -> torch.Tensor:
-    target, mask, known = targets
     return created_objects_terms(
-        model.created_objects(hidden).float(), target, mask, known,
-        log_dispersion=model.created_objects_dispersion(),
+        model.created_objects(hidden).float(), CreatedTargets(*targets),
+        HeadScoring(model.created_objects_dispersion()),
     )
 
 
 def _global_terms(model, hidden, targets: tuple) -> torch.Tensor:
-    target, mask = targets
     return record_head_terms(
-        model.global_outputs(hidden).float(), target, mask, GLOBAL_LAYOUT,
-        log_dispersion=model.global_dispersion(),
+        model.global_outputs(hidden).float(), RecordHeadTargets(*targets), GLOBAL_LAYOUT,
+        HeadScoring(model.global_dispersion()),
     )
 
 

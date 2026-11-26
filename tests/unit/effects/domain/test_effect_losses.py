@@ -30,15 +30,16 @@ from effects.domain.effect_head_layout import (
     ZONE_OUTCOMES,
     FieldType,
 )
-from effects.domain.effect_losses import (
-    api_loss,
+from effects.domain.effect_losses import EntityLossScoring, field_loss, per_entity_loss
+from effects.domain.loss_floor import constant_predictor_outputs
+from effects.domain.record_head_losses import (
+    CreatedTargets,
+    HeadScoring,
+    RecordHeadTargets,
     created_objects_loss,
-    field_loss,
-    mlm_loss,
-    per_entity_loss,
     verdict_loss,
 )
-from effects.domain.loss_floor import constant_predictor_outputs
+from effects.domain.text_head_losses import api_loss, mlm_loss
 from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
 #: Log-dispersions at zero (a dispersion of one) for every head a test scores.
@@ -59,20 +60,20 @@ class TestLosses:
         targets = fields_everywhere({"damage_taken": torch.zeros(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
-            outputs, make_entity_targets(torch.zeros(2, 3), targets, entity_mask), fields=fields,
-            log_dispersion=DISPERSION, report_parts=True,
+            outputs, make_entity_targets(torch.zeros(2, 3), targets, entity_mask),
+            EntityLossScoring(fields=fields, log_dispersion=DISPERSION, report_parts=True),
         )[1]
         on = per_entity_loss(
-            outputs, make_entity_targets(torch.ones(2, 3), targets, entity_mask), fields=fields,
-            log_dispersion=DISPERSION, report_parts=True,
+            outputs, make_entity_targets(torch.ones(2, 3), targets, entity_mask),
+            EntityLossScoring(fields=fields, log_dispersion=DISPERSION, report_parts=True),
         )[1]
         assert "damage_taken" not in off.names
         assert "damage_taken" in on.names
 
     def test_the_gate_trains_on_every_entity_including_unaffected_ones(self):
         _, parts = per_entity_loss(
-            self._outputs(), make_entity_targets(torch.zeros(2, 3)), fields=(),
-            report_parts=True,
+            self._outputs(), make_entity_targets(torch.zeros(2, 3)),
+            EntityLossScoring(fields=(), report_parts=True),
         )
         assert parts.as_dict()["gate"] > 0.0
 
@@ -80,7 +81,8 @@ class TestLosses:
         """The training loop discards the terms on every step but the one that
         logs them — so the caller has to ask."""
         _, parts = per_entity_loss(
-            self._outputs(), make_entity_targets(torch.zeros(2, 3)), fields=(),
+            self._outputs(), make_entity_targets(torch.zeros(2, 3)),
+            EntityLossScoring(fields=()),
         )
         assert not parts
         assert parts.as_dict() == {}
@@ -108,7 +110,7 @@ class TestLosses:
         }
         _, parts = per_entity_loss(
             outputs, make_entity_targets(torch.ones(2, 3), values),
-            fields=fields, log_dispersion=DISPERSION, report_parts=True,
+            EntityLossScoring(fields=fields, log_dispersion=DISPERSION, report_parts=True),
         )
 
         flat = outputs.reshape(6, PER_ENTITY_WIDTH)
@@ -129,11 +131,12 @@ class TestLosses:
         """Reporting must not change what is optimized."""
         outputs = self._outputs()
         quiet, _ = per_entity_loss(
-            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)), fields=(),
+            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)),
+            EntityLossScoring(fields=()),
         )
         loud, _ = per_entity_loss(
-            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)), fields=(),
-            report_parts=True,
+            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)),
+            EntityLossScoring(fields=(), report_parts=True),
         )
         assert float(quiet) == pytest.approx(float(loud))
 
@@ -143,16 +146,19 @@ class TestLosses:
         wide = torch.zeros(1, 12, PER_ENTITY_WIDTH)
         narrow = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         wide_loss, _ = per_entity_loss(
-            wide, make_entity_targets(torch.zeros(1, 12), {}, torch.ones(1, 12)), fields=(),
+            wide, make_entity_targets(torch.zeros(1, 12), {}, torch.ones(1, 12)),
+            EntityLossScoring(fields=()),
         )
         narrow_loss, _ = per_entity_loss(
-            narrow, make_entity_targets(torch.zeros(1, 2), {}, torch.ones(1, 2)), fields=(),
+            narrow, make_entity_targets(torch.zeros(1, 2), {}, torch.ones(1, 2)),
+            EntityLossScoring(fields=()),
         )
         # Both divide by one record; the wide board's larger sum is the point,
         # but doubling the batch must halve neither.
         two_records = torch.zeros(2, 2, PER_ENTITY_WIDTH)
         batched, _ = per_entity_loss(
-            two_records, make_entity_targets(torch.zeros(2, 2), {}, torch.ones(2, 2)), fields=(),
+            two_records, make_entity_targets(torch.zeros(2, 2), {}, torch.ones(2, 2)),
+            EntityLossScoring(fields=()),
         )
         assert batched == pytest.approx(float(narrow_loss), rel=1e-5)
         assert wide_loss > narrow_loss
@@ -168,7 +174,7 @@ class TestLosses:
         fields = (FIELDS_BY_NAME["damage_taken"],)
         total, reported = per_entity_loss(
             outputs, make_entity_targets(torch.ones(2, 3), targets, torch.ones(2, 3)),
-            fields=fields, log_dispersion=DISPERSION, report_parts=True,
+            EntityLossScoring(fields=fields, log_dispersion=DISPERSION, report_parts=True),
         )
         parts = reported.as_dict()
         assert set(parts) == {"gate", "damage_taken"}
@@ -177,16 +183,14 @@ class TestLosses:
     def test_padded_entities_contribute_nothing(self):
         outputs = self._outputs()
         full = per_entity_loss(
-            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)), fields=(),
-            report_parts=True,
+            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)),
+            EntityLossScoring(fields=(), report_parts=True),
         )[1].as_dict()["gate"]
         masked = per_entity_loss(
-            outputs,
-            make_entity_targets(
+            outputs, make_entity_targets(
                 torch.ones(2, 3), mask=torch.tensor([[1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]),
             ),
-            fields=(),
-            report_parts=True,
+            EntityLossScoring(fields=(), report_parts=True),
         )[1].as_dict()["gate"]
         assert masked < full
 
@@ -265,26 +269,36 @@ class TestLosses:
         predicts_overflow[:, -1] = 8.0
         denies_overflow = torch.zeros(2, CREATED_OBJECTS_WIDTH)
         denies_overflow[:, -1] = -8.0
-        assert created_objects_loss(predicts_overflow, target, log_dispersion=CREATED) < (
-            created_objects_loss(denies_overflow, target, log_dispersion=CREATED)
+        assert created_objects_loss(
+            predicts_overflow, CreatedTargets(target), HeadScoring(log_dispersion=CREATED),
+        ) < (
+            created_objects_loss(
+                denies_overflow, CreatedTargets(target), HeadScoring(log_dispersion=CREATED),
+            )
         )
 
     def test_created_objects_loss_scores_every_slot(self):
         """A slot the head gets wrong costs, wherever in the K it sits."""
         target = torch.zeros(2, CREATED_OBJECTS_WIDTH)
         baseline = created_objects_loss(
-            torch.zeros(2, CREATED_OBJECTS_WIDTH), target, log_dispersion=CREATED,
+            torch.zeros(2, CREATED_OBJECTS_WIDTH),
+            CreatedTargets(target),
+            HeadScoring(log_dispersion=CREATED),
         )
         for slot in range(CREATED_OBJECT_SLOTS):
             wrong = torch.zeros(2, CREATED_OBJECTS_WIDTH)
             wrong[:, slot * CREATED_SLOT_WIDTH] = 8.0  # claims a group is present
-            assert created_objects_loss(wrong, target, log_dispersion=CREATED) > baseline
+            assert created_objects_loss(
+                wrong, CreatedTargets(target), HeadScoring(log_dispersion=CREATED),
+            ) > baseline
 
     def test_verdict_loss_skips_records_with_no_verdict(self):
         prediction = torch.zeros(2, VERDICT_WIDTH)
         target = torch.zeros(2, VERDICT_WIDTH)
         empty = verdict_loss(
-            prediction, target, torch.zeros(2, dtype=torch.bool), log_dispersion=VERDICT,
+            prediction,
+            RecordHeadTargets(target, torch.zeros(2, dtype=torch.bool)),
+            HeadScoring(log_dispersion=VERDICT),
         )
         assert float(empty) == 0.0
 
@@ -292,7 +306,9 @@ class TestLosses:
         prediction = torch.zeros(2, VERDICT_WIDTH)
         target = torch.ones(2, VERDICT_WIDTH)
         scored = verdict_loss(
-            prediction, target, torch.ones(2, dtype=torch.bool), log_dispersion=VERDICT,
+            prediction,
+            RecordHeadTargets(target, torch.ones(2, dtype=torch.bool)),
+            HeadScoring(log_dispersion=VERDICT),
         )
         assert float(scored) > 0.0
 
@@ -322,9 +338,9 @@ class TestGen2Losses:
         mask = torch.zeros(2, len(VERDICT_LAYOUT.fields), dtype=torch.bool)
         for bit in VERDICT_BITS:
             mask[0, VERDICT_LAYOUT.index[bit]] = True
-        bits_only = verdict_loss(prediction, target, mask)
+        bits_only = verdict_loss(prediction, RecordHeadTargets(target, mask), HeadScoring())
         mask[1, VERDICT_LAYOUT.index["trigger_fired"]] = True
-        with_trigger = verdict_loss(prediction, target, mask)
+        with_trigger = verdict_loss(prediction, RecordHeadTargets(target, mask), HeadScoring())
         assert 0 < float(bits_only) < float(with_trigger)
 
     def test_the_created_objects_mask_drops_unsupervised_records(self):
@@ -332,13 +348,17 @@ class TestGen2Losses:
         prediction = torch.zeros(2, CREATED_OBJECTS_WIDTH)
         prediction[1, 0] = 9.0  # the unsupervised row is badly wrong
         mask = torch.tensor([True, False])
-        assert created_objects_loss(prediction, target, mask, log_dispersion=CREATED) < (
-            created_objects_loss(prediction, target, log_dispersion=CREATED)
+        assert created_objects_loss(
+            prediction, CreatedTargets(target, mask), HeadScoring(log_dispersion=CREATED),
+        ) < (
+            created_objects_loss(
+                prediction, CreatedTargets(target), HeadScoring(log_dispersion=CREATED),
+            )
         )
 
     def test_the_value_loss_skips_masked_targets(self):
         from effects.domain.effect_head_layout import VALUE_DISPERSED, VALUE_WIDTH
-        from effects.domain.effect_losses import value_loss
+        from effects.domain.text_head_losses import value_loss
         from effects.domain.value_targets import VALUE_TARGETS
 
         prediction = torch.zeros(2, VALUE_WIDTH)
@@ -350,7 +370,7 @@ class TestGen2Losses:
 
     def test_at_least_bits_read_the_magnitude(self):
         from effects.domain.effect_head_layout import AT_LEAST_STEPS
-        from effects.domain.effect_losses import at_least_targets
+        from effects.domain.text_head_losses import at_least_targets
 
         bits = at_least_targets(torch.tensor([0.0, 3.0, -2.0, 45.0]))
         assert bits.shape == (4, AT_LEAST_STEPS)
@@ -365,7 +385,7 @@ class TestGen2Losses:
             VALUE_DISPERSED,
             VALUE_WIDTH,
         )
-        from effects.domain.effect_losses import at_least_targets, value_loss
+        from effects.domain.text_head_losses import at_least_targets, value_loss
         from effects.domain.value_targets import VALUE_TARGET_NAMES
 
         damage = VALUE_TARGET_NAMES.index("damage")
@@ -456,8 +476,8 @@ class TestHostPickedRowsMatchBooleanMasks:
         fields, targets = self._targets(generator, batch, entities)
         expected = self._reference(outputs, gate, targets, entity_mask, fields)
         got, _ = per_entity_loss(
-            outputs, make_entity_targets(gate, targets, entity_mask), fields=fields,
-            log_dispersion=self.DISPERSION,
+            outputs, make_entity_targets(gate, targets, entity_mask),
+            EntityLossScoring(fields=fields, log_dispersion=self.DISPERSION),
         )
         assert torch.allclose(got, expected, rtol=1e-6, atol=1e-6)
 
@@ -477,8 +497,8 @@ class TestHostPickedRowsMatchBooleanMasks:
         }
         targets = make_entity_targets(gate, EntityFieldTargets(everywhere.values, present))
         _, parts = per_entity_loss(
-            outputs, targets, fields=fields, log_dispersion=self.DISPERSION,
-            report_parts=True,
+            outputs, targets,
+            EntityLossScoring(fields=fields, log_dispersion=self.DISPERSION, report_parts=True),
         )
         expected = {}
         for spec in fields:
@@ -513,8 +533,8 @@ class TestHostPickedRowsMatchBooleanMasks:
             return leaf.grad, dispersion.grad
 
         grouped = gradients(lambda leaf, dispersion: per_entity_loss(
-            leaf, make_entity_targets(gate, targets, mask), fields=fields,
-            log_dispersion=dispersion,
+            leaf, make_entity_targets(gate, targets, mask),
+            EntityLossScoring(fields=fields, log_dispersion=dispersion),
         )[0])
 
         def looped(leaf, dispersion):
@@ -535,24 +555,28 @@ class TestHostPickedRowsMatchBooleanMasks:
         fields, targets = self._targets(generator, 3, 4)
         gate = torch.zeros(3, 4)
         got, _ = per_entity_loss(
-            outputs, make_entity_targets(gate, targets), fields=fields,
-            log_dispersion=self.DISPERSION,
+            outputs, make_entity_targets(gate, targets),
+            EntityLossScoring(fields=fields, log_dispersion=self.DISPERSION),
         )
         expected = self._reference(outputs, gate, targets, torch.ones(3, 4), fields)
         assert torch.allclose(got, expected)
 
     def test_created_objects_and_verdict_losses_are_unchanged(self):
         from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH
-        from effects.domain.effect_losses import created_objects_loss, verdict_loss
+        from effects.domain.record_head_losses import created_objects_loss, verdict_loss
 
         generator = torch.Generator().manual_seed(13)
         prediction = torch.randn(5, CREATED_OBJECTS_WIDTH, generator=generator)
         target = torch.rand(5, CREATED_OBJECTS_WIDTH, generator=generator).round()
         mask = torch.tensor([True, False, True, True, False])
-        picked = created_objects_loss(prediction, target, mask, log_dispersion=CREATED)
+        picked = created_objects_loss(
+            prediction, CreatedTargets(target, mask), HeadScoring(log_dispersion=CREATED),
+        )
         # Selecting the rows first and scoring them unmasked is the same sum.
         whole = created_objects_loss(
-            prediction[mask], target[mask], None, log_dispersion=CREATED,
+            prediction[mask],
+            CreatedTargets(target[mask], None),
+            HeadScoring(log_dispersion=CREATED),
         )
         assert torch.allclose(picked, whole * mask.sum() / mask.numel())
 
@@ -563,11 +587,21 @@ class TestHostPickedRowsMatchBooleanMasks:
         verdict_target = torch.rand(4, VERDICT_LAYOUT.target_width, generator=generator).round()
         per_field = torch.rand(4, fields, generator=generator) > 0.5
         assert torch.allclose(
-            verdict_loss(verdict, verdict_target, per_field, log_dispersion=VERDICT),
-            verdict_loss(verdict, verdict_target, per_field.float(), log_dispersion=VERDICT),
+            verdict_loss(
+                verdict,
+                RecordHeadTargets(verdict_target, per_field),
+                HeadScoring(log_dispersion=VERDICT),
+            ),
+            verdict_loss(
+                verdict,
+                RecordHeadTargets(verdict_target, per_field.float()),
+                HeadScoring(log_dispersion=VERDICT),
+            ),
         )
         assert float(verdict_loss(
-            verdict, verdict_target, torch.zeros(4, fields), log_dispersion=VERDICT,
+            verdict,
+            RecordHeadTargets(verdict_target, torch.zeros(4, fields)),
+            HeadScoring(log_dispersion=VERDICT),
         )) == 0.0
 
 

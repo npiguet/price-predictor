@@ -1,8 +1,10 @@
-"""The effect head's losses (FR-080, FR-081, FR-082, FR-085).
+"""The per-entity effect head's loss (FR-080, FR-081, FR-082, FR-085).
 
-One reduction for every head: a row's loss is summed over its targets, then
-averaged over every row of the batch, scored or not (:func:`per_row`). A row is
-a record, or an encoded text for the value, script-API and MLM heads.
+A row's loss is summed over its targets, then averaged over every row of the
+batch, scored or not (:func:`~effects.domain.loss_rows.per_row`): the rows are
+the batch's records. The other heads' losses are in
+:mod:`~effects.domain.record_head_losses` and
+:mod:`~effects.domain.text_head_losses`.
 
 Every mask is tested and indexed on the host, where it was built, and rows are
 gathered by index: a device mask would stall the step until the GPU drains.
@@ -19,30 +21,18 @@ import torch
 import torch.nn.functional as functional
 
 from effects.domain.effect_head_layout import (
-    AT_LEAST_SLICES,
-    AT_LEAST_STEPS,
-    CREATED_MAGNITUDES,
-    CREATED_OBJECT_SLOTS,
-    CREATED_SLOT_WIDTH,
-    CREATED_TERMS,
     DISPERSION_INDEX,
     FIELD_SLICES,
     GATE_INDEX,
     GATE_TERM,
-    GLOBAL_LAYOUT,
     PER_ENTITY_TERMS,
-    VALUE_DISPERSED,
-    VALUE_SLICES,
-    VERDICT_LAYOUT,
-    CreatedSlot,
     FieldSpec,
-    RecordHeadLayout,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.field_kinds import FIELD_KINDS, FieldScoring, counted, negative_binomial
+from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
 from effects.domain.field_types import FieldType
 from effects.domain.input_layout import MAGNITUDE_CAP
-from effects.domain.value_targets import VALUE_TARGETS
+from effects.domain.loss_rows import Rows, per_row, scaled
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,37 +62,17 @@ class LossParts:
 
 
 @dataclass(frozen=True, slots=True)
-class _Rows:
-    """The rows a host mask selects: tested and indexed on the host, where the
-    mask was built, and copied to the device once for gathering there."""
+class EntityLossScoring:
+    """How the per-entity head is scored: the ``fields`` active at the step,
+    the head's log-dispersions in :data:`DISPERSED_FIELDS` order (which a
+    count or signed-delta field needs), each term's reciprocal loss
+    denominator in :data:`PER_ENTITY_TERMS` order (FR-062; None scores every
+    term unscaled), and whether the terms are reported."""
 
-    host: torch.Tensor
-    device: torch.Tensor
-
-    @classmethod
-    def of(cls, mask: torch.Tensor, device: torch.device) -> _Rows:
-        host = mask.detach().bool().cpu().flatten().nonzero().squeeze(1)
-        return cls(host, host.to(device, non_blocking=True))
-
-    @property
-    def empty(self) -> bool:
-        return self.host.numel() == 0
-
-    def select(self, tensor: torch.Tensor) -> torch.Tensor:
-        """``tensor``'s selected rows, gathered wherever ``tensor`` lives."""
-        return tensor.index_select(0, self.host if tensor.device.type == "cpu" else self.device)
-
-
-def per_row(total: torch.Tensor, rows: int) -> torch.Tensor:
-    return total / max(int(rows), 1)
-
-
-def at_least_targets(amounts: torch.Tensor) -> torch.Tensor:
-    """``(n,)`` amounts as ``(n, AT_LEAST_STEPS)`` bits: column k-1 is ``|amount| >= k``."""
-    steps = torch.arange(
-        1, AT_LEAST_STEPS + 1, device=amounts.device, dtype=amounts.dtype,
-    )
-    return (amounts.abs().unsqueeze(-1) >= steps).to(amounts.dtype)
+    fields: tuple[FieldSpec, ...]
+    log_dispersion: torch.Tensor | None = None
+    scale: torch.Tensor | None = None
+    report_parts: bool = False
 
 
 def magnitude_target(spec: FieldSpec, target: torch.Tensor) -> torch.Tensor:
@@ -124,35 +94,17 @@ def field_loss(
     )
 
 
-def _scaled(sums: torch.Tensor, scale: torch.Tensor | None) -> torch.Tensor:
-    """Per-term sums divided by their loss denominators (FR-062): ``scale``
-    holds each term's reciprocal, in the same order; None leaves them as they
-    are."""
-    return sums.sum() if scale is None else (sums * scale).sum()
-
-
 def per_entity_loss(
-    outputs: torch.Tensor,
-    targets: EntityTargetBatch,
-    *,
-    fields: tuple[FieldSpec, ...],
-    log_dispersion: torch.Tensor | None = None,
-    scale: torch.Tensor | None = None,
-    report_parts: bool = False,
+    outputs: torch.Tensor, targets: EntityTargetBatch, scoring: EntityLossScoring,
 ) -> tuple[torch.Tensor, LossParts]:
     """The per-entity head's loss, per record, and its terms when
-    ``report_parts``.
+    ``scoring.report_parts``.
 
     Args:
         outputs: ``(batch, entities, PER_ENTITY_WIDTH)``, already gathered
             column for column with ``targets``.
-        fields: the fields active at this step.
-        log_dispersion: the head's log-dispersions in
-            :data:`DISPERSED_FIELDS` order, which a count or signed-delta
-            field needs.
-        scale: each term's reciprocal loss denominator in
-            :data:`PER_ENTITY_TERMS` order (FR-062), on the outputs' device;
-            None scores every term unscaled.
+        scoring: the fields active at this step, the head's log-dispersions
+            and each term's reciprocal loss denominator (:class:`EntityLossScoring`).
 
     The gate trains wherever :attr:`~EntityTargetBatch.gate_scored` puts it,
     a field wherever :meth:`~EntityTargetBatch.scored` does. The parts are
@@ -161,18 +113,22 @@ def per_entity_loss(
     """
     flat_outputs = outputs.reshape(-1, outputs.shape[-1])
     gate = _gate_term(flat_outputs, targets)
-    names, sums = _field_sums(flat_outputs, targets, fields, log_dispersion)
+    names, sums = _field_sums(flat_outputs, targets, scoring.fields, scoring.log_dispersion)
     terms = torch.cat([gate.reshape(1), sums])
-    term_scale = None
-    if scale is not None:
-        term_scale = scale.index_select(0, _term_index((GATE_TERM, *names), scale.device))
-    total = _scaled(terms, term_scale)
+    total = scaled(terms, _term_scale(scoring.scale, (GATE_TERM, *names)))
 
     records = int(outputs.shape[0])
     parts = LossParts()
-    if report_parts:
+    if scoring.report_parts:
         parts = LossParts((GATE_TERM, *names), terms.detach().double() / max(records, 1))
     return per_row(total, records), parts
+
+
+def _term_scale(scale: torch.Tensor | None, names: tuple[str, ...]) -> torch.Tensor | None:
+    """``scale`` (every per-entity term's) cut to the terms ``names``."""
+    if scale is None:
+        return None
+    return scale.index_select(0, _term_index(names, scale.device))
 
 
 _PER_ENTITY_TERM_INDEX: dict[str, int] = {name: i for i, name in enumerate(PER_ENTITY_TERMS)}
@@ -190,7 +146,7 @@ def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.
     entity at its rule-mask weight (FR-061): under the hard mask an added
     copy trains the gate on its drawn rule's entities alone."""
     device = flat_outputs.device
-    scored = _Rows.of(targets.gate_scored, device)
+    scored = Rows.of(targets.gate_scored, device)
     if scored.empty:
         return flat_outputs.new_zeros((), dtype=torch.float32)
     affected = scored.select(targets.gate.detach().cpu().flatten()).float()
@@ -252,363 +208,91 @@ def _group_sums(
     group: list[FieldSpec], log_dispersion: torch.Tensor | None,
 ) -> tuple[list[str], torch.Tensor] | None:
     """One same-kind group's per-field sums; None where it scores nothing."""
-    device = flat_outputs.device
-    masks = torch.stack([targets.scored(spec.name).reshape(-1) for spec in group], dim=1)
-    scored = masks.any(0)
-    if not scored.any():
+    kept = _scored_members(targets, group)
+    if kept is None:
         return None
-    if not scored.all():
-        keep = scored.nonzero().squeeze(1)
-        group = [group[int(i)] for i in keep]
-        masks = masks.index_select(1, keep)
-    rows = _Rows.of(masks.any(1), device)
-    weighed = [targets.field_weights(spec.name) for spec in group]
-    if any(weight is not None for weight in weighed):
-        masks = masks.float() * torch.stack([
-            torch.ones(masks.shape[0]) if weight is None else weight.reshape(-1)
-            for weight in weighed
-        ], dim=1)
-    weights = rows.select(masks).to(device, torch.float32, non_blocking=True)
-
-    first = group[0]
-    columns = torch.cat([
-        torch.arange(*FIELD_SLICES[spec.name]) for spec in group
-    ]).to(device, non_blocking=True)
-    predicted = rows.select(flat_outputs).index_select(1, columns).reshape(
-        -1, len(group), first.width,
+    group, masks = kept
+    device = flat_outputs.device
+    rows = Rows.of(masks.any(1), device)
+    weights = rows.select(_weighed(masks, targets, group)).to(
+        device, torch.float32, non_blocking=True,
     )
-    member = (first.arity,) if first.type.per_member else ()
-    target = torch.stack([
-        targets.fields.values[spec.name].reshape(masks.shape[0], *member)
-        for spec in group
-    ], dim=1)
-    target = rows.select(target).to(device, non_blocking=True)
-    dispersion = None
-    if first.type.has_magnitude:
-        if log_dispersion is None:
-            raise ValueError(
-                f"{first.name} is scored by a negative binomial and needs the "
-                "per-entity head's log-dispersions"
-            )
-        index = torch.tensor([DISPERSION_INDEX[spec.name] for spec in group])
-        dispersion = log_dispersion.index_select(
-            0, index.to(log_dispersion.device, non_blocking=True),
-        )
+    first = group[0]
+    predicted = _group_predicted(flat_outputs, rows, group)
+    target = _group_target(targets, rows, group, masks.shape[0]).to(device, non_blocking=True)
+    dispersion = _group_dispersion(group, log_dispersion)
     terms = FIELD_KINDS[first.type].terms(
         predicted.float(), target, FieldScoring(first.arity, MAGNITUDE_CAP, dispersion),
     )
     return [spec.name for spec in group], (terms * weights).sum(0)
 
 
-def created_objects_terms(
-    prediction: torch.Tensor, target: torch.Tensor,
-    mask: torch.Tensor | None = None, known: torch.Tensor | None = None,
-    *, log_dispersion: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """The created-objects head's loss by term, summed over records, in
-    :data:`CREATED_TERMS` order: each slot column over every slot, then the
-    overflow flag.
+def _scored_members(
+    targets: EntityTargetBatch, group: list[FieldSpec],
+) -> tuple[list[FieldSpec], torch.Tensor] | None:
+    """The members of ``group`` scored anywhere, beside their ``(entities,
+    members)`` masks; None where none is."""
+    masks = torch.stack([targets.scored(spec.name).reshape(-1) for spec in group], dim=1)
+    scored = masks.any(0)
+    if not scored.any():
+        return None
+    if scored.all():
+        return group, masks
+    keep = scored.nonzero().squeeze(1)
+    return [group[int(i)] for i in keep], masks.index_select(1, keep)
 
-    The K slots are in canonical order (FR-078), so no assignment problem
-    arises. ``mask`` selects the records that supervise the head; ``known``
-    ``(records, width)`` the columns each record says, a column it leaves
-    unsaid (a token's controller) training nothing. ``log_dispersion`` is
-    the head's, in :data:`CREATED_DISPERSED` order, shared by the slots.
-    """
+
+def _weighed(
+    masks: torch.Tensor, targets: EntityTargetBatch, group: list[FieldSpec],
+) -> torch.Tensor:
+    """``masks`` as each member's weight where scored: the rule mask's (FR-061)
+    for a field it weighs, 1 for the others; the masks as they are where none
+    is weighed."""
+    weighed = [targets.field_weights(spec.name) for spec in group]
+    if all(weight is None for weight in weighed):
+        return masks
+    return masks.float() * torch.stack([
+        torch.ones(masks.shape[0]) if weight is None else weight.reshape(-1)
+        for weight in weighed
+    ], dim=1)
+
+
+def _group_predicted(
+    flat_outputs: torch.Tensor, rows: Rows, group: list[FieldSpec],
+) -> torch.Tensor:
+    """``(rows, members, width)``: the group's columns at the selected rows."""
+    columns = torch.cat([
+        torch.arange(*FIELD_SLICES[spec.name]) for spec in group
+    ]).to(flat_outputs.device, non_blocking=True)
+    return rows.select(flat_outputs).index_select(1, columns).reshape(
+        -1, len(group), group[0].width,
+    )
+
+
+def _group_target(
+    targets: EntityTargetBatch, rows: Rows, group: list[FieldSpec], entities: int,
+) -> torch.Tensor:
+    """``(rows, members[, arity])``: the group's targets at the selected rows."""
+    first = group[0]
+    member = (first.arity,) if first.type.per_member else ()
+    target = torch.stack([
+        targets.fields.values[spec.name].reshape(entities, *member)
+        for spec in group
+    ], dim=1)
+    return rows.select(target)
+
+
+def _group_dispersion(
+    group: list[FieldSpec], log_dispersion: torch.Tensor | None,
+) -> torch.Tensor | None:
+    """The members' log-dispersions, None for a group no negative binomial scores."""
+    first = group[0]
+    if not first.type.has_magnitude:
+        return None
     if log_dispersion is None:
         raise ValueError(
-            "the created-objects head scores its counts by a negative binomial "
-            "and needs its log-dispersions"
+            f"{first.name} is scored by a negative binomial and needs the "
+            "per-entity head's log-dispersions"
         )
-    if mask is not None:
-        rows = _Rows.of(mask, prediction.device)
-        if rows.empty:
-            return prediction.new_zeros(len(CREATED_TERMS), dtype=torch.float32)
-        prediction = rows.select(prediction)
-        target = rows.select(target)
-        if known is not None:
-            known = rows.select(known)
-    elementwise, overflow = _created_elementwise(prediction, target, known, log_dispersion)
-    columns = elementwise.sum((0, 1))
-    return torch.cat([columns, overflow.sum().reshape(1)])
-
-
-def created_objects_row_terms(
-    prediction: torch.Tensor, target: torch.Tensor, known: torch.Tensor | None = None,
-    *, log_dispersion: torch.Tensor,
-) -> torch.Tensor:
-    """:func:`created_objects_terms` before the sum over records: ``(records,
-    len(CREATED_TERMS))``, each slot column summed over the slots, every
-    record scored (the deviance sample's per-record losses, research E4)."""
-    elementwise, overflow = _created_elementwise(prediction, target, known, log_dispersion)
-    return torch.cat([elementwise.sum(1), overflow.reshape(-1, 1)], dim=-1)
-
-
-def _created_elementwise(
-    prediction: torch.Tensor, target: torch.Tensor, known: torch.Tensor | None,
-    log_dispersion: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Each slot column's loss ``(records, slots, slot width)`` and the
-    overflow flag's ``(records,)``, each at the weight ``known`` gives it."""
-    prediction = prediction.float()
-    target = target.to(prediction.device).float()
-    weights = (
-        torch.ones_like(target) if known is None
-        else known.to(prediction.device, non_blocking=True).to(target.dtype)
-    )
-    # Every slot at once, as ``(records, slots, slot width)``.
-    slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
-    predicted = prediction[:, :-1].reshape(slots)
-    wanted = target[:, :-1].reshape(slots)
-    weight = weights[:, :-1].reshape(slots)
-    flags = slice(CreatedSlot.PRESENT, CreatedSlot.COUNT)
-    binaries = slice(CreatedSlot.OTHER_CONTROLLER, CREATED_SLOT_WIDTH)
-    elementwise = torch.cat([
-        functional.binary_cross_entropy_with_logits(
-            predicted[..., flags], wanted[..., flags], reduction="none",
-        ),
-        negative_binomial(
-            predicted[..., CREATED_MAGNITUDES],
-            counted(wanted[..., CREATED_MAGNITUDES], MAGNITUDE_CAP),
-            log_dispersion,
-        ),
-        functional.binary_cross_entropy_with_logits(
-            predicted[..., binaries], wanted[..., binaries], reduction="none",
-        ),
-    ], dim=-1)
-    overflow = functional.binary_cross_entropy_with_logits(
-        prediction[:, -1], target[:, -1], reduction="none",
-    ) * weights[:, -1]
-    return elementwise * weight, overflow
-
-
-def created_objects_loss(
-    prediction: torch.Tensor, target: torch.Tensor,
-    mask: torch.Tensor | None = None, known: torch.Tensor | None = None,
-    *, log_dispersion: torch.Tensor | None = None, scale: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """:func:`created_objects_terms`, scaled by ``scale`` (each term's
-    reciprocal denominator in :data:`CREATED_TERMS` order) and summed, per
-    record of the batch."""
-    terms = created_objects_terms(
-        prediction, target, mask, known, log_dispersion=log_dispersion,
-    )
-    return per_row(_scaled(terms, scale), int(prediction.shape[0]))
-
-
-def record_head_terms(
-    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
-    layout: RecordHeadLayout, *, log_dispersion: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """A per-record head's loss by field, summed over the records that set
-    it, in ``layout.terms`` order; a field's members are scored together
-    (FR-079), under the field's one log-dispersion.
-
-    ``target`` is ``(batch, layout.target_width)``, a categorical's column a
-    class index; ``mask`` ``(batch, fields)``, or ``(batch,)`` for a record
-    that sets every field; ``log_dispersion`` in ``layout.dispersed`` order.
-    A floating ``mask`` is each record's weight on the field under the rule
-    mask (FR-061), zero where the record does not set it.
-    """
-    weights = None
-    if mask.is_floating_point():
-        weights = mask.detach().cpu().float()
-        if weights.dim() == 1:
-            weights = weights.unsqueeze(-1).expand(-1, len(layout.fields))
-    mask = mask.detach().cpu() != 0
-    if mask.dim() == 1:
-        mask = mask.unsqueeze(-1).expand(-1, len(layout.fields))
-    sums = [prediction.new_zeros((), dtype=torch.float32)] * len(layout.fields)
-    if not mask.any():
-        return torch.stack(sums)
-    target = target.to(prediction.device, non_blocking=True)
-    for position, spec in enumerate(layout.fields):
-        rows = _Rows.of(mask[:, position], prediction.device)
-        if rows.empty:
-            continue
-        start, end = layout.slices[spec.name]
-        first, last = layout.target_slices[spec.name]
-        predicted = rows.select(prediction)[:, start:end].float().reshape(
-            -1, spec.count, spec.type.width(spec.arity),
-        )
-        wanted = rows.select(target)[:, first:last]
-        dispersion = None
-        if spec.type.has_magnitude:
-            if log_dispersion is None:
-                raise ValueError(
-                    f"{spec.name} is scored by a negative binomial and needs "
-                    "its head's log-dispersions"
-                )
-            dispersion = log_dispersion[layout.dispersion_index[spec.name]]
-        kind = FIELD_KINDS[spec.type]
-        if weights is None:
-            sums[position] = kind.loss(
-                predicted, wanted, FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
-            )
-            continue
-        terms = kind.terms(
-            predicted, wanted, FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
-        )
-        weight = rows.select(weights[:, position]).to(prediction.device, non_blocking=True)
-        sums[position] = (terms * weight.reshape(-1, *([1] * (terms.dim() - 1)))).sum()
-    return torch.stack(sums)
-
-
-def record_head_row_terms(
-    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
-    layout: RecordHeadLayout, *, log_dispersion: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """:func:`record_head_terms` before the sum over records, unweighted:
-    ``(records, fields)``, each field's loss on each record that sets it and
-    zero on the others (the deviance sample's per-record losses, research
-    E4). ``mask`` is ``(records, fields)`` or ``(records,)``; any non-zero
-    entry sets the field."""
-    flags = mask.detach().cpu() != 0
-    if flags.dim() == 1:
-        flags = flags.unsqueeze(-1).expand(-1, len(layout.fields))
-    out = torch.zeros(int(prediction.shape[0]), len(layout.fields), dtype=torch.float32,
-                      device=prediction.device)
-    target = target.to(prediction.device, non_blocking=True)
-    for position, spec in enumerate(layout.fields):
-        rows = _Rows.of(flags[:, position], prediction.device)
-        if rows.empty:
-            continue
-        start, end = layout.slices[spec.name]
-        first, last = layout.target_slices[spec.name]
-        predicted = rows.select(prediction)[:, start:end].float().reshape(
-            -1, spec.count, spec.type.width(spec.arity),
-        )
-        wanted = rows.select(target)[:, first:last]
-        dispersion = None
-        if spec.type.has_magnitude:
-            if log_dispersion is None:
-                raise ValueError(
-                    f"{spec.name} is scored by a negative binomial and needs "
-                    "its head's log-dispersions"
-                )
-            dispersion = log_dispersion[layout.dispersion_index[spec.name]]
-        terms = FIELD_KINDS[spec.type].terms(
-            predicted, wanted, FieldScoring(spec.arity, MAGNITUDE_CAP, dispersion),
-        )
-        out[rows.device, position] = terms.reshape(terms.shape[0], -1).sum(-1).float()
-    return out
-
-
-def record_head_loss(
-    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
-    layout: RecordHeadLayout, *, log_dispersion: torch.Tensor | None = None,
-    scale: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """A per-record head's loss: :func:`record_head_terms`, scaled by
-    ``scale`` (each field's reciprocal denominator in ``layout.terms``
-    order) and summed, per record of the batch."""
-    terms = record_head_terms(
-        prediction, target, mask, layout, log_dispersion=log_dispersion,
-    )
-    return per_row(_scaled(terms, scale), int(prediction.shape[0]))
-
-
-def verdict_loss(
-    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
-    *, log_dispersion: torch.Tensor | None = None, scale: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """The verdict head's loss at ``[ACT]``: each record kind supervises only
-    its own fields (:data:`VERDICT_LAYOUT`)."""
-    return record_head_loss(
-        prediction, target, mask, VERDICT_LAYOUT,
-        log_dispersion=log_dispersion, scale=scale,
-    )
-
-
-def global_loss(
-    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
-    *, log_dispersion: torch.Tensor | None = None, scale: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """The global head's loss at ``[GLOBAL]`` (:data:`GLOBAL_LAYOUT`)."""
-    return record_head_loss(
-        prediction, target, mask, GLOBAL_LAYOUT,
-        log_dispersion=log_dispersion, scale=scale,
-    )
-
-
-_VALUE_DISPERSION_INDEX: dict[str, int] = {
-    name: i for i, name in enumerate(VALUE_DISPERSED)
-}
-
-
-def value_loss(
-    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
-    *, log_dispersion: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """The value head's loss, one row per unique text (FR-058, FR-058b): the
-    per-entity fields' losses by type, plus each amount's at-least bits;
-    ``log_dispersion`` in :data:`VALUE_DISPERSED` order."""
-    rows = int(prediction.shape[0])
-    mask = mask.detach().bool().cpu()
-    target = target.to(prediction.device)
-    total = prediction.new_zeros((), dtype=torch.float32)
-    for index, (name, field_type) in enumerate(VALUE_TARGETS):
-        selected = _Rows.of(mask[:, index], prediction.device)
-        if selected.empty:
-            continue
-        predicted = selected.select(prediction).float()
-        start, end = VALUE_SLICES[name]
-        wanted = selected.select(target)[:, index]
-        dispersion = None
-        if field_type.has_magnitude:
-            if log_dispersion is None:
-                raise ValueError(
-                    f"the value head's {name} is scored by a negative binomial "
-                    "and needs the head's log-dispersions"
-                )
-            dispersion = log_dispersion[_VALUE_DISPERSION_INDEX[name]]
-        # Uncapped: a stated amount is the text's own, which no game compounds.
-        total = total + FIELD_KINDS[field_type].loss(
-            predicted[:, start:end], wanted, FieldScoring(1, None, dispersion),
-        )
-        if name in AT_LEAST_SLICES:
-            # Averaged over the steps, so forty bits weigh what one binary
-            # target does rather than dominating the encoder's gradient.
-            start, end = AT_LEAST_SLICES[name]
-            total = total + functional.binary_cross_entropy_with_logits(
-                predicted[:, start:end],
-                at_least_targets(wanted.float()), reduction="sum",
-            ) / AT_LEAST_STEPS
-    return per_row(total, rows)
-
-
-def mlm_loss(
-    logits: torch.Tensor, targets: torch.Tensor, *, rows: int,
-) -> torch.Tensor:
-    """Cross-entropy at the masked positions, per text of the pass."""
-    return per_row(functional.cross_entropy(logits, targets, reduction="sum"), rows)
-
-
-def api_loss(
-    type_logits: torch.Tensor,
-    type_targets: torch.Tensor,
-    key_logits: torch.Tensor | None,
-    key_targets: torch.Tensor | None,
-) -> torch.Tensor:
-    """Script-API classification from ``e``, one row per text: the API type's
-    cross-entropy plus every parameter key's binary cross-entropy. The keys
-    are None for a run whose sidecars name no parameter key, which builds no
-    key head."""
-    rows = int(type_logits.shape[0])
-    total = None
-    # A line with no API type carries -1 and is skipped.
-    known = _Rows.of(type_targets.detach().cpu() >= 0, type_logits.device)
-    if not known.empty:
-        total = functional.cross_entropy(
-            known.select(type_logits),
-            known.select(type_targets).to(type_logits.device),
-            reduction="sum",
-        )
-    if key_logits is not None and key_targets is not None:
-        keys = functional.binary_cross_entropy_with_logits(
-            key_logits, key_targets.float(), reduction="sum",
-        )
-        total = keys if total is None else total + keys
-    if total is None:
-        return type_logits.new_zeros(())
-    return per_row(total, rows)
+    index = torch.tensor([DISPERSION_INDEX[spec.name] for spec in group])
+    return log_dispersion.index_select(0, index.to(log_dispersion.device, non_blocking=True))

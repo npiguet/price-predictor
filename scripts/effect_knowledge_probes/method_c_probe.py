@@ -47,7 +47,7 @@ def _train_step(shallow, optimizer, probe_model, chunk: list) -> None:
     """One optimiser step of the shallow trunk over ``chunk``."""
     import torch
 
-    from effects.domain.effect_losses import per_entity_loss
+    from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
     from effects.domain.surface_collation import per_entity_targets
 
     fields = probe_model.fields
@@ -58,8 +58,8 @@ def _train_step(shallow, optimizer, probe_model, chunk: list) -> None:
     device = hidden.device
     gathered = shallow.per_entity_at(hidden, targets.index.to(device))
     loss, _ = per_entity_loss(
-        gathered, targets.fields_on(device), fields=fields,
-        log_dispersion=shallow.per_entity_dispersion(),
+        gathered, targets.fields_on(device),
+        EntityLossScoring(fields=fields, log_dispersion=shallow.per_entity_dispersion()),
     )
     optimizer.zero_grad()
     loss.backward()

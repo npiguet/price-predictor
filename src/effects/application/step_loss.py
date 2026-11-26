@@ -27,10 +27,11 @@ from effects.domain.aux_heads import (
     Head,
     HeadInput,
 )
-from effects.domain.effect_losses import LossParts, mlm_loss, per_entity_loss
+from effects.domain.effect_losses import EntityLossScoring, LossParts, per_entity_loss
 from effects.domain.effect_model import EffectModel
 from effects.domain.loss_denominators import HEAD_TERMS, HeadScales, LossDenominators
 from effects.domain.selection_set import deviance_item
+from effects.domain.text_head_losses import mlm_loss
 
 
 def autocast_enabled(device: torch.device) -> bool:
@@ -179,10 +180,12 @@ class StepLossComputer:
             )
             loss, parts = per_entity_loss(
                 gathered, targets.fields_on(self.device, non_blocking=True),
-                fields=prepared.fields,
-                log_dispersion=modules.model.per_entity_dispersion(),
-                scale=None if self.scales is None else self.scales.per_entity,
-                report_parts=request.report_parts,
+                EntityLossScoring(
+                    fields=prepared.fields,
+                    log_dispersion=modules.model.per_entity_dispersion(),
+                    scale=None if self.scales is None else self.scales.per_entity,
+                    report_parts=request.report_parts,
+                ),
             )
             terms = self.head_terms(prepared.heads, encoded, modules.model, hidden)
             extra = (self.record_head_parts(prepared.heads, modules.model, hidden,

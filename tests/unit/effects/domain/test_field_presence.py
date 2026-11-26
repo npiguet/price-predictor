@@ -21,7 +21,7 @@ from effects.domain.effect_head_layout import (
     PER_ENTITY_WIDTH,
     FieldScope,
 )
-from effects.domain.effect_losses import per_entity_loss
+from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.input_layout import Slot, SlotKind
@@ -74,8 +74,12 @@ def _losses(record, names, outputs):
     fields = tuple(FIELDS_BY_NAME[name] for name in names)
     targets = entity_target_tensors([_SURFACE], [derive_targets(record)], fields)
     return per_entity_loss(
-        outputs, targets, fields=fields,
-        log_dispersion=torch.zeros(len(DISPERSED_FIELDS)), report_parts=True,
+        outputs, targets,
+        EntityLossScoring(
+            fields=fields,
+            log_dispersion=torch.zeros(len(DISPERSED_FIELDS)),
+            report_parts=True,
+        ),
     )
 
 

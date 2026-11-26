@@ -18,7 +18,7 @@ from effects.domain.effect_head_layout import (
     PER_ENTITY_WIDTH,
     VERDICT_LAYOUT,
 )
-from effects.domain.effect_losses import _gate_term, per_entity_loss
+from effects.domain.effect_losses import EntityLossScoring, _gate_term, per_entity_loss
 from effects.domain.input_layout import EffectHeadInput, Slot, SlotKind
 from effects.domain.records import (
     Curation,
@@ -99,8 +99,8 @@ def _gradients(records, mode) -> torch.Tensor:
         len(records), len(_MASK_ENTITIES), PER_ENTITY_WIDTH, requires_grad=True,
     )
     loss, _parts = per_entity_loss(
-        outputs, _mask_batch(records, mode), fields=_MASK_FIELDS,
-        log_dispersion=torch.zeros(len(DISPERSED_FIELDS)),
+        outputs, _mask_batch(records, mode),
+        EntityLossScoring(fields=_MASK_FIELDS, log_dispersion=torch.zeros(len(DISPERSED_FIELDS))),
     )
     loss.backward()
     return outputs.grad

@@ -54,13 +54,7 @@ from effects.domain.effect_head_layout import (
     FieldType,
     RecordHeadLayout,
 )
-from effects.domain.effect_losses import (
-    LossParts,
-    created_objects_row_terms,
-    created_objects_terms,
-    record_head_row_terms,
-    record_head_terms,
-)
+from effects.domain.effect_losses import LossParts
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.field_kinds import (
     FIELD_KINDS,
@@ -70,6 +64,15 @@ from effects.domain.field_kinds import (
     fit_log_dispersion,
 )
 from effects.domain.input_layout import MAGNITUDE_CAP
+from effects.domain.record_head_losses import (
+    CreatedTargets,
+    HeadScoring,
+    RecordHeadTargets,
+    created_objects_row_terms,
+    created_objects_terms,
+    record_head_row_terms,
+    record_head_terms,
+)
 from effects.domain.selection_set import PER_ENTITY_HEAD
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
@@ -459,8 +462,8 @@ def _record_head_losses(
     for targets in batches:
         # The head's own mask, a weight per record under the rule mask.
         summed += record_head_terms(
-            constant.outputs.expand(int(targets[0].shape[0]), layout.width), targets[0],
-            targets[1], layout, log_dispersion=constant.log_dispersion,
+            constant.outputs.expand(int(targets[0].shape[0]), layout.width),
+            RecordHeadTargets(targets[0], targets[1]), layout, HeadScoring(constant.log_dispersion),
         ).double()
     records = max(sample.records, 1)
     return {
@@ -486,8 +489,8 @@ def record_head_record_losses(
     fitted = flags if weights is None else flags.float() * weights.float().unsqueeze(-1)
     constant = record_head_constant([(target, fitted)], layout, weighted=weights is not None)
     rows = record_head_row_terms(
-        constant.outputs.expand(int(target.shape[0]), layout.width), target, flags, layout,
-        log_dispersion=constant.log_dispersion,
+        constant.outputs.expand(int(target.shape[0]), layout.width),
+        RecordHeadTargets(target, flags), layout, HeadScoring(constant.log_dispersion),
     ).double()
     return {
         name: torch.zeros_like(rows[:, position]) if name in constant.degenerate
@@ -517,8 +520,8 @@ def _created_objects_losses(sample: TargetSample, weighted: bool = False) -> dic
     summed = torch.zeros(len(CREATED_TERMS), dtype=torch.float64)
     for wanted, said in batches:
         summed += created_objects_terms(
-            outputs.expand(int(wanted.shape[0]), CREATED_OBJECTS_WIDTH), wanted,
-            known=said, log_dispersion=log_dispersion,
+            outputs.expand(int(wanted.shape[0]), CREATED_OBJECTS_WIDTH),
+            CreatedTargets(wanted, known=said), HeadScoring(log_dispersion),
         ).double()
     records = max(sample.records, 1)
     losses = {}

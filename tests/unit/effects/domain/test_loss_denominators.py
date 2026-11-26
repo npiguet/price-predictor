@@ -17,15 +17,18 @@ from effects.domain.effect_head_layout import (
     VERDICT_LAYOUT,
     VERDICT_WIDTH,
 )
-from effects.domain.effect_losses import (
+from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
+from effects.domain.loss_denominators import HEAD_TERMS, HeadScales, LossDenominators
+from effects.domain.loss_floor import PER_ENTITY
+from effects.domain.record_head_losses import (
+    CreatedTargets,
+    HeadScoring,
+    RecordHeadTargets,
     created_objects_loss,
     created_objects_terms,
-    per_entity_loss,
     record_head_terms,
     verdict_loss,
 )
-from effects.domain.loss_denominators import HEAD_TERMS, HeadScales, LossDenominators
-from effects.domain.loss_floor import PER_ENTITY
 from tests.unit.effects.builders import make_entity_targets
 
 FLOOR = 0.04
@@ -54,11 +57,16 @@ class TestDenominators:
             {PER_ENTITY: {"damage_taken": 0.01, "gate": 0.7}}, floor=FLOOR,
         )
         scaled, _ = per_entity_loss(
-            outputs, targets, fields=fields, log_dispersion=dispersion,
-            scale=denominators.reciprocals(PER_ENTITY),
+            outputs, targets,
+            EntityLossScoring(
+                fields=fields,
+                log_dispersion=dispersion,
+                scale=denominators.reciprocals(PER_ENTITY),
+            ),
         )
         _, parts = per_entity_loss(
-            outputs, targets, fields=fields, log_dispersion=dispersion, report_parts=True,
+            outputs, targets,
+            EntityLossScoring(fields=fields, log_dispersion=dispersion, report_parts=True),
         )
         raw = parts.as_dict()
         assert float(scaled) == pytest.approx(
@@ -109,10 +117,15 @@ class TestEveryShippedHeadScales:
         dispersion = torch.zeros(len(VERDICT_LAYOUT.dispersed))
         scale = torch.linspace(0.5, 3.0, len(VERDICT_LAYOUT.fields))
         terms = record_head_terms(
-            prediction, target, mask, VERDICT_LAYOUT, log_dispersion=dispersion,
+            prediction,
+            RecordHeadTargets(target, mask),
+            VERDICT_LAYOUT,
+            HeadScoring(log_dispersion=dispersion),
         )
         assert float(verdict_loss(
-            prediction, target, mask, log_dispersion=dispersion, scale=scale,
+            prediction,
+            RecordHeadTargets(target, mask),
+            HeadScoring(log_dispersion=dispersion, scale=scale),
         )) == pytest.approx(float((terms * scale).sum()) / 3, rel=1e-5)
 
     def test_the_created_objects_head_divides_each_column_by_its_own(self):
@@ -121,7 +134,11 @@ class TestEveryShippedHeadScales:
         target = torch.rand(2, CREATED_OBJECTS_WIDTH, generator=generator).round()
         dispersion = torch.zeros(len(CREATED_DISPERSED))
         scale = torch.rand(len(CREATED_TERMS), generator=generator)
-        terms = created_objects_terms(prediction, target, log_dispersion=dispersion)
+        terms = created_objects_terms(
+            prediction, CreatedTargets(target), HeadScoring(log_dispersion=dispersion),
+        )
         assert float(created_objects_loss(
-            prediction, target, log_dispersion=dispersion, scale=scale,
+            prediction,
+            CreatedTargets(target),
+            HeadScoring(log_dispersion=dispersion, scale=scale),
         )) == pytest.approx(float((terms * scale).sum()) / 2, rel=1e-5)
