@@ -19,6 +19,7 @@ from effects.domain.records import (
     RecordKind,
 )
 from tests.unit.effects.domain.effect_targets_support import (
+    Board,
     _entity,
     _on_board,
     _record,
@@ -26,6 +27,7 @@ from tests.unit.effects.domain.effect_targets_support import (
 )
 
 _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
+_FORBID_E2 = (ForbiddenEntity(entity="E2"),)
 
 
 @functools.cache
@@ -37,54 +39,54 @@ def _fixture() -> dict:
     return {record.record_id: record for record in read_shard(GEN3_RECORDS)}
 
 
+def _playability(payload, subkind: PlayabilitySubkind):
+    """A playability record of ``subkind`` around ``payload``, at no moment."""
+    return _record(payload, kind=RecordKind.PLAYABILITY, moment=None, subkind=subkind)
+
+
+def _derived_playability(payload, subkind: PlayabilitySubkind):
+    """The targets ``derive_targets`` reads off ``_playability(payload, subkind)``."""
+    return derive_targets(_playability(payload, subkind))
+
+
 class TestLegalityBits:
     def test_a_legal_target_sets_its_bit(self):
-        record = _record(
+        record = _playability(
             PlayabilityDecisionPayload(candidates=(
                 Candidate(ability=(), can_play=True, affordable=True,
                           has_legal_target=True, legal_targets=("E1",)),
             )),
-            kind=RecordKind.PLAYABILITY, moment=None,
-            subkind=PlayabilitySubkind.DECISION,
+            PlayabilitySubkind.DECISION,
         )
         assert derive_targets(record)["E1"].fields["target_legal"] == 1
 
     def test_legal_and_forbidden_attackers_both_get_a_bit(self):
-        record = _record(
-            PlayabilityAttackersPayload(
-                legal_attackers=("E1",),
-                forbidden=(ForbiddenEntity(entity="E2"),),
-            ),
-            kind=RecordKind.PLAYABILITY, moment=None,
-            subkind=PlayabilitySubkind.ATTACKERS,
+        targets = _derived_playability(
+            PlayabilityAttackersPayload(legal_attackers=("E1",), forbidden=_FORBID_E2),
+            PlayabilitySubkind.ATTACKERS,
         )
-        targets = derive_targets(record)
         assert targets["E1"].fields["attacker_legal"] == 1
         assert targets["E2"].fields["attacker_legal"] == 0
 
     def test_min_blockers_is_read_at_the_anchored_attacker(self):
         """Not at the blockers — the restriction belongs to the attacker."""
-        record = _record(
+        record = _playability(
             PlayabilityBlockersPayload(
                 anchor_attacker="E9", legal_blockers=("E1",), min_blockers=2,
             ),
-            kind=RecordKind.PLAYABILITY, moment=None,
-            subkind=PlayabilitySubkind.BLOCKERS,
+            PlayabilitySubkind.BLOCKERS,
         )
         targets = derive_targets(record)
         assert targets["E9"].fields["min_blockers"] == 2
         assert "min_blockers" not in targets["E1"].fields
 
     def test_a_forbidden_blocker_gets_a_zero_bit(self):
-        record = _record(
+        targets = _derived_playability(
             PlayabilityBlockersPayload(
-                anchor_attacker="E9", legal_blockers=("E1",),
-                forbidden=(ForbiddenEntity(entity="E2"),),
+                anchor_attacker="E9", legal_blockers=("E1",), forbidden=_FORBID_E2,
             ),
-            kind=RecordKind.PLAYABILITY, moment=None,
-            subkind=PlayabilitySubkind.BLOCKERS,
+            PlayabilitySubkind.BLOCKERS,
         )
-        targets = derive_targets(record)
         assert targets["E1"].fields["blocker_legal"] == 1
         assert targets["E2"].fields["blocker_legal"] == 0
 
@@ -124,7 +126,8 @@ class TestTargetLegalityOnADecisionRecord:
             PlayabilityDecisionPayload(candidates=(
                 Candidate(ability=(), can_play=False, affordable=True, has_legal_target=False),
             )),
-            _entity("E1"), kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION,
+            Board.of(_entity("E1")), kind=RecordKind.PLAYABILITY,
+            subkind=PlayabilitySubkind.DECISION,
         )
         targets = derive_targets(record)
         assert {ref: entry.fields["target_legal"] for ref, entry in targets.items()} == {
@@ -144,10 +147,12 @@ class TestCombatLegality:
                 anchor_attacker="E1", legal_defenders=("P1", "E3"), must_attack=True,
                 legal_attackers=("E1",),
             ),
-            _entity("E1", types=("creature",)),
-            _entity("E3", types=("planeswalker",), controller="P1"),
-            _entity("E4", types=("battle",), controller="P1"),
-            _entity("E5", types=("creature",), controller="P1"),
+            Board.of(
+                _entity("E1", types=("creature",)),
+                _entity("E3", types=("planeswalker",), controller="P1"),
+                _entity("E4", types=("battle",), controller="P1"),
+                _entity("E5", types=("creature",), controller="P1"),
+            ),
             kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.ATTACKERS,
         )
         targets = derive_targets(record)
@@ -165,7 +170,7 @@ class TestCombatLegality:
                     anchor_attacker="E1", legal_defenders=("P1",),
                     tapped_by_attack=tapped_by_attack,
                 ),
-                _entity("E1", types=("creature",)),
+                Board.of(_entity("E1", types=("creature",))),
                 kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.ATTACKERS,
             )
             entry = derive_targets(record)["E1"]

@@ -16,6 +16,7 @@ from effects.domain.records import (
 )
 from effects.domain.state_snapshot import COLORS
 from tests.unit.effects.domain.effect_targets_support import (
+    Board,
     _entity,
     _on_board,
     _resolution,
@@ -36,7 +37,7 @@ class TestBasePowerAndToughness:
         record = _on_board(ResolutionPayload(events=(
             Event(type=EventType.PT_CHANGE, subjects=("E1", "E2"),
                   params={"power_delta": 5, "toughness_delta": 5, "set_pt": [5, 5]}),
-        )), artifact, creature)
+        )), Board.of(artifact, creature))
         targets = derive_targets(record)
         assert targets["E1"].fields["base_power_delta"] == 5.0
         assert targets["E1"].fields["base_toughness_delta"] == 5.0
@@ -54,7 +55,7 @@ class TestBasePowerAndToughness:
         record = _on_board(ContinuousPayload(contributions=(
             Contribution(entity="E1", set_pt=(1, 1)),
             Contribution(entity="E2", set_pt=(5, 5)),
-        )), angel, artifact, kind=RecordKind.CONTINUOUS, moment=None)
+        )), Board.of(angel, artifact), kind=RecordKind.CONTINUOUS, moment=None)
         targets = derive_targets(record)
         assert targets["E1"].fields["base_power_delta"] == -3.0
         assert targets["E1"].fields["base_toughness_delta"] == -3.0
@@ -67,7 +68,7 @@ class TestBasePowerAndToughness:
         bears = _entity("E1", types=("creature",), pt=PowerToughness(base=(2, 2)))
         record = _on_board(ContinuousPayload(contributions=(
             Contribution(entity="E1", set_pt=(0, None)),
-        )), bears, kind=RecordKind.CONTINUOUS, moment=None)
+        )), Board.of(bears), kind=RecordKind.CONTINUOUS, moment=None)
         entry = derive_targets(record)["E1"]
         assert entry.fields["base_power_delta"] == -2.0
         assert entry.supervised(_spec("base_toughness_delta")) is None
@@ -80,7 +81,7 @@ class TestBasePowerAndToughness:
         bears = _entity("E1", types=("creature",), colors=("G",))
         record = _on_board(ContinuousPayload(contributions=(
             Contribution(entity="E1", colors=("=", "C"), types=("=", "land")),
-        )), bears, kind=RecordKind.CONTINUOUS, moment=None, generation=3)
+        )), Board.of(bears), kind=RecordKind.CONTINUOUS, moment=None, generation=3)
         entry = derive_targets(record)["E1"]
         assert entry.fields["types_lost"] == [
             1.0 if name == "creature" else 0.0 for name in CARD_TYPES
@@ -94,14 +95,14 @@ class TestBasePowerAndToughness:
         land = _entity("E1", types=("land",))
         record = _on_board(ContinuousPayload(contributions=(
             Contribution(entity="E1", types=("=", "land")),
-        )), land, kind=RecordKind.CONTINUOUS, moment=None, generation=3)
+        )), Board.of(land), kind=RecordKind.CONTINUOUS, moment=None, generation=3)
         entry = derive_targets(record)["E1"]
         assert entry.fields["types_lost"] == [0.0] * len(CARD_TYPES)
 
     def test_a_continuous_control_change_is_a_control_change(self):
         record = _on_board(ContinuousPayload(contributions=(
             Contribution(entity="E1", controller="P0"),
-        )), _entity("E1", controller="P1"), kind=RecordKind.CONTINUOUS, moment=None)
+        )), Board.of(_entity("E1", controller="P1")), kind=RecordKind.CONTINUOUS, moment=None)
         assert derive_targets(record)["E1"].fields["control_change"] == 1
 
     def test_a_pump_says_nothing_of_the_base(self):
@@ -154,7 +155,7 @@ class TestCopiesAndRetargets:
                   params={"from_zone": "stack", "to_zone": "battlefield"}),
             Event(type=EventType.PERMANENT_COPIED,
                   params={"copy_source": "Grizzly Bears", "count": 1, "cause": "E1"}),
-        )), _entity("E1", zone="stack")))
+        )), Board.of(_entity("E1", zone="stack"))))
         assert targets["E1"].fields["copied"] == 1
 
     def test_token_copies_place_nothing_and_leave_copied_unknown(self):
@@ -162,7 +163,7 @@ class TestCopiesAndRetargets:
             Event(type=EventType.PERMANENT_COPIED,
                   params={"copy_source": "Mountain", "count": 1, "cause": "E1"}),
             Event(type=EventType.TAPPED, subjects=("E1",)),
-        )), _entity("E1")))
+        )), Board.of(_entity("E1"))))
         assert targets["E1"].supervised(_spec("copied")) is None
 
     def test_a_spell_copy_lands_on_the_targeted_stack_object(self):
@@ -172,8 +173,8 @@ class TestCopiesAndRetargets:
             ResolutionPayload(events=(
                 Event(type=EventType.SPELL_COPIED, params={"count": 2, "cause": "E1"}),
             )),
-            _entity("E1", zone="stack"), _entity("E2", zone="stack"),
-            refs=Refs(targets=("E2",)),
+            Board.of(_entity("E1", zone="stack"), _entity("E2", zone="stack"),
+                     refs=Refs(targets=("E2",))),
         ))
         assert targets["E2"].fields["spell_copies"] == 2.0
         assert "E1" not in targets
@@ -185,7 +186,7 @@ class TestCopiesAndRetargets:
             ResolutionPayload(events=(
                 Event(type=EventType.TARGETS_CHANGED, params={"targets": ["P0"]}),
             )),
-            _entity("E2", zone="stack"), refs=Refs(targets=("E2",)),
+            Board.of(_entity("E2", zone="stack"), refs=Refs(targets=("E2",))),
         ))
         assert targets["E2"].fields["targets_changed"] == 1
 
@@ -224,7 +225,7 @@ class TestGen3EventFields:
         targets = derive_targets(_on_board(ResolutionPayload(events=(
             Event(type=EventType.DUNGEON_VENTURED,
                   params={"dungeon": "Undercity", "room": "Secret Entrance", "cause": "E1"}),
-        )), _entity("E1", controller="P1")))
+        )), Board.of(_entity("E1", controller="P1"))))
         assert targets["P1"].fields == {"ventured": 1}
 
     def test_a_goad_is_a_designation_gained(self):

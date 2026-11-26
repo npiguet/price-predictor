@@ -4,12 +4,15 @@ players, and the head layout's lookups by name."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.records import (
     EffectRecord,
     RecordKind,
     ResolutionPayload,
 )
+from effects.domain.state_snapshot import EntityState, Refs
 from tests.unit.effects.builders import make_record
 
 
@@ -31,12 +34,24 @@ def _players(*ids, library=30):
     )
 
 
-def _on_board(payload, *entities, kind=RecordKind.RESOLUTION, refs=None, **overrides):
-    from effects.domain.state_snapshot import Refs
+@dataclass(frozen=True, slots=True)
+class Board:
+    """What a record's snapshot holds beside its two players, P0 and P1: the
+    entities, and the refs of the acting ability."""
+
+    entities: tuple[EntityState, ...] = ()
+    refs: Refs = Refs()
+
+    @classmethod
+    def of(cls, *entities: EntityState, refs: Refs = Refs()) -> Board:
+        return cls(entities=tuple(entities), refs=refs)
+
+
+def _on_board(payload, board: Board, *, kind=RecordKind.RESOLUTION, **overrides):
     from tests.unit.effects.builders import make_snapshot
 
     state = make_snapshot(
-        players=_players("P0", "P1"), entities=tuple(entities), refs=refs or Refs(),
+        players=_players("P0", "P1"), entities=board.entities, refs=board.refs,
     )
     return _record(payload, kind=kind, state=state, **overrides)
 

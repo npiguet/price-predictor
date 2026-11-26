@@ -12,6 +12,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from tests.unit.effects.domain.effect_targets_support import (
+    Board,
     _entity,
     _on_board,
     _record,
@@ -123,7 +124,7 @@ class TestTheWp4Wire:
         assert walker.on_battlefield and not gone.on_battlefield
         record = _on_board(PlayabilityAttackersPayload(
             legal_attackers=("E1",), anchor_attacker="E1", legal_defenders=("P1", "E9")),
-            _entity("E1"), walker, gone, kind=RecordKind.PLAYABILITY,
+            Board.of(_entity("E1"), walker, gone), kind=RecordKind.PLAYABILITY,
             subkind=PlayabilitySubkind.ATTACKERS)
         targets = derive_targets(record)
         assert targets["E9"].fields["attack_target_legal"] == 1

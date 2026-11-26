@@ -13,6 +13,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from tests.unit.effects.domain.effect_targets_support import (
+    Board,
     _entity,
     _on_board,
     _resolution,
@@ -71,7 +72,7 @@ class TestZoneOutcomeExtensions:
         targets = derive_targets(_on_board(ResolutionPayload(events=(
             Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
                   params={"from_zone": "stack", "to_zone": "battlefield"}),
-        )), _entity("E1", zone="stack", face_state="face_down")))
+        )), Board.of(_entity("E1", zone="stack", face_state="face_down"))))
         assert targets["E1"].fields["zone_outcome"] == _zone("entered")
         assert targets["E1"].fields["face_after"] == FACE_STATES.index("face_down")
 
@@ -89,7 +90,7 @@ class TestZoneOutcomeExtensions:
             Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
                   params={"from_zone": "battlefield", "to_zone": "library"}),
             Event(type=EventType.LIBRARY_SHUFFLED, subjects=("P0",)),
-        )), _entity("E1", owner="P0")))
+        )), Board.of(_entity("E1", owner="P0"))))
         assert targets["E1"].fields["zone_outcome"] == _zone("shuffled_into_library")
         assert targets["P0"].fields["library_events"][LIBRARY_EVENTS.index("shuffle")] == 1.0
 
@@ -100,14 +101,14 @@ class TestZoneOutcomeExtensions:
                 Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
                       params={"from_zone": "battlefield", "to_zone": "library",
                               "library_position": position}),
-            )), _entity("E1", owner="P0")))
+            )), Board.of(_entity("E1", owner="P0"))))
             assert targets["E1"].fields["zone_outcome"] == _zone(outcome), position
 
     def test_a_library_move_the_record_cannot_place_is_unknown(self):
         entry = derive_targets(_on_board(ResolutionPayload(events=(
             Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
                   params={"from_zone": "battlefield", "to_zone": "library"}),
-        )), _entity("E1", owner="P0")))["E1"]
+        )), Board.of(_entity("E1", owner="P0"))))["E1"]
         assert entry.affected
         assert entry.supervised(_spec("zone_outcome")) is None
 
