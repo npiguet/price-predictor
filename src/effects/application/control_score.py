@@ -141,7 +141,12 @@ from effects.application.record_forward import RecordForward
 from effects.application.step_preparation import DeviceStep, scoring_step
 from effects.application.stratum_records import StratumReader
 from effects.application.surface_batching import SurfaceBatcher
-from effects.application.validation_pass import FieldParts, KeptTargets, score_steps
+from effects.application.validation_pass import (
+    FieldParts,
+    KeptTargets,
+    StepScoring,
+    score_steps,
+)
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.loss_floor import constant_predictor_losses
 from effects.domain.rule_mask import RuleMask, copy_weights, weighed_by_class
@@ -448,8 +453,9 @@ def _deviance_parts(cache: StratumCache, epoch: _Epoch, key: tuple[str, ...]) ->
     kept = KeptTargets() if key not in cache.floors else None
     collectors = (parts,) if kept is None else (parts, kept)
     fields = epoch.fields
+    scoring = StepScoring(epoch.forward, epoch.losses, _device_of(epoch.forward))
     score_steps((unpack(replace(step, fields=fields)) for step in cache.steps),
-                epoch.forward, epoch.losses, collectors, device=_device_of(epoch.forward))
+                scoring, collectors)
     if kept is not None:
         cache.floors[key] = deviance_items(
             constant_predictor_losses(kept.sample, fields=fields, weighted=True))

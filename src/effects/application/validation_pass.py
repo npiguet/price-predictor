@@ -325,15 +325,25 @@ class Validator:
             run.preparer.prepare_scoring_step(records[start:start + size], fields)
             for start in range(0, len(records), size)
         )
-        return score_steps(
-            prepared, RecordForward(run.encoder, run.model, run.scoring), self.losses,
-            collectors, device=self.device,
+        scoring = StepScoring(
+            RecordForward(run.encoder, run.model, run.scoring), self.losses, self.device,
         )
+        return score_steps(prepared, scoring, collectors)
+
+
+@dataclass(frozen=True)
+class StepScoring:
+    """What scores a step: the chunked forward, the device half whose shipped
+    loss it reads, and the device the running total lives on."""
+
+    forward: RecordForward
+    losses: StepLossComputer
+    device: torch.device
 
 
 def score_steps(
-    steps: Iterable[DeviceStep], forward: RecordForward, losses: StepLossComputer,
-    collectors: tuple[PassCollector, ...] = (), *, device: torch.device,
+    steps: Iterable[DeviceStep], scoring: StepScoring,
+    collectors: tuple[PassCollector, ...] = (),
 ) -> float:
     """The mean shipped loss over ``steps`` through the one chunked forward
     (:mod:`effects.application.record_forward`), each of ``collectors`` folding
@@ -344,10 +354,11 @@ def score_steps(
     """
     report_parts = any(collector.wants_parts for collector in collectors)
     head_parts = any(getattr(collector, "wants_head_parts", False) for collector in collectors)
-    total = torch.zeros((), device=device)
+    total = torch.zeros((), device=scoring.device)
     batches = 0
-    for prepared, computed in forward.steps(steps, losses, report_parts=report_parts,
-                                            head_parts=head_parts):
+    for prepared, computed in scoring.forward.steps(
+        steps, scoring.losses, report_parts=report_parts, head_parts=head_parts,
+    ):
         total += computed.shipped
         batches += 1
         for collector in collectors:

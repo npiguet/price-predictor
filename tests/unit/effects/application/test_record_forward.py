@@ -16,7 +16,7 @@ from effects.application import record_forward
 from effects.application.record_forward import EntityScoring, RecordForward, entity_chunks
 from effects.application.step_loss import StepLoss
 from effects.application.surface_batching import Materializer
-from effects.application.validation_pass import score_steps
+from effects.application.validation_pass import StepScoring, score_steps
 from effects.domain.baselines import BaselineMasks
 from effects.domain.effect_losses import LossParts
 from effects.domain.surface_collation import entity_index, per_entity_targets
@@ -145,12 +145,11 @@ class TestSteps:
             total=torch.tensor(9.0), shipped=torch.tensor(float(prepared)),
             parts=LossParts(), terms={}))
         module = one_parameter_module()
-        value = score_steps([2, 4], RecordForward(module, module, None), losses,
-                            (collector,), device=torch.device("cpu"))
+        scoring = StepScoring(RecordForward(module, module, None), losses, torch.device("cpu"))
+        value = score_steps([2, 4], scoring, (collector,))
         assert value == 3.0
         assert added == [2, 4] and finished == [True]
-        assert math.isnan(score_steps([], RecordForward(module, module, None), losses,
-                                      device=torch.device("cpu")))
+        assert math.isnan(score_steps([], scoring))
 
 
 def test_the_probes_predict_through_it(run, records, monkeypatch):
