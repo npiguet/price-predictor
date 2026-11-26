@@ -118,6 +118,13 @@ def evaluation_dir(checkpoint: Path, output: Path | None) -> Path:
     return checkpoint.parent / f"{checkpoint.stem}.evaluation"
 
 
+def _lacks_name_or_path(separator: str, name: str, path: str) -> bool:
+    """Whether a ``NAME=PATH`` split has no ``=``, or a blank side."""
+    if not separator:
+        return True
+    return not name.strip() or not path.strip()
+
+
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
     """``NAME=PATH`` for ``--variant-checkpoint``, ``NAME`` a baseline.
 
@@ -125,7 +132,7 @@ def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
     as gate 1's "no identity checkpoint" skip.
     """
     name, separator, path = value.partition("=")
-    if not separator or not name.strip() or not path.strip():
+    if _lacks_name_or_path(separator, name, path):
         raise ValueError(
             f"--variant-checkpoint takes NAME=PATH, got {value!r}"
         )
