@@ -5,7 +5,6 @@ snapshot tiers, the collection mode and empty mana.
 from __future__ import annotations
 
 from effects.application.corpus_validation.findings import Thresholds
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     CollectionMode,
@@ -15,6 +14,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import InclusionTier
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _activation,
     _healthy,

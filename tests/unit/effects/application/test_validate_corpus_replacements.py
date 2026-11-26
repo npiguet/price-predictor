@@ -7,10 +7,10 @@ from __future__ import annotations
 import pytest
 
 from effects.application.corpus_validation.findings import Thresholds
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import RewriteResult
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _KEY,
     _healthy,

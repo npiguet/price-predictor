@@ -5,9 +5,9 @@ declare a cause, and which event types a corpus holds.
 from __future__ import annotations
 
 from effects.application.corpus_validation.findings import Finding, Thresholds
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import AttributionKind, Event, EventType
 from effects.domain.records import EffectRecord, ResolutionPayload, RewritePayload
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _healthy,
     _named,

@@ -59,6 +59,7 @@ from effects.application.corpus_validation.payload_checks import (
     Rewrites,
     Triggers,
 )
+from effects.application.corpus_validation.ports import RecordRenderer, ShardSource
 from effects.application.corpus_validation.presence import FieldPresence
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
@@ -76,6 +77,8 @@ class DirectoryReport:
 
 def validate_directory(
     root: Path, *,
+    source: ShardSource,
+    record_renderer: RecordRenderer,
     limit: int = 0,
     thresholds: Thresholds = Thresholds(),
     sidecars: SidecarLookup | None = None,
@@ -89,21 +92,18 @@ def validate_directory(
     measured; the other shards are read on (V5 #20). What the read met
     without stopping, values outside the wire's closed lists and damaged last
     members (``shard_io.DecodeTally``), is reported as watched figures.
+    ``source`` and ``record_renderer`` are the ports the command passes
+    (:mod:`effects.application.corpus_validation.ports`).
     """
-    from effects.infrastructure.shard_io import (
-        require_generation,
-        require_shards,
-        reset_decode_tally,
-    )
-
-    shards = require_shards(root)
-    require_generation(shard.path(root) for shard in shards)
+    shards = source.require_shards(root)
+    source.require_generation(shard.path(root) for shard in shards)
     presence = FieldPresence()
-    damage = ShardDamage()
-    reset_decode_tally()
+    damage = ShardDamage(source)
+    source.reset_decode_tally()
     findings = validate_corpus(
         damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
         playability_rate=playability_rate_of(root), window_cut=bool(limit),
+        record_renderer=record_renderer,
     )
     findings.extend(damage.findings())
     return DirectoryReport(len(shards), findings)
@@ -113,32 +113,29 @@ class ShardDamage:
     """The shards a damaged member or an undecodable line cut short, and the
     read's decode tally, as findings."""
 
-    def __init__(self) -> None:
+    def __init__(self, source: ShardSource) -> None:
+        self.source = source
         self.read_shards = 0
         self.cut: list[str] = []
 
     def read(self, root: Path, shards, limit: int, observe) -> Iterator[EffectRecord]:
         """Every record of ``shards`` up to ``limit``, a shard's damage noted
         and its read ended, the next shard read on."""
-        from effects.infrastructure.shard_io import SHARD_DAMAGE, read_window
-
         seen = 0
         for shard in shards:
             self.read_shards += 1
             try:
-                for record in read_window(root, limit - seen if limit else 0, observe,
-                                          shards=(shard,)):
+                for record in self.source.read_window(
+                        root, limit - seen if limit else 0, observe, shards=(shard,)):
                     yield record
                     seen += 1
-            except SHARD_DAMAGE as error:
+            except self.source.damage as error:
                 logger.error("%s", error)
                 self.cut.append(str(error))
             if limit and seen >= limit:
                 return
 
     def findings(self) -> list[Finding]:
-        from effects.infrastructure.shard_io import take_decode_tally
-
         found = [Finding(
             name="every shard line decodes",
             ok=not self.cut,
@@ -147,7 +144,7 @@ class ShardDamage:
                       "decode, their records before it measured"),
             detail=tuple(self.cut[:EXAMPLES]),
         )]
-        tally = take_decode_tally()
+        tally = self.source.take_decode_tally()
         found.append(Finding.watch(
             f"values outside the wire's closed lists: {sum(tally.off_list.values())}",
             "read as written and counted (shard_io.DecodeTally)",
@@ -187,6 +184,7 @@ def validate_corpus(
     sidecars: SidecarLookup | None = None,
     presence: FieldPresence | None = None,
     *,
+    record_renderer: RecordRenderer,
     playability_rate: float | None = None,
     window_cut: bool = False,
 ) -> Findings:
@@ -197,9 +195,10 @@ def validate_corpus(
     ``shard_io.read_window`` fills from the raw lines (FR-033, root § 8.13),
     since a parsed record cannot say whether a field was on the wire.
     ``window_cut`` says ``--limit`` ended the read, so a record the window
-    does not hold may exist.
+    does not hold may exist. ``record_renderer`` renders a record as the
+    writer does, for the exact-duplicate check.
     """
-    checks = _checks(sidecars, playability_rate, window_cut)
+    checks = _checks(sidecars, record_renderer, playability_rate, window_cut)
     for record in records:
         for check in checks:
             check.add(record)
@@ -211,8 +210,8 @@ def validate_corpus(
     return findings
 
 
-def _checks(sidecars: SidecarLookup | None, playability_rate: float | None = None,
-            window_cut: bool = False) -> tuple[Check, ...]:
+def _checks(sidecars: SidecarLookup | None, record_renderer: RecordRenderer,
+            playability_rate: float | None = None, window_cut: bool = False) -> tuple[Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = RecordIds()
     return (
@@ -226,7 +225,7 @@ def _checks(sidecars: SidecarLookup | None, playability_rate: float | None = Non
         Modes(),
         Activations(),
         Tiers(),
-        Duplicates(),
+        Duplicates(record_renderer),
         DuplicateEvents(),
         Triggers(),
         Rewrites(),

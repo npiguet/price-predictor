@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.provenance import ProvenanceKey
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _BEARS,
     _healthy,

@@ -5,9 +5,9 @@ fork's turn against its mirror, and the clause a fork event names.
 from __future__ import annotations
 
 from effects.application.corpus_validation.findings import Thresholds
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import AttributionKind, Event, EventType
 from effects.domain.records import CombatPayload, ResolutionPayload
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _combat,
     _healthy,

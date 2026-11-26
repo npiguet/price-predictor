@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 from effects.application.corpus_validation.findings import Finding, Thresholds
-from effects.application.validate_corpus import validate_directory
 from effects.domain.shard_generation import OlderGenerationError, UnknownGenerationError
+from tests.unit.effects.application.validate_corpus_ports import validate_directory
 
 GEN3 = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-records.jsonl.gz"
 

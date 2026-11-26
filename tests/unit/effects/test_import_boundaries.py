@@ -263,6 +263,20 @@ def test_the_domain_imports_neither_layer_above_it() -> None:
     )
 
 
+def _is_validator(path: Path) -> bool:
+    return path.name == "validate_corpus.py" or path.parent.name == "corpus_validation"
+
+
+def test_the_validator_imports_no_infrastructure() -> None:
+    """``validate_corpus`` and ``corpus_validation`` receive their shard reader
+    and record renderer from the command (``corpus_validation.ports``)."""
+    violations = _imports_matching(
+        ("effects",), _is_under("effects.infrastructure"), _is_validator,
+    )
+    assert not violations, (
+        "the validator imports effects.infrastructure:\n  " + "\n  ".join(violations)
+    )
+
 
 def test_no_package_imports_the_scripts() -> None:
     """``scripts/`` imports the packages and never the reverse (FR-078).

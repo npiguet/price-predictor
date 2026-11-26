@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 
 from effects.application.corpus_validation.findings import Finding, Findings
-from effects.application.validate_corpus import validate_corpus, validate_directory
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import ResolutionPayload
 from effects.infrastructure.shard_io import NoShardsError, read_window
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus, validate_directory
 from tests.unit.effects.application.validate_corpus_support import (
     _BEARS,
     _healthy,

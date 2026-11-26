@@ -20,6 +20,7 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
+from effects.application.corpus_validation.ports import RecordRenderer
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.event_schema import countered_objects
 from effects.domain.provenance import ProvenanceKey
@@ -69,12 +70,11 @@ def _labels_of(*kinds: RecordKind) -> tuple[str, ...]:
     )
 
 
-def _digest(record: EffectRecord) -> bytes:
+def _digest(record: EffectRecord, render: RecordRenderer) -> bytes:
     """A record's content, identity stripped, as 16 bytes. Rendered through the
-    writer, so a field added later is covered without being added here."""
-    from effects.infrastructure.record_codec import record_to_dict
-
-    data = record_to_dict(record)
+    writer (``render``), so a field added later is covered without being added
+    here."""
+    data = render(record)
     for name in _IDENTITY_FIELDS:
         data.pop(name, None)
     return canonical_digest(data)
@@ -344,8 +344,6 @@ class GameEndMarkers:
 
 def _all_labels() -> tuple[str, ...]:
     """Every kind label a window can hold, turn actions by subkind."""
-    from effects.domain.records import TurnActionSubkind
-
     labels = [label for label in _labels_of(*RecordKind) if not label.startswith("turn_action")]
     return (*labels, *(f"{RecordKind.TURN_ACTION.value}/{s.value}" for s in TurnActionSubkind))
 
@@ -626,14 +624,15 @@ class Tiers:
 class Duplicates:
     """Records byte-identical to an earlier one in the same game, per kind."""
 
-    def __init__(self) -> None:
+    def __init__(self, render: RecordRenderer) -> None:
+        self.render = render
         #: Per kind label: how many records repeat an earlier one of their game.
         self.by_kind: dict[str, Share] = defaultdict(Share)
         #: game_id -> the digest of every record it has shown.
         self.digests: dict[str, set[bytes]] = defaultdict(set)
 
     def add(self, record: EffectRecord) -> None:
-        digest = _digest(record)
+        digest = _digest(record, self.render)
         game = self.digests[record.game_id]
         self.by_kind[_kind_label(record)].note(digest in game)
         game.add(digest)

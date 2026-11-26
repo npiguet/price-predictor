@@ -103,7 +103,7 @@ def test_a_shard_line_without_a_member_is_refused_at_its_shard_and_line(
 def test_validate_corpus_names_the_member_twice_and_cuts_the_shard_there(tmp_path):
     """The presence check sees the raw line before it is decoded, so it
     names the member; the decode then ends the shard's read at that line."""
-    from effects.application.validate_corpus import validate_directory
+    from tests.unit.effects.application.validate_corpus_ports import validate_directory
 
     index = _first_carrying(Site.COMBAT, "blocks", start=len(_fixture()) // 2)
     shard = _shard_with(tmp_path, index, _dropped(index, Site.COMBAT, "blocks"))

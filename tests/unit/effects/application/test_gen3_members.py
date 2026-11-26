@@ -138,8 +138,8 @@ def _write(directory: Path, rows: list[dict]) -> None:
 
 
 def _gen3_finding(tmp_path: Path, rows: list[dict]):
-    from effects.application.validate_corpus import ShardDamage, validate_corpus
     from effects.infrastructure.shard_io import list_shards
+    from tests.unit.effects.application.validate_corpus_ports import ShardDamage, validate_corpus
 
     _write(tmp_path, rows)
     presence = FieldPresence()

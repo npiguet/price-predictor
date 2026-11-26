@@ -11,10 +11,10 @@ import pytest
 
 from effects.application.corpus_validation.findings import Findings
 from effects.application.corpus_validation.presence import FieldPresence
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.gen3_members import ALWAYS, Site
 from effects.domain.records import PlayabilitySubkind, RecordKind
 from effects.infrastructure.shard_io import read_window
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _healthy,
     _named,
@@ -68,8 +68,8 @@ def _read_noting_damage(root: Path, presence: FieldPresence):
     """The records under ``root`` as ``validate-corpus`` reads them: a line
     missing a member the decoder requires ends its shard, after the presence
     tally has seen it."""
-    from effects.application.validate_corpus import ShardDamage
     from effects.infrastructure.shard_io import list_shards
+    from tests.unit.effects.application.validate_corpus_ports import ShardDamage
 
     return ShardDamage().read(root, list_shards(root), 0, presence.observe)
 

@@ -4,9 +4,9 @@ copy its event, and its outgoing event agrees with its result.
 
 from __future__ import annotations
 
-from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import RecordKind, RewritePayload, RewriteResult
+from tests.unit.effects.application.validate_corpus_ports import validate_corpus
 from tests.unit.effects.application.validate_corpus_support import (
     _KEY,
     _healthy,

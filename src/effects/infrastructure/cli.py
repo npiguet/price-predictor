@@ -951,9 +951,10 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
     from effects.application.validate_corpus import validate_directory
 
     root = args.effect_records
+    source, record_renderer = validation_ports()
     report = validate_directory(
-        root, limit=args.limit, thresholds=config_from_args(Thresholds, args),
-        sidecars=_sidecars_for_validation(args),
+        root, source=source, record_renderer=record_renderer, limit=args.limit,
+        thresholds=config_from_args(Thresholds, args), sidecars=_sidecars_for_validation(args),
     )
     findings = report.findings
     window = f" (first {args.limit} records)" if args.limit else ""
@@ -962,6 +963,24 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
         print("\n".join(finding.lines()))
     print("\n" + "\n".join(findings.summary()))
     return 1 if findings.broken() else 0
+
+
+def validation_ports():
+    """The shard reader and record renderer the validator runs on: the
+    application layer imports no infrastructure, so this composition root
+    hands them in."""
+    from effects.application.corpus_validation.ports import ShardSource
+    from effects.infrastructure import shard_io
+    from effects.infrastructure.record_codec import record_to_dict
+
+    return ShardSource(
+        require_shards=shard_io.require_shards,
+        require_generation=shard_io.require_generation,
+        reset_decode_tally=shard_io.reset_decode_tally,
+        take_decode_tally=shard_io.take_decode_tally,
+        read_window=shard_io.read_window,
+        damage=shard_io.SHARD_DAMAGE,
+    ), record_to_dict
 
 
 def _sidecars_for_validation(args: argparse.Namespace):
