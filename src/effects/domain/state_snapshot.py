@@ -1,7 +1,7 @@
 """The pre-event game state every effect record carries.
 
 Stored as data and tensorized at training time by
-:mod:`effects.domain.effect_head_input`, so a representation change is a code
+:mod:`effects.domain.surface_builder`, so a representation change is a code
 change rather than a re-collection. Controllers are absolute player ids — mine
 and opponent derive from the record's ``actor_player`` — and an absent
 inclusion tier means uncollected, not empty.

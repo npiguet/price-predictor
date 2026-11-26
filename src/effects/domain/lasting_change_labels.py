@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 
-from effects.domain.effect_head_input import vocabulary_slot
 from effects.domain.effect_head_layout import HeadField
 from effects.domain.event_schema import Event
+from effects.domain.input_vocabularies import vocabulary_slot
 from effects.domain.keyword_names import changed_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED
 

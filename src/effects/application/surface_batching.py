@@ -22,20 +22,13 @@ from effects.application.text_staging import StagedTexts, TextStager, encode_by_
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
-from effects.domain.effect_head_input import (
-    ACT_SLOT,
-    KIND_FLAG_WIDTH,
-    NO_STRIP,
-    SlotKind,
-    SurfaceBuilder,
-    board_entities,
-    keyword_line_fragment,
-    slot_lines,
-)
+from effects.domain.input_layout import ACT_SLOT, KIND_FLAG_WIDTH, SlotKind
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
+from effects.domain.slot_lines import keyword_line_fragment, slot_lines
 from effects.domain.slot_widths import layout_widths
+from effects.domain.surface_builder import NO_STRIP, SurfaceBuilder, board_entities
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 from effects.domain.value_targets import ValueLine
 

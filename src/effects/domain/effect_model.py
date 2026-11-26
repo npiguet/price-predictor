@@ -15,13 +15,6 @@ import torch
 import torch.nn as nn
 
 from effects.domain.ability_encoder import DROPOUT, ENCODER_D_MODEL, FF_MULTIPLIER
-from effects.domain.effect_head_input import (
-    ACT_SLOT,
-    COUNTER_ROWS,
-    ID_PADDING,
-    SUBTYPE_ROWS,
-    SlotKind,
-)
 from effects.domain.effect_head_layout import (
     CREATED_DISPERSED,
     CREATED_OBJECTS_WIDTH,
@@ -35,6 +28,8 @@ from effects.domain.effect_head_layout import (
     VERDICT_WIDTH,
 )
 from effects.domain.field_kinds import INITIAL_LOG_DISPERSION, bounded_log_dispersion
+from effects.domain.input_layout import ACT_SLOT, SlotKind
+from effects.domain.input_vocabularies import COUNTER_ROWS, ID_PADDING, SUBTYPE_ROWS
 from effects.domain.relation_attention import RelationEncoderLayer
 from effects.domain.relation_types import RELATION_TYPES
 from effects.domain.surface_collation import TrunkInputs, gather_entities

@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import pytest
 
-from effects.domain.effect_head_input import card_features, card_segments, player_features
+from effects.domain.card_features import card_features, card_segments
 from effects.domain.event_schema import Event, EventType
+from effects.domain.input_layout import player_features
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records
 from tests.unit.effects.domain.test_pending_event_input import _surface, _with_event, _with_pending

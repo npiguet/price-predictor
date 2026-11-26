@@ -1,6 +1,6 @@
 """Each slot kind's feature width: a constant of the input layout.
 
-The widths are what the slot builders of :mod:`effects.domain.effect_head_input`
+The widths are what the slot builders of :mod:`effects.domain.surface_builder`
 emit, and no builder's width depends on the record it reads. They are computed
 once per process, by running a blank record with one blank player and one
 blank card through those builders, so they cannot drift from what a batch
@@ -13,15 +13,10 @@ from collections.abc import Mapping
 from functools import cache
 from types import MappingProxyType
 
-from effects.domain.effect_head_input import (
-    ABILITY_FEATURE_WIDTH,
-    SlotKind,
-    act_features,
-    card_features,
-    global_features,
-    player_features,
-)
+from effects.domain.card_features import card_features
+from effects.domain.input_layout import SlotKind, act_features, global_features, player_features
 from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
+from effects.domain.slot_lines import ABILITY_FEATURE_WIDTH
 from effects.domain.state_snapshot import EntityState, GlobalState, PlayerState, StateSnapshot
 
 

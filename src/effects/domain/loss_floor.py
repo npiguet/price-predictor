@@ -35,7 +35,6 @@ from dataclasses import dataclass
 import torch
 
 from effects.domain.aux_heads import Head
-from effects.domain.effect_head_input import MAGNITUDE_CAP
 from effects.domain.effect_head_layout import (
     CREATED_DISPERSED,
     CREATED_MAGNITUDES,
@@ -70,6 +69,7 @@ from effects.domain.field_kinds import (
     counted,
     fit_log_dispersion,
 )
+from effects.domain.input_layout import MAGNITUDE_CAP
 from effects.domain.selection_set import PER_ENTITY_HEAD
 
 #: A guard on dividing by a floor, not the degenerate-field detector.

@@ -543,7 +543,7 @@ class BatchContext:
 
 def _slot_index(surface) -> tuple[dict[str, int], dict[str, list[int]]]:
     """A surface's slot of each player, and its ability rows by entity."""
-    from effects.domain.effect_head_input import SlotKind
+    from effects.domain.input_layout import SlotKind
 
     player_slot: dict[str, int] = {}
     rows_of: dict[str, list[int]] = defaultdict(list)

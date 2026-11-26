@@ -11,10 +11,11 @@ from dataclasses import dataclass, replace
 import numpy as np
 import torch
 
-from effects.domain.effect_head_input import ID_PADDING, SlotKind
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
+from effects.domain.input_layout import SlotKind
+from effects.domain.input_vocabularies import ID_PADDING
 from effects.domain.rule_mask import CopyWeights
 
 

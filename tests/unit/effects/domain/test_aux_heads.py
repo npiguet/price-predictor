@@ -22,7 +22,6 @@ from effects.domain.aux_head_targets import (
     verdict_targets,
 )
 from effects.domain.aux_heads import AUX_HEADS, SHIPPED_HEADS, Head
-from effects.domain.effect_head_input import CARD_TYPES, MANA_SYMBOLS
 from effects.domain.effect_head_layout import (
     CREATED_KINDS,
     CREATED_OBJECTS_WIDTH,
@@ -44,6 +43,7 @@ from effects.domain.effect_losses import global_loss, record_head_loss, verdict_
 from effects.domain.event_schema import Event, EventType
 from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
 from effects.domain.field_types import FieldType
+from effects.domain.input_vocabularies import CARD_TYPES, MANA_SYMBOLS
 from effects.domain.output_vocabularies import SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (

@@ -347,7 +347,7 @@ class TestEpochShares:
 
 def _built_run(monkeypatch, **config):
     """The run a loop builds over a stand-in preparer, at the smallest encoder."""
-    from effects.domain.effect_head_input import SlotKind
+    from effects.domain.input_layout import SlotKind
 
     loop = make_cpu_training_loop(
         monkeypatch, encoder_layers=1, encoder_d_model=8, **config,

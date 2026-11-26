@@ -17,7 +17,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from effects.domain.effect_head_input import MAGNITUDE_CAP
 from effects.domain.effect_head_layout import (
     DISPERSION_INDEX,
     FIELDS_BY_NAME,
@@ -31,6 +30,7 @@ from effects.domain.head_decoding import (
     expected_magnitude,
     field_outputs,
 )
+from effects.domain.input_layout import MAGNITUDE_CAP
 
 # Gate thresholds (FR-118, FR-123): contract, not tuning.
 GATE1_MIN_GATE_F1_GAIN = 0.05

@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 
 from effects.domain.baselines import BaselineMasks
-from effects.domain.effect_head_input import EffectHeadInput, Slot, SlotKind
+from effects.domain.input_layout import EffectHeadInput, Slot, SlotKind
 from effects.domain.provenance import SidecarLine
 from effects.domain.records import (
     EffectRecord,
@@ -58,7 +58,7 @@ class TestRelationsUnderTheMasks:
     """T102: the board's links are state, so the no-state baseline reads none."""
 
     def _inputs(self):
-        from effects.domain.effect_head_input import SlotKind
+        from effects.domain.input_layout import SlotKind
         from effects.domain.surface_collation import collate_surfaces
 
         slots = tuple(Slot(kind=SlotKind.CARD, position=i, features=(1.0,)) for i in range(3))
@@ -109,7 +109,7 @@ def _resolution(entities) -> EffectRecord:
 def test_a_keyword_line_with_no_script_reads_its_reminder_text():
     """Root spec § 9.2: a keyword an effect granted is a line read through its
     reminder text; a keyword the definitions do not know reads as written."""
-    from effects.domain.effect_head_input import keyword_line_key
+    from effects.domain.slot_lines import keyword_line_key
 
     batcher = _flying_batcher(widths={})
     flying = keyword_line_key("Flying")
@@ -154,7 +154,7 @@ def test_no_state_zeroes_the_line_flags_and_the_card_ids():
 def test_a_floating_effects_card_reads_its_source_lines_text():
     """Root spec § 9.3 (T114): a timestamped floating effect's ``[CARD]``
     is followed by its source line, encoded with the batch like any other."""
-    from effects.domain.effect_head_input import command_zone_entities
+    from effects.domain.surface_builder import command_zone_entities
     from effects.infrastructure.record_codec import record_from_dict
     from tests.unit.effects.builders import (
         GEN3_SIDECAR_FOLDERS,

@@ -91,7 +91,7 @@ class TestEntitySlots:
     def test_players_are_read_beside_cards(self):
         from types import SimpleNamespace
 
-        from effects.domain.effect_head_input import SlotKind
+        from effects.domain.input_layout import SlotKind
         from effects.domain.probe_readouts import card_slots, entity_slots
 
         slots = [SimpleNamespace(kind=SlotKind.GLOBAL, entity_id=None, player_id=None),

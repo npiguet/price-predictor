@@ -18,15 +18,11 @@ from dataclasses import replace
 
 import pytest
 
-from effects.domain.effect_head_input import (
-    ACT_SLOT,
-    SlotKind,
-    SurfaceBuilder,
-    card_features,
-    card_segments,
-)
+from effects.domain.card_features import card_features, card_segments
+from effects.domain.input_layout import ACT_SLOT, SlotKind
 from effects.domain.relation_types import relation_type
 from effects.domain.state_snapshot import LineRef, Link
+from effects.domain.surface_builder import SurfaceBuilder
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records
 from tests.unit.effects.domain.test_input_outcome_independence import E_DIM, _Lines

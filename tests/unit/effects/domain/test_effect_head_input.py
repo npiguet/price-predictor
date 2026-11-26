@@ -15,23 +15,19 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from effects.domain.effect_head_input import (
+from effects.domain.card_features import card_features, card_segments, counter_rows
+from effects.domain.effect_head_layout import OVERLAY_KEYWORDS
+from effects.domain.event_schema import Event, EventType
+from effects.domain.input_layout import (
     ACT_SLOT,
-    NO_STRIP,
-    OVERLAY_KEYWORDS,
-    PHASES,
     THERMOMETER_STEPS,
     SlotKind,
-    SurfaceBuilder,
     _push_scalar,
     act_features,
-    card_features,
-    card_segments,
-    counter_rows,
     global_features,
     player_features,
 )
-from effects.domain.event_schema import Event, EventType
+from effects.domain.input_vocabularies import PHASES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
@@ -52,6 +48,7 @@ from effects.domain.state_snapshot import (
     Refs,
     StateSnapshot,
 )
+from effects.domain.surface_builder import NO_STRIP, SurfaceBuilder
 from tests.unit.effects.builders import (
     lines_of,
     make_entity,
@@ -681,7 +678,7 @@ class TestLineFlags:
             _build(_record(state=_snapshot(entities=(entity,))), **build), SlotKind.ABILITY)
 
     def test_every_ability_slot_has_the_flags_width(self):
-        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH
+        from effects.domain.slot_lines import ABILITY_FEATURE_WIDTH
 
         entity = _entity("E1", lines=(_line(_ANTHEM), _line(_WARD, active=False)))
         assert {len(slot.features) for slot in self._abilities(entity)} == {
@@ -739,7 +736,7 @@ class TestLineFlags:
         ) == [(1.0, 0.0), (1.0, 0.0)]
 
     def test_a_keyword_an_effect_granted_reads_through_its_reminder_line(self):
-        from effects.domain.effect_head_input import keyword_line_fragment
+        from effects.domain.slot_lines import keyword_line_fragment
 
         entity = _entity("E1", lines=(
             _line(None, kind="keyword", granted=True, grant="effect", fragment="Flying"),))
@@ -772,7 +769,8 @@ class TestLineFlags:
         assert [_flags(slot)["chosen"] for slot in abilities] == [0.0, 1.0, 0.0, 1.0]
 
     def test_a_keyword_counter_is_a_granted_keyword_line_not_a_counter(self):
-        from effects.domain.effect_head_input import counter_id, keyword_line_fragment, slot_lines
+        from effects.domain.input_vocabularies import counter_id
+        from effects.domain.slot_lines import keyword_line_fragment, slot_lines
 
         entity = _entity("E1", counters={"FLYING": 1, "P1P1": 2})
         lines = slot_lines(entity)
@@ -781,7 +779,7 @@ class TestLineFlags:
         assert counter_rows(entity) == ((counter_id("P1P1"), 2.0),)
 
     def test_a_keyword_counter_adds_no_line_where_the_keyword_has_one(self):
-        from effects.domain.effect_head_input import slot_lines
+        from effects.domain.slot_lines import slot_lines
 
         entity = _entity("E1", counters={"FLYING": 1}, lines=(
             _line(None, kind="keyword", granted=True, fragment="Flying"),))
@@ -832,7 +830,7 @@ class TestCardSlotInputs:
     """Root spec § 9.4: the card slot's new inputs."""
 
     def test_the_face_state_is_one_hot(self):
-        from effects.domain.effect_head_input import FACE_STATES
+        from effects.domain.input_vocabularies import FACE_STATES
 
         record = _record()
         for face in FACE_STATES:
@@ -867,7 +865,7 @@ class TestCardSlotInputs:
         assert (plain[-2:], copy[-2:], token[-2:]) == ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
 
     def test_mana_cost_reads_each_symbol(self):
-        from effects.domain.effect_head_input import MANA_SYMBOLS
+        from effects.domain.input_vocabularies import MANA_SYMBOLS
 
         entity = _entity("E1", mana_cost={"generic": 2, "W/U": 1, "G/P": 2})
         part = _card_part(entity, _record(), "mana_cost")
@@ -888,14 +886,14 @@ class TestCardSlotInputs:
         import re
         from pathlib import Path
 
-        from effects.domain.effect_head_input import DESIGNATIONS
+        from effects.domain.input_vocabularies import DESIGNATIONS
 
         java = (Path(__file__).resolve().parents[4] / "forge-connector/src/main/java/com/"
                 "pricepredictor/connector/effects/Designation.java").read_text(encoding="utf-8")
         assert tuple(re.findall(r'^\s*[A-Z_]+\("([a-z_]+)",', java, re.MULTILINE)) == DESIGNATIONS
 
     def test_designations_x_paid_history_and_order_rank(self):
-        from effects.domain.effect_head_input import DESIGNATIONS
+        from effects.domain.input_vocabularies import DESIGNATIONS
         from effects.domain.state_snapshot import CardHistory
 
         entity = _entity(
@@ -924,7 +922,7 @@ class TestCardSlotInputs:
         assert paid[0] == 1.0 and paid[1 + 2 * COLORS.index("B")] == 2.0 and paid[-1] == 1.0
 
     def test_subtypes_and_chosen_types_share_the_subtype_rows(self):
-        from effects.domain.effect_head_input import SUBTYPE_ROWS, subtype_id
+        from effects.domain.input_vocabularies import SUBTYPE_ROWS, subtype_id
         from effects.domain.state_snapshot import CardChoices
 
         entity = _entity("E1", subtypes=("human", "soldier"),
@@ -936,13 +934,13 @@ class TestCardSlotInputs:
         assert subtype_id("not a subtype") == SUBTYPE_ROWS - 1
 
     def test_a_chosen_card_type_is_no_subtype(self):
-        from effects.domain.effect_head_input import chosen_subtypes
+        from effects.domain.card_features import chosen_subtypes
         from effects.domain.state_snapshot import CardChoices
 
         assert chosen_subtypes(_entity("E1", chosen=CardChoices(type="Artifact"))) == ()
 
     def test_every_named_counter_has_a_row_of_its_own(self):
-        from effects.domain.effect_head_input import COUNTER_ROWS, counter_id
+        from effects.domain.input_vocabularies import COUNTER_ROWS, counter_id
 
         rows = dict(counter_rows(_entity("E1", counters={"OIL": 2, "+1/+1": 1, "ZZZ": 4})))
         assert rows[counter_id("OIL")] == 2.0 and rows[counter_id("P1P1")] == 1.0
@@ -962,7 +960,7 @@ class TestPlayerGlobalAndActInputs:
     """Root spec § 9.4-§ 9.5 and the land-play limit of FR-044."""
 
     def test_max_land_plays_beside_lands_played_and_unlimited(self):
-        from effects.domain.effect_head_input import THIS_TURN_COUNTERS
+        from effects.domain.input_vocabularies import THIS_TURN_COUNTERS
 
         record = _record()
         at = 6 * 2 + len(THIS_TURN_COUNTERS) * 2
@@ -985,14 +983,14 @@ class TestPlayerGlobalAndActInputs:
                 plain, record), change
 
     def test_day_night_and_the_pending_event_reach_the_global_slot(self):
-        from effects.domain.effect_head_input import DAY_NIGHT, EVENT_TYPES
+        from effects.domain.input_vocabularies import DAY_NIGHT, EVENT_TYPES
 
         night = _record(state=_snapshot(global_=GlobalState(
             turn=2, phase="main1", active="P0", priority="P0", stack_size=0,
             day_night="night")))
         # turn, stack size, the phase and substep one-hots, the two actor
         # flags and the emblem count come first.
-        from effects.domain.effect_head_input import COMBAT_SUBSTEPS
+        from effects.domain.input_vocabularies import COMBAT_SUBSTEPS
 
         start = 4 + len(PHASES) + 1 + len(COMBAT_SUBSTEPS) + 1 + 2 + 2
         assert global_features(night)[start + DAY_NIGHT.index("night")] == 1.0
@@ -1094,7 +1092,7 @@ class TestTheGen3Fixture:
         assert seen == {kind: {widths[kind]} for kind in seen}
 
     def test_the_fixture_reaches_the_new_inputs(self, records):
-        from effects.domain.effect_head_input import keyword_line_fragment, slot_lines
+        from effects.domain.slot_lines import keyword_line_fragment, slot_lines
 
         entities = [entity for record in records for entity in record.state.entities]
         lines = [line for entity in entities for line in slot_lines(entity)]
@@ -1205,7 +1203,8 @@ class TestCommandZoneSlots:
         )
 
     def test_creatures_cant_block_this_turn_is_a_command_zone_card(self):
-        from effects.domain.effect_head_input import EFFECT_DURATIONS, command_zone_entities
+        from effects.domain.input_vocabularies import EFFECT_DURATIONS
+        from effects.domain.surface_builder import command_zone_entities
 
         record = self._falter_record()
         falter_e = (0.5, 0.5, 0.0, 0.0)
@@ -1229,7 +1228,8 @@ class TestCommandZoneSlots:
         assert sum(duration[:len(EFFECT_DURATIONS) + 1]) == 1.0
 
     def test_a_shield_reads_what_it_has_left(self):
-        from effects.domain.effect_head_input import EFFECT_DURATIONS, command_zone_entities
+        from effects.domain.input_vocabularies import EFFECT_DURATIONS
+        from effects.domain.surface_builder import command_zone_entities
 
         record = self._falter_record(duration="until_leaves", shield_left=3)
         effect, = command_zone_entities(record)
@@ -1240,7 +1240,7 @@ class TestCommandZoneSlots:
         assert sum(_card_part(record.state.entities[0], record, "command_zone")) == 0.0
 
     def test_an_effect_card_on_the_board_reads_its_duration_and_gets_no_second_slot(self):
-        from effects.domain.effect_head_input import EFFECT_DURATIONS
+        from effects.domain.input_vocabularies import EFFECT_DURATIONS
         from effects.domain.state_snapshot import CommandZoneObject
 
         card = _gen3_entity("E81", name="Regeneration", zone="command", lines=(
@@ -1393,7 +1393,7 @@ class TestRelations:
 
     def test_exploration_affects_its_controllers_player_slot(self):
         """Story 5 acceptance 8."""
-        from effects.domain.effect_head_input import THIS_TURN_COUNTERS
+        from effects.domain.input_vocabularies import THIS_TURN_COUNTERS
         from effects.domain.state_snapshot import LineRef, Link
 
         exploration_static = ProvenanceKey("cardsfolder/e/exploration.txt", 0, "static", 0)
@@ -1480,8 +1480,8 @@ class TestTheGen3FixtureInTheModel:
     def test_the_fixture_runs_through_the_model(self, gen3_records):
         import torch
 
-        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH
         from effects.domain.effect_model import EffectModel, EffectModelConfig
+        from effects.domain.slot_lines import ABILITY_FEATURE_WIDTH
         from effects.domain.slot_widths import layout_widths
         from effects.domain.surface_collation import collate_surfaces
 
@@ -1516,7 +1516,7 @@ class TestTheTargetsAsCast:
         return _record(state=_snapshot(refs=Refs(**refs)))
 
     def test_a_fizzled_half_reads_its_targets_as_cast(self):
-        from effects.domain.effect_head_input import _push_relation_to_act
+        from effects.domain.card_features import _push_relation_to_act
 
         record = self._fizzled(targets=(), targets_at_cast=("E2", "P1"), targets_on_stack=())
         out: list[float] = []
@@ -1527,14 +1527,14 @@ class TestTheTargetsAsCast:
         assert unknown.state.refs.as_cast == ("P1",)
 
     def test_the_count_of_targets_is_the_count_as_cast(self):
-        from effects.domain.effect_head_input import act_features
+        from effects.domain.input_layout import act_features
 
         fizzled = act_features(self._fizzled(targets=(), targets_at_cast=("E2",)))
         resolved = act_features(self._fizzled(targets=("E2",), targets_at_cast=("E2",)))
         assert fizzled == resolved
 
     def test_a_permanent_whose_ability_is_targeted_is_not_itself_targeted(self):
-        from effects.domain.effect_head_input import _push_relation_to_act
+        from effects.domain.card_features import _push_relation_to_act
 
         record = self._fizzled(targets=("E2",), targets_at_cast=("E2",),
                                targets_on_stack=("E2",))

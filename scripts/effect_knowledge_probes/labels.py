@@ -124,7 +124,7 @@ def capped(value: float) -> float:
     −9999 toughness, The Millennium Calendar's 1000 life — and a few items that
     far out dominate an R² taken over thousands.
     """
-    from effects.domain.effect_head_input import MAGNITUDE_CAP
+    from effects.domain.input_layout import MAGNITUDE_CAP
 
     return max(-MAGNITUDE_CAP, min(MAGNITUDE_CAP, float(value)))
 

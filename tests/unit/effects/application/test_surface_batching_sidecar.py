@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.input_layout import SlotKind
 from tests.unit.effects.application.surface_batching_support import (
     _ACT,
     _ANTHEM,
@@ -70,7 +70,7 @@ def test_the_no_state_variant_keeps_the_acting_lines_e():
 
 
 def test_the_no_state_variant_keeps_only_the_record_kind_flags_of_global():
-    from effects.domain.effect_head_input import KIND_FLAG_WIDTH
+    from effects.domain.input_layout import KIND_FLAG_WIDTH
 
     full = _prepared("full")[1].slot_features[SlotKind.GLOBAL][0, 0]
     _surface, inputs = _prepared("no-state")

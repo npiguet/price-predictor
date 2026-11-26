@@ -20,9 +20,10 @@ from __future__ import annotations
 from bisect import bisect_right
 from dataclasses import dataclass
 
-from effects.domain.effect_head_input import CARD_TYPES, SUPERTYPES, keywords_of, vocabulary_slot
+from effects.domain.card_features import keywords_of
 from effects.domain.effect_head_layout import HeadField
 from effects.domain.forge_vocabularies import SUBTYPE_SECTIONS, SUBTYPES
+from effects.domain.input_vocabularies import CARD_TYPES, SUPERTYPES, vocabulary_slot
 from effects.domain.keyword_names import changed_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import ChannelChange, Contribution

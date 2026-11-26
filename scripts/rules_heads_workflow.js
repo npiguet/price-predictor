@@ -34,7 +34,7 @@ const COMMON = `Working directory: ${WT} (a checkout). All paths are relative to
 const SCHEMA_TEXT = `
 ## The question
 
-For each rule, decide whether the gen-2 effect model can LEARN it: whether it READS every fact that decides the rule's outcome, and whether some output is TRAINED on that outcome. The rule's scenarios (rules/scenarios/<unit>.json) make this concrete: the difference in "expected" between a scenario's fires and does_not_fire variants is the outcome that must be trained, and each variant's "delta" is a fact the model must read. rules/MODEL-FIELDS.md is the authority on what the model reads and what is trained; read it first and in full. When it leaves a doubt, src/effects/domain/effect_targets.py (record -> targets) and src/effects/domain/effect_head_input.py (record -> inputs) are the code.
+For each rule, decide whether the gen-2 effect model can LEARN it: whether it READS every fact that decides the rule's outcome, and whether some output is TRAINED on that outcome. The rule's scenarios (rules/scenarios/<unit>.json) make this concrete: the difference in "expected" between a scenario's fires and does_not_fire variants is the outcome that must be trained, and each variant's "delta" is a fact the model must read. rules/MODEL-FIELDS.md is the authority on what the model reads and what is trained; read it first and in full. When it leaves a doubt, src/effects/domain/effect_targets.py (record -> targets) and src/effects/domain/surface_builder.py with the modules it imports (record -> inputs) are the code.
 
 Judge where the outcome actually lands as records carry it today. Examples:
 - A creature dying in the state-based check after a burn spell resolves: the effect half carries the zone change, so zone_outcome (died) is trained.

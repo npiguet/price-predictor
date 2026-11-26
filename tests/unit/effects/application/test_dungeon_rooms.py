@@ -14,7 +14,7 @@ from dataclasses import replace
 
 import pytest
 
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.input_layout import SlotKind
 from tests.unit.effects.application.test_surface_batching_option_rows import _fixture_batcher
 
 _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"

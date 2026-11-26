@@ -14,7 +14,6 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from effects.domain.effect_head_input import Slot, SlotKind
 from effects.domain.effect_head_layout import (
     DISPERSED_FIELDS,
     FIELD_SLICES,
@@ -25,6 +24,7 @@ from effects.domain.effect_head_layout import (
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
+from effects.domain.input_layout import Slot, SlotKind
 from effects.domain.records import (
     ContinuousPayload,
     Contribution,

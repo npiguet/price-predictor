@@ -14,9 +14,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS, SUPERTYPES
+from effects.domain.effect_head_layout import OVERLAY_KEYWORDS
 from effects.domain.event_schema import EventType
 from effects.domain.forge_vocabularies import SUBTYPES
+from effects.domain.input_vocabularies import CARD_TYPES, SUPERTYPES
 from effects.domain.keyword_names import changed_keyword, normalize_keyword
 from effects.domain.records import ContinuousPayload, EffectRecord, events_of
 

@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.effect_head_input import DESIGNATIONS
 from effects.domain.effect_targets import _STATE_FLAG_FIELDS
+from effects.domain.input_vocabularies import DESIGNATIONS
 from effects.domain.records import ForkKind
 from effects.domain.rule_detectors import declared_values
 from effects.domain.state_snapshot import (
@@ -242,7 +242,7 @@ def test_the_designations_are_the_connector_s_in_its_order():
 
 
 def test_the_two_python_copies_of_the_designations_are_equal():
-    """``effect_head_input.py`` and ``rule_detectors/declared_values.py`` each
+    """``input_vocabularies.py`` and ``rule_detectors/declared_values.py`` each
     list them; this task pins the Java enum against the first."""
     assert set(DESIGNATIONS) == declared_values.DESIGNATIONS
 

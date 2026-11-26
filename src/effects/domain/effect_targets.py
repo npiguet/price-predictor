@@ -25,14 +25,6 @@ from functools import partial
 from effects.domain.closed_list_misses import closed_list_misses
 from effects.domain.continuous_lines import LineChange, abilities_changed, line_changes
 from effects.domain.cost_targets import apply_paid_costs, is_cost_half
-from effects.domain.effect_head_input import (
-    CARD_TYPES,
-    DESIGNATIONS,
-    FACE_STATES,
-    SUPERTYPES,
-    has_card_slot,
-    vocabulary_slot,
-)
 from effects.domain.effect_head_layout import (
     DURATIONS,
     LIBRARY_EVENTS,
@@ -47,6 +39,13 @@ from effects.domain.effect_head_layout import (
     mana_field,
 )
 from effects.domain.event_schema import Event, EventType, signed_delta
+from effects.domain.input_vocabularies import (
+    CARD_TYPES,
+    DESIGNATIONS,
+    FACE_STATES,
+    SUPERTYPES,
+    vocabulary_slot,
+)
 from effects.domain.keyword_names import changed_keyword
 from effects.domain.lasting_change_labels import (
     cancel_enchant_swaps,
@@ -68,6 +67,7 @@ from effects.domain.records import (
 )
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.state_snapshot import COLORS, Zone, normalize_counter_type
+from effects.domain.surface_builder import has_card_slot
 
 #: The zone outcome each moving event implies; the record keeps destroy and
 #: sacrifice apart, the target collapses them.
@@ -273,7 +273,7 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
 def _drop_slotless(record: EffectRecord, targets: RecordTargets) -> None:
     """A snapshot entity with no ``[CARD]`` slot, a library card below the
     top, trains no gate and no field; its player's draw, mill and library
-    events stay (:func:`effect_head_input.has_card_slot`)."""
+    events stay (:func:`surface_builder.has_card_slot`)."""
     for entity in record.state.entities:
         if not has_card_slot(entity):
             targets.pop(entity.id, None)

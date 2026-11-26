@@ -10,18 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from effects.domain.effect_head_input import (
-    COMBAT_SUBSTEPS,
-    ENTITY_ROLES,
-    PENDING_EVENT_MODES,
-    ZONES,
-    SlotKind,
-    act_features,
-    card_features,
-    card_segments,
-    global_features,
-    player_features,
-)
+from effects.domain.card_features import card_features, card_segments
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
     CREATED_OBJECTS_WIDTH,
@@ -39,6 +28,13 @@ from effects.domain.effect_head_layout import (
     counter_field,
 )
 from effects.domain.field_types import DIRECTIONS
+from effects.domain.input_layout import SlotKind, act_features, global_features, player_features
+from effects.domain.input_vocabularies import (
+    COMBAT_SUBSTEPS,
+    ENTITY_ROLES,
+    PENDING_EVENT_MODES,
+    ZONES,
+)
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.slot_widths import layout_widths
 from effects.infrastructure.record_codec import record_from_dict
@@ -177,16 +173,22 @@ def _recorded_lists() -> set[tuple[str, ...]]:
 
 def _layout_modules():
     from effects.domain import (
-        effect_head_input,
+        card_features,
         effect_head_layout,
         field_types,
         forge_vocabularies,
+        input_layout,
+        input_vocabularies,
         kept_keyword_flags,
         output_vocabularies,
         relation_types,
+        slot_lines,
+        slot_relations,
+        surface_builder,
     )
 
-    return (effect_head_input, effect_head_layout, field_types, forge_vocabularies,
+    return (input_vocabularies, input_layout, card_features, slot_lines, slot_relations,
+            surface_builder, effect_head_layout, field_types, forge_vocabularies,
             kept_keyword_flags, output_vocabularies, relation_types)
 
 

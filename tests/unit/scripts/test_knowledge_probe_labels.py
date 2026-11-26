@@ -11,7 +11,7 @@ from effect_knowledge_probes import (
     labels,
 )
 
-from effects.domain.effect_head_input import MAGNITUDE_CAP
+from effects.domain.input_layout import MAGNITUDE_CAP
 from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
 from tests.unit.scripts.knowledge_probe_support import (
     fixture_line,

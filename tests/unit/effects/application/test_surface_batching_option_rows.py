@@ -8,7 +8,7 @@ import torch
 
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.baselines import BaselineMasks
-from effects.domain.effect_head_input import ACT_SLOT, SlotKind
+from effects.domain.input_layout import ACT_SLOT, SlotKind
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     EffectRecord,

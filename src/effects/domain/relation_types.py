@@ -11,7 +11,7 @@ The order of :data:`RELATION_TYPES` fixes each type's row in every layer's
 relation tables, so a checkpoint records it as a list of names and a loader
 refuses one whose list differs. A family is only ever appended.
 
-Prior art: ``effect_head_input.SlotKind``, the closed enum whose order fixes an
+Prior art: ``input_layout.SlotKind``, the closed enum whose order fixes an
 embedding table; this is a new enum of the same kind, not a variant of it.
 
 Torch-free.

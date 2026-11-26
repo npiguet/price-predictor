@@ -53,8 +53,8 @@ def probe_model(records, sidecars):
     from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
     from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer, Surface
     from effects.domain.baselines import baseline_masks
-    from effects.domain.effect_head_input import SlotKind
     from effects.domain.effect_model import EffectModel, EffectModelConfig
+    from effects.domain.input_layout import SlotKind
     from effects.domain.slot_widths import layout_widths
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
     from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_batcher

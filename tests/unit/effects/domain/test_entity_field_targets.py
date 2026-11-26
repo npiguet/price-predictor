@@ -12,7 +12,6 @@ from dataclasses import dataclass
 import torch
 from torch.nn import functional
 
-from effects.domain.effect_head_input import Slot, SlotKind
 from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
@@ -22,6 +21,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
+from effects.domain.input_layout import Slot, SlotKind
 from effects.domain.surface_collation import entity_target_tensors
 from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 

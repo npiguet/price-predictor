@@ -194,14 +194,14 @@ class TestGrantingAKeywordOnGen3:
 
     @staticmethod
     def _flag(entity, record, keyword) -> float:
-        from effects.domain.effect_head_input import card_features, card_segments
+        from effects.domain.card_features import card_features, card_segments
         from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 
         flags = card_features(entity, record)[card_segments(entity, record)["keyword_flags"]]
         return flags[KEPT_KEYWORD_FLAGS.index(keyword)]
 
     def test_a_kept_keyword_gets_its_flag_and_a_granted_line(self, gen3_creature):
-        from effects.domain.effect_head_input import keyword_line_key, slot_lines
+        from effects.domain.slot_lines import keyword_line_key, slot_lines
 
         record, granted, before = self._granted(gen3_creature, "flying")
         added = granted.lines[len(before.lines):]
@@ -212,8 +212,9 @@ class TestGrantingAKeywordOnGen3:
         assert self._flag(before, record, "flying") == 0.0
 
     def test_a_keyword_without_a_flag_is_read_through_its_line_alone(self, gen3_creature):
-        from effects.domain.effect_head_input import card_features, keyword_line_key, slot_lines
+        from effects.domain.card_features import card_features
         from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
+        from effects.domain.slot_lines import keyword_line_key, slot_lines
 
         assert "fear" not in KEPT_KEYWORD_FLAGS
         record, granted, before = self._granted(gen3_creature, "fear")

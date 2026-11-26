@@ -136,7 +136,7 @@ def _built_run(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
     from effects.application.run_context import build_run
-    from effects.domain.effect_head_input import SlotKind
+    from effects.domain.input_layout import SlotKind
     from tests.unit.effects.builders import make_cpu_training_loop
 
     loop = make_cpu_training_loop(

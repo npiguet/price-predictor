@@ -9,7 +9,6 @@ import torch
 import torch.nn.functional as functional
 
 from effects.application import step_preparation
-from effects.domain.effect_head_input import EffectHeadInput, Slot, SlotKind
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     DISPERSED_FIELDS,
@@ -20,6 +19,7 @@ from effects.domain.effect_head_layout import (
     VERDICT_LAYOUT,
 )
 from effects.domain.effect_losses import _gate_term, per_entity_loss
+from effects.domain.input_layout import EffectHeadInput, Slot, SlotKind
 from effects.domain.records import (
     Curation,
 )

@@ -15,7 +15,6 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from effects.domain.effect_head_input import SurfaceBuilder
 from effects.domain.records import (
     ActivationPayload,
     CombatPayload,
@@ -30,6 +29,7 @@ from effects.domain.records import (
     TurnActionPayload,
 )
 from effects.domain.state_snapshot import EntityRole
+from effects.domain.surface_builder import SurfaceBuilder
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records
 

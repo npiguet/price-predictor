@@ -14,7 +14,7 @@ from effects.domain.closed_lists import (
     subtypes_of,
     type_tokens,
 )
-from effects.domain.effect_head_input import OVERLAY_KEYWORDS
+from effects.domain.effect_head_layout import OVERLAY_KEYWORDS
 from effects.domain.event_schema import Event, EventType
 from effects.domain.forge_vocabularies import SUBTYPES
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED

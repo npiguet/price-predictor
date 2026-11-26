@@ -8,8 +8,8 @@ import random
 import measure_trunk_step as mts
 import pytest
 
-from effects.domain.effect_head_input import SurfaceBuilder
 from effects.domain.relation_types import FAMILIES, RELATION_TYPES, reverse
+from effects.domain.surface_builder import SurfaceBuilder
 from tests.unit.effects.builders import GEN3_RECORDS, curated_fixture_records
 
 

@@ -36,7 +36,6 @@ from pathlib import Path
 import torch
 
 from effects.domain.aux_heads import Head
-from effects.domain.effect_head_input import MAGNITUDE_CAP
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     FIELD_SLICES,
@@ -50,6 +49,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.field_kinds import FIELD_KINDS, FieldScoring, fit_log_dispersion
+from effects.domain.input_layout import MAGNITUDE_CAP
 from effects.domain.loss_floor import (
     created_objects_record_losses,
     record_head_record_losses,

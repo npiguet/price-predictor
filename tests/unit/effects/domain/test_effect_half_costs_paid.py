@@ -13,7 +13,7 @@ from dataclasses import replace
 
 import pytest
 
-from effects.domain.effect_head_input import card_features, card_segments
+from effects.domain.card_features import card_features, card_segments
 from effects.domain.records import RecordOrigin
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records

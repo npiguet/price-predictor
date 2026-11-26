@@ -8,8 +8,8 @@ import pytest
 import torch
 
 from effects.domain.aux_heads import AUX_HEADS, SHIPPED_HEADS, TRAINING_ONLY_MODULES
-from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.input_layout import SlotKind
 from effects.domain.surface_collation import TrunkInputs
 
 _CONFIG = EffectModelConfig(

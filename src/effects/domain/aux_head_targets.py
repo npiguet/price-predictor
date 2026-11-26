@@ -12,13 +12,8 @@ import re
 from dataclasses import dataclass
 
 from effects.domain.closed_lists import subtypes_of, type_tokens
-from effects.domain.effect_head_input import (
-    CARD_TYPES,
-    COUNTER_TYPES,
-    MANA_SYMBOLS,
-    vocabulary_slot,
-)
 from effects.domain.effect_head_layout import (
+    COUNTER_TYPES,
     CREATED_KINDS,
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
@@ -38,6 +33,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_targets import keyword_index
 from effects.domain.event_schema import EventType
+from effects.domain.input_vocabularies import CARD_TYPES, MANA_SYMBOLS, vocabulary_slot
 from effects.domain.output_vocabularies import SUBTYPES_CHANGED
 from effects.domain.provenance import TraitKind
 from effects.domain.records import (

@@ -17,7 +17,6 @@ import torch
 
 from effects.application.control_score import _OutputReading, decoder_of
 from effects.domain.cost_targets import is_cost_half, paid_entities
-from effects.domain.effect_head_input import has_card_slot
 from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     GATE_INDEX,
@@ -29,6 +28,7 @@ from effects.domain.effect_head_layout import (
 from effects.domain.effect_targets import derive_targets
 from effects.domain.rule_output_targets import entity_indicators
 from effects.domain.selection_set import RULE_TESTS, SelectionSet, TaggedRecord
+from effects.domain.surface_builder import has_card_slot
 from tests.unit.effects.application.test_control_score import (  # noqa: F401
     STRATA,
     _epoch,

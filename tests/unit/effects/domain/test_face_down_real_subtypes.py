@@ -14,9 +14,11 @@ from dataclasses import replace
 import pytest
 import torch
 
-from effects.domain.effect_head_input import ID_PADDING, SlotKind, SurfaceBuilder, subtype_id
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.input_layout import SlotKind
+from effects.domain.input_vocabularies import ID_PADDING, subtype_id
 from effects.domain.slot_widths import layout_widths
+from effects.domain.surface_builder import SurfaceBuilder
 from effects.domain.surface_collation import collate_surfaces
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records

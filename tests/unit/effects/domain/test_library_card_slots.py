@@ -14,9 +14,9 @@ from dataclasses import replace
 
 import pytest
 
-from effects.domain.effect_head_input import SurfaceBuilder, board_entities
 from effects.domain.effect_head_layout import LIBRARY_EVENTS, HeadField, LibraryEvent
 from effects.domain.effect_targets import derive_targets
+from effects.domain.surface_builder import SurfaceBuilder, board_entities
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records
 from tests.unit.effects.domain.test_input_outcome_independence import E_DIM, _Lines

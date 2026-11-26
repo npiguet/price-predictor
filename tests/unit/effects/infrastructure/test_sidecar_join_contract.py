@@ -22,7 +22,6 @@ import pytest
 
 from effects.application.ability_text import KeyResolver
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.effect_head_input import slot_lines
 from effects.domain.provenance import (
     BuiltTrait,
     KeyResolution,
@@ -31,6 +30,7 @@ from effects.domain.provenance import (
 )
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_detectors.acting_line import acting_line, acting_root_params
+from effects.domain.slot_lines import slot_lines
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, read_sidecar, sidecar_from_dict
 from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS

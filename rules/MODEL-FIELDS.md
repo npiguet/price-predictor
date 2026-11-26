@@ -5,7 +5,7 @@ A rule is learnable only when the model **reads** what decides it and an output 
 the outcome. The catalogue's triage asked only whether a record **shows** the outcome; this file
 is what the heads pass checks against instead.
 
-Sources: `src/effects/domain/effect_head_input.py` (inputs), `effect_model.py` (outputs),
+Sources: `src/effects/domain/surface_builder.py` and the input modules it imports (inputs), `effect_model.py` (outputs),
 `effect_targets.py` (which record fields become targets), `state_snapshot.py`, `records.py`,
 `event_schema.py`.
 

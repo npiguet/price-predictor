@@ -15,22 +15,39 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from effects.domain.effect_head_input import (
+from effects.domain.field_types import FieldType
+from effects.domain.forge_vocabularies import NAMED_COUNTERS
+from effects.domain.input_layout import THERMOMETER_STEPS
+from effects.domain.input_vocabularies import (
     CARD_TYPES,
-    COUNTER_TYPES,
     DESIGNATIONS,
     FACE_STATES,
     MANA_SYMBOLS,
     SUPERTYPES,
-    THERMOMETER_STEPS,
 )
-from effects.domain.field_types import FieldType
-from effects.domain.forge_vocabularies import NAMED_COUNTERS
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import PlayabilityCheck, ResolutionOutcome, RewriteResult
 from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import COLORS, normalize_counter_type
 from effects.domain.value_targets import VALUE_TARGETS
+
+#: The counter types the head's ``counters_delta`` outputs name; the input
+#: reads every named counter (:data:`NAMED_COUNTERS`) instead.
+COUNTER_TYPES: tuple[str, ...] = (
+    "P1P1", "M1M1", "LOYALTY", "CHARGE", "TIME", "STUN", "SHIELD", "OIL",
+    "POISON", "EXPERIENCE", "KI", "LEVEL", "LORE", "DEFENSE",
+)
+#: Keywords the head's ``keywords_gained``/``keywords_lost`` outputs track; the
+#: eight damage-step keywords must be among them. The input's keyword flags
+#: are :data:`KEPT_KEYWORD_FLAGS` instead (root spec § 9.6).
+OVERLAY_KEYWORDS: tuple[str, ...] = (
+    "first_strike", "double_strike", "deathtouch", "lifelink", "trample",
+    "indestructible", "wither", "infect",
+    "flying", "reach", "vigilance", "haste", "menace", "hexproof", "shroud",
+    "defender", "protection", "ward", "flash", "banding", "fear", "intimidate",
+    "horsemanship", "skulk", "shadow", "unblockable", "annihilator",
+)
+
 
 
 class ZoneOutcome(StrEnum):

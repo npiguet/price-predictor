@@ -15,7 +15,7 @@ the freeze leaves out every output they do not settle, over the same frozen
 rows, so both read one definition of an output's target. Each indicator is
 what training reads (``effect_targets.derive_targets``, the verdict, global
 and created-objects rows of ``aux_head_targets``), at an entity the record's
-surface gives a slot (``effect_head_input.has_card_slot``, every player).
+surface gives a slot (``surface_builder.has_card_slot``, every player).
 
 Torch-free: the freeze reads it.
 """
@@ -33,7 +33,6 @@ from effects.domain.aux_head_targets import (
     supervises_created_objects,
     verdict_targets,
 )
-from effects.domain.effect_head_input import slotted_entities
 from effects.domain.effect_head_layout import (
     CREATED_OBJECT_SLOTS,
     CREATED_SLOT_WIDTH,
@@ -55,6 +54,7 @@ from effects.domain.selection_set import (
     UNOBSERVED_TARGETS,
     TaggedRecord,
 )
+from effects.domain.surface_builder import slotted_entities
 
 #: The least a rule-test output's mean target must differ between the
 #: polarities (in its most different category) for the output to be read.

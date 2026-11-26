@@ -15,7 +15,9 @@ from dataclasses import replace
 
 import pytest
 
-from effects.domain.effect_head_input import SlotKind, SurfaceBuilder, slot_lines
+from effects.domain.input_layout import SlotKind
+from effects.domain.slot_lines import slot_lines
+from effects.domain.surface_builder import SurfaceBuilder
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import gen3_fixture_records
 from tests.unit.effects.domain.test_input_outcome_independence import E_DIM, _Lines

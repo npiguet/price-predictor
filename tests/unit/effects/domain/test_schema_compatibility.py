@@ -26,7 +26,6 @@ from dataclasses import fields, replace
 
 import pytest
 
-from effects.domain.effect_head_input import SurfaceBuilder
 from effects.domain.provenance import ProvenanceKey, TraitKind
 from effects.domain.records import (
     PAYLOAD_TYPES,
@@ -48,6 +47,7 @@ from effects.domain.state_snapshot import (
     PlayerState,
     StateSnapshot,
 )
+from effects.domain.surface_builder import SurfaceBuilder
 from tests.unit.effects.builders import (
     java_golden_entities,
     make_entity,

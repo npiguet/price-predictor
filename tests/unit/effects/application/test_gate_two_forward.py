@@ -20,12 +20,14 @@ import torch
 from effects.application import gate_two
 from effects.application.model_loading import Runnable
 from effects.application.record_forward import RecordForward
+from effects.domain.card_features import card_segments
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     KeywordResolver,
     qualifying_observations,
 )
-from effects.domain.effect_head_input import NO_STRIP, SlotKind, card_segments
+from effects.domain.input_layout import SlotKind
+from effects.domain.surface_builder import NO_STRIP
 from effects.domain.surface_collation import TrunkInputs, entity_index
 from effects.infrastructure.record_codec import record_from_dict
 from tests.unit.effects.builders import fixture_run, gen3_fixture_records

@@ -36,8 +36,8 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
     from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
     from effects.domain.baselines import baseline_masks
-    from effects.domain.effect_head_input import SlotKind
     from effects.domain.effect_model import EffectModel, EffectModelConfig
+    from effects.domain.input_layout import SlotKind
     from effects.domain.slot_widths import layout_widths
     from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure.effect_model_store import EffectCheckpoint, EffectModelStore

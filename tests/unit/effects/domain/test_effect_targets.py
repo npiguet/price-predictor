@@ -15,10 +15,10 @@ import sys
 
 import pytest
 
-from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS
-from effects.domain.effect_head_layout import LIBRARY_EVENTS, ZONE_OUTCOMES
+from effects.domain.effect_head_layout import LIBRARY_EVENTS, OVERLAY_KEYWORDS, ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets, events_of
 from effects.domain.event_schema import Event, EventType
+from effects.domain.input_vocabularies import CARD_TYPES
 from effects.domain.records import (
     Candidate,
     CombatPayload,
@@ -871,7 +871,7 @@ class TestBasePowerAndToughness:
 
 class TestZoneOutcomeExtensions:
     def test_a_permanent_spell_resolving_entered_with_the_face_it_was_cast_with(self):
-        from effects.domain.effect_head_input import FACE_STATES
+        from effects.domain.input_vocabularies import FACE_STATES
 
         targets = derive_targets(_on_board(ResolutionPayload(events=(
             Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
@@ -943,7 +943,7 @@ class TestZoneOutcomeExtensions:
         assert targets["E1"].fields["zone_outcome"] == _zone("ceased_to_exist")
 
     def test_phasing_in_and_out_are_distinct(self):
-        from effects.domain.effect_head_input import DESIGNATIONS
+        from effects.domain.input_vocabularies import DESIGNATIONS
 
         out = derive_targets(_resolution(
             Event(type=EventType.PHASED, subjects=("E1",), params={"out": True}),
@@ -1141,7 +1141,7 @@ class TestGen3EventFields:
         assert targets["P1"].fields == {"ventured": 1}
 
     def test_a_goad_is_a_designation_gained(self):
-        from effects.domain.effect_head_input import DESIGNATIONS
+        from effects.domain.input_vocabularies import DESIGNATIONS
 
         fields = derive_targets(_resolution(
             Event(type=EventType.RESTRICTION_CHANGE, subjects=("E1",),
@@ -1150,7 +1150,7 @@ class TestGen3EventFields:
         assert fields["designations_gained"][DESIGNATIONS.index("goaded")] == 1.0
 
     def test_a_type_change_reads_subtypes_and_supertypes_too(self):
-        from effects.domain.effect_head_input import SUPERTYPES
+        from effects.domain.input_vocabularies import SUPERTYPES
         from effects.domain.output_vocabularies import SUBTYPES_CHANGED
 
         fields = derive_targets(_resolution(
@@ -1284,7 +1284,7 @@ class TestTheWp4Wire:
         assert all(not t.affected for t in derive_targets(trigger).values())
 
     def test_a_face_change_names_the_face_now_up(self):
-        from effects.domain.effect_head_input import FACE_STATES
+        from effects.domain.input_vocabularies import FACE_STATES
 
         targets = derive_targets(_resolution(
             Event(type=EventType.FACE_CHANGE, subjects=("E1",), params={"to_state": "back"})))

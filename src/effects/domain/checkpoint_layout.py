@@ -13,34 +13,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from effects.domain.canonical_digest import canonical_sha256
-from effects.domain.effect_head_input import (
-    CANT_ATTACK_KEYWORDS,
-    CANT_BLOCK_KEYWORDS,
-    CARD_PARTS,
-    CARD_TYPES,
-    CHOSEN_DIRECTIONS,
-    CHOSEN_PARITIES,
-    COMBAT_SUBSTEPS,
-    COUNTER_TYPES,
-    DAY_NIGHT,
-    DESIGNATIONS,
-    EFFECT_DURATIONS,
-    ENTITY_ROLES,
-    EVENT_TYPES,
-    FACE_STATES,
-    MANA_SYMBOLS,
-    MOMENTS,
-    PENDING_EVENT_MODES,
-    PHASES,
-    PLAYABILITY_SUBKINDS,
-    RECORD_KINDS,
-    SUPERTYPES,
-    THIS_TURN_COUNTERS,
-    TURN_COUNTS,
-    ZONES,
-    SlotKind,
-)
+from effects.domain.card_features import CANT_ATTACK_KEYWORDS, CANT_BLOCK_KEYWORDS, CARD_PARTS
 from effects.domain.effect_head_layout import (
+    COUNTER_TYPES,
     CREATED_KINDS,
     CREATED_TERMS,
     DAY_NIGHT_CHANGES,
@@ -59,6 +34,29 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.field_types import DIRECTIONS, FieldType
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
+from effects.domain.input_layout import SlotKind
+from effects.domain.input_vocabularies import (
+    CARD_TYPES,
+    CHOSEN_DIRECTIONS,
+    CHOSEN_PARITIES,
+    COMBAT_SUBSTEPS,
+    DAY_NIGHT,
+    DESIGNATIONS,
+    EFFECT_DURATIONS,
+    ENTITY_ROLES,
+    EVENT_TYPES,
+    FACE_STATES,
+    MANA_SYMBOLS,
+    MOMENTS,
+    PENDING_EVENT_MODES,
+    PHASES,
+    PLAYABILITY_SUBKINDS,
+    RECORD_KINDS,
+    SUPERTYPES,
+    THIS_TURN_COUNTERS,
+    TURN_COUNTS,
+    ZONES,
+)
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.relation_types import RELATION_TYPES, TARGET_INDICES

@@ -6,7 +6,7 @@ per-entity head's fields, the per-record heads' fields and the value head's
 targets, so the losses, the constant-predictor floor and the evaluation's
 deviance cannot read a type two ways. Every magnitude takes the cap
 explicitly: the per-entity fields score at
-:data:`~effects.domain.effect_head_input.MAGNITUDE_CAP`, where an amount above
+:data:`~effects.domain.input_layout.MAGNITUDE_CAP`, where an amount above
 it is the game compounding, while the value head's amounts are the text's own
 and are scored uncapped (``cap=None``).
 

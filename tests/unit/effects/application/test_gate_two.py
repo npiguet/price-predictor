@@ -38,6 +38,7 @@ from effects.application.gate_two import (
 from effects.application.model_loading import Runnable
 from effects.application.surface_batching import IdentityTable, SurfaceBatcher
 from effects.domain.baselines import BaselineMasks
+from effects.domain.card_features import card_segments
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     KEYWORDS_BY_NAME,
@@ -47,11 +48,6 @@ from effects.domain.damage_step_keywords import (
     Subject,
     combat_participant,
 )
-from effects.domain.effect_head_input import (
-    NO_STRIP,
-    SlotKind,
-    card_segments,
-)
 from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
@@ -60,6 +56,7 @@ from effects.domain.effect_head_layout import (
     ZONE_OUTCOMES,
 )
 from effects.domain.evaluation_report import CheckStatus
+from effects.domain.input_layout import SlotKind
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import CombatPayload, EffectRecord, RecordKind
@@ -74,6 +71,7 @@ from effects.domain.state_snapshot import (
     Refs,
     StateSnapshot,
 )
+from effects.domain.surface_builder import NO_STRIP
 from effects.domain.surface_collation import gather_entities
 from tests.unit.effects.builders import (
     keyword_score,

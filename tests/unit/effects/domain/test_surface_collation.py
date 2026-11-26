@@ -6,7 +6,7 @@ import random
 
 import torch
 
-from effects.domain.effect_head_input import EffectHeadInput, Slot, SlotKind
+from effects.domain.input_layout import EffectHeadInput, Slot, SlotKind
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 

@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as functional
 
-from effects.domain.effect_head_input import MAGNITUDE_CAP
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
     AT_LEAST_STEPS,
@@ -42,6 +41,7 @@ from effects.domain.effect_head_layout import (
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.field_kinds import FIELD_KINDS, FieldScoring, counted, negative_binomial
 from effects.domain.field_types import FieldType
+from effects.domain.input_layout import MAGNITUDE_CAP
 from effects.domain.value_targets import VALUE_TARGETS
 
 

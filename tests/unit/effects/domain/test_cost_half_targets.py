@@ -28,7 +28,6 @@ from pathlib import Path
 import pytest
 import torch
 
-from effects.domain.effect_head_input import SurfaceBuilder
 from effects.domain.effect_head_layout import (
     DISPERSED_FIELDS,
     FIELDS_BY_NAME,
@@ -43,6 +42,7 @@ from effects.domain.effect_losses import per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.sampling import SamplingClass
+from effects.domain.surface_builder import SurfaceBuilder
 from effects.domain.surface_collation import entity_target_tensors
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import read_shard

@@ -32,7 +32,6 @@ from effects.domain.damage_step_keywords import (
     KeywordResolver,
     qualifying_observations,
 )
-from effects.domain.effect_head_input import NO_STRIP
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, FieldSpec, FieldType
 from effects.domain.evaluation_report import (
     CheckName,
@@ -43,6 +42,7 @@ from effects.domain.evaluation_report import (
 from effects.domain.head_decoding import HeadReading
 from effects.domain.records import EffectRecord, distinct_records
 from effects.domain.strata import Stratum
+from effects.domain.surface_builder import NO_STRIP
 
 if TYPE_CHECKING:
     from effects.application.evaluation_context import EvaluationContext

@@ -64,7 +64,7 @@ def cache_statistics(items) -> CacheStatistics:
 
 def scope_mask(slot_kinds, scope: str):
     """Which slots a scope replaces: ``[ACT]`` is slot 1, cards are ABILITY slots."""
-    from effects.domain.effect_head_input import SlotKind
+    from effects.domain.input_layout import SlotKind
 
     act = slot_kinds == int(SlotKind.ACT)
     cards = slot_kinds == int(SlotKind.ABILITY)

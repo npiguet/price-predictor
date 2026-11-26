@@ -408,7 +408,8 @@ class TestAGen3Checkpoint:
             TrainEffectModelConfig,
         )
         from effects.domain.ability_encoder import AbilityEncoder
-        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH, SlotKind
+        from effects.domain.input_layout import SlotKind
+        from effects.domain.slot_lines import ABILITY_FEATURE_WIDTH
         from effects.domain.slot_widths import layout_widths
 
         cards = tmp_path / "cardsfolder"

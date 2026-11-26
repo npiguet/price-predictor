@@ -581,14 +581,14 @@ class TestMagnitudeCap:
     """
 
     def test_a_count_above_the_cap_scores_as_the_cap(self):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
+        from effects.domain.input_layout import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["damage_taken"]
         prediction = torch.zeros(1, 1)
         assert field_loss(spec, prediction, torch.tensor([2_000_000.0]), log_dispersion=ONE) == \
             field_loss(spec, prediction, torch.tensor([MAGNITUDE_CAP]), log_dispersion=ONE)
 
     def test_a_signed_delta_keeps_its_direction_and_caps_its_size(self):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
+        from effects.domain.input_layout import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["power_delta"]
         prediction = torch.zeros(1, 4)
         for sign in (1.0, -1.0):
@@ -599,7 +599,7 @@ class TestMagnitudeCap:
             )
 
     def test_the_floor_is_computed_over_capped_targets(self):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
+        from effects.domain.input_layout import MAGNITUDE_CAP
 
         def floor(value):
             batch = make_entity_targets(
@@ -618,8 +618,8 @@ class TestMagnitudeCap:
     def test_the_evaluation_deviance_caps_the_observed_amount(self):
         import numpy as np
 
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
         from effects.domain.gate_metrics import mean_deviance
+        from effects.domain.input_layout import MAGNITUDE_CAP
         predicted = np.array([3.0, 5.0])
         dispersion = np.array(0.0)
         assert mean_deviance(predicted, np.array([1.0, 2_000_000.0]), dispersion) == \

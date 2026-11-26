@@ -15,9 +15,9 @@ from dataclasses import replace
 from functools import cache
 from pathlib import Path
 
-from effects.domain.effect_head_input import CARD_TYPES, SUPERTYPES
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, HeadField
 from effects.domain.effect_targets import derive_targets
+from effects.domain.input_vocabularies import CARD_TYPES, SUPERTYPES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import EffectRecord, RecordKind

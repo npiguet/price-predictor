@@ -147,7 +147,7 @@ def read(target: str, outputs, verdict, row: int, slot: int) -> float:
 
 def card_slots(surface) -> dict[str, int]:
     """Each card entity's ``[CARD]`` slot in one record's surface."""
-    from effects.domain.effect_head_input import SlotKind
+    from effects.domain.input_layout import SlotKind
 
     slots: dict[str, int] = {}
     for index, slot in enumerate(surface.slots):
@@ -160,7 +160,7 @@ def entity_slots(surface) -> dict[str, int]:
     """Each card entity's ``[CARD]`` slot and each player's ``[PLAYER]`` slot
     in one record's surface: what a field scored at players as well as
     cards, such as ``target_legal``, is read at."""
-    from effects.domain.effect_head_input import SlotKind
+    from effects.domain.input_layout import SlotKind
 
     slots = card_slots(surface)
     for index, slot in enumerate(surface.slots):
