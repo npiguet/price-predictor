@@ -255,7 +255,7 @@ class Validator:
         self.scorer = ControlScorer.prepare(
             selection.selection, selection.strata, preparer=run.preparer,
             fields=list(run.fields.values()),
-            rule_outputs=rule_outputs, mask=str(self.config.rule_mask),
+            rule_outputs=rule_outputs, mask=self.config.rule_mask,
             stratum_weight=self.config.stratum_weight,
             deviance_floor=self.config.deviance_floor,
             editor=GridEdits(run.preparer.scoring_batcher()),

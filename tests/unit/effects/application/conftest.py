@@ -28,6 +28,18 @@ from tests.unit.effects.domain.conftest import ability_key, make_record, snapsho
 
 
 @pytest.fixture(scope="module")
+def single_thread():
+    """Torch on one CPU thread for the module: under its default thread count
+    two identical runs differ in the last float bits once the model is larger
+    than the fixture's, so the weight equalities hold only on one thread
+    (``checkpoints.md`` § ``resume.pt``). The step workers pin themselves."""
+    before = torch.get_num_threads()
+    torch.set_num_threads(1)
+    yield
+    torch.set_num_threads(before)
+
+
+@pytest.fixture(scope="module")
 def records():
     return curated_fixture_records()
 

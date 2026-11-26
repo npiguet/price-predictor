@@ -3,8 +3,8 @@ interrupted (finding 15.5, D10).
 
 The re-warmed rate is a function of the step and of flags a resume compares,
 and so is the averaged weights' start, so ``resume.pt`` stores nothing new
-for them. Three fixture epochs of 7 steps, the switch at step 7 and a 10-step
-re-warm: epoch 2 ends at step 14, inside the re-warm, where the average starts
+for them. Three fixture epochs of 6 steps, the switch at step 6 and a 10-step
+re-warm: epoch 2 ends at step 12, inside the re-warm, where the average starts
 (one epoch after the switch). Runs a real training loop: about five minutes.
 """
 
@@ -18,7 +18,9 @@ from tests.unit.effects.application.test_training_loop_workers import (
     _run,
 )
 
-#: Steps 7 to 17 re-warm; epoch 2 ends at step 14.
+pytestmark = pytest.mark.usefixtures("single_thread")
+
+#: Steps 6 to 16 re-warm; epoch 2 ends at step 12.
 REWARM = {"epochs": 3, "curriculum_rewarm_steps": 10}
 
 
@@ -28,7 +30,7 @@ def test_a_run_interrupted_inside_the_re_warm_resumes_to_the_same_weights(
     whole = _run(monkeypatch, corpus, tmp_path / "whole", caplog, workers=0, **REWARM)
     out = tmp_path / "interrupted"
     first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=2, **REWARM)
-    assert first["average"]["start_step"] == 14
+    assert first["average"]["start_step"] == 12
     second = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, **REWARM)
 
     assert first["losses"] + second["losses"] == whole["losses"]

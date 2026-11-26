@@ -55,6 +55,8 @@ from tests.unit.effects.builders import (
 
 SEED = FIXTURE_TRAINING_SEED
 
+pytestmark = pytest.mark.usefixtures("single_thread")
+
 
 @functools.cache
 def _selection():
@@ -105,6 +107,10 @@ def _run(
     ``interrupt_at`` presses Ctrl+C on that device loss, counted from 1.
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    # Gradient accumulation (6 steps, an even count, so each epoch ends on an
+    # optimizer step) and lethality copies on, so the equalities cover
+    # the micro-batch sum and the counterfactual draws.
+    config = {"grad_accum": 2, "lethality_copies": 2, "steps_per_epoch": 6, **config}
     if interrupt_after is not None:
         real_save = loop_module.save_resume
 
@@ -204,7 +210,7 @@ def _assert_same_average(first: dict, second: dict) -> None:
 
 
 @pytest.fixture(scope="module")
-def in_process(corpus, tmp_path_factory):
+def in_process(single_thread, corpus, tmp_path_factory):
     with pytest.MonkeyPatch.context() as monkeypatch:
         handler = _Capture()
         return _run(
@@ -254,7 +260,7 @@ def test_the_fixture_run_exercises_what_it_claims(in_process):
     """Steps trained, both epochs logged, and each scored by the control
     score: per stratum its four components and score, then control and best
     (FR-075)."""
-    assert len(in_process["losses"]) >= 14
+    assert len(in_process["losses"]) >= 12
     assert len(in_process["shares"]) == 2
     assert len(in_process["control"]) == 2
     for line in in_process["control"]:
@@ -387,11 +393,11 @@ def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
 
 
 def test_the_average_starts_one_epoch_after_the_curriculum_switch(in_process):
-    """The fixture's warmup is one step and its switch step 7, so the average
-    starts at step 14, epoch 2's last, from that step's weights.
+    """The fixture's warmup is one step and its switch step 6, so the average
+    starts at step 12, epoch 2's last, from that step's weights.
     ``test_curriculum_resume.py`` sees it move in the epoch after."""
     average = in_process["average"]
-    assert average["start_step"] == 14
+    assert average["start_step"] == 12
     assert set(average["state"]) == {"encoder", "model"}
     for owner, tensors in average["state"].items():
         for name, value in tensors.items():
@@ -409,7 +415,7 @@ def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_
         assert torch.equal(value, averaged["model"][name]), name
     for name, value in saved.encoder_state.items():
         assert torch.equal(value, averaged["encoder"][name]), name
-    assert saved.ema_epochs == 1.0 and saved.rule_mask == "hard"
+    assert saved.training_settings["ema_epochs"] == 1.0 and saved.scored_under().mask == "hard"
     # FR-069: the epoch's own control score, and the set it was scored against.
     state = run["stopper"]
     assert saved.best_control_score == state["best"]
@@ -420,7 +426,7 @@ def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_
 def test_an_epoch_ending_before_warmup_is_no_best_candidate(
     monkeypatch, corpus, tmp_path, caplog,
 ):
-    """Story 7 acceptance 4: at 40 epochs of 7 steps warmup lasts 14 steps,
+    """Story 7 acceptance 4: at 40 epochs of 6 steps warmup lasts 12 steps,
     so epoch 1 is validated on the current weights, saves no best checkpoint
     and leaves the stopper's patience untouched."""
     from effects.infrastructure.effect_model_store import load_resume_state
@@ -429,7 +435,7 @@ def test_an_epoch_ending_before_warmup_is_no_best_candidate(
     run = _run(monkeypatch, corpus, out, caplog, workers=0, epochs=40, interrupt_after=1)
     assert run["losses"]
     state = load_resume_state(out)
-    assert state["warmup"] == 14
+    assert state["warmup"] == 12
     assert state["weight_average"] == {"state": None, "start_step": None}
     assert state["stopper"] == {
         "measure": "control_score", "best": float("-inf"), "since_best": 0}
@@ -452,7 +458,7 @@ def test_a_resume_across_warmup_starts_the_average_at_warmups_end(
         monkeypatch, corpus, out, caplog, workers=0, epochs=40, resume=True,
         interrupt_after=3,
     )
-    assert whole["average"]["start_step"] == resumed["average"]["start_step"] == 14
+    assert whole["average"]["start_step"] == resumed["average"]["start_step"] == 12
     _assert_same_average(whole["average"], resumed["average"])
 
 
