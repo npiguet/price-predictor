@@ -12,10 +12,10 @@ import math
 
 import pytest
 
-from effects.application import breakdowns as bd
 from effects.application.control_items import explained_deviance, probe_item, rule_item
 from effects.application.control_reads import OutputReading
 from effects.application.control_score import ControlScore, StratumScore
+from effects.application.half_score_report import HalfReading, half_score_checks
 from effects.application.run_reporter import format_non_finite
 from effects.domain.head_decoding import decoder_of
 from effects.domain.score_scales import grid_score
@@ -177,6 +177,6 @@ def test_the_evaluation_report_names_a_stratums_non_finite_readings():
     components = dict.fromkeys(("probes", "grids", "rule_tests", "deviance"), 0.5)
     score = ControlScore({STRATA[0]: StratumScore(components, {}, non_finite=4),
                           STRATA[1]: StratumScore(components, {})}, 0.5)
-    checks = {c.name: c for c in bd.half_score_checks(score, half="reporting", games={})}
+    checks = {c.name: c for c in half_score_checks(score, HalfReading("reporting", {}))}
     assert "4 non-finite reading(s) scored at -1" in checks["reporting-half card-disjoint"].detail
     assert "non-finite" not in checks["reporting-half game-disjoint"].detail

@@ -17,6 +17,7 @@ from effects.application.breakdowns import (
     RecordResult,
     breakdown_checks,
 )
+from effects.application.half_score_report import HalfReading, half_score_checks
 from effects.domain.effect_families import effect_family
 from effects.domain.evaluation_report import CheckStatus
 from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
@@ -229,16 +230,16 @@ class TestHalfScoreChecks:
         return ControlScore({"card-disjoint": card, "game-disjoint": game}, 0.5)
 
     def test_each_stratum_reports_its_components_and_score(self):
-        checks = {c.name: c for c in bd.half_score_checks(
-            self._score(), half="reporting", games={"card-disjoint": 40})}
+        checks = {c.name: c for c in half_score_checks(
+            self._score(), HalfReading("reporting", {"card-disjoint": 40}))}
         card = checks["reporting-half card-disjoint"]
         assert card.values["probes"] == 0.4 and card.values["score"] != card.values["score"]
         assert "40 games" in card.detail and "nothing to score in grids" in card.detail
         assert checks["reporting-half game-disjoint"].values["score"] == pytest.approx(0.5)
 
     def test_the_rule_tests_are_reported_per_rule_with_the_left_out_named(self):
-        checks = {c.name: c for c in bd.half_score_checks(
-            self._score(), half="reporting", games={})}
+        checks = {c.name: c for c in half_score_checks(
+            self._score(), HalfReading("reporting", {}))}
         rules = checks["rule-tests card-disjoint reporting"]
         assert rules.values == {"704.5f": 0.3, "702.2b": 0.1}
         assert rules.detail.startswith("2 rules scored") and "701.3a" in rules.detail
@@ -246,8 +247,8 @@ class TestHalfScoreChecks:
             "1 left out: damage")
 
     def test_the_deviance_items_of_every_head_are_listed_and_summed_up_by_head(self):
-        checks = {c.name: c for c in bd.half_score_checks(
-            self._score(), half="reporting", games={})}
+        checks = {c.name: c for c in half_score_checks(
+            self._score(), HalfReading("reporting", {}))}
         deviance = checks["reporting-half card-disjoint deviance"]
         assert set(deviance.values) == {"gate", "zone_outcome", "verdict.can_play",
                                         "created_objects.count"}
@@ -256,8 +257,8 @@ class TestHalfScoreChecks:
                 "created_objects -0.200 (1)") in deviance.detail
 
     def test_the_control_score_sits_beside_the_selection_halfs(self):
-        checks = {c.name: c for c in bd.half_score_checks(
-            self._score(), half="reporting", games={}, selection_control=0.7)}
+        checks = {c.name: c for c in half_score_checks(
+            self._score(), HalfReading("reporting", {}, selection_control=0.7))}
         control = checks["reporting-half control"]
         assert control.values == {"control": control.values["control"],
                                   "selection_control": 0.7}

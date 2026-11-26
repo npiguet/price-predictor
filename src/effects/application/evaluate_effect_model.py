@@ -2,11 +2,11 @@
 
 The orchestration only: each gate lives in its own module (``gate_one``,
 ``gate_two``, ``geometry_checks``), the UMAP picture in ``umap_check``, the
-breakdowns in ``breakdowns``, and the reporting half's score in
-``control_score`` (:func:`run_reporting_half`): the selected checkpoint scored
-once on the half of each validation stratum its selection never read, through
-the scorer training selected it with (FR-070), its rule tests per rule
-(FR-074).
+breakdowns in ``breakdowns``, the report lines of a half's control score in
+``half_score_report``, and the reporting half's score in ``control_score``
+(:func:`run_reporting_half`): the selected checkpoint scored once on the half
+of each validation stratum its selection never read, through the scorer
+training selected it with (FR-070), its rule tests per rule (FR-074).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from effects.application.breakdown_table import BREAKDOWNS_CSV, write_breakdowns_csv
-from effects.application.breakdowns import breakdown_checks, half_score_checks
+from effects.application.breakdowns import breakdown_checks
 from effects.application.evaluation_context import (
     EvaluateEffectModelConfig,
     EvaluationContext,
@@ -34,6 +34,7 @@ from effects.application.geometry_checks import (
     check_ward,
     run_gate_three,
 )
+from effects.application.half_score_report import HalfReading, half_score_checks
 from effects.application.record_scoring import score_records
 from effects.application.umap_check import check_umap
 from effects.application.unbuilt_checks import NOT_IMPLEMENTED_CHECKS, not_implemented
@@ -194,8 +195,8 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
         HalfScope(half),
     )
     games = {stratum: len(selection.halves[stratum].get(half, ())) for stratum in readers}
-    return half_score_checks(score, half=half, games=games,
-                             selection_control=main.control_score, note=note)
+    return half_score_checks(
+        score, HalfReading(half, games, selection_control=main.control_score, note=note))
 
 
 def _sidecar_index(context: EvaluationContext):

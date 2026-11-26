@@ -1,9 +1,8 @@
-"""The evaluation report's breakdowns: one scored record set, grouped many ways,
-and a half's control score as report lines.
+"""The evaluation report's breakdowns: one scored record set, grouped many ways.
 
 Pure grouping over :class:`RecordResult` rows, torch-free; scoring is
-``record_scoring.score_records``'s job, and a half's score
-``control_score.score_half``'s. The per-text mean weighs every held-out text
+``record_scoring.score_records``'s job, and a half's control score is reported
+by ``half_score_report``. The per-text mean weighs every held-out text
 once, where a pooled loss is dominated by the texts with the most records
 (FR-064). The scored records are distinct: a validation stratum repeats a
 record's row for every added copy, and every record is read once (FR-068a).
@@ -11,25 +10,16 @@ record's row for every added copy, and every record is read once (FR-068a).
 
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from effects.domain.check_label import CheckLabel, TableRow
 from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, TextGames
 from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
-from effects.domain.selection_set import COMPONENTS, DEVIANCE, RULE_TESTS, deviance_by_head
 from effects.domain.strata import Stratum
-
-if TYPE_CHECKING:
-    from effects.application.control_score import ControlScore
-
-#: Left-out item names a report line spells out before it counts the rest.
-NAMED_LEFT_OUT = 12
 
 #: The loss key every scored record carries: the per-entity loss summed over
 #: the gate and every supervised field, as the trainer's validation reads it.
@@ -227,27 +217,25 @@ def breakdown_checks(
     checks = [*_card_disjoint_checks(card, games_by_text)]
     checks += _memorization_gap_checks(card, game)
     for stratum, rows in ((Stratum.CARD_DISJOINT, card), (Stratum.GAME_DISJOINT, game)):
-        checks += _slice_checks(
-            CheckLabel.of(stratum, "policy"), policy_slice(rows), present=OFF_POLICY,
+        checks += _slice_checks(policy_slice(rows), SliceSpec(
+            CheckLabel.of(stratum, "policy"), present=OFF_POLICY,
             skipped=CheckLabel.of(stratum, "off-policy"),
             why="no record in this stratum was acted by the random seat",
-        )
-        checks += _slice_checks(
-            CheckLabel.of(stratum, "legality"), decision_slice(rows),
-            present=LegalityDecision.REAL,
+        ))
+        checks += _slice_checks(decision_slice(rows), SliceSpec(
+            CheckLabel.of(stratum, "legality"), present=LegalityDecision.REAL,
             skipped=CheckLabel.of(stratum, "real-decision legality"),
             why="no legality record in this stratum is classed a real decision",
-        )
+        ))
     if withheld_keyword:
-        checks += _slice_checks(
+        checks += _slice_checks(keyword_slice([*card, *game], withheld_keyword), SliceSpec(
             CheckLabel.of(CheckName.ZERO_SHOT_KEYWORD, withheld_keyword),
-            keyword_slice([*card, *game], withheld_keyword),
             present=WITHHELD, skipped=CheckLabel.of(CheckName.ZERO_SHOT_KEYWORD),
             why=(
                 f"no validation record carries the withheld keyword "
                 f"{withheld_keyword!r}"
             ),
-        )
+        ))
     return checks
 
 
@@ -294,14 +282,23 @@ def _gap_check(family: str, gaps: Mapping[str, float]) -> CheckResult:
     )
 
 
-def _slice_checks(
-    head: CheckLabel, groups: dict, *, present, skipped: CheckLabel, why: str,
-) -> list[CheckResult]:
+@dataclass(frozen=True, slots=True)
+class SliceSpec:
+    """How one slice reads: its lines' head, the group whose absence skips the
+    comparison, the skip line's name and why it is skipped."""
+
+    head: CheckLabel
+    present: str
+    skipped: CheckLabel
+    why: str
+
+
+def _slice_checks(groups: dict, spec: SliceSpec) -> list[CheckResult]:
     """Every group of one slice as a line, or one skip when the ``present``
     group is missing and the comparison would have one side."""
-    if present not in groups:
-        return [CheckResult(str(skipped), CheckStatus.SKIPPED, why)]
-    return [_group_check(head.then(name), group) for name, group in groups.items()]
+    if spec.present not in groups:
+        return [CheckResult(str(spec.skipped), CheckStatus.SKIPPED, spec.why)]
+    return [_group_check(spec.head.then(name), group) for name, group in groups.items()]
 
 
 def _group_check(
@@ -327,66 +324,3 @@ def _group_check(
         str(label), CheckStatus.REPORTED,
         detail or f"{per_record.records} records, {texts} texts", values, table,
     )
-
-
-# ── a half's control score ──────────────────────────────────────────────
-
-
-def half_score_checks(
-    score: ControlScore, *, half: str, games: Mapping[str, int],
-    selection_control: float | None = None, note: str = "",
-) -> list[CheckResult]:
-    """One half of every stratum, scored as the control score scores the
-    selection half (FR-070): per stratum its four components and their mean,
-    then each component's items, the rule tests per rule (FR-074), and last
-    the control score the strata mix to beside the selection half's of the
-    epoch the checkpoint holds. ``games`` is each stratum's games in the half."""
-    prefix = f"{half}-half"
-    checks: list[CheckResult] = []
-    for stratum, scored in sorted(score.strata.items()):
-        where = CheckLabel.of(prefix, stratum)
-        missing = [name for name in COMPONENTS if name in scored.components
-                   and math.isnan(scored.components[name])]
-        detail = f"{games.get(stratum, 0)} games; score = the mean of the four components"
-        if missing:
-            detail += f"; nothing to score in {', '.join(missing)}"
-        if scored.non_finite:
-            detail += f"; {scored.non_finite} non-finite reading(s) scored at -1"
-        checks.append(CheckResult(str(where), CheckStatus.REPORTED, detail, {
-            **dict(scored.components), "score": scored.score}))
-        for component in COMPONENTS:
-            if component not in scored.components:
-                continue
-            items = dict(scored.items.get(component, {}))
-            left_out = tuple(scored.left_out.get(component, ()))
-            name = (CheckLabel.of(CheckName.RULE_TESTS, stratum, half) if component == RULE_TESTS
-                    else where.then(component))
-            checks.append(CheckResult(str(name), CheckStatus.REPORTED,
-                                      _items_detail(component, items, left_out), items))
-    values = {"control": score.control} if len(score.strata) == 2 else {}
-    if selection_control is not None:
-        values["selection_control"] = float(selection_control)
-    if values:
-        detail = (f"stratum weight {score.stratum_weight:g} on the card-disjoint score"
-                  + ("; selection_control is the control score of the epoch the checkpoint holds"
-                     if selection_control is not None else "")
-                  + (f"; {note}" if note else ""))
-        checks.append(CheckResult(
-            str(CheckLabel.of(prefix, "control")), CheckStatus.REPORTED, detail, values))
-    return checks
-
-
-def _items_detail(component: str, items: Mapping[str, float], left_out: tuple[str, ...]) -> str:
-    """How many items a component scored, each rescaled and clipped at -1, and
-    which it left out."""
-    unit = "rules" if component == RULE_TESTS else "items"
-    detail = f"{len(items)} {unit} scored, rescaled and clipped below at -1"
-    if component == DEVIANCE and items:
-        heads = deviance_by_head(items)
-        detail += "; by head: " + ", ".join(
-            f"{head} {mean:.3f} ({count})" for head, (mean, count) in heads.items())
-    if left_out:
-        named = ", ".join(left_out[:NAMED_LEFT_OUT])
-        more = len(left_out) - NAMED_LEFT_OUT
-        detail += f"; {len(left_out)} left out: {named}" + (f" and {more} more" if more > 0 else "")
-    return detail

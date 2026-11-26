@@ -11,6 +11,7 @@ import pytest
 
 from effects.application import breakdowns as bd
 from effects.application.breakdown_table import COLUMNS, write_breakdowns_csv
+from effects.application.half_score_report import HalfReading, half_score_checks
 from effects.domain.check_label import CheckLabel
 from effects.domain.evaluation_report import CheckName, EvaluationReport
 from effects.domain.strata import Stratum
@@ -52,7 +53,7 @@ class TestTheNames:
     def test_every_name_parses_back_to_its_head_and_qualifier(self, rows):
         score = test_breakdowns.TestHalfScoreChecks()._score()
         names = [c.name for c in _checks(rows)]
-        names += [c.name for c in bd.half_score_checks(score, half="reporting", games={})]
+        names += [c.name for c in half_score_checks(score, HalfReading("reporting", {}))]
         assert len(names) > 20
         for name in names:
             label = CheckLabel.parse(name)
@@ -63,7 +64,7 @@ class TestTheNames:
         known = {*map(str, CheckName), *map(str, Stratum), "reporting-half"}
         score = test_breakdowns.TestHalfScoreChecks()._score()
         names = [c.name for c in _checks(rows)]
-        names += [c.name for c in bd.half_score_checks(score, half="reporting", games={})]
+        names += [c.name for c in half_score_checks(score, HalfReading("reporting", {}))]
         assert {CheckLabel.parse(name).head for name in names} <= known
 
     def test_a_qualifier_keeps_its_spaces(self):
