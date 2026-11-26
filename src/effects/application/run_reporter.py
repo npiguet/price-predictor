@@ -14,9 +14,9 @@ from pathlib import Path
 import torch
 
 from effects.application.line_preparation import TruncationLog, log_truncation
+from effects.application.shard_plan import NO_TEXT_BUCKET
 from effects.application.step_loss import StepLoss, read_back
 from effects.application.step_preparation import (
-    NO_TEXT_BUCKET,
     ShardClosed,
     ShardOpened,
     ShardTask,

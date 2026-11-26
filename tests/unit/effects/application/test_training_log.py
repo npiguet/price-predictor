@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from effects.application.step_preparation import NO_TEXT_BUCKET
+from effects.application.shard_plan import NO_TEXT_BUCKET
 from effects.application.training_log import (
     format_floor,
     format_norms,

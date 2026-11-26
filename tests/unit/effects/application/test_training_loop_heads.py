@@ -18,8 +18,9 @@ import torch
 
 from effects.application.mlm_masking import MlmMasker
 from effects.application.run_context import build_run, training_settings
+from effects.application.shard_plan import NO_TEXT_BUCKET
 from effects.application.step_loss import StepLoss
-from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
+from effects.application.step_preparation import training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.text_staging import StagedTexts
 from effects.application.train_effect_model import (
@@ -325,7 +326,7 @@ class TestEpochShares:
     def test_every_record_gets_a_bucket_and_a_family(self, records, tmp_path):
         preparer = _fixture_preparer(tmp_path)
         texts = preparer._texts(records)
-        labels = preparer._shard_labels(records, texts, preparer._games(records, texts))
+        labels = preparer._shard_plan(records, texts, preparer._games(records, texts)).labels
         assert set(labels) == {r.record_id for r in records}
         buckets = {bucket for bucket, _ in labels.values()}
         assert buckets <= {*RARITY_BUCKETS, NO_TEXT_BUCKET}
@@ -341,7 +342,7 @@ class TestEpochShares:
         )
         preparer.rarity = {preparer.resolver.acting_text(record): 50}
         texts = preparer._texts([record])
-        labels = preparer._shard_labels([record], texts, preparer._games([record], texts))
+        labels = preparer._shard_plan([record], texts, preparer._games([record], texts)).labels
         assert labels[record.record_id][0] == "20+"
 
 

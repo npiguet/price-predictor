@@ -12,13 +12,13 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import NamedTuple
 
 import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.line_preparation import TruncationLog
 from effects.application.mlm_masking import MaskedTokens
+from effects.application.shard_plan import ShardPlan
 from effects.application.surface_batching import (
     PreparedBatch,
     StepDraws,
@@ -68,11 +68,6 @@ from effects.domain.rule_mask import (
     copy_weights,
     weighed_by_class,
 )
-from effects.domain.sampling import (
-    batches_without_replacement,
-    sample_weights,
-    sampling_class,
-)
 from effects.domain.script_text import params, segments
 from effects.domain.split import (
     CorpusSplit,
@@ -82,8 +77,6 @@ from effects.domain.text_head_losses import ApiTargets, ValueTargets
 from effects.domain.value_targets import ValueLine
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 
-#: Rarity-bucket label for a record with no acting text (combat, legality).
-NO_TEXT_BUCKET = "no-text"
 #: The epoch line's family label for the step's counterfactual copies (FR-063e).
 COUNTERFACTUAL_FAMILY = "(lethality copy)"
 
@@ -130,13 +123,6 @@ class DeviceStep:
         self.batch.pin()
         self.targets = self.targets.pinned()
         self.heads.pin()
-
-
-class RecordLabels(NamedTuple):
-    """Where one trained record is counted on the epoch line (FR-055)."""
-
-    bucket: str
-    family: str
 
 
 @dataclass(frozen=True)
@@ -459,31 +445,18 @@ class StepPreparer:
         table (FR-086), else the shard's own count."""
         return TextGames.of(records, lambda record: texts[record.record_id], self.rarity)
 
-    def _weighted(
-        self, records: list, texts: Mapping[str, str | None], games: TextGames,
-    ) -> list[float]:
-        """Rarity weights for a shard's records."""
-        return sample_weights(
-            records, lambda record: texts[record.record_id],
-            games=games, class_of=sampling_class,
+    def _family_of(self, record: EffectRecord) -> str:
+        """``record``'s effect family on the epoch line."""
+        return effect_family(
+            record, self.sidecars, resolver=self._keywords,
+            legality_mode_counts=self.legality_mode_counts,
         )
 
-    def _shard_labels(
+    def _shard_plan(
         self, records: list, texts: Mapping[str, str | None], games: TextGames,
-    ) -> dict[str, RecordLabels]:
-        """``record_id -> labels`` for one shard's records, bucketed by the
-        games the weights read."""
-        labels: dict[str, RecordLabels] = {}
-        for record in records:
-            text = texts[record.record_id]
-            bucket = NO_TEXT_BUCKET if text is None else games.bucket(text)
-            labels[record.record_id] = RecordLabels(
-                bucket, effect_family(
-                    record, self.sidecars, resolver=self._keywords,
-                    legality_mode_counts=self.legality_mode_counts,
-                ),
-            )
-        return labels
+    ) -> ShardPlan:
+        """One shard's rarity weights and epoch-line labels."""
+        return ShardPlan.of(records, texts, games, self._family_of)
 
     def shard_steps(
         self, task: ShardTask, records: list, *, pin: bool = False,
@@ -500,23 +473,16 @@ class StepPreparer:
         yield ShardOpened(trainable=len(records), rarity_coverage=games.coverage())
         if not records:
             return
-        weights = self._weighted(records, texts, games)
-        labels = self._shard_labels(records, texts, games)
+        plan = self._shard_plan(records, texts, games)
         del texts
-        batches = batches_without_replacement(
-            records, weights, batch_size=self.config.batch_size,
-            rng=plan_rng(self.seed, task.epoch, task.position),
+        batches = plan.batches(
+            self.config.batch_size, plan_rng(self.seed, task.epoch, task.position),
         )
         for index in range(task.budget):
-            plan = next(batches)
-            buckets: Counter[str] = Counter()
-            families: Counter[str] = Counter()
-            for record in plan.records:
-                counted = labels[record.record_id]
-                buckets[counted.bucket] += 1
-                families[counted.family] += 1
+            planned = next(batches)
+            buckets, families = plan.shares(planned.records)
             step, copies = self.prepare_training_step(
-                plan.records, fields=task.fields, pin=pin,
+                planned.records, fields=task.fields, pin=pin,
                 rng=step_rng(self.seed, task.epoch, task.position, index),
             )
             if copies:

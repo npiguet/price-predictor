@@ -258,7 +258,7 @@ def test_every_line_on_disk_is_a_known_text_spelled_as_the_join_spells_it(tmp_pa
 
 
 class TestWeightsKeyByAbilityText:
-    """``StepPreparer._weighted`` must key rarity by ability text, not record id.
+    """``ShardPlan.weights`` must key rarity by ability text, not record id.
 
     A ``record_id`` is unique per record, so keying on it gives
     ``effective_games`` a count of exactly 1 for every key and every record in
@@ -300,6 +300,6 @@ class TestWeightsKeyByAbilityText:
 
         shard = [*common_records, *rare_records]
         texts = preparer._texts(shard)
-        weights = preparer._weighted(shard, texts, preparer._games(shard, texts))
+        weights = preparer._shard_plan(shard, texts, preparer._games(shard, texts)).weights
 
         assert weights[-1] > weights[0]
