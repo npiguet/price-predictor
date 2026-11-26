@@ -290,41 +290,54 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     game (no game-end marker) is left out. ``salvage`` counts a damaged shard
     up to the damage and names it in ``damaged`` (a collection run must not
     stop on one); otherwise the damage raises, located."""
-    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
-
     index, sidecars, keywords = built
     out = RuleCounts()
-    seat_games: set[str] = set()
-    ends = GameEnds()
-    pending: list[_Pending] = []
-    by_game = _GameReads()
+    state = _ShardState(_ReadSide(index, sidecars, keywords))
+    _read_shard_into(out, shard, state, salvage)
+    cut = state.ends.cut
+    out.cut_games = len(cut)
+    _settle_records(out, state, cut)
+    _settle_pending(out, state, cut)
+    take_gaps = getattr(sidecars, "take_join_gaps", None)
+    if take_gaps is not None:
+        out.joins = take_gaps()
+    return out
+
+
+def _read_shard_into(out: RuleCounts, shard: Path, state: _ShardState, salvage: bool) -> None:
+    """Read ``shard`` into ``state``; a damage raises, or under ``salvage`` is
+    named in ``out.damaged`` with the records before it kept."""
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
+
     try:
-        _count_records(read_shard(shard, tally=out.decode), by_game, index, sidecars, keywords,
-                       seat_games, pending, ends)
+        _count_records(read_shard(shard, tally=out.decode), state)
     except SHARD_DAMAGE as exc:
         if not salvage:
             raise
         logger.warning("%s; its records before the damage are counted", exc)
         out.damaged.append(str(exc))
-    cut = ends.cut
-    out.cut_games = len(cut)
-    for game, records in by_game.records.items():
+
+
+def _settle_records(out: RuleCounts, state: _ShardState, cut: frozenset[str]) -> None:
+    """Add the records and the uncountable rules of every game that ended."""
+    for game, records in state.by_game.records.items():
         if game not in cut:
             out.records += records
-            out.not_countable |= by_game.not_countable.get(game, set())
-    for found in pending:
+            out.not_countable |= state.by_game.not_countable.get(game, set())
+
+
+def _settle_pending(out: RuleCounts, state: _ShardState, cut: frozenset[str]) -> None:
+    """Add the tags, review entries and carriers of every game that ended, each
+    tag under its game's source."""
+    for found in state.pending:
         if found.game_id in cut:
             continue
         out.review |= found.review
         out.carriers.update(found.carried)
         source = RuleSource.of(fork=found.fork, aimed=found.aimed,
-                               random_seat_game=found.game_id in seat_games)
+                               random_seat_game=found.game_id in state.seat_games)
         for tag in found.tags:
             out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
-    take_gaps = getattr(sidecars, "take_join_gaps", None)
-    if take_gaps is not None:
-        out.joins = take_gaps()
-    return out
 
 
 @dataclass
@@ -348,27 +361,54 @@ class _Pending:
     carried: frozenset
 
 
-def _count_records(records, by_game: _GameReads, index, sidecars, keywords,
-                   seat_games: set[str], pending: list, ends: GameEnds) -> None:
+@dataclass(frozen=True)
+class _ReadSide:
+    """What a worker reads records against: the detector index, the sidecar
+    cache and the keyword each scenario names."""
+
+    index: DetectorIndex
+    sidecars: SidecarLookup | None
+    keywords: dict[str, str]
+
+
+@dataclass
+class _ShardState:
+    """What reading one shard holds until it ends."""
+
+    side: _ReadSide
+    by_game: _GameReads = field(default_factory=_GameReads)
+    seat_games: set[str] = field(default_factory=set)
+    ends: GameEnds = field(default_factory=GameEnds)
+    pending: list[_Pending] = field(default_factory=list)
+
+
+def _count_records(records, state: _ShardState) -> None:
     for record in records:
-        by_game.records[record.game_id] += 1
-        ends.note(record)
+        state.by_game.records[record.game_id] += 1
+        state.ends.note(record)
         if record.random_seat:
-            seat_games.add(record.game_id)
-        result = tag_record(record, index, sidecars)
-        if result.not_countable:
-            by_game.not_countable.setdefault(record.game_id, set()).update(
-                result.not_countable)
-        review = frozenset((record.record_id, tag.scenario) for tag in result.review)
-        carried = frozenset(
-            (tag.rule, script_file, key)
-            for tag in result.tags
-            for script_file, key in tag_carriers(record, tag, keywords, sidecars)
-        )
-        if result.tags or review:
-            pending.append(_Pending(record.game_id, counts_as_fork(record),
-                                    record.aimed_at is not None,
-                                    tuple(result.tags), review, carried))
+            state.seat_games.add(record.game_id)
+        _note_tags(record, state)
+
+
+def _note_tags(record: EffectRecord, state: _ShardState) -> None:
+    """Tag ``record`` and hold what it adds: its game's uncountable rules, and
+    its tags, review entries and carriers where it has any."""
+    side = state.side
+    result = tag_record(record, side.index, side.sidecars)
+    if result.not_countable:
+        state.by_game.not_countable.setdefault(record.game_id, set()).update(
+            result.not_countable)
+    review = frozenset((record.record_id, tag.scenario) for tag in result.review)
+    carried = frozenset(
+        (tag.rule, script_file, key)
+        for tag in result.tags
+        for script_file, key in tag_carriers(record, tag, side.keywords, side.sidecars)
+    )
+    if result.tags or review:
+        state.pending.append(_Pending(record.game_id, counts_as_fork(record),
+                                      record.aimed_at is not None,
+                                      tuple(result.tags), review, carried))
 
 
 def none_rules(catalogue) -> dict[str, str]:
@@ -421,32 +461,45 @@ def unit_of(rule: str) -> str:
     return section
 
 
-def report_lines(counts: dict) -> list[str]:
-    """The printed table: one line per rule grouped by unit, then the rest."""
-    def split(sides: dict, polarity: str) -> str:
-        found = sides.get(polarity, {})
-        return "/".join(str(found.get(str(s), 0)) for s in RuleSource)
+def _split(sides: dict, polarity: str) -> str:
+    found = sides.get(polarity, {})
+    return "/".join(str(found.get(str(s), 0)) for s in RuleSource)
 
+
+def _rule_table(rules: dict) -> list[str]:
+    """The table's header, then one line per rule grouped by unit."""
     lines = [f"{'rule':12s} {'fires':>20s} {'does_not_fire':>20s}   "
              f"(each {' / '.join(str(s) for s in RuleSource)})"]
     unit = None
-    for rule, sides in sorted(counts["rules"].items(), key=lambda item: rule_order(item[0])):
+    for rule, sides in sorted(rules.items(), key=lambda item: rule_order(item[0])):
         if unit_of(rule) != unit:
             unit = unit_of(rule)
             lines.append(f"-- {unit}")
-        lines.append(f"{rule:12s} {split(sides, Polarity.FIRES):>20s} "
-                     f"{split(sides, Polarity.DOES_NOT_FIRE):>20s}")
+        lines.append(f"{rule:12s} {_split(sides, Polarity.FIRES):>20s} "
+                     f"{_split(sides, Polarity.DOES_NOT_FIRE):>20s}")
+    return lines
+
+
+def _untaggable_lines(untaggable: dict) -> list[str]:
+    return [f"scenarios no record can show (untaggable): {len(untaggable)}",
+            *[f"  {sid} ({', '.join(found['rules'])}): {found['reason']}"
+              for sid, found in untaggable.items()]]
+
+
+def _same_as_lines(same_as: dict) -> list[str]:
+    return [f"scenarios counted under another (same_as): {len(same_as)}",
+            *[f"  {sid} ({', '.join(found['rules'])}) -> {', '.join(found['same_as'])} "
+              f"({', '.join(found['counted_under'])})" for sid, found in same_as.items()]]
+
+
+def report_lines(counts: dict) -> list[str]:
+    """The printed table: one line per rule grouped by unit, then the rest."""
+    lines = _rule_table(counts["rules"])
     zero = counts.get("declared_zero", [])
     lines.append(f"rules declared with zero records: {len(zero)}")
     lines += [f"  {rule}" for rule in zero]
-    untaggable = counts.get("untaggable", {})
-    lines.append(f"scenarios no record can show (untaggable): {len(untaggable)}")
-    lines += [f"  {sid} ({', '.join(found['rules'])}): {found['reason']}"
-              for sid, found in untaggable.items()]
-    same_as = counts.get("same_as", {})
-    lines.append(f"scenarios counted under another (same_as): {len(same_as)}")
-    lines += [f"  {sid} ({', '.join(found['rules'])}) -> {', '.join(found['same_as'])} "
-              f"({', '.join(found['counted_under'])})" for sid, found in same_as.items()]
+    lines += _untaggable_lines(counts.get("untaggable", {}))
+    lines += _same_as_lines(counts.get("same_as", {}))
     lines.append(f"rules declared none: {len(counts['none'])}")
     lines += [f"  {rule}: {reason}" for rule, reason in counts["none"].items()]
     lines.append(f"rules not countable on these records: {len(counts['not_countable'])}")
