@@ -211,10 +211,27 @@ class RecordTargets(dict[str, EntityTargets]):
     (:func:`closed_list_misses.closed_list_misses`), written to no column.
     """
 
-    def __init__(self, *, gated: bool = True) -> None:
+    def __init__(
+        self, *, gated: bool = True, record_class: SamplingClass | None = None,
+        players: frozenset[str] = frozenset(),
+    ) -> None:
         super().__init__()
         self.gated = gated
         self.unsupervised: Counter[str] = Counter()
+        self._record_class = record_class
+        self._players = players
+
+    def entry(self, subject: str) -> EntityTargets:
+        """The subject's entry, made on first use: a player's at the player
+        scope, any other subject's at the permanent scope, each in the
+        record's sampling class."""
+        entry = self.get(subject)
+        if entry is None:
+            entry = self[subject] = EntityTargets(
+                record_class=self._record_class,
+                scope=FieldScope.PLAYER if subject in self._players else FieldScope.PERMANENT,
+            )
+        return entry
 
 
 def unsupervised_kind(event: Event) -> str | None:
@@ -237,34 +254,25 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
     game-end marker, which names nobody and trains no gate."""
     if is_game_end(record):
         return RecordTargets(gated=False)
-    record_class = sampling_class(record)
-    targets = RecordTargets(gated=_trains_gate(record))
-    players = {player.id for player in record.state.players}
-
-    def slot(subject: str) -> EntityTargets:
-        entry = targets.get(subject)
-        if entry is None:
-            entry = targets[subject] = EntityTargets(
-                record_class=record_class,
-                scope=FieldScope.PLAYER if subject in players else FieldScope.PERMANENT,
-            )
-        return entry
-
+    targets = RecordTargets(
+        gated=_trains_gate(record), record_class=sampling_class(record),
+        players=frozenset(player.id for player in record.state.players),
+    )
     events = _target_events(record)
     for event in events:
         kind = unsupervised_kind(event)
         if kind is not None:
             targets.unsupervised[kind] += 1
         for subject in event.subjects:
-            entry = slot(subject)
+            entry = targets.entry(subject)
             entry.affected = True
             _apply_event(entry, event)
 
     if events:
-        _RecordPass(record, events, slot, targets).run()
-    _apply_playability(record, slot)
-    _apply_continuous(record, slot)
-    apply_paid_costs(record, slot)
+        _RecordPass(record, events, targets).run()
+    _apply_playability(record, targets.entry)
+    _apply_continuous(record, targets.entry)
+    apply_paid_costs(record, targets.entry)
     targets.unsupervised.update(closed_list_misses(record))
     _drop_slotless(record, targets)
     return targets
@@ -571,11 +579,10 @@ class _RecordPass:
     """What one event cannot say alone: read against the record's other
     events and its snapshot, once every event has been applied."""
 
-    def __init__(self, record: EffectRecord, events: tuple[Event, ...], slot,
+    def __init__(self, record: EffectRecord, events: tuple[Event, ...],
                  targets: RecordTargets) -> None:
         self.record = record
         self.events = events
-        self.slot = slot
         self.targets = targets
         self.entities = {entity.id: entity for entity in record.state.entities}
         self.players = {player.id: player for player in record.state.players}
@@ -760,7 +767,7 @@ class _RecordPass:
             self.unknown.add(name)
             return
         for subject in subjects:
-            entry = self.slot(subject)
+            entry = self.targets.entry(subject)
             entry.affected = True
             write(entry)
 
