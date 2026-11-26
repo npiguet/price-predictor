@@ -1018,7 +1018,11 @@ def _train_effect_model_parser(subparsers) -> None:
     _add_variant_scripts(parser, without=(
         "the tree the corpus's manifest records is read, if any"
     ))
-    _add_variant(parser)
+    _add_variant(parser, help_text=(
+        "The shipping model, or one of its baselines, which zero part of the "
+        "input or replace the encoder; each trains under its own name "
+        "(default: %(default)s)"
+    ))
     add_config_flags(parser, TrainEffectModelConfig)
 
 

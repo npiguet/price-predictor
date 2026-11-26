@@ -177,7 +177,10 @@ class TrainEffectModelConfig:
         "Checkpoint directory (models/effects/<gen>/effect-model/<run>/)"
     ))
     variant: Baseline = setting(COMPARED, ALWAYS, default=Baseline.FULL)
-    e_dim: int = setting(COMPARED, ALWAYS, default=256)
+    e_dim: int = setting(COMPARED, ALWAYS, default=256, help=(
+        "Width of each ability's vector e, the encoder's output the effect head "
+        "reads (default: %(default)s)"
+    ))
     relation_values: str = setting(COMPARED, ALWAYS, default="on", type=on_off, help=(
         "on: the trunk's relations change what a slot receives as well as how "
         "much it attends; off: the value tables stay at zero and untrained "
@@ -218,8 +221,14 @@ class TrainEffectModelConfig:
         "Ability-encoder width, recorded in the checkpoint; must divide by the "
         "encoder's head count (default: %(default)s)"
     ))
-    keyword_expand_p: float = setting(COMPARED, ALWAYS, default=0.25)
-    context_dropout: float = setting(COMPARED, ALWAYS, default=0.15)
+    keyword_expand_p: float = setting(COMPARED, ALWAYS, default=0.25, help=(
+        "Probability, per known keyword in an ability text, of expanding it to "
+        "its reminder text instead of keeping its token (default: %(default)s)"
+    ))
+    context_dropout: float = setting(COMPARED, ALWAYS, default=0.15, help=(
+        "Probability that an ability on the board but the acting one's loses its "
+        "token from the input (default: %(default)s)"
+    ))
     lethality_copies: int = setting(COMPARED, WHEN_SET, default=0, help=(
         "Counterfactual copies per qualifying damage or -X/-X resolution per "
         "step, toughness and amount redrawn and the death labelled by the rules "
@@ -232,11 +241,19 @@ class TrainEffectModelConfig:
         "Also keep every epoch's checkpoint under <model-output>/epochs/, so "
         "any epoch can be probed"
     ))
-    mlm_weight: float = setting(COMPARED, ALWAYS, default=0.1)
-    mlm_mask_prob: float = setting(COMPARED, ALWAYS, default=0.15)
+    mlm_weight: float = setting(COMPARED, ALWAYS, default=0.1, help=(
+        "Loss weight of the encoder's masked-token prediction (default: %(default)s)"
+    ))
+    mlm_mask_prob: float = setting(COMPARED, ALWAYS, default=0.15, help=(
+        "Share of an ability text's tokens masked for the masked-token "
+        "prediction (default: %(default)s)"
+    ))
     #: Small because the script-API term sums a BCE per parameter key, which
     #: starts two orders of magnitude above the value term.
-    api_weight: float = setting(COMPARED, ALWAYS, default=0.003)
+    api_weight: float = setting(COMPARED, ALWAYS, default=0.003, help=(
+        "Loss weight of the script-API head, which predicts an ability's API "
+        "type and parameter keys (default: %(default)s)"
+    ))
     #: An epoch rather than a step, so the field set never changes inside an
     #: epoch whose end validates the new fields' untrained heads.
     curriculum_epoch: int = setting(COMPARED, ALWAYS, default=3, help=(
@@ -247,9 +264,18 @@ class TrainEffectModelConfig:
         "to the scheduled rate at the curriculum switch; 0 turns the re-warm off "
         "(default: %(default)s)"
     ))
-    batch_size: int = setting(COMPARED, ALWAYS, default=32)
-    grad_accum: int = setting(COMPARED, ALWAYS, default=1)
-    steps_per_epoch: int = setting(COMPARED, ALWAYS, default=5_000)
+    batch_size: int = setting(COMPARED, ALWAYS, default=32, help=(
+        "Records per training micro-step, and per validation batch "
+        "(default: %(default)s)"
+    ))
+    grad_accum: int = setting(COMPARED, ALWAYS, default=1, help=(
+        "Micro-steps per optimizer step; must divide --steps-per-epoch "
+        "(default: %(default)s)"
+    ))
+    steps_per_epoch: int = setting(COMPARED, ALWAYS, default=5_000, help=(
+        "Micro-steps in an epoch, which fixes how long an epoch takes "
+        "(default: %(default)s)"
+    ))
     shards_per_epoch: int = setting(COMPARED, ALWAYS, default=DEFAULT_SHARDS_PER_EPOCH, help=(
         "Record shards an epoch reads, drawn at random across the corpus: "
         "--steps-per-epoch fixes how long an epoch takes, this how many shards "
@@ -260,7 +286,10 @@ class TrainEffectModelConfig:
         "trains; 0 prepares each step here, just before it trains. Changes speed, never results "
         "(default: %(default)s)"
     ))
-    epochs: int = setting(MAY_CHANGE, ALWAYS, default=40)
+    epochs: int = setting(MAY_CHANGE, ALWAYS, default=40, help=(
+        "Most epochs to train; early stopping may end the run sooner "
+        "(default: %(default)s)"
+    ))
     patience: int = setting(MAY_CHANGE, ALWAYS, default=5, help=(
         "Epochs without a new best control score before stopping, counted from "
         "the averaged weights' start; 0 never stops early (default: %(default)s)"
