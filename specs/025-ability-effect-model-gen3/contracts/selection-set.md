@@ -51,6 +51,12 @@ selected against the one on disk); writing the same set again leaves the file as
    global or created-objects output keeps every row. Name
    every rule whose detector finds no test record in a half as `untested`, and in every half every
    rule whose manifest `effective_outputs` is empty as untested for having no output to read.
+   Over a rule's drawn rows, leave out each effective output that no `fires` row observes or whose
+   mean target differs between the polarities by less than 1e-6, by the targets the control score
+   reads (§ Score), named `<rule>/<output>`, reason `targets the same in both polarities` or
+   `no fires row observes it`; a rule with none left is left out, reason `no output whose targets
+   differ between the polarities`. A kept rule's standard error counts the rows a kept output
+   reads.
 5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05` and every grid cell non-empty; otherwise exit 1
    naming stratum, half and component.
 6. Write the file.
@@ -74,7 +80,7 @@ record gives no slot is counted and logged. The selection set
 records no scenario category, so an output's category, or member, is the one whose observed share in
 the frozen records' own targets differs most between `fires` and `does_not_fire`, read as its
 complement where the difference is negative; a count or delta takes the sign of the mean difference;
-an output no head carries, one no `fires` record observes, or one whose mean target differs between the polarities by less than 1e-6 (named `rule/output` in the scorer's left-out items; the freeze does not test it) is not read, and a rule left with none
+an output no head carries, one no `fires` record observes, or one whose mean target differs between the polarities by less than 1e-6 (named `rule/output` in the scorer's left-out items, as the freeze names it) is not read, and a rule left with none
 is left out. Every item is clipped below at −1, and an item with any non-finite reading of the model scores −1. A component is the mean of its items, and a stratum score the mean
 of its four components; the grid component is the mean over the damage, combat and evasion grids of
 each grid's mean over its scored variants (`combat/…` and `combat-several/…` both being the combat

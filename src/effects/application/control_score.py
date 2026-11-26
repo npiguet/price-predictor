@@ -124,12 +124,6 @@ from effects.application.record_forward import RecordForward
 from effects.application.step_preparation import DeviceStep, scoring_step, stripped
 from effects.application.surface_batching import SurfaceBatcher
 from effects.application.validation_pass import FieldParts, KeptTargets, score_steps
-from effects.domain.aux_head_targets import (
-    created_objects_targets,
-    global_targets,
-    supervises_created_objects,
-    verdict_targets,
-)
 from effects.domain.effect_head_layout import (
     CREATED_OBJECT_SLOTS,
     CREATED_SLOT_WIDTH,
@@ -143,6 +137,7 @@ from effects.domain.effect_head_layout import (
     RecordHeadLayout,
     active_fields,
 )
+from effects.domain.effect_targets import RecordTargets, derive_targets
 from effects.domain.field_types import FieldType
 from effects.domain.grid_edits import CellRead, TextOverride, grid_of
 from effects.domain.head_decoding import HeadReading, expected_magnitude, nonzero_direction_balance
@@ -154,6 +149,11 @@ from effects.domain.rule_mask import (
     RuleMask,
     copy_weights,
     weighed_by_class,
+)
+from effects.domain.rule_output_targets import (
+    TargetMeans,
+    entity_indicators,
+    record_indicators,
 )
 from effects.domain.sampling import SamplingClass
 from effects.domain.score_scales import (
@@ -179,7 +179,7 @@ from effects.domain.selection_set import (
     item_key,
 )
 from effects.domain.strata import Half, Stratum
-from effects.domain.surface_collation import per_entity_targets
+from effects.domain.surface_collation import entity_target_tensors
 
 if TYPE_CHECKING:
     from effects.application.record_forward import ForwardOutputs
@@ -198,9 +198,6 @@ FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 #: card beside a training run's state, and runs several times faster than
 #: chunks of a training batch's size (T160).
 CHUNK_RECORDS = 128
-#: The least a rule-test output's mean target must differ between the
-#: polarities (in its most different category) for the output to be read.
-MIN_DIFFERENCE = 1e-6
 
 
 class ControlScoreError(RuntimeError):
@@ -437,8 +434,12 @@ def _readout(name: str) -> Read:
 
 class _Decoder:
     """One rule-test output's candidate readings and the matching target
-    indicators: a candidate per category (or member), or one expected value."""
+    indicators: a candidate per category (or member), or one expected value.
+    Its targets are :attr:`output`'s, read by ``rule_output_targets``, the
+    definition the freeze leaves an output out by."""
 
+    #: The output the decoder reads, as the manifest's map names it.
+    output = ""
     #: Whether the output is read at the tag's outcome entities rather than the record.
     per_entity = False
     #: Whether the candidates are probabilities of categories (else amounts).
@@ -459,24 +460,13 @@ class _Decoder:
         """Whether one entity's reading leaves the affected gate out."""
         return False
 
-    def entity_indicators(self, targets: EntityTargetBatch, row: int,
-                          column: int) -> list[float] | None:
-        return None
-
-    def record_indicators(self, record: EffectRecord) -> list[float] | None:
-        return None
-
 
 class _GateDecoder(_Decoder):
+    output = GATE_OUTPUT
     per_entity = True
 
     def candidates(self, heads, rows, columns):
         return torch.sigmoid(heads.gathered[rows, columns, GATE_INDEX].float()).unsqueeze(-1)
-
-    def entity_indicators(self, targets, row, column):
-        if not bool(targets.gate_scored[row, column]):
-            return None
-        return [float(targets.gate[row, column])]
 
 
 class _EntityFieldDecoder(_Decoder):
@@ -490,6 +480,7 @@ class _EntityFieldDecoder(_Decoder):
 
     def __init__(self, spec: FieldSpec) -> None:
         self.spec = spec
+        self.output = spec.name
         self.categorical = not spec.type.has_magnitude
 
     def candidates(self, heads, rows, columns):
@@ -516,43 +507,12 @@ class _EntityFieldDecoder(_Decoder):
     def reads_conditionally(self, targets, row, column):
         return self.spec.gated and not bool(targets.gate_scored[row, column])
 
-    def entity_indicators(self, targets, row, column):
-        spec = self.spec
-        if spec.gated and not bool(targets.affected[row, column]):
-            return self._unaffected(targets, row, column)
-        if not self._scored(targets, row, column):
-            return None
-        value = targets.fields.values[spec.name][row, column]
-        if spec.type is FieldType.CATEGORICAL:
-            hot = [0.0] * spec.arity
-            hot[int(value)] = 1.0
-            return hot
-        if spec.type is FieldType.MULTI_BINARY:
-            return [float(v) for v in value.reshape(-1)]
-        return [float(value)]
-
-    def _unaffected(self, targets, row, column) -> list[float] | None:
-        """A gated field at an entity nothing affected: nothing happened
-        where the record trains the gate, unread where it trains none."""
-        if bool(targets.gate_scored[row, column]):
-            return [0.0] * _width(self.spec)
-        return None
-
-    def _scored(self, targets, row, column) -> bool:
-        name = self.spec.name
-        return (name in targets.fields and bool(targets.fields.present[name][row, column])
-                and bool(targets.scored(name)[row, column]))
-
-
-def _width(spec: FieldSpec) -> int:
-    return 1 if spec.type.has_magnitude or spec.type is FieldType.BINARY else spec.arity
-
 
 class _RecordFieldDecoder(_Decoder):
     """A verdict or global field, read at the record."""
 
-    def __init__(self, layout: RecordHeadLayout, name: str, head: str, derive) -> None:
-        self.layout, self.spec, self.head, self.derive = layout, layout.by_name[name], head, derive
+    def __init__(self, layout: RecordHeadLayout, name: str, head: str) -> None:
+        self.layout, self.spec, self.head, self.output = layout, layout.by_name[name], head, name
         self.categorical = not self.spec.type.has_magnitude
 
     def _outputs(self, heads: _Heads, rows: torch.Tensor) -> torch.Tensor:
@@ -574,24 +534,6 @@ class _RecordFieldDecoder(_Decoder):
             value = nonzero_direction_balance(_Magnitude(spec.type), members) * value
         return value.sum(-1, keepdim=True)
 
-    def record_indicators(self, record):
-        row = self.derive(record)
-        if row is None:
-            return None
-        values, mask = row
-        if not mask[self.layout.index[self.spec.name]]:
-            return None
-        first, last = self.layout.target_slices[self.spec.name]
-        given = values[first:last]
-        spec = self.spec
-        if spec.type is FieldType.CATEGORICAL:
-            hot = [0.0] * spec.arity
-            hot[int(given[0])] = 1.0
-            return hot
-        if spec.type is FieldType.BINARY:
-            return [float(v) for v in given]
-        return [float(sum(given))]
-
 
 @dataclass(frozen=True)
 class _Magnitude:
@@ -606,19 +548,13 @@ class _CreatedDecoder(_Decoder):
     """The created-objects head: its expected number of created groups, the
     sum over its slots of the probability each is present."""
 
+    output = CREATED_OBJECTS_OUTPUT
     categorical = False
 
     def candidates(self, heads, rows, columns):
         present = heads.created[rows][:, [slot * CREATED_SLOT_WIDTH + CreatedSlot.PRESENT
                                           for slot in range(CREATED_OBJECT_SLOTS)]]
         return torch.sigmoid(present.float()).sum(-1, keepdim=True)
-
-    def record_indicators(self, record):
-        if not supervises_created_objects(record):
-            return None
-        target, _known = created_objects_targets(record)
-        return [float(sum(target[slot * CREATED_SLOT_WIDTH + CreatedSlot.PRESENT]
-                          for slot in range(CREATED_OBJECT_SLOTS)))]
 
 
 def decoder_of(output: str) -> _Decoder | None:
@@ -631,9 +567,9 @@ def decoder_of(output: str) -> _Decoder | None:
     if output in FIELDS_BY_NAME:
         return _EntityFieldDecoder(FIELDS_BY_NAME[output])
     if output in VERDICT_LAYOUT.by_name:
-        return _RecordFieldDecoder(VERDICT_LAYOUT, output, "verdict", verdict_targets)
+        return _RecordFieldDecoder(VERDICT_LAYOUT, output, "verdict")
     if output in GLOBAL_LAYOUT.by_name:
-        return _RecordFieldDecoder(GLOBAL_LAYOUT, output, "global", global_targets)
+        return _RecordFieldDecoder(GLOBAL_LAYOUT, output, "global")
     return None
 
 
@@ -643,8 +579,7 @@ class _OutputReading:
 
     def __init__(self, decoder: _Decoder) -> None:
         self.decoder = decoder
-        self.sums: dict[str, np.ndarray | None] = {FIRES: None, DOES_NOT_FIRE: None}
-        self.counts = {FIRES: 0, DOES_NOT_FIRE: 0}
+        self.means = TargetMeans()
         self.candidate = 0
         self.sign = 1.0
         self.fires: list[list[int]] = []
@@ -652,10 +587,7 @@ class _OutputReading:
         self._conditional: _ConditionalRead | None = None
 
     def observe(self, polarity: str, indicators: Sequence[float]) -> None:
-        vector = np.asarray(indicators, dtype=np.float64)
-        held = self.sums[polarity]
-        self.sums[polarity] = vector if held is None else held + vector
-        self.counts[polarity] += 1
+        self.means.observe(polarity == FIRES, indicators)
 
     def positions(self) -> list[int]:
         """Every value position this output's records are read at."""
@@ -664,18 +596,15 @@ class _OutputReading:
     def settle(self) -> bool:
         """Choose the category and direction from the targets; False when no
         ``fires`` record observed the output, or when no category's mean
-        target differs between the polarities by :data:`MIN_DIFFERENCE`: such
+        target differs between the polarities by ``rule_output_targets.MIN_DIFFERENCE``: such
         an output decides nothing about the rule, and its AUC would enter the
-        rule's mean at full weight."""
-        if not self.counts[FIRES]:
+        rule's mean at full weight (``TargetMeans.settle``, which the freeze
+        reads too)."""
+        direction = self.means.settle()
+        if direction is None:
             return False
-        fires = self.sums[FIRES] / self.counts[FIRES]
-        does_not = (self.sums[DOES_NOT_FIRE] / self.counts[DOES_NOT_FIRE]
-                    if self.counts[DOES_NOT_FIRE] else np.zeros_like(fires))
-        difference = fires - does_not
-        self.candidate = int(np.argmax(np.abs(difference)))
-        self.sign = -1.0 if difference[self.candidate] < 0 else 1.0
-        return bool(abs(difference[self.candidate]) >= MIN_DIFFERENCE)
+        self.candidate, self.sign = direction.candidate, direction.sign
+        return True
 
     def __call__(self, heads: _Heads, rows: torch.Tensor,
                  columns: torch.Tensor) -> torch.Tensor:
@@ -822,7 +751,7 @@ class _ChunkBuilder:
         targets = None
         if any(r.observation is not None and r.subject is not None
                for _, requests in self.pending for r in requests):
-            targets = per_entity_targets(records, surfaces, tuple(FIELDS_BY_NAME.values()))
+            targets = _RowTargets.of(records, surfaces)
         columns = [{surface.slots[slot].subject_id: column
                     for column, slot in enumerate(surface.entity_slots)} for surface in surfaces]
         asked: list[dict[int, int]] = [{} for _ in records]
@@ -841,7 +770,7 @@ class _ChunkBuilder:
                     continue
                 read = request.read
                 if request.observation is not None:
-                    read = self._observed(request.observation, targets, row, column)
+                    read = self._observed(request, targets, row, column)
                     if read is None:
                         continue
                     observations.append(request.observation)
@@ -858,18 +787,35 @@ class _ChunkBuilder:
                                   _grouped(reads)))
         self.pending = []
 
-    def _observed(self, observation: _Observation, targets: EntityTargetBatch,
+    def _observed(self, request: _Request, targets: _RowTargets,
                   row: int, column: int) -> Read | None:
         """A rule test's read of one entity, its target observed; None where
         the record does not say what the output is there, so the reading
         would compare nothing."""
+        observation = request.observation
         reading = observation.reading
-        indicators = reading.decoder.entity_indicators(targets, row, column)
+        indicators = entity_indicators(reading.decoder.output, targets.derived[row],
+                                       request.subject)
         if indicators is None:
             self.untargeted += 1
             return None
         observation.add(indicators)
-        return reading.at(targets, row, column)
+        return reading.at(targets.batch, row, column)
+
+
+@dataclass(frozen=True)
+class _RowTargets:
+    """A chunk's targets: the per-entity batch a read chooses its gate by,
+    and each record's derived targets its indicators are read from."""
+
+    batch: EntityTargetBatch
+    derived: list[RecordTargets]
+
+    @classmethod
+    def of(cls, records: list[EffectRecord], surfaces: list) -> _RowTargets:
+        derived = [derive_targets(record) for record in records]
+        return cls(entity_target_tensors(surfaces, derived, tuple(FIELDS_BY_NAME.values())),
+                   derived)
 
 
 # ── items ───────────────────────────────────────────────────────────────
@@ -1319,7 +1265,7 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
         _, reading, polarity, row, held = ask
         decoder = reading.decoder
         if not decoder.per_entity:
-            indicators = decoder.record_indicators(record)
+            indicators = record_indicators(decoder.output, record)
             if indicators is None:
                 continue
             position = cache.position()

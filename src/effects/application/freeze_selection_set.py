@@ -82,6 +82,12 @@ from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity, ScenarioCatalogue
 from effects.domain.rule_detectors import DetectorIndex, RuleTag, tag_record
 from effects.domain.rule_output_carriage import carried_outputs, read_at_entities_only
+from effects.domain.rule_output_targets import (
+    Indicators,
+    RecordIndicators,
+    informative_rows,
+    reads_output,
+)
 from effects.domain.score_scales import (
     clustered_auc_standard_error,
     component_standard_error,
@@ -202,6 +208,11 @@ class RuleTestRules:
     #: entities is read nowhere (the scorer's ``untargeted``), so only rows
     #: carrying one are tests.
     entity_read: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: Each mapped rule's effective outputs (the manifest's
+    #: ``effective_rule_outputs``): a rule held here is frozen with the
+    #: outputs alone whose targets settle a direction over its drawn rows
+    #: (``rule_output_targets``, finding 12.9), as the control score reads it.
+    outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, catalogue: ScenarioCatalogue, manifest: CorpusManifest,
@@ -218,6 +229,7 @@ class RuleTestRules:
             entity_read={rule: tuple(outputs)
                          for rule, outputs in manifest.effective_rule_outputs.items()
                          if read_at_entities_only(outputs)},
+            outputs=manifest.effective_rule_outputs,
         )
 
     @property
@@ -355,6 +367,10 @@ class _Half:
     grids: dict[str, dict[str, tuple]] = field(default_factory=lambda: defaultdict(dict))
     #: A bounded max-heap (negated hashes) of the deviance sample's copies.
     sample: list[tuple[int, str, str, int]] = field(default_factory=list)
+    #: ``(rule, row) -> output -> its indicators on the row``, for each rule
+    #: :attr:`RuleTestRules.outputs` holds.
+    rule_targets: dict[tuple[str, TaggedRecord], dict[str, Indicators | None]] = field(
+        default_factory=dict)
 
 
 def freeze_selection_set(
@@ -429,9 +445,7 @@ def _gather(
             _sample(found.sample, record, copy, seed=seed, cap=cap)
             if copy:
                 continue
-            for rule, polarity, entities in rules.tests_of(record):
-                found.rule_tests[rule][polarity].append(
-                    TaggedRecord(record.record_id, record.game_id, tuple(entities)))
+            _hold_rule_tests(found, rules, record)
             if record.synthetic:
                 continue
             distinct.append(record)
@@ -457,6 +471,19 @@ def _gather(
                                      f"{known} and {item.kind}")
                 gathered[half_of[game]].probes[item.probe_type].append(
                     ProbeRecord(item.record_id, game, item.entity, float(item.label)))
+
+
+def _hold_rule_tests(found: _Half, rules: RuleTestRules, record: EffectRecord) -> None:
+    """``record``'s rule-test rows, each with its rule's outputs' indicators
+    where ``rules`` holds the rule's outputs."""
+    indicators = RecordIndicators(record)
+    for rule, polarity, entities in rules.tests_of(record):
+        row = TaggedRecord(record.record_id, record.game_id, tuple(entities))
+        found.rule_tests[rule][polarity].append(row)
+        if rule in rules.outputs:
+            found.rule_targets[(rule, row)] = {
+                output: indicators.of(output, row.entities)
+                for output in rules.outputs[rule] if reads_output(output)}
 
 
 def _games_error(positives: Sequence, negatives: Sequence) -> float:
@@ -502,6 +529,10 @@ class _Assembly:
                    reason: str) -> None:
         self.left_out[stratum][half][component].append(LeftOut(item, reason))
 
+    def _leave_out_all(self, stratum: str, half: str, component: str,
+                       items: Iterable[tuple[str, str]]) -> None:
+        self.left_out[stratum][half][component] += [LeftOut(*item) for item in items]
+
     def _enters(self, stratum: str, half: str, component: str, item: str,
                 error: float) -> bool:
         """Record ``item``'s standard error; whether it meets the item target."""
@@ -530,24 +561,38 @@ class _Assembly:
         for rule in self.unreadable:
             self._leave_out(stratum, half, RULE_TESTS, rule, NO_READABLE_OUTPUT)
         for rule in self.testable:
-            sides = found.rule_tests.get(rule)
-            if not sides or not any(sides.values()):
-                self._leave_out(stratum, half, RULE_TESTS, rule, UNTESTED)
+            tested = self._rule_test(stratum, half, rule, found)
+            if tested is None:
                 continue
-            rows, reason = self._test_rows(rule, sides)
-            if reason is not None:
-                self.errors[item_key(stratum, half, RULE_TESTS, rule)] = None
-                self._leave_out(stratum, half, RULE_TESTS, rule, reason)
-                continue
-            drawn = balanced(rows, self.limits.r,
-                             seed=self.seed, salt=f"rule-test|{stratum}|{half}|{rule}",
-                             key=lambda row: row.record_id)
-            error = _games_error(drawn[Polarity.FIRES], drawn[Polarity.DOES_NOT_FIRE])
+            drawn, error = tested
             if self._enters(stratum, half, RULE_TESTS, rule, error):
                 errors.append(error)
                 kept[rule] = {str(p): tuple(rows) for p, rows in drawn.items()}
         self.frozen_rule_tests[stratum][half] = kept
         self._check(stratum, half, RULE_TESTS, errors)
+
+    def _rule_test(self, stratum: str, half: str, rule: str, found: _Half,
+                   ) -> tuple[dict[Polarity, list[TaggedRecord]], float] | None:
+        """A rule's drawn rows and their standard error, counting the rows a
+        kept output reads; None, the rule named in ``left_out``, when it is
+        left out before its error, and each output left out named too."""
+        sides = found.rule_tests.get(rule)
+        if not sides or not any(sides.values()):
+            self._leave_out(stratum, half, RULE_TESTS, rule, UNTESTED)
+            return None
+        rows, reason = self._test_rows(rule, sides)
+        if reason is None:
+            drawn = balanced(rows, self.limits.r,
+                             seed=self.seed, salt=f"rule-test|{stratum}|{half}|{rule}",
+                             key=lambda row: row.record_id)
+            read, left = informative_rows(rule, drawn, found.rule_targets)
+            self._leave_out_all(stratum, half, RULE_TESTS, left)
+            if read is not None:
+                return drawn, _games_error(read[Polarity.FIRES], read[Polarity.DOES_NOT_FIRE])
+        else:
+            self._leave_out(stratum, half, RULE_TESTS, rule, reason)
+        self.errors[item_key(stratum, half, RULE_TESTS, rule)] = None
+        return None
 
     def _test_rows(self, rule: str, sides: Mapping[Polarity, list[TaggedRecord]],
                    ) -> tuple[dict[Polarity, list[TaggedRecord]], str | None]:

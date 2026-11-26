@@ -27,6 +27,7 @@ from effects.domain.effect_head_layout import (
     ZoneOutcome,
 )
 from effects.domain.effect_targets import derive_targets
+from effects.domain.rule_output_targets import entity_indicators
 from effects.domain.selection_set import RULE_TESTS, SelectionSet, TaggedRecord
 from tests.unit.effects.application.test_control_score import (  # noqa: F401
     STRATA,
@@ -54,16 +55,16 @@ def _sacrifice():
 
 class TestTheSacrificedCreaturesZoneOutcome:
     def test_its_target_is_the_move_to_the_graveyard(self):
-        targets, column = _sacrifice()
         hot = [0.0] * len(ZONE_OUTCOMES)
         hot[_DIED] = 1.0
-        assert decoder_of(_ZONE).entity_indicators(targets, 0, column) == hot
+        assert entity_indicators(_ZONE, derive_targets(_record(_BODYGUARD)), "E28") == hot
 
     def test_an_entity_the_payment_did_not_reach_is_read_nowhere(self):
-        targets, column = _sacrifice()
-        other = next(c for c in range(targets.mask.shape[1])
-                     if c != column and bool(targets.mask[0, c]))
-        assert decoder_of(_ZONE).entity_indicators(targets, 0, other) is None
+        record = _record(_BODYGUARD)
+        (surface,), _ = _batch(record)
+        other = next(surface.slots[slot].subject_id for slot in surface.entity_slots
+                     if surface.slots[slot].subject_id != "E28")
+        assert entity_indicators(_ZONE, derive_targets(record), other) is None
 
     def test_it_is_read_conditionally(self):
         targets, column = _sacrifice()

@@ -1399,9 +1399,12 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
   output is read conditionally, at the entities its targets mark affected.
 - A rule test's score is the AUC with which that prediction ranks the records where the
   outcome happens above those where it does not, averaged over the rule's outputs.
-- A rule-test output whose mean target differs between `fires` and `does_not_fire` by less than
-  1e-6 is not read and is named in the scored half's left-out items; a rule with no output left is
-  left out.
+- A rule-test output whose mean target over the rule's frozen records differs between `fires`
+  and `does_not_fire` by less than 1e-6, or that no `fires` record observes, is left out at the
+  freeze and named `<rule>/<output>` in the frozen half's left-out items; the control score does
+  not read it and names it in the scored half's left-out items. A rule with no output left is
+  left out, and its standard error counts toward no precision target. A kept rule's standard
+  error counts the records a kept output reads.
 - A rule whose test records in a stratum hold one polarity only is left out of that
   stratum's rule-test component.
 - For a rule whose effective outputs are all per-entity, only test records naming an outcome

@@ -95,6 +95,14 @@ UNTESTED_REASONS = frozenset({UNTESTED, NO_READABLE_OUTPUT})
 #: rule test would read them (finding 7.8); the reason goes on with each
 #: polarity's rows naming one.
 NO_OUTCOME_ENTITY = "no outcome entity"
+#: Why a rule-test output is left out of a half (``rule/output``): its mean
+#: targets over the rule's drawn rows differ between the polarities by less
+#: than ``rule_output_targets.MIN_DIFFERENCE``, or no ``fires`` row observes
+#: it; the control score reads no such output (finding 12.9).
+SAME_TARGETS = "targets the same in both polarities"
+UNOBSERVED_TARGETS = "no fires row observes it"
+#: Why a rule is left out of a half when every output it has is left out.
+NO_DIFFERING_OUTPUT = "no output whose targets differ between the polarities"
 
 T = TypeVar("T")
 
