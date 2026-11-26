@@ -99,7 +99,6 @@ def validate_directory(
     source.require_generation(shard.path(root) for shard in shards)
     presence = FieldPresence()
     damage = ShardDamage(source)
-    source.reset_decode_tally()
     findings = validate_corpus(
         damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
         playability_rate=playability_rate_of(root), window_cut=bool(limit),
@@ -144,7 +143,7 @@ class ShardDamage:
                       "decode, their records before it measured"),
             detail=tuple(self.cut[:EXAMPLES]),
         )]
-        tally = self.source.take_decode_tally()
+        tally = self.source.decode_tally
         found.append(Finding.watch(
             f"values outside the wire's closed lists: {sum(tally.off_list.values())}",
             "read as written and counted (shard_io.DecodeTally)",

@@ -132,7 +132,11 @@ class WorkerContext:
     so every context over the same roots in one process shares it."""
 
     def __init__(self, read: ReadConfig) -> None:
+        from effects.infrastructure.shard_io import DecodeTally
+
         self.read = read
+        #: What this context's reads met without stopping, until :meth:`ReadGaps.take`.
+        self.decode_tally = DecodeTally()
         self._sidecars: SidecarCache | None = None
         self._resolver = None
         self._index: DetectorIndex | None = None
@@ -170,7 +174,7 @@ class WorkerContext:
     def records(self, shard: SourceShard) -> Iterator[EffectRecord]:
         from effects.infrastructure.shard_io import read_shard
 
-        return read_shard(shard.path(self.read.records_dir))
+        return read_shard(shard.path(self.read.records_dir), tally=self.decode_tally)
 
     def ended_games(self, shard: SourceShard) -> frozenset[str]:
         """The shard's games that wrote their game-end marker."""
@@ -346,11 +350,9 @@ class ReadGaps:
     dropped: Counter[str] = field(default_factory=Counter)
 
     @classmethod
-    def take(cls, sidecars: SidecarCache) -> ReadGaps:
-        """What this process's reads and ``sidecars`` met since the last take."""
-        from effects.infrastructure.shard_io import take_decode_tally
-
-        decode, gaps = take_decode_tally(), sidecars.take_join_gaps()
+    def take(cls, context: WorkerContext) -> ReadGaps:
+        """What ``context``'s reads and its sidecars met since the last take."""
+        decode, gaps = context.decode_tally.take(), context.sidecars.take_join_gaps()
         return cls(Counter(decode.off_list), list(decode.damaged_tails),
                    *(Counter(getattr(gaps, kind)) for kind in JOIN_GAP_KINDS))
 
@@ -497,14 +499,14 @@ class SurveyWorker:
     def survey(self, shard: SourceShard) -> ShardSurvey:
         """One shard's survey, its games split at the end of the shard, with
         what reading it met without stopping."""
-        ReadGaps.take(self.context.sidecars)
+        ReadGaps.take(self.context)
         surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
             shard=shard, supply=TrainingSupply(self.config.heap_cap),
         ), ended=self.context.ended_games(shard))
         for record in self.context.records(shard):
             surveyor.observe(record)
         out = surveyor.finish()
-        out.reading = ReadGaps.take(self.context.sidecars)
+        out.reading = ReadGaps.take(self.context)
         return out
 
 

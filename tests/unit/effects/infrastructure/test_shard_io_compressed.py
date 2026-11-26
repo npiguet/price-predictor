@@ -243,10 +243,10 @@ class TestDamagedShards:
     def _ends_quietly(self, path, caplog, expected):
         from effects.infrastructure import shard_io
 
-        shard_io.reset_decode_tally()
+        tally = shard_io.DecodeTally()
         with caplog.at_level("WARNING", logger=shard_io.__name__):
-            assert list(iter_shard_lines(path)) == expected
-        assert shard_io.take_decode_tally().damaged_tails == [f"{path}, byte {self._at}"]
+            assert list(iter_shard_lines(path, tally=tally)) == expected
+        assert tally.damaged_tails == [f"{path}, byte {self._at}"]
         assert any("is corrupt" in r.getMessage() and str(path) in r.getMessage()
                    for r in caplog.records)
 

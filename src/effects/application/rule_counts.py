@@ -290,7 +290,7 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     game (no game-end marker) is left out. ``salvage`` counts a damaged shard
     up to the damage and names it in ``damaged`` (a collection run must not
     stop on one); otherwise the damage raises, located."""
-    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard, take_decode_tally
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 
     index, sidecars, keywords = built
     out = RuleCounts()
@@ -299,8 +299,8 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     pending: list[_Pending] = []
     by_game = _GameReads()
     try:
-        _count_records(read_shard(shard), by_game, index, sidecars, keywords, seat_games,
-                       pending, ends)
+        _count_records(read_shard(shard, tally=out.decode), by_game, index, sidecars, keywords,
+                       seat_games, pending, ends)
     except SHARD_DAMAGE as exc:
         if not salvage:
             raise
@@ -321,7 +321,6 @@ def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
                                random_seat_game=found.game_id in seat_games)
         for tag in found.tags:
             out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
-    out.decode = take_decode_tally()
     take_gaps = getattr(sidecars, "take_join_gaps", None)
     if take_gaps is not None:
         out.joins = take_gaps()

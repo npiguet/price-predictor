@@ -874,20 +874,19 @@ def run_rule_counts(args: argparse.Namespace) -> int:
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
     from effects.infrastructure.shard_io import (
+        DecodeTally,
         read_shard,
         require_generation,
         require_shards,
-        reset_decode_tally,
-        take_decode_tally,
     )
 
     config = config_from_args(FieldCoverageConfig, args)
     root = config.effect_records
     shards = require_shards(root)
     require_generation(shard.path(root) for shard in shards)
-    reset_decode_tally()
+    tally = DecodeTally()
     coverage = field_coverage(
-        record for shard in shards for record in read_shard(shard.path(root))
+        record for shard in shards for record in read_shard(shard.path(root), tally=tally)
     )
     if not coverage:
         print(f"no records under {root}")
@@ -895,7 +894,7 @@ def run_field_coverage(args: argparse.Namespace) -> int:
     print(f"{len(coverage)} fields over {root}\n")
     for line in report_lines(coverage, all_fields=config.all):
         print(line)
-    for line in take_decode_tally().report_lines():
+    for line in tally.report_lines():
         print(line)
     return 0
 
@@ -958,12 +957,18 @@ def validation_ports():
     from effects.infrastructure import shard_io
     from effects.infrastructure.record_codec import record_to_dict
 
+    tally = shard_io.DecodeTally()
+
+    def read_window(root, limit, observe, *, shards):
+        return shard_io.read_window(
+            root, shard_io.ReadWindow(limit, observe), shards=shards, tally=tally,
+        )
+
     return ShardSource(
         require_shards=shard_io.require_shards,
         require_generation=shard_io.require_generation,
-        reset_decode_tally=shard_io.reset_decode_tally,
-        take_decode_tally=shard_io.take_decode_tally,
-        read_window=shard_io.read_window,
+        decode_tally=tally,
+        read_window=read_window,
         damage=shard_io.SHARD_DAMAGE,
     ), record_to_dict
 

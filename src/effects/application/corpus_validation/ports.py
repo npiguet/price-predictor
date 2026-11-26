@@ -36,9 +36,10 @@ class ShardSource:
 
     require_shards: Callable[[Path], tuple[SourceShard, ...]]
     require_generation: Callable[[Iterable[Path]], None]
-    reset_decode_tally: Callable[[], None]
-    take_decode_tally: Callable[[], DecodeTallyReading]
-    #: ``read_window(root, limit, observe, shards=...)``.
+    #: What ``read_window`` meets without stopping: the tally it fills, one
+    #: per source, so one source serves one validation.
+    decode_tally: DecodeTallyReading
+    #: ``read_window(root, limit, observe, shards=...)``, filling :attr:`decode_tally`.
     read_window: Callable[..., Iterator[EffectRecord]]
     #: The errors that end one shard's read.
     damage: tuple[type[ValueError], ...]

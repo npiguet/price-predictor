@@ -175,12 +175,12 @@ class WriteWorker:
 
     def write(self, task: WriteTask) -> WriteResult:
         """Filter one shard into its output parts, with what reading it met."""
-        ReadGaps.take(self.context.sidecars)
+        ReadGaps.take(self.context)
         writer = _ShardWriter(self.plan, self.context, task)
         for record in self.context.records(task.shard):
             writer.observe(record)
         result = writer.finish(task.shard.part_name)
-        result.reading = ReadGaps.take(self.context.sidecars)
+        result.reading = ReadGaps.take(self.context)
         return result
 
 

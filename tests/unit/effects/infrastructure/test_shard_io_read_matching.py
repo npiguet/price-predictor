@@ -9,6 +9,7 @@ from pathlib import Path
 from effects.domain.records import RecordKind
 from effects.infrastructure.record_codec import record_to_dict
 from effects.infrastructure.shard_io import (
+    ReadWindow,
     iter_shards,
     read_records,
     read_shard,
@@ -129,15 +130,15 @@ class TestTheWindow:
 
     def test_limit_stops_reading(self, tmp_path):
         self._write(tmp_path, 5)
-        assert len(list(read_window(tmp_path, limit=2))) == 2
+        assert len(list(read_window(tmp_path, ReadWindow(limit=2)))) == 2
         assert len(list(read_window(tmp_path))) == 5
 
     def test_each_raw_record_is_observed_under_its_shard_s_relative_name(self, tmp_path):
         self._write(tmp_path, 2)
         seen = []
-        records = list(read_window(tmp_path, observe=lambda name, data: seen.append(
+        records = list(read_window(tmp_path, ReadWindow(observe=lambda name, data: seen.append(
             (name, data["record_id"]),
-        )))
+        ))))
         shard = iter_shards(tmp_path)[0].relative_to(tmp_path).as_posix()
         assert seen == [(shard, record.record_id) for record in records]
 
@@ -154,30 +155,29 @@ class TestValuesOutsideTheClosedLists:
         line = json.dumps(raw)
         path = tmp_path / "run.0-L1.jsonl"
         path.write_text(f"{line}\n{line}\n", encoding="utf-8")
-        shard_io.reset_decode_tally()
+        tally = shard_io.DecodeTally()
         with caplog.at_level("WARNING", logger=shard_io.__name__):
-            records = list(read_shard(path))
+            records = list(read_shard(path, tally=tally))
         assert [r.state.entities[0].zone for r in records] == ["nowhere-zone"] * 2
-        assert shard_io.decode_tally().off_list[("entity.zone", "'nowhere-zone'")] == 2
+        assert tally.off_list[("entity.zone", "'nowhere-zone'")] == 2
         warned = [r.getMessage() for r in caplog.records if "nowhere-zone" in r.getMessage()]
         assert len(warned) == 1 and "run.0-L1.jsonl, line 1: entity.zone" in warned[0]
 
     def test_a_taken_tally_travels_and_sums(self, tmp_path):
         """What a pool worker hands back with a shard's result, its caller adds
-        to its own: the tally is per process, emptied when taken."""
+        to its own: the tally is the reader's, emptied when taken."""
         from effects.infrastructure import shard_io
 
         raw = record_to_dict(_record(record_id="r.1"))
         raw["state"]["entities"][0]["zone"] = "elsewhere-zone"
         path = tmp_path / "run.0-L1.jsonl"
         path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
-        shard_io.reset_decode_tally()
-        list(read_shard(path))
-        taken = shard_io.take_decode_tally()
-        assert not shard_io.decode_tally()
-        shard_io.absorb_decode_tally(taken)
-        shard_io.absorb_decode_tally(taken)
-        total = shard_io.decode_tally()
+        tally = shard_io.DecodeTally()
+        list(read_shard(path, tally=tally))
+        taken = tally.take()
+        assert not tally
+        total = shard_io.DecodeTally()
+        total.merge(taken)
+        total.merge(taken)
         assert total.off_list[("entity.zone", "'elsewhere-zone'")] == 2
         assert "  entity.zone 'elsewhere-zone': 2" in total.report_lines()
-        shard_io.reset_decode_tally()

@@ -100,8 +100,11 @@ class DecodeTally:
     member's closed list (``(member, repr of the value) -> times read``) and
     each shard whose last gzip member was damaged, which ends its read.
 
-    One per process (:func:`take_decode_tally`); a caller whose workers read
-    shards sums what each hands back (:meth:`merge`).
+    One per read the caller wants reported: pass it as ``tally=`` to the
+    readers that take one (``read_shard``, ``read_window``), which fill it as
+    they go. A caller whose workers read shards sums what each hands back
+    (:meth:`merge`); a worker that reads shard after shard empties its own
+    between them (:meth:`take`).
     """
 
     off_list: Counter = field(default_factory=Counter)
@@ -110,6 +113,13 @@ class DecodeTally:
     def merge(self, other: DecodeTally) -> None:
         self.off_list.update(other.off_list)
         self.damaged_tails.extend(other.damaged_tails)
+
+    def take(self) -> DecodeTally:
+        """A copy of what has been tallied, the tally emptied."""
+        taken = DecodeTally(Counter(self.off_list), list(self.damaged_tails))
+        self.off_list.clear()
+        self.damaged_tails.clear()
+        return taken
 
     def __bool__(self) -> bool:
         return bool(self.off_list or self.damaged_tails)
@@ -128,34 +138,9 @@ class DecodeTally:
         return lines
 
 
-#: This process's tally since it was last taken.
-_TALLY = DecodeTally()
 #: ``(member, repr of the value)`` this process has warned of, so each is
-#: logged once whether or not its tally has been taken since.
+#: logged once whatever tally the reads that met it fill.
 _WARNED: set[tuple[str, str]] = set()
-
-
-def decode_tally() -> DecodeTally:
-    """A copy of what this process's reads have tallied since the last take."""
-    return DecodeTally(Counter(_TALLY.off_list), list(_TALLY.damaged_tails))
-
-
-def take_decode_tally() -> DecodeTally:
-    """This process's tally, emptied: a pool worker returns it with each
-    shard's result, and the caller sums them (:meth:`DecodeTally.merge`)."""
-    taken = decode_tally()
-    reset_decode_tally()
-    return taken
-
-
-def absorb_decode_tally(tally: DecodeTally) -> None:
-    """Add a tally a worker handed back to this process's."""
-    _TALLY.merge(tally)
-
-
-def reset_decode_tally() -> None:
-    _TALLY.off_list.clear()
-    _TALLY.damaged_tails.clear()
 
 
 class _LineSplitter:
@@ -181,20 +166,21 @@ class _LineSplitter:
             raise RecordDecodeError.at(self.path, self.number, exc) from exc
 
 
-def _end_at_damage(damage: MemberDamage, number: int, *, tally: bool) -> None:
+def _end_at_damage(damage: MemberDamage, number: int, tally: DecodeTally | None) -> None:
     """End a read at a damaged member after line ``number``: quietly, but for
-    a warning and a tally entry, when no member follows it; an error otherwise."""
+    a warning and an entry in ``tally`` (none: neither), when no member follows
+    it; an error otherwise."""
     if damage.follows:
         raise CorruptShardError(
             f"{damage.where}; a member follows it, so the shard is read no "
             f"further, past line {number}") from damage.cause
-    if tally:
+    if tally is not None:
         logger.warning("%s; it is the shard's last, so its read ends "
                        "there, past line %d", damage.where, number)
-        _TALLY.damaged_tails.append(f"{damage.path}, byte {damage.start}")
+        tally.damaged_tails.append(f"{damage.path}, byte {damage.start}")
 
 
-def _gzip_numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[int, str]]:
+def _gzip_numbered_lines(path: Path, tally: DecodeTally | None) -> Iterator[tuple[int, str]]:
     """Each newline-terminated line of a gzip file of concatenated members,
     with its 1-based line number, terminator stripped.
 
@@ -204,8 +190,8 @@ def _gzip_numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[in
     member follows it (a damaged tail: the lines it completed are kept);
     with one after it, it raises :class:`CorruptShardError` naming the byte
     it starts at, since every later member would be lost unsaid. A line that
-    is no UTF-8 raises :class:`RecordDecodeError`. ``tally`` false notes a
-    damaged tail neither in the tally nor in the log: a read beside the one
+    is no UTF-8 raises :class:`RecordDecodeError`. ``tally`` None notes a
+    damaged tail neither in a tally nor in the log: a read beside the one
     that reports the shard (:func:`ended_games`).
     """
     splitter = _LineSplitter(path)
@@ -213,7 +199,7 @@ def _gzip_numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[in
         for chunk in gzip_member_chunks(path):
             yield from splitter.lines(chunk)
     except MemberDamage as damage:
-        _end_at_damage(damage, splitter.number, tally=tally)
+        _end_at_damage(damage, splitter.number, tally)
 
 
 def _plain_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
@@ -226,13 +212,25 @@ def _plain_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
         raise RecordDecodeError.at(path, number + 1, exc) from exc
 
 
-def _numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[int, str]]:
+def _raw_numbered_lines(
+    path: Path, tally: DecodeTally | None, quiet: bool,
+) -> Iterator[tuple[int, str]]:
+    """Every complete line of a shard with its 1-based number, blank lines
+    counted: a damaged last gzip member is noted in ``tally``, a throwaway
+    when none is given, and nowhere when ``quiet``."""
+    if path.suffix != ".gz":
+        return _plain_numbered_lines(path)
+    noted = None if quiet else (DecodeTally() if tally is None else tally)
+    return _gzip_numbered_lines(path, noted)
+
+
+def _numbered_lines(
+    path: Path, tally: DecodeTally | None = None, *, quiet: bool = False,
+) -> Iterator[tuple[int, str]]:
     """Every complete, non-blank line of a shard with its 1-based number in
-    the file, blank lines counted; ``tally`` as :func:`_gzip_numbered_lines`."""
-    path = Path(path)
-    lines = (_gzip_numbered_lines(path, tally=tally) if path.suffix == ".gz"
-             else _plain_numbered_lines(path))
-    for number, line in lines:
+    the file, blank lines counted; ``tally`` and ``quiet`` as
+    :func:`_raw_numbered_lines`."""
+    for number, line in _raw_numbered_lines(Path(path), tally, quiet):
         if line.strip():
             yield number, line
 
@@ -273,9 +271,10 @@ def _parse_object(line: str) -> dict:
     return data
 
 
-def _check_closed_lists(path: Path, number: int, data: dict) -> None:
-    """Count each value of one raw record outside its closed list, warning
-    the first time this process reads it; the record still decodes."""
+def _check_closed_lists(path: Path, number: int, data: dict, tally: DecodeTally | None) -> None:
+    """Count each value of one raw record outside its closed list in
+    ``tally``, warning the first time this process reads it; the record
+    still decodes."""
     for member, value in off_list_values(data):
         seen = (member, repr(value))
         if seen not in _WARNED:
@@ -284,19 +283,20 @@ def _check_closed_lists(path: Path, number: int, data: dict) -> None:
                 "%s, line %d: %s %r is outside the wire's closed list; read as "
                 "written, its later sightings only counted", path, number, member, value,
             )
-        _TALLY.off_list[seen] += 1
+        if tally is not None:
+            tally.off_list[seen] += 1
 
 
-def _checked(path: Path, number: int, line: str) -> dict:
+def _checked(path: Path, number: int, line: str, tally: DecodeTally | None) -> dict:
     """One line parsed and checked against the closed lists, any failure
     (no JSON object, a malformed member) located."""
     data = _decode(path, number, line, _parse_object)
-    _decode(path, number, data, lambda raw: _check_closed_lists(path, number, raw))
+    _decode(path, number, data, lambda raw: _check_closed_lists(path, number, raw, tally))
     return data
 
 
-def _record_at(path: Path, number: int, line: str) -> EffectRecord:
-    return _decode(path, number, _checked(path, number, line), record_from_dict)
+def _record_at(path: Path, number: int, line: str, tally: DecodeTally | None) -> EffectRecord:
+    return _decode(path, number, _checked(path, number, line, tally), record_from_dict)
 
 
 def iter_record_dicts(path: Path) -> Iterator[dict]:
@@ -309,40 +309,58 @@ def iter_record_dicts(path: Path) -> Iterator[dict]:
 
 
 
-def read_window(
-    directory: Path, limit: int = 0,
-    observe: Callable[[str, dict], None] | None = None,
-    *, shards: Sequence[SourceShard] | None = None,
-) -> Iterator[EffectRecord]:
-    """The first ``limit`` records under ``directory``; 0 reads all of them.
+@dataclass(frozen=True, slots=True)
+class ReadWindow:
+    """Which records :func:`read_window` reads: the first ``limit`` (0: all of
+    them), each seen by ``observe`` with its shard's path relative to the
+    directory and its raw dict before it is parsed, since a parsed record
+    cannot say whether a field was on the wire."""
 
-    ``observe``, when given, sees each record's raw dict, with its shard's
-    path relative to ``directory``, before it is parsed: a parsed record
-    cannot say whether a field was on the wire. ``shards`` is the directory's
-    :func:`list_shards` when the caller already holds it.
+    limit: int = 0
+    observe: Callable[[str, dict], None] | None = None
+
+
+def read_window(
+    directory: Path, window: ReadWindow = ReadWindow(),
+    *, shards: Sequence[SourceShard] | None = None, tally: DecodeTally | None = None,
+) -> Iterator[EffectRecord]:
+    """The records of ``window`` under ``directory``.
+
+    ``shards`` is the directory's :func:`list_shards` when the caller already
+    holds it. What the read meets without stopping is noted in ``tally``.
     """
     root = Path(directory)
     seen = 0
     for shard in list_shards(root) if shards is None else shards:
-        path = shard.path(root)
-        for number, line in _numbered_lines(path):
-            data = _checked(path, number, line)
-            if observe is not None:
-                _decode(path, number, data, lambda raw: observe(shard.name, raw))
-            yield _decode(path, number, data, record_from_dict)
+        for record in _window_shard(root, shard, window.observe, tally):
+            yield record
             seen += 1
-            if limit and seen >= limit:
+            if window.limit and seen >= window.limit:
                 return
 
 
-def read_shard(path: Path) -> Iterator[EffectRecord]:
+def _window_shard(
+    root: Path, shard: SourceShard, observe: Callable[[str, dict], None] | None,
+    tally: DecodeTally | None,
+) -> Iterator[EffectRecord]:
+    """One shard's records, each shown to ``observe`` raw before it decodes."""
+    path = shard.path(root)
+    for number, line in _numbered_lines(path, tally):
+        data = _checked(path, number, line, tally)
+        if observe is not None:
+            _decode(path, number, data, lambda raw: observe(shard.name, raw))
+        yield _decode(path, number, data, record_from_dict)
+
+
+def read_shard(path: Path, *, tally: DecodeTally | None = None) -> Iterator[EffectRecord]:
     """Yield every complete record in one shard; skip a trailing partial line.
 
     A line that does not decode raises :class:`RecordDecodeError` naming the
-    shard and the line.
+    shard and the line. What the read meets without stopping is noted in
+    ``tally``.
     """
-    for number, line in _numbered_lines(path):
-        yield _record_at(path, number, line)
+    for number, line in _numbered_lines(path, tally):
+        yield _record_at(path, number, line, tally)
 
 
 def load_shard(path: Path) -> list[EffectRecord]:
@@ -436,7 +454,7 @@ def ended_games(path: Path) -> frozenset[str]:
     read as it ends every read, but goes unreported here: the read of the
     shard's records reports it, once."""
     ended: set[str] = set()
-    for number, line in _numbered_lines(path, tally=False):
+    for number, line in _numbered_lines(path, None, quiet=True):
         head = peek_envelope(line)
         if head is None:
             data = _decode(path, number, line, _parse_object)
@@ -494,7 +512,7 @@ def iter_shard_matching(
         head = peek_envelope(line)
         if head is not None and not _wanted(head, game_ids, kinds, where):
             continue
-        record = _record_at(shard, number, line)
+        record = _record_at(shard, number, line, None)
         if head is None and not _wanted(
             EnvelopeHead(record.record_id, record.game_id, record.kind.value),
             game_ids, kinds, where,
