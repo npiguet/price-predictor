@@ -116,6 +116,7 @@ def _prepare_with_heads(records):
         VERDICT_LAYOUT,
         CreatedSlot,
     )
+    from effects.domain.record_head_losses import CreatedTargets, RecordHeadTargets
 
     batch, _ = _prepare(records)
     verdict = torch.zeros(len(records), VERDICT_LAYOUT.target_width)
@@ -132,8 +133,9 @@ def _prepare_with_heads(records):
             supervises[row] = True
             created[row, CreatedSlot.PRESENT] = float(made > 0)
             created[row, CreatedSlot.COUNT] = float(made)
-    return batch, {Head.VERDICT: (verdict, flags),
-                   Head.CREATED_OBJECTS: (created, supervises, torch.ones_like(created))}
+    return batch, {Head.VERDICT: RecordHeadTargets(verdict, flags),
+                   Head.CREATED_OBJECTS: CreatedTargets(
+                       created, supervises, torch.ones_like(created))}
 
 
 def test_verdict_fields_and_created_objects_terms_are_items_of_their_own() -> None:

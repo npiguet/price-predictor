@@ -30,7 +30,7 @@ weight flags set, and have no floor.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 
@@ -109,7 +109,7 @@ class TargetSample:
         self._gate_weights: list[torch.Tensor] = []
         self._fields: dict[str, list[torch.Tensor]] = {}
         self._field_weights: dict[str, list[torch.Tensor]] = {}
-        self._heads: dict[str, list[tuple]] = {}
+        self._heads: dict[str, list[RecordHeadTargets | CreatedTargets]] = {}
 
     def add(self, entity: EntityTargetBatch, heads: Mapping | None = None) -> None:
         """Fold in one batch: its per-entity targets and its shipped heads'
@@ -122,7 +122,7 @@ class TargetSample:
         for name, values in entity.fields.values.items():
             self._add_field(entity, name, values)
         for head, targets in (heads or {}).items():
-            compact = _supervising_rows(str(head), targets)
+            compact = _supervising_rows(targets)
             if compact is not None:
                 self._heads.setdefault(str(head), []).append(compact)
 
@@ -165,7 +165,7 @@ class TargetSample:
         parts = self._fields.get(name)
         return torch.cat(parts) if parts else None
 
-    def head_batches(self, head: str) -> list[tuple]:
+    def head_batches(self, head: str) -> list[RecordHeadTargets | CreatedTargets]:
         """The supervising rows of each batch carrying ``head``."""
         return self._heads.get(head, [])
 
@@ -193,24 +193,19 @@ def _weighted_sum(terms: torch.Tensor, weights: torch.Tensor | None) -> float:
     return float((terms.double() * weights.double().reshape(-1)).sum())
 
 
-def _supervising_rows(head: str, targets: tuple) -> tuple | None:
-    """A head's ``(target, mask[, known])`` cut to the records that supervise
-    any of its terms; None for none."""
-    mask = targets[1].detach().bool().cpu()
+def _supervising_rows(
+    targets: RecordHeadTargets | CreatedTargets,
+) -> RecordHeadTargets | CreatedTargets | None:
+    """A head's targets cut to the records that supervise any of its terms;
+    None for none. A created-objects cut always carries ``known``."""
+    mask = targets.mask.detach().bool().cpu()
     rows = mask if mask.dim() == 1 else mask.any(-1)
     if not rows.any():
         return None
-    cut = tuple(
-        None if part is None else part.detach().cpu()[rows] for part in targets
-    )
-    if head == Head.CREATED_OBJECTS.value and _lacks_known(cut):
-        cut = (cut[0], cut[1], torch.ones_like(cut[0]))
+    cut = targets.rows(rows)
+    if isinstance(cut, CreatedTargets) and cut.known is None:
+        cut = replace(cut, known=torch.ones_like(cut.target))
     return cut
-
-
-def _lacks_known(cut: tuple) -> bool:
-    """Whether a created-objects tuple carries no ``known`` part."""
-    return len(cut) < 3 or cut[2] is None
 
 
 def constant_predictor_losses(
@@ -358,7 +353,7 @@ class RecordHeadConstant:
     degenerate: frozenset[str]
 
 
-def record_head_constant(batches: Sequence[tuple], layout: RecordHeadLayout, *,
+def record_head_constant(batches: Sequence[RecordHeadTargets], layout: RecordHeadLayout, *,
                          weighted: bool = False) -> RecordHeadConstant:
     """The maximum-likelihood constant of a per-record head over ``batches``,
     each a ``(target, mask[, …])`` of the head's: each member's rate, class
@@ -387,23 +382,23 @@ class _HeadRows:
     """A per-record head's batches, each one's ``(records, fields)`` mask as
     bools and, where weighted, as weights."""
 
-    batches: Sequence[tuple]
+    batches: Sequence[RecordHeadTargets]
     layout: RecordHeadLayout
     masks: list[torch.Tensor]
     weights: list[torch.Tensor] | None
 
     @classmethod
-    def of(cls, batches: Sequence[tuple], layout: RecordHeadLayout, *,
+    def of(cls, batches: Sequence[RecordHeadTargets], layout: RecordHeadLayout, *,
            weighted: bool) -> _HeadRows:
-        masks = [_field_mask(targets[1], layout) for targets in batches]
-        weights = [_mask_weights(targets[1], layout) for targets in batches] if weighted else None
+        masks = [_field_mask(targets.mask, layout) for targets in batches]
+        weights = [_mask_weights(targets.mask, layout) for targets in batches] if weighted else None
         return cls(batches, layout, masks, weights)
 
     def field(self, position: int) -> tuple[torch.Tensor, torch.Tensor | None]:
         """One field's targets over the records setting it, and their weights
         (None unweighted)."""
         first, last = self.layout.target_slices[self.layout.fields[position].name]
-        rows = [targets[0][mask[:, position]][:, first:last].float()
+        rows = [targets.target[mask[:, position]][:, first:last].float()
                 for targets, mask in zip(self.batches, self.masks)]
         wanted = torch.cat(rows) if rows else torch.zeros(0, last - first)
         if self.weights is None:
@@ -462,8 +457,8 @@ def _record_head_losses(
     for targets in batches:
         # The head's own mask, a weight per record under the rule mask.
         summed += record_head_terms(
-            constant.outputs.expand(int(targets[0].shape[0]), layout.width),
-            RecordHeadTargets(targets[0], targets[1]), layout, HeadScoring(constant.log_dispersion),
+            constant.outputs.expand(int(targets.target.shape[0]), layout.width),
+            targets, layout, HeadScoring(constant.log_dispersion),
         ).double()
     records = max(sample.records, 1)
     return {
@@ -487,7 +482,9 @@ def record_head_record_losses(
     if not flags.any():
         return {}
     fitted = flags if weights is None else flags.float() * weights.float().unsqueeze(-1)
-    constant = record_head_constant([(target, fitted)], layout, weighted=weights is not None)
+    constant = record_head_constant(
+        [RecordHeadTargets(target, fitted)], layout, weighted=weights is not None,
+    )
     rows = record_head_row_terms(
         constant.outputs.expand(int(target.shape[0]), layout.width),
         RecordHeadTargets(target, flags), layout, HeadScoring(constant.log_dispersion),
@@ -562,7 +559,7 @@ def created_objects_record_losses(
     each of them and zero elsewhere, a term summed over the slots as the
     head's loss sums it. A term no record says is absent; one whose targets
     never vary is all zero, as its floor is (research E4's ``ℓ_i``)."""
-    rows = _created_rows((target, mask, known))
+    rows = _created_rows(CreatedTargets(target, mask, known))
     if rows is None:
         return {}
     wanted, said = rows
@@ -596,10 +593,10 @@ def _created_record_constant(
     return _created_constant(wanted, said * chosen, weighted=True)
 
 
-def _created_rows(targets: tuple) -> tuple[torch.Tensor, torch.Tensor] | None:
+def _created_rows(targets: CreatedTargets) -> tuple[torch.Tensor, torch.Tensor] | None:
     """The supervising records' ``(target, known)``, or None for none."""
-    target, mask = targets[0], targets[1]
-    known = targets[2] if len(targets) > 2 and targets[2] is not None else torch.ones_like(target)
+    target, mask = targets.target, targets.mask
+    known = torch.ones_like(target) if targets.known is None else targets.known
     rows = mask.detach().bool().cpu()
     if not rows.any():
         return None

@@ -10,6 +10,7 @@ on each field (FR-061).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import torch
 import torch.nn.functional as functional
@@ -25,6 +26,7 @@ from effects.domain.effect_head_layout import (
     RecordHeadLayout,
 )
 from effects.domain.field_kinds import FIELD_KINDS, FieldScoring, counted, negative_binomial
+from effects.domain.head_targets import HeadTargetParts
 from effects.domain.input_layout import MAGNITUDE_CAP
 from effects.domain.loss_rows import Rows, per_row, scaled
 
@@ -40,23 +42,27 @@ class HeadScoring:
 
 
 @dataclass(frozen=True, slots=True)
-class RecordHeadTargets:
+class RecordHeadTargets(HeadTargetParts):
     """A per-record head's targets: ``target`` ``(batch, layout.target_width)``,
     a categorical's column a class index, and ``mask`` ``(batch, fields)``, or
     ``(batch,)`` for a record that sets every field; a floating ``mask`` is
     each record's weight on the field under the rule mask (FR-061), zero
     where the record does not set it."""
 
+    ON_DEVICE: ClassVar[tuple[str, ...]] = ("target",)
+
     target: torch.Tensor
     mask: torch.Tensor
 
 
 @dataclass(frozen=True, slots=True)
-class CreatedTargets:
+class CreatedTargets(HeadTargetParts):
     """The created-objects head's targets: ``mask`` selects the records that
     supervise the head, ``known`` ``(records, width)`` the columns each
     record says, a column it leaves unsaid (a token's controller) training
     nothing."""
+
+    ON_DEVICE: ClassVar[tuple[str, ...]] = ("target", "known")
 
     target: torch.Tensor
     mask: torch.Tensor | None = None

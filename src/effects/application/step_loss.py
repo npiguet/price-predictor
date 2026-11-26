@@ -210,7 +210,7 @@ class StepLossComputer:
             given = targets.get(spec.head)
             if spec.terms is None or given is None:
                 continue
-            sums = spec.terms(model, hidden, spec.to_device(given, self.device))
+            sums = spec.terms(model, hidden, given.to(self.device))
             names += [deviance_item(spec.head.value, term) for term in HEAD_TERMS[spec.head.value]]
             values.append(sums.detach().double())
         if not names:
@@ -232,7 +232,7 @@ class StepLossComputer:
             if given is None or source is None:
                 continue
             terms[spec.head] = spec.loss(
-                model, source, spec.to_device(given, self.device),
+                model, source, given.to(self.device),
                 **self._scale_of(spec),
             )
         return terms

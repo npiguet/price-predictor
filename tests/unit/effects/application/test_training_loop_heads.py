@@ -302,15 +302,15 @@ class TestTheApiTargets:
             (tmp_path / name).mkdir()
         first = make_preparer(tmp_path / "a", api_types=["Keyword"])
         first._api_batch([self._TEXT], lined)
-        after, _ = first._api_batch([self._TEXT], {})
-        fresh, _ = make_preparer(tmp_path / "b", api_types=["Keyword"])._api_batch(
-            [self._TEXT], {})
+        after = first._api_batch([self._TEXT], {}).types
+        fresh = make_preparer(tmp_path / "b", api_types=["Keyword"])._api_batch(
+            [self._TEXT], {}).types
         assert after.tolist() == fresh.tolist() == [-1]
 
     def test_a_lineless_batch_first_leaves_the_line_s_target_whole(self, tmp_path):
         preparer = make_preparer(tmp_path, api_types=["Keyword"])
         preparer._api_batch([self._TEXT], {})
-        types, _ = preparer._api_batch([self._TEXT], {self._TEXT: self._line()})
+        types = preparer._api_batch([self._TEXT], {self._TEXT: self._line()}).types
         assert types.tolist() == [0]
 
 

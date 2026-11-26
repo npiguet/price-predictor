@@ -263,6 +263,18 @@ def _verdict_batch(rows: int, values: dict, supervised: dict):
     return target, mask
 
 
+def _record(target, mask):
+    from effects.domain.record_head_losses import RecordHeadTargets
+
+    return RecordHeadTargets(target, mask)
+
+
+def _created(target, mask, known):
+    from effects.domain.record_head_losses import CreatedTargets
+
+    return CreatedTargets(target, mask, known)
+
+
 def _sample(entity_records: int, heads: dict):
     from effects.domain.loss_floor import TargetSample
 
@@ -284,7 +296,9 @@ class TestEveryHead:
             4, {"can_play": [1.0, 0.0, 0.0, 0.0]},
             {"can_play": [True, True, False, False]},
         )
-        losses = constant_predictor_losses(_sample(4, {"verdict": (target, mask)}), fields=())
+        losses = constant_predictor_losses(
+            _sample(4, {"verdict": _record(target, mask)}), fields=(),
+        )
         assert set(losses["verdict"]) == {"can_play"}
         assert losses["verdict"]["can_play"] == pytest.approx(2 * math.log(2) / 4, abs=1e-5)
 
@@ -308,7 +322,7 @@ class TestEveryHead:
             200, {"mana_paid": paid.tolist()}, {"mana_paid": [True] * 200},
         )
         floor = constant_predictor_losses(
-            _sample(200, {"verdict": (target, mask)}), fields=(),
+            _sample(200, {"verdict": _record(target, mask)}), fields=(),
         )["verdict"]["mana_paid"]
 
         start, _ = VERDICT_LAYOUT.slices["mana_paid"]
@@ -347,7 +361,7 @@ class TestEveryHead:
         target[:, column] = torch.tensor([0.0, 1.0, 2.0])
         mask = torch.ones(3, len(GLOBAL_LAYOUT.fields), dtype=torch.bool)
         losses = constant_predictor_losses(
-            _sample(3, {"global": (target, mask)}), fields=(),
+            _sample(3, {"global": _record(target, mask)}), fields=(),
         )["global"]
         assert set(losses) == {"turn_structure_change", "day_night_change"}
         assert losses["day_night_change"] == pytest.approx(math.log(3), abs=1e-5)
@@ -371,7 +385,7 @@ class TestEveryHead:
         known[:, CreatedSlot.OTHER_CONTROLLER] = 0.0  # said by no record
         mask = torch.tensor([True, True, True, False])
         losses = constant_predictor_losses(
-            _sample(4, {"created_objects": (target, mask, known)}), fields=(),
+            _sample(4, {"created_objects": _created(target, mask, known)}), fields=(),
         )["created_objects"]
         assert set(losses) <= set(CREATED_TERMS)
         assert losses["present"] > 0.0 and losses["count"] > 0.0

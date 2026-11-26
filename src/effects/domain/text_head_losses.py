@@ -7,6 +7,9 @@ A row's loss is averaged over the rows of the pass
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import ClassVar
+
 import torch
 import torch.nn.functional as functional
 
@@ -18,8 +21,33 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.field_kinds import FIELD_KINDS, FieldScoring
 from effects.domain.field_types import FieldType
+from effects.domain.head_targets import HeadTargetParts
 from effects.domain.loss_rows import Rows, per_row
 from effects.domain.value_targets import VALUE_TARGETS
+
+
+@dataclass(frozen=True, slots=True)
+class ValueTargets(HeadTargetParts):
+    """The value head's targets, one row per line (FR-058): ``values`` and
+    ``mask`` ``(lines, targets)``, and ``matrix_rows[i]`` the row of the batch's ``e``
+    matrix line ``i``'s text is encoded at."""
+
+    ON_DEVICE: ClassVar[tuple[str, ...]] = ("values", "matrix_rows")
+
+    values: torch.Tensor
+    mask: torch.Tensor
+    matrix_rows: torch.Tensor
+
+
+@dataclass(frozen=True, slots=True)
+class ApiTargets(HeadTargetParts):
+    """The script-API head's targets, one row per text: ``types`` the API type
+    (``-1`` for none), ``keys`` the multi-hot of parameter keys."""
+
+    ON_DEVICE: ClassVar[tuple[str, ...]] = ("keys",)
+
+    types: torch.Tensor
+    keys: torch.Tensor
 
 
 def at_least_targets(amounts: torch.Tensor) -> torch.Tensor:

@@ -47,9 +47,11 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.head_targets import HeadTargetParts
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import RarityCoverage, TextGames
+from effects.domain.record_head_losses import CreatedTargets, RecordHeadTargets
 from effects.domain.records import EffectRecord
 from effects.domain.rule_mask import (
     CREATED_OBJECTS_OUTPUT,
@@ -68,9 +70,9 @@ from effects.domain.split import (
     CorpusSplit,
 )
 from effects.domain.surface_collation import entity_target_tensors
+from effects.domain.text_head_losses import ApiTargets, ValueTargets
 from effects.domain.value_targets import ValueLine
 from effects.infrastructure.tokenizer_loading import load_tokenizer
-from effects.infrastructure.torch_device import pinned
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
 NO_TEXT_BUCKET = "no-text"
@@ -91,7 +93,7 @@ def step_rng(seed: int, epoch: int, position: int, index: int) -> random.Random:
     return random.Random(f"{seed}:{epoch}:{position}:{index}")
 
 
-class HeadTargets(dict[Head, object]):
+class HeadTargets(dict[Head, HeadTargetParts | MaskedTokens]):
     """The targets of every loss term beside the per-entity one, on the host,
     for only the heads computed for this batch."""
 
@@ -100,7 +102,7 @@ class HeadTargets(dict[Head, object]):
             if isinstance(targets, MaskedTokens):
                 targets.pin()
             else:
-                self[head] = pinned(targets)
+                self[head] = targets.pinned()
 
 
 @dataclass
@@ -175,17 +177,16 @@ class ShardClosed:
 
 def value_batch(
     lines: Sequence[ValueLine], rows: Mapping[str, int],
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """``(values, mask, rows)`` of the value head's targets, one row per line
-    (FR-058): ``rows[i]`` is the row of the batch's ``e`` matrix line ``i``'s
-    text is encoded at, so two lines sharing a text read one ``e`` each toward
-    their own targets.
+) -> ValueTargets:
+    """The value head's targets, one row per line (FR-058): ``matrix_rows[i]``
+    is the row of the batch's ``e`` matrix line ``i``'s text is encoded at, so two
+    lines sharing a text read one ``e`` each toward their own targets.
 
     Read from each line's script whatever the surface, since prose holds no
     ``$`` parameter; a line with no script, or a keyword line, masks them all.
     """
     targets = [line.targets for line in lines]
-    return (
+    return ValueTargets(
         torch.tensor([row.values for row in targets]),
         torch.tensor([row.mask for row in targets]),
         torch.tensor([rows[line.text] for line in lines], dtype=torch.long),
@@ -404,10 +405,10 @@ class StepPreparer:
 
     def _api_batch(
         self, texts: Sequence[str], lines: Mapping[str, SidecarLine],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """The script-API head's ``(types, keys)`` for the batch's texts, in
-        row order: the API type (``-1`` when none or unknown) and the
-        multi-hot of parameter keys over every chained segment."""
+    ) -> ApiTargets:
+        """The script-API head's targets for the batch's texts, in row
+        order: the API type (``-1`` when none or unknown) and the multi-hot of
+        parameter keys over every chained segment."""
         types: list[int] = []
         rows: list[int] = []
         columns: list[int] = []
@@ -439,7 +440,7 @@ class StepPreparer:
         # host half of the step.
         keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
         keys[torch.tensor(rows, dtype=torch.long), torch.tensor(columns, dtype=torch.long)] = 1.0
-        return torch.tensor(types, dtype=torch.long), keys
+        return ApiTargets(torch.tensor(types, dtype=torch.long), keys)
 
     def _texts(self, records: Sequence[EffectRecord]) -> dict[str, str | None]:
         """``record_id -> acting text`` on this run's surface, once per shard."""
@@ -596,8 +597,10 @@ def scoring_step(
     )
 
 
-def _record_head_rows(records, weights: list[CopyWeights], layout: RecordHeadLayout, derive):
-    """A per-record head's ``(targets, mask)`` over ``records``, or None where
+def _record_head_rows(
+    records, weights: list[CopyWeights], layout: RecordHeadLayout, derive,
+) -> RecordHeadTargets | None:
+    """A per-record head's targets over ``records``, or None where
     no record sets any of its fields. Under the rule mask (FR-061) a field a
     copy weighs zero is unset, and the mask holds each field's weight where
     any is fractional."""
@@ -615,12 +618,12 @@ def _record_head_rows(records, weights: list[CopyWeights], layout: RecordHeadLay
         mask = mask.float() * weighed
         if bool(((mask == 0) | (mask == 1)).all()):
             mask = mask.bool()
-    return torch.tensor([values for values, _ in filled]), mask
+    return RecordHeadTargets(torch.tensor([values for values, _ in filled]), mask)
 
 
-def _created_objects_rows(records, weights: list[CopyWeights]) -> tuple | None:
-    """The created-objects head's ``(targets, mask, known)`` over ``records``,
-    or None where none supervises it. The rule mask (FR-061) weighs the head
+def _created_objects_rows(records, weights: list[CopyWeights]) -> CreatedTargets | None:
+    """The created-objects head's targets over ``records``, or None where none
+    supervises it. The rule mask (FR-061) weighs the head
     whole: a copy weighing it zero does not supervise it, and any other
     weight but one (a soft share, a class weight) scales every column the
     record says."""
@@ -639,4 +642,6 @@ def _created_objects_rows(records, weights: list[CopyWeights]) -> tuple | None:
     known = torch.tensor([said for _, said in made])
     if any(share not in (0.0, 1.0) for share in weight):
         known = known.float() * torch.tensor(weight).unsqueeze(-1)
-    return torch.tensor([target for target, _ in made]), torch.tensor(created), known
+    return CreatedTargets(
+        torch.tensor([target for target, _ in made]), torch.tensor(created), known,
+    )

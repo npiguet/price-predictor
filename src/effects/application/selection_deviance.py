@@ -55,6 +55,7 @@ from effects.domain.loss_floor import (
     record_head_record_losses,
     weighted_mean,
 )
+from effects.domain.record_head_losses import CreatedTargets, RecordHeadTargets
 from effects.domain.records import EffectRecord
 from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT
 from effects.domain.selection_set import deviance_item
@@ -140,6 +141,10 @@ class TargetDevianceLosses:
         gathered.count += len(chunk)
 
 
+#: A shipped record head's targets, held on the host.
+_HeldTargets = RecordHeadTargets | CreatedTargets
+
+
 class _Gathered:
     """What :meth:`TargetDevianceLosses.losses` reads off its chunks: each
     field's scored targets beside their record, each head's targets, each
@@ -148,7 +153,7 @@ class _Gathered:
     def __init__(self, modes: Sequence[str]) -> None:
         self.modes = tuple(modes)
         self.rows: dict[str, list[tuple[torch.Tensor, torch.Tensor]]] = {}
-        self.heads: dict[str, list[tuple[int, tuple]]] = {}
+        self.heads: dict[str, list[tuple[int, _HeldTargets]]] = {}
         self.weights: dict[str, list] = {mode: [] for mode in self.modes}
         self.classes: list[float] = []
         self.gate_entities: list[int] = []
@@ -164,8 +169,7 @@ class _Gathered:
                 _keep(self.rows, spec.name, (batch.scored(spec.name),
                       batch.fields.values[spec.name].detach().cpu()), self.count)
         for head, targets in (head_targets or {}).items():
-            self.heads.setdefault(str(head), []).append((self.count, tuple(
-                None if part is None else part.detach().cpu() for part in targets)))
+            self.heads.setdefault(str(head), []).append((self.count, targets.on_host()))
 
     def losses(self, specs: Mapping[str, FieldSpec]) -> dict[str, dict[str, list[float]]]:
         """Each item's per-copy constant losses by mode, at the copy's class
@@ -222,7 +226,7 @@ class _Sample:
     classes: torch.Tensor
 
 
-def _head_losses(heads: Mapping[str, list[tuple[int, tuple]]],
+def _head_losses(heads: Mapping[str, list[tuple[int, _HeldTargets]]],
                  sample: _Sample) -> dict[str, dict[str, torch.Tensor]]:
     """Each shipped record head's per-record constant losses by term, over
     every record (zero where a record does not supervise the term), the
@@ -240,12 +244,12 @@ def _head_losses(heads: Mapping[str, list[tuple[int, tuple]]],
     return out
 
 
-def _record_head_found(held: list[tuple[int, tuple]], layout: RecordHeadLayout,
+def _record_head_found(held: list[tuple[int, _HeldTargets]], layout: RecordHeadLayout,
                        sample: _Sample) -> dict[str, torch.Tensor]:
     target = torch.zeros(sample.records, layout.target_width)
     mask = torch.zeros(sample.records, len(layout.fields), dtype=torch.bool)
-    for offset, (values, flags, *_) in held:
-        flags = flags != 0
+    for offset, targets in held:
+        values, flags = targets.target, targets.mask != 0
         if flags.dim() == 1:
             flags = flags.unsqueeze(-1).expand(-1, len(layout.fields))
         target[offset:offset + values.shape[0]] = values.float()
@@ -253,17 +257,17 @@ def _record_head_found(held: list[tuple[int, tuple]], layout: RecordHeadLayout,
     return record_head_record_losses(target, mask, layout, sample.classes)
 
 
-def _created_objects_found(held: list[tuple[int, tuple]],
+def _created_objects_found(held: list[tuple[int, _HeldTargets]],
                            sample: _Sample) -> dict[str, torch.Tensor]:
     target = torch.zeros(sample.records, CREATED_OBJECTS_WIDTH)
     known = torch.ones(sample.records, CREATED_OBJECTS_WIDTH)
     mask = torch.zeros(sample.records, dtype=torch.bool)
-    for offset, (values, flags, *rest) in held:
-        size = values.shape[0]
-        target[offset:offset + size] = values.float()
-        mask[offset:offset + size] = flags != 0
-        if rest and rest[0] is not None:
-            known[offset:offset + size] = (rest[0] != 0).float()
+    for offset, targets in held:
+        size = targets.target.shape[0]
+        target[offset:offset + size] = targets.target.float()
+        mask[offset:offset + size] = targets.mask != 0
+        if targets.known is not None:
+            known[offset:offset + size] = (targets.known != 0).float()
     return created_objects_record_losses(target, mask, known, sample.classes)
 
 

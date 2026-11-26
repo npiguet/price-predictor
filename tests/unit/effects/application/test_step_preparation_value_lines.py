@@ -43,7 +43,8 @@ _BERSERKER = _sidecar_line("s/scorn_blade_berserker", 4)
 
 def test_two_lines_sharing_a_text_are_two_rows_reading_one_row_of_e():
     lines = [ValueLine.of(_BACKUP, _AERONAUT), ValueLine.of(_BACKUP, _BERSERKER)]
-    values, mask, rows = value_batch(lines, {_BACKUP: 3})
+    targets = value_batch(lines, {_BACKUP: 3})
+    values, mask, rows = targets.values, targets.mask, targets.matrix_rows
     assert rows.tolist() == [3, 3]
     assert rows.dtype == torch.long
     assert values.shape[0] == mask.shape[0] == 2

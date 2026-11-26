@@ -25,7 +25,7 @@ from effects.domain.record_head_losses import (
     record_head_terms,
     verdict_loss,
 )
-from effects.domain.text_head_losses import api_loss, value_loss
+from effects.domain.text_head_losses import ApiTargets, ValueTargets, api_loss, value_loss
 
 
 class Head(StrEnum):
@@ -51,65 +51,64 @@ class HeadInput(StrEnum):
     MASKED_TOKENS = "masked_tokens"
 
 
-def _verdict(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
+def _verdict(model, hidden, targets: RecordHeadTargets, *, scale=None) -> torch.Tensor:
     return verdict_loss(
-        model.verdict(hidden).float(), RecordHeadTargets(*targets),
+        model.verdict(hidden).float(), targets,
         HeadScoring(model.verdict_dispersion(), scale),
     )
 
 
-def _created_objects(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
+def _created_objects(model, hidden, targets: CreatedTargets, *, scale=None) -> torch.Tensor:
     return created_objects_loss(
-        model.created_objects(hidden).float(), CreatedTargets(*targets),
+        model.created_objects(hidden).float(), targets,
         HeadScoring(model.created_objects_dispersion(), scale),
     )
 
 
-def _global(model, hidden, targets: tuple, *, scale=None) -> torch.Tensor:
+def _global(model, hidden, targets: RecordHeadTargets, *, scale=None) -> torch.Tensor:
     return global_loss(
-        model.global_outputs(hidden).float(), RecordHeadTargets(*targets),
+        model.global_outputs(hidden).float(), targets,
         HeadScoring(model.global_dispersion(), scale),
     )
 
 
-def _verdict_terms(model, hidden, targets: tuple) -> torch.Tensor:
+def _verdict_terms(model, hidden, targets: RecordHeadTargets) -> torch.Tensor:
     return record_head_terms(
-        model.verdict(hidden).float(), RecordHeadTargets(*targets), VERDICT_LAYOUT,
+        model.verdict(hidden).float(), targets, VERDICT_LAYOUT,
         HeadScoring(model.verdict_dispersion()),
     )
 
 
-def _created_objects_terms(model, hidden, targets: tuple) -> torch.Tensor:
+def _created_objects_terms(model, hidden, targets: CreatedTargets) -> torch.Tensor:
     return created_objects_terms(
-        model.created_objects(hidden).float(), CreatedTargets(*targets),
+        model.created_objects(hidden).float(), targets,
         HeadScoring(model.created_objects_dispersion()),
     )
 
 
-def _global_terms(model, hidden, targets: tuple) -> torch.Tensor:
+def _global_terms(model, hidden, targets: RecordHeadTargets) -> torch.Tensor:
     return record_head_terms(
-        model.global_outputs(hidden).float(), RecordHeadTargets(*targets), GLOBAL_LAYOUT,
+        model.global_outputs(hidden).float(), targets, GLOBAL_LAYOUT,
         HeadScoring(model.global_dispersion()),
     )
 
 
-def _value(model, matrix, targets: tuple) -> torch.Tensor:
-    """One row per line: the targets' ``rows`` name the row of ``matrix`` each
-    reads, so a text two lines share enters the head once per line, by row index."""
-    values, mask, rows = targets
+def _value(model, matrix, targets: ValueTargets) -> torch.Tensor:
+    """One row per line: the targets' ``matrix_rows`` name the row of ``matrix``
+    each reads, so a text two lines share enters the head once per line, by row
+    index."""
     return value_loss(
-        model.value_head(matrix[rows]).float(), values, mask,
+        model.value_head(matrix[targets.matrix_rows]).float(), targets.values, targets.mask,
         log_dispersion=model.value_dispersion(),
     )
 
 
-def _api(model, matrix, targets: tuple) -> torch.Tensor:
-    types, keys = targets
+def _api(model, matrix, targets: ApiTargets) -> torch.Tensor:
     keyed = model.param_key_head is not None
     return api_loss(
-        model.api_type_head(matrix).float(), types,
+        model.api_type_head(matrix).float(), targets.types,
         model.param_key_head(matrix).float() if keyed else None,
-        keys if keyed else None,
+        targets.keys if keyed else None,
     )
 
 
@@ -133,9 +132,6 @@ class HeadSpec:
     #: term order (``loss_denominators.HEAD_TERMS``): what the control
     #: score's explained deviance reads term by term.
     terms: Callable[..., torch.Tensor] | None = None
-    #: Which target tensors the loss reads on the device; the rest are masks
-    #: and indices it selects rows by on the host.
-    on_device: tuple[int, ...] = (0,)
     needs_api_vocabulary: bool = False
 
     @property
@@ -145,12 +141,6 @@ class HeadSpec:
     def weight(self, config) -> float:
         return 1.0 if self.weight_field is None else getattr(config, self.weight_field)
 
-    def to_device(self, targets: tuple, device) -> tuple:
-        return tuple(
-            target.to(device, non_blocking=True) if index in self.on_device else target
-            for index, target in enumerate(targets)
-        )
-
 
 #: Every auxiliary head, shipped ones first, in the order the terms are summed:
 #: reordered, a run would no longer repeat bit for bit.
@@ -159,21 +149,21 @@ AUX_HEADS: tuple[HeadSpec, ...] = (
              terms=_verdict_terms),
     HeadSpec(
         Head.CREATED_OBJECTS, HeadInput.TRUNK, ("created_objects_head",),
-        loss=_created_objects, terms=_created_objects_terms, on_device=(0, 2),
+        loss=_created_objects, terms=_created_objects_terms,
     ),
     HeadSpec(Head.GLOBAL, HeadInput.TRUNK, ("global_head",), loss=_global,
              terms=_global_terms),
     HeadSpec(
         Head.VALUE, HeadInput.ENCODED, ("value_head", "value_dispersion"),
         weight_field="value_weight",
-        loss=_value, on_device=(0, 2),
+        loss=_value,
     ),
     HeadSpec(
         Head.MLM, HeadInput.MASKED_TOKENS, ("mlm_head",), weight_field="mlm_weight",
     ),
     HeadSpec(
         Head.API, HeadInput.ENCODED, ("api_type_head", "param_key_head"),
-        weight_field="api_weight", loss=_api, on_device=(1,),
+        weight_field="api_weight", loss=_api,
         needs_api_vocabulary=True,
     ),
 )

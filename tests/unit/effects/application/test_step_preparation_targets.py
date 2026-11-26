@@ -20,7 +20,8 @@ _LINE = SidecarLine(
 
 def test_a_prose_texts_amounts_come_from_its_lines_script():
     prose = "cardname deals 2 damage to any target."
-    values, mask, _rows = value_batch([ValueLine.of(prose, _LINE)], {prose: 0})
+    targets = value_batch([ValueLine.of(prose, _LINE)], {prose: 0})
+    values, mask = targets.values, targets.mask
     damage = VALUE_TARGET_NAMES.index("damage")
     assert bool(mask[0, damage])
     assert float(values[0, damage]) == 2.0
@@ -31,6 +32,7 @@ def test_a_text_with_no_line_states_nothing():
     text did not name (and the damage it did): a keyword line's reminder text
     has no script, so it masks every target."""
     script = "SP$ DealDamage | NumDmg$ 4"
-    values, mask, _rows = value_batch([ValueLine.of(script, None)], {script: 0})
+    targets = value_batch([ValueLine.of(script, None)], {script: 0})
+    values, mask = targets.values, targets.mask
     assert not bool(mask.any())
     assert float(values[0, VALUE_TARGET_NAMES.index("damage")]) == 0.0

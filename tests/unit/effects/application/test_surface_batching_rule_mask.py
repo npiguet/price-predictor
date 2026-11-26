@@ -236,10 +236,10 @@ def test_the_verdict_head_takes_the_rule_mask():
                copy_weights(soft, RuleMask.SOFT, outputs)]
     every = [True] * len(names)
 
-    _target, mask = step_preparation._record_head_rows(
+    mask = step_preparation._record_head_rows(
         [hard, soft], weights, VERDICT_LAYOUT,
         lambda record: (VERDICT_LAYOUT.blank()[0], every),
-    )
+    ).mask
     fired = names.index("trigger_fired")
     assert mask[0].tolist() == [1.0 if i == fired else 0.0 for i in range(len(names))]
     assert mask[1].tolist() == [1.0 if i == fired else 0.25 for i in range(len(names))]
@@ -258,9 +258,8 @@ def test_the_created_objects_head_is_masked_whole(monkeypatch):
     weights = [copy_weights(named, RuleMask.HARD, outputs),
                copy_weights(other, RuleMask.HARD, outputs),
                copy_weights(soft, RuleMask.SOFT, outputs)]
-    _target, mask, known = step_preparation._created_objects_rows(
-        [named, other, soft], weights,
-    )
+    made = step_preparation._created_objects_rows([named, other, soft], weights)
+    mask, known = made.mask, made.known
     assert mask.tolist() == [True, False, True]
     assert known[0].unique().tolist() == [1.0]
     assert known[2].unique().tolist() == [0.25]
