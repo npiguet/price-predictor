@@ -28,8 +28,8 @@ class _MaskTokens:
 class _EchoEncoder:
     """Returns each position's (masked) token id as its hidden state."""
 
-    def __call__(self, token_ids, **_rest):
-        return None, token_ids.unsqueeze(-1).float().repeat(1, 1, 2)
+    def __call__(self, inputs):
+        return None, inputs.token_ids.unsqueeze(-1).float().repeat(1, 1, 2)
 
 
 def _mlm_lines(lengths, *, number: float | None = None) -> list:
