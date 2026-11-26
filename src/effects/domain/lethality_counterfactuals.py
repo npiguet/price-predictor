@@ -55,6 +55,8 @@ from effects.domain.script_text import (
     segments,
 )
 from effects.domain.state_snapshot import (
+    CardLine,
+    CommandZoneObject,
     EntityState,
     LineKind,
     StateSnapshot,
@@ -234,18 +236,32 @@ def _amount(kind: EffectKind, found: dict[str, str], x: int | None, x_stated: St
             ) -> StatedEffect | None:
     """The amount one damage or shrink segment states, or None if it states none."""
     if kind is EffectKind.DAMAGE:
-        raw = found.get("NumDmg")
-        if raw == "X" and x is not None:
-            return StatedEffect(kind, x, x_stated, False)
-        amount = _literal(raw)
-        return None if amount is None else StatedEffect(kind, amount, Stated.TEXT, False)
+        return _damage_amount(found, x, x_stated)
+    return _shrink_amount(found, x, x_stated)
+
+
+def _damage_amount(found: dict[str, str], x: int | None, x_stated: Stated
+                   ) -> StatedEffect | None:
+    """The damage a ``DealDamage``/``DamageAll`` segment states: its X, or a literal."""
+    raw = found.get("NumDmg")
+    if raw == "X" and x is not None:
+        return StatedEffect(EffectKind.DAMAGE, x, x_stated, False)
+    amount = _literal(raw)
+    return None if amount is None else StatedEffect(EffectKind.DAMAGE, amount, Stated.TEXT, False)
+
+
+def _shrink_amount(found: dict[str, str], x: int | None, x_stated: Stated
+                   ) -> StatedEffect | None:
+    """The toughness a ``Pump``/``PumpAll`` segment takes: its -X, or a negative
+    literal; symmetric where it takes as much power."""
     raw, power = found.get("NumDef"), found.get("NumAtt")
     if raw == "-X" and x is not None:
-        return StatedEffect(kind, x, x_stated, power == "-X")
+        return StatedEffect(EffectKind.SHRINK, x, x_stated, power == "-X")
     shrink = _literal(raw)
     if shrink is None or shrink >= 0:
         return None
-    return StatedEffect(kind, -shrink, Stated.TEXT, power is not None and _literal(power) == shrink)
+    return StatedEffect(EffectKind.SHRINK, -shrink, Stated.TEXT,
+                        power is not None and _literal(power) == shrink)
 
 
 def _x_stated(record: EffectRecord) -> Stated:
@@ -296,32 +312,62 @@ def _player_hit(fields: dict, found: StatedEffect) -> _Hit:
     return _Hit.HIT
 
 
+@dataclass(frozen=True)
+class _Board:
+    """What a hit subject is judged against: the board's cards and players,
+    the keywords each card has, and the creatures an Aura or Equipment on the
+    battlefield is attached to."""
+
+    entities: dict[str, EntityState]
+    players: set[str]
+    keywords_of: KeywordsOf
+    attached: set[str]
+
+    def verdict(self, subject: str, entry: EntityTargets, found: StatedEffect) -> _Hit:
+        """What ``subject``, a player or a card, says about the record."""
+        if subject in self.players:
+            return _player_hit(entry.fields, found)
+        return _creature_hit(self.entities.get(subject), entry, found, self)
+
+    def shields(self, entity: EntityState) -> bool:
+        """Whether something besides toughness decides what a hit does to
+        ``entity``: indestructible, an attachment, a shield counter."""
+        return ("indestructible" in self.keywords_of(entity) or entity.id in self.attached
+                or SHIELD_COUNTER in entity.counters)
+
+
 def _creature_hit(entity: EntityState | None, entry: EntityTargets, found: StatedEffect,
-                  keywords_of: KeywordsOf, attached: set[str]) -> _Hit:
+                  board: _Board) -> _Hit:
     if entity is None or not entity.on_battlefield:
         return _Hit.MISSED
-    rules = _RULES[found.kind]
-    fields = entry.fields
-    took = fields.get(rules.field)
-    if not took:
+    if not entry.fields.get(_RULES[found.kind].field):
         return _Hit.MISSED
-    if took != found.amount * rules.sign:
+    if _beyond_the_rule(entity, entry, found) or board.shields(entity):
         return _Hit.REFUSED
+    return _Hit.HIT if _death_obeys_the_rule(entity, entry, found) else _Hit.REFUSED
+
+
+def _beyond_the_rule(entity: EntityState, entry: EntityTargets, found: StatedEffect) -> bool:
+    """Whether the hit creature shows what the rule cannot read: another
+    amount, a move no zone outcome names, no creature's toughness, or a
+    change besides the amount's."""
+    rules = _RULES[found.kind]
+    if entry.fields.get(rules.field) != found.amount * rules.sign:
+        return True
     if HeadField.ZONE_OUTCOME in entry.unknown:
         # Moved where no zone outcome names (the stack, merged): not "stayed".
-        return _Hit.REFUSED
+        return True
     if not entity.is_creature or entity.pt is None:
-        return _Hit.REFUSED
-    if set(fields) - rules.hit_fields:
-        return _Hit.REFUSED
-    if ("indestructible" in keywords_of(entity) or entity.id in attached
-            or SHIELD_COUNTER in entity.counters):
-        return _Hit.REFUSED
-    zone = fields.get(HeadField.ZONE_OUTCOME, _STAYED)
-    died = zone == _TO_GRAVEYARD
-    if zone not in (_STAYED, _TO_GRAVEYARD) or died != lethal(found.kind, found.amount, entity):
-        return _Hit.REFUSED
-    return _Hit.HIT
+        return True
+    return bool(set(entry.fields) - rules.hit_fields)
+
+
+def _death_obeys_the_rule(entity: EntityState, entry: EntityTargets, found: StatedEffect) -> bool:
+    """Whether the creature stayed or went to the graveyard, as rule 704.5f-g says."""
+    zone = entry.fields.get(HeadField.ZONE_OUTCOME, _STAYED)
+    if zone not in (_STAYED, _TO_GRAVEYARD):
+        return False
+    return (zone == _TO_GRAVEYARD) == lethal(found.kind, found.amount, entity)
 
 
 def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, EntityTargets],
@@ -334,9 +380,7 @@ def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, E
     regeneration shield or a replacement may turn is refused (P3a #14).
     Without it they are not read.
     """
-    if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
-        return None
-    if record.fork or record.interventional or record.synthetic or record.directed is not None:
+    if not _natural_resolution(record):
         return None
     if line is None or not line.script_text:
         return None
@@ -347,9 +391,30 @@ def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, E
     if hits is None or not hits[0]:
         return None
     hit, hit_players = hits
-    if lines is not None and _death_may_be_replaced(record.state, set(hit), lines):
+    if _death_read_as_replaced(record.state, hit, lines):
         return None
     return Qualified(effect=found, hit=tuple(hit), players=tuple(hit_players))
+
+
+def _natural_resolution(record: EffectRecord) -> bool:
+    """Whether ``record`` is a resolution's effect half that no fork,
+    intervention, directed fork or synthesis made."""
+    if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
+        return False
+    return not (record.fork or record.interventional or record.synthetic
+                or record.directed is not None)
+
+
+def _death_read_as_replaced(state: StateSnapshot, hit: list[str], lines: SidecarLookup | None
+                            ) -> bool:
+    """:func:`_death_may_be_replaced` where the caller passes the sidecars;
+    False without them, which are then not read."""
+    return lines is not None and _death_may_be_replaced(state, set(hit), lines)
+
+
+def _script_of(line: SidecarLine | None) -> str | None:
+    """The line's script, None where there is no line."""
+    return None if line is None else line.script_text
 
 
 def _subjects_hit(state: StateSnapshot, targets: dict[str, EntityTargets], found: StatedEffect,
@@ -362,22 +427,23 @@ def _subjects_hit(state: StateSnapshot, targets: dict[str, EntityTargets], found
         return None
     attached = {entity.attached_to for entity in state.entities
                 if entity.attached_to and entity.on_battlefield}
+    return _tally_hits(targets, found, _Board(entities, players, keywords_of, attached))
+
+
+def _tally_hits(targets: dict[str, EntityTargets], found: StatedEffect, board: _Board
+                ) -> tuple[list[str], list[str]] | None:
+    """``(creatures, players)`` the amount hit, in ``targets`` order, or None
+    where any affected subject refuses a copy."""
     hit: list[str] = []
     hit_players: list[str] = []
     for subject, entry in targets.items():
         if not entry.affected:
             continue
-        if subject in players:
-            verdict, into = _player_hit(entry.fields, found), hit_players
-        else:
-            verdict = _creature_hit(
-                entities.get(subject), entry, found, keywords_of, attached,
-            )
-            into = hit
+        verdict = board.verdict(subject, entry, found)
         if verdict is _Hit.REFUSED:
             return None
         if verdict is _Hit.HIT:
-            into.append(subject)
+            (hit_players if subject in board.players else hit).append(subject)
     return hit, hit_players
 
 
@@ -389,13 +455,15 @@ _DEATH_EVENTS = frozenset({"Moved", "Destroy"})
 def _replaces_or_regenerates(line: SidecarLine | None) -> bool:
     """Whether a floating effect's source line regenerates or sets up a
     replacement (``Regenerate``, ``ReplacementEffects$``)."""
-    if line is None or not line.script_text:
+    script = _script_of(line)
+    if not script:
         return False
-    for segment in segments(line.script_text):
-        found = params(segment)
-        if (api_of(found) or "").startswith("Regenerate") or "ReplacementEffects" in found:
-            return True
-    return False
+    return any(_regenerates_or_replaces(params(segment)) for segment in segments(script))
+
+
+def _regenerates_or_replaces(found: dict[str, str]) -> bool:
+    """Whether one segment's parameters regenerate or set up a replacement."""
+    return (api_of(found) or "").startswith("Regenerate") or "ReplacementEffects" in found
 
 
 def _death_may_be_replaced(state: StateSnapshot, hit: set[str], lines: SidecarLookup) -> bool:
@@ -404,22 +472,48 @@ def _death_may_be_replaced(state: StateSnapshot, hit: set[str], lines: SidecarLo
     made by a line that regenerates or sets up a replacement; or a
     replacement line of a move or a destruction on any permanent or
     command-zone object (Rest in Peace, an exile-instead)."""
-    for effect in (*state.global_.floating_effects, *state.global_.delayed_triggers):
-        if set(effect.affected) & hit and any(
-                _replaces_or_regenerates(lines.line_or_none(key)) for key in effect.source_lines):
-            return True
-    for entity in state.entities:
-        if not entity.on_battlefield and entity.zone != Zone.COMMAND:
-            continue
-        for card_line in entity.lines:
-            if card_line.kind != LineKind.REPLACEMENT or card_line.active is False:
-                continue
-            for key in card_line.keys:
-                found = lines.line_or_none(key)
-                if found is not None and found.script_text and params(
-                        root(found.script_text)).get("Event") in _DEATH_EVENTS:
-                    return True
-    return False
+    return _shield_on_a_hit(state, hit, lines) or _death_replacement_on_board(state, lines)
+
+
+def _shield_on_a_hit(state: StateSnapshot, hit: set[str], lines: SidecarLookup) -> bool:
+    """Whether a floating effect or a delayed trigger affecting a creature in
+    ``hit`` was made by a line that regenerates or sets up a replacement."""
+    return any(_shields_a_hit(effect, hit, lines)
+               for effect in (*state.global_.floating_effects, *state.global_.delayed_triggers))
+
+
+def _shields_a_hit(effect: CommandZoneObject, hit: set[str], lines: SidecarLookup) -> bool:
+    return bool(set(effect.affected) & hit) and any(
+        _replaces_or_regenerates(lines.line_or_none(key)) for key in effect.source_lines)
+
+
+def _death_replacement_on_board(state: StateSnapshot, lines: SidecarLookup) -> bool:
+    """Whether a permanent or a command-zone object carries a replacement
+    line of a move or a destruction."""
+    return any(_replaces_a_death(card_line, lines)
+               for entity in state.entities if _replacement_applies_from(entity)
+               for card_line in entity.lines)
+
+
+def _replacement_applies_from(entity: EntityState) -> bool:
+    """Whether ``entity``'s replacements apply: a permanent the rules see, or
+    a command-zone object."""
+    return entity.on_battlefield or entity.zone == Zone.COMMAND
+
+
+def _replaces_a_death(card_line: CardLine, lines: SidecarLookup) -> bool:
+    """Whether ``card_line`` is a replacement in force whose line replaces a
+    move or a destruction."""
+    if card_line.kind != LineKind.REPLACEMENT or card_line.active is False:
+        return False
+    return any(_replaces_a_death_event(lines.line_or_none(key)) for key in card_line.keys)
+
+
+def _replaces_a_death_event(line: SidecarLine | None) -> bool:
+    script = _script_of(line)
+    if not script:
+        return False
+    return params(root(script)).get("Event") in _DEATH_EVENTS
 
 
 def edit_text(text: str, effect: StatedEffect, amount: int) -> str | None:
@@ -482,14 +576,10 @@ def amount_edit(record: EffectRecord, effect: StatedEffect, line: SidecarLine,
                  text: str | None, drawn: int) -> TextEdit:
     """A literal amount set to ``drawn`` in the script and the encoded text,
     both or neither, so the text never disagrees with the labels."""
-    unedited = TextEdit(effect.amount)
-    if not text:
-        return unedited
-    script = edit_text(line.script_text, effect, drawn)
-    found = None if script is None else _edited_reading(text, line, script, effect, drawn)
+    found = _edited_reading(text, line, effect, drawn) if text else None
     if found is None:
-        return unedited
-    edited, spans = found
+        return TextEdit(effect.amount)
+    edited, script, spans = found
     original = record.ability[0]
     # A tree of its own, so the edited text never shares a key with the real line's.
     key = replace(original, script_file=(
@@ -497,15 +587,21 @@ def amount_edit(record: EffectRecord, effect: StatedEffect, line: SidecarLine,
     return TextEdit(drawn, key, edited, script, spans)
 
 
-def _edited_reading(text: str, line: SidecarLine, script: str, effect: StatedEffect,
-                    drawn: int) -> tuple[str, tuple[RoleSpan, ...]] | None:
-    """``text`` as the edited line reads it, by what ``text`` is: the line's
-    script, its script reading (a line with no prose), or its prose."""
+def _edited_reading(text: str, line: SidecarLine, effect: StatedEffect, drawn: int
+                    ) -> tuple[str, str, tuple[RoleSpan, ...]] | None:
+    """``(text, script, role spans)`` with the amount set to ``drawn``: ``text``
+    as the edited line reads it, by what ``text`` is (the line's script, its
+    script reading for a line with no prose, or its prose), and the edited
+    script; None where the script or the prose states no amount."""
+    script = edit_text(line.script_text, effect, drawn)
+    if script is None:
+        return None
     if text == line.script_text:
-        return script, ()
+        return script, script, ()
     if is_script_reading(text):
-        return script_reading(script), ()
-    return edit_prose(text, line.role_spans, effect, drawn)
+        return script_reading(script), script, ()
+    prose = edit_prose(text, line.role_spans, effect, drawn)
+    return None if prose is None else (prose[0], script, prose[1])
 
 
 def _with_toughness(entities: tuple[EntityState, ...], chosen: str, toughness: int
