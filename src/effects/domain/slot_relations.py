@@ -36,6 +36,12 @@ def _relation_pair(family: str, target_index: int | None) -> tuple[int, int]:
             relation_type(family, Direction.REVERSE, target_index))
 
 
+def _distinct_slots(a: int | None, b: int | None) -> bool:
+    """Whether a link's two ends are two slots: a missing end or one slot at
+    both ends makes no relation."""
+    return a is not None and b is not None and a != b
+
+
 def name_key(name: str) -> str:
     return name.strip().lower()
 
@@ -76,7 +82,7 @@ class SlotRelations:
 
     def link(self, a: int | None, b: int | None, family: str,
              target_index: int | None = None) -> None:
-        if a is None or b is None or a == b:
+        if not _distinct_slots(a, b):
             return
         forward, reverse = _relation_pair(family, target_index)
         self._triples[(a, b, forward)] = None

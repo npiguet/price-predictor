@@ -48,10 +48,12 @@ from effects.domain.slot_lines import (
 from effects.domain.slot_relations import SlotRelations, name_key
 from effects.domain.state_snapshot import (
     CardLine,
+    CommandZoneObject,
     EntityRole,
     EntityState,
     LineGrant,
     LineRef,
+    StateSnapshot,
     Zone,
 )
 
@@ -71,23 +73,34 @@ def command_zone_entities(record: EffectRecord) -> tuple[EntityState, ...]:
         return ()
     known = {entity.id for entity in state.entities}
     controllers = {entity.id: entity.controller for entity in state.entities}
+    makers = _makers(state)
+    return tuple(
+        _command_zone_card(found, controllers.get(makers.get(found.id, ""), ""))
+        for found in (*g.floating_effects, *g.delayed_triggers)
+        if found.id not in known
+    )
+
+
+def _makers(state: StateSnapshot) -> dict[str, str]:
+    """Each object's maker: the card its first ``created_by`` link ends at."""
     makers: dict[str, str] = {}
     for link in state.links:
         if link.type == "created_by" and isinstance(link.from_, str):
             end = link.to.entity if isinstance(link.to, LineRef) else link.to
             makers.setdefault(link.from_, end)
-    return tuple(
-        EntityState(
-            id=found.id, name="", zone=Zone.COMMAND.value,
-            controller=controllers.get(makers.get(found.id, ""), ""),
-            lines=tuple(
-                CardLine(keys=(key,), kind=key.trait_kind, granted=True,
-                         grant=LineGrant.EFFECT.value)
-                for key in found.source_lines
-            ),
-        )
-        for found in (*g.floating_effects, *g.delayed_triggers)
-        if found.id not in known
+    return makers
+
+
+def _command_zone_card(found: CommandZoneObject, controller: str) -> EntityState:
+    """A command-zone object as a card: its lines its source lines, each
+    granted by an effect."""
+    return EntityState(
+        id=found.id, name="", zone=Zone.COMMAND.value, controller=controller,
+        lines=tuple(
+            CardLine(keys=(key,), kind=key.trait_kind, granted=True,
+                     grant=LineGrant.EFFECT.value)
+            for key in found.source_lines
+        ),
     )
 
 

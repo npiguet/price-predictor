@@ -6,6 +6,8 @@ checkpoint records that order.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from effects.domain.input_layout import (
     NO_THERMOMETER,
     SCALAR_WIDTH,
@@ -41,14 +43,17 @@ from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.records import (
     EffectRecord,
+    Payload,
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import (
     COLORS,
+    CardChoices,
     CommandZoneObject,
     CostsPaid,
     EntityState,
     FaceState,
+    StateSnapshot,
 )
 
 #: Power and toughness of the base, boosts and counters, then the present flag.
@@ -60,6 +65,29 @@ _NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * (3 * SCALAR_WIDTH)
 # ── the card slot ─────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True, slots=True)
+class CardContext:
+    """What a ``[CARD]`` slot's parts read, built once per slot: the entity,
+    the record's snapshot (its refs, its pending event, the turn and the
+    command zone), its acting player and its payload, and the keywords gate
+    2's strip removes from the keyword flags."""
+
+    entity: EntityState
+    state: StateSnapshot
+    actor_player: str
+    payload: Payload
+    masked_keywords: frozenset[str] = frozenset()
+
+    @classmethod
+    def of(
+        cls, entity: EntityState, record: EffectRecord,
+        masked_keywords: frozenset[str] = frozenset(),
+    ) -> CardContext:
+        """``entity``'s context in ``record``."""
+        return cls(entity=entity, state=record.state, actor_player=record.actor_player,
+                   payload=record.payload, masked_keywords=masked_keywords)
+
+
 def card_features(
     entity: EntityState,
     record: EffectRecord,
@@ -69,9 +97,10 @@ def card_features(
     """One entity's structured characteristics and state (root spec § 9.4);
     ``masked_keywords`` removes keywords from its keyword flags, gate 2's
     strip (:meth:`SurfaceBuilder.build`)."""
+    card = CardContext.of(entity, record, masked_keywords)
     out: list[float] = []
     for _, push in _CARD_PARTS:
-        push(out, entity, record, masked_keywords)
+        push(out, card)
     return tuple(out)
 
 
@@ -80,11 +109,12 @@ def card_segments(
 ) -> dict[str, slice]:
     """Where each named part of :func:`card_features` sits; every part has a
     fixed width, so any entity gives the same slices."""
+    card = CardContext.of(entity, record)
     out: list[float] = []
     segments: dict[str, slice] = {}
     for name, push in _CARD_PARTS:
         start = len(out)
-        push(out, entity, record, frozenset())
+        push(out, card)
         segments[name] = slice(start, len(out))
     return segments
 
@@ -96,9 +126,10 @@ def _push_colors_and_mana_value(out, colors, mana_value) -> None:
     push_scalar(out, mana_value)
 
 
-def _push_characteristics(out, entity: EntityState, record, masked) -> None:
+def _push_characteristics(out: list[float], card: CardContext) -> None:
     """Types, supertypes, colours, mana value and the P/T breakdown; whether
     it is a copy and whether a token (subtypes are the slot's ids)."""
+    entity = card.entity
     out += multi_hot(entity.types, CARD_TYPES)
     out += multi_hot(entity.supertypes, SUPERTYPES)
     _push_colors_and_mana_value(out, entity.colors, entity.mana_value)
@@ -119,9 +150,10 @@ def face_state_of(entity: EntityState) -> str:
     return entity.face_state if entity.face_state is not None else FaceState.FRONT.value
 
 
-def _push_face_state(out, entity: EntityState, record, masked) -> None:
+def _push_face_state(out: list[float], card: CardContext) -> None:
     """Face state one-hot (``in.face_state``). A face-down card's real face
     is the next part's; its lines enter as inactive ability slots."""
+    entity = card.entity
     out += one_hot(face_state_of(entity), FACE_STATES)
 
 
@@ -131,7 +163,7 @@ _NO_REAL_FACE: tuple[float, ...] = (0.0,) * (
 )
 
 
-def _push_real_face(out, entity: EntityState, record, masked) -> None:
+def _push_real_face(out: list[float], card: CardContext) -> None:
     """A face-down card's real face: its types, colours, mana value, printed
     power and toughness (a present flag, then two scalars) and how many
     subtypes it has (``in.face_state``). Turning the card face up makes it
@@ -140,6 +172,7 @@ def _push_real_face(out, entity: EntityState, record, masked) -> None:
     ``characteristics``. Zeros on every other card. Which subtypes they are
     is the slot's ``real_face_subtypes`` (:func:`real_face_subtype_rows`),
     not a feature."""
+    entity = card.entity
     face = entity.real_face
     if face is None:
         out += _NO_REAL_FACE
@@ -153,9 +186,10 @@ def _push_real_face(out, entity: EntityState, record, masked) -> None:
     push_scalar(out, len(face.subtypes))
 
 
-def _push_mana_cost(out, entity: EntityState, record, masked) -> None:
+def _push_mana_cost(out: list[float], card: CardContext) -> None:
     """A scalar per mana symbol kind and one for every other symbol, after a
     flag for having a mana cost at all (``in.mana_cost``)."""
+    entity = card.entity
     cost = entity.mana_cost
     out.append(0.0 if cost is None else 1.0)
     cost = cost or {}
@@ -167,18 +201,20 @@ def _push_mana_cost(out, entity: EntityState, record, masked) -> None:
 _MANA_SYMBOL_SET = frozenset(MANA_SYMBOLS)
 
 
-def _push_printed_loyalty_defense(out, entity: EntityState, record, masked) -> None:
+def _push_printed_loyalty_defense(out: list[float], card: CardContext) -> None:
     """Printed loyalty and defense, each a scalar with a thermometer, as
     toughness has (``in.printed_loyalty_defense``)."""
+    entity = card.entity
     for value in (entity.printed_loyalty, entity.printed_defense):
         push_optional(out, value)
         out += NO_THERMOMETER if value is None else thermometer(value)
 
 
-def _push_status(out, entity: EntityState, record, masked) -> None:
+def _push_status(out: list[float], card: CardContext) -> None:
     """Zone, tapped, summoning sick, marked damage, combat. Summoning sickness
     reads on a permanent only (:attr:`EntityState.on_battlefield`): Forge
     writes it in every zone, where it would say "is a creature card"."""
+    entity = card.entity
     out += one_hot(entity.zone, ZONES)
     out.append(1.0 if entity.tapped else 0.0)
     out.append(1.0 if entity.sick and entity.on_battlefield else 0.0)
@@ -190,10 +226,11 @@ def _push_status(out, entity: EntityState, record, masked) -> None:
     push_scalar(out, len(combat.blocked_by) if combat else 0)
 
 
-def _push_role(out, entity: EntityState, record, masked) -> None:
+def _push_role(out: list[float], card: CardContext) -> None:
     """Why the entity is in the snapshot, over :data:`ENTITY_ROLES`
     (``in.role``). A last-known copy keeps the zone it last had, so without
     its role one with zone ``battlefield`` reads as a permanent."""
+    entity = card.entity
     out += one_hot(entity.role or TIER_ROLE, ENTITY_ROLES)
 
 
@@ -201,21 +238,20 @@ def keywords_of(entity: EntityState) -> set[str]:
     """Every keyword the card has now, in :func:`overlay_keyword`'s spelling:
     its keyword list, its keyword lines in force and its keyword counters."""
     found = {overlay_keyword(keyword) for keyword in entity.granted_temporary.keywords}
-    for line in entity.keyword_lines:
-        if line.in_force and line.keyword:
-            found.add(overlay_keyword(line.keyword))
-    for name, count in entity.counters.items():
-        if count > 0 and is_keyword_counter(name):
-            found.add(overlay_keyword(name))
+    found.update(overlay_keyword(line.keyword) for line in entity.keyword_lines
+                 if line.in_force and line.keyword)
+    found.update(overlay_keyword(name) for name, count in entity.counters.items()
+                 if count > 0 and is_keyword_counter(name))
     return found
 
 
-def _push_keyword_flags(out, entity: EntityState, record, masked) -> None:
+def _push_keyword_flags(out: list[float], card: CardContext) -> None:
     """One flag per kept keyword (root spec § 9.6), and nothing for any other:
     a keyword without a flag is read through its line."""
+    entity = card.entity
     flags = [0.0] * len(KEPT_KEYWORD_FLAGS)
     slots = positions(KEPT_KEYWORD_FLAGS)
-    hidden = {overlay_keyword(keyword) for keyword in masked}
+    hidden = {overlay_keyword(keyword) for keyword in card.masked_keywords}
     for keyword in keywords_of(entity) - hidden:
         index = slots.get(spelling(keyword))
         if index is not None:
@@ -230,51 +266,52 @@ CANT_BLOCK_KEYWORDS = frozenset({"CARDNAME can't block.", "CARDNAME can't attack
 CANT_ATTACK_KEYWORDS = frozenset({"CARDNAME can't attack.", "CARDNAME can't attack or block."})
 
 
-def _push_hidden_keywords(out, entity: EntityState, record, masked) -> None:
+def _push_hidden_keywords(out: list[float], card: CardContext) -> None:
     """Can't block, can't attack: Forge's hidden keywords no line carries, a
     pump's or a static's "can't block this turn", which the blocker and
     attacker legality outputs turn on. No other hidden keyword is read."""
+    entity = card.entity
     hidden = {keyword.strip() for keyword in entity.granted_temporary.hidden_keywords or ()}
     out.append(1.0 if hidden & CANT_BLOCK_KEYWORDS else 0.0)
     out.append(1.0 if hidden & CANT_ATTACK_KEYWORDS else 0.0)
 
 
-def _push_relation_to_act(out, entity: EntityState, record: EffectRecord, masked) -> None:
+def _push_relation_to_act(out: list[float], card: CardContext) -> None:
     """Its relation to the acting player, the targets and the source, then the
     turn, priority and control inputs of root spec § 9.5."""
-    state = record.state
+    entity = card.entity
+    state = card.state
     g = state.global_
-    out.append(1.0 if entity.controller == record.actor_player else 0.0)
+    out.append(1.0 if entity.controller == card.actor_player else 0.0)
     out.append(1.0 if state.targets_card(entity.id) else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
     out.append(1.0 if entity.controller == g.active else 0.0)
     out.append(1.0 if entity.controller == g.priority else 0.0)
-    out.append(1.0 if entity.owner is not None and entity.owner == record.actor_player else 0.0)
+    out.append(1.0 if entity.owner is not None and entity.owner == card.actor_player else 0.0)
     out.append(1.0 if entity.owner is not None and entity.owner != entity.controller else 0.0)
 
 
-def _push_designations(out, entity: EntityState, record, masked) -> None:
+def _push_designations(out: list[float], card: CardContext) -> None:
+    entity = card.entity
     out += multi_hot(entity.designations, DESIGNATIONS)
 
 
-def _push_x_paid(out, entity: EntityState, record, masked) -> None:
+def _push_x_paid(out: list[float], card: CardContext) -> None:
+    entity = card.entity
     push_optional(out, entity.x_paid)
 
 
-def _push_chosen(out, entity: EntityState, record, masked) -> None:
+def _push_chosen(out: list[float], card: CardContext) -> None:
     """What the card remembers choosing (``in.chosen_values``): colours, card
     types, a number, whether a player, cards or names, a direction, even or
     odd, a sector or a mode, and stored die results. A creature type is a row
     of the subtype table, and a player, card or name a relation."""
+    entity = card.entity
     chosen = entity.chosen
     if chosen is None:
         out += _NO_CHOSEN
         return
-    colors = [COLOR_NAMES.get(spelling(color), color) for color in chosen.colors or ()]
-    out += multi_hot(colors, COLORS)
-    card_types = [t for t in (chosen.type, chosen.type2)
-                  if t is not None and vocabulary_slot(t, CARD_TYPES) is not None]
-    out += multi_hot(card_types, CARD_TYPES)
+    _push_chosen_kinds(out, chosen)
     push_optional(out, chosen.number)
     out.append(1.0 if chosen.player is not None else 0.0)
     push_scalar(out, len(chosen.cards or ()))
@@ -286,6 +323,15 @@ def _push_chosen(out, entity: EntityState, record, masked) -> None:
     rolls = chosen.stored_rolls or ()
     push_scalar(out, len(rolls))
     push_scalar(out, sum(rolls))
+
+
+def _push_chosen_kinds(out: list[float], chosen: CardChoices) -> None:
+    """The chosen colours and the chosen types that are card types."""
+    colors = [COLOR_NAMES.get(spelling(color), color) for color in chosen.colors or ()]
+    out += multi_hot(colors, COLORS)
+    card_types = [t for t in (chosen.type, chosen.type2)
+                  if t is not None and vocabulary_slot(t, CARD_TYPES) is not None]
+    out += multi_hot(card_types, CARD_TYPES)
 
 
 #: The chosen block of a card that chose nothing.
@@ -313,20 +359,20 @@ def real_face_subtype_rows(entity: EntityState) -> tuple[int, ...]:
     return () if face is None else tuple(subtype_id(subtype) for subtype in face.subtypes)
 
 
-def _paid_for(entity: EntityState, record: EffectRecord) -> CostsPaid | None:
+def _paid_for(card: CardContext) -> CostsPaid | None:
     """What paid for the card, as the input reads it: nothing for the acting
     source on an effect half. A forced resolution skips the payment, so there
     "paid no mana" would tell a forced half from a live one (D16)."""
-    if isinstance(record.payload, ResolutionPayload) and entity.id == record.state.refs.source:
+    if isinstance(card.payload, ResolutionPayload) and card.entity.id == card.state.refs.source:
         return None
-    return entity.costs_paid
+    return card.entity.costs_paid
 
 
-def _push_costs_paid(out, entity: EntityState, record, masked) -> None:
+def _push_costs_paid(out: list[float], card: CardContext) -> None:
     """The mana spent per colour, the zone cast from and the mana rider, after
     a flag for having been cast (``in.costs_paid``); all zero for the acting
     source on an effect half (:func:`_paid_for`)."""
-    paid = _paid_for(entity, record)
+    paid = _paid_for(card)
     out.append(0.0 if paid is None else 1.0)
     mana = paid.mana if paid is not None else {}
     for color in COLORS:
@@ -335,8 +381,9 @@ def _push_costs_paid(out, entity: EntityState, record, masked) -> None:
     out.append(1.0 if paid is not None and paid.mana_rider else 0.0)
 
 
-def _push_history(out, entity: EntityState, record, masked) -> None:
+def _push_history(out: list[float], card: CardContext) -> None:
     """What the card did this turn (``in.history``)."""
+    entity = card.entity
     history = entity.history
     for done in (
         history.entered_this_turn if history else False,
@@ -347,11 +394,13 @@ def _push_history(out, entity: EntityState, record, masked) -> None:
         out.append(1.0 if done else 0.0)
 
 
-def _push_order_rank(out, entity: EntityState, record, masked) -> None:
+def _push_order_rank(out: list[float], card: CardContext) -> None:
+    entity = card.entity
     push_optional(out, entity.order_rank)
 
 
-def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
+def _push_stack_extras(out: list[float], card: CardContext) -> None:
+    entity = card.entity
     extras = entity.stack_extras
     if extras is None:
         out += _NO_STACK_EXTRAS
@@ -361,12 +410,13 @@ def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
     push_scalar(out, sum(extras.up_to_counts.values()))
 
 
-def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) -> None:
+def _push_pending_event(out: list[float], card: CardContext) -> None:
     """Whether a ``rewrite`` or ``trigger`` record has a pending event,
     whether this card is its subject and whether its source (the damage
     source: "whenever CARDNAME deals combat damage"); the event's type,
     amount, mode and combat bit are the ``[GLOBAL]`` slot's."""
-    state = record.state
+    entity = card.entity
+    state = card.state
     pending = state.pending_event
     if pending is None:
         out += (0.0,) * 6
@@ -377,29 +427,30 @@ def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) 
     out += pending_param_bits(pending, entity.id, ("defender", "blockers", "cause"))
 
 
-def command_zone_object(record: EffectRecord, object_id: str) -> CommandZoneObject | None:
+def command_zone_object(state: StateSnapshot, object_id: str) -> CommandZoneObject | None:
     """The floating effect or pending delayed trigger named ``object_id``;
     None for any other id."""
-    g = record.state.global_
+    g = state.global_
     for found in (*g.floating_effects, *g.delayed_triggers):
         if found.id == object_id:
             return found
     return None
 
 
-def _push_command_zone(out, entity: EntityState, record: EffectRecord, masked) -> None:
+def _push_command_zone(out: list[float], card: CardContext) -> None:
     """What a command-zone object's text cannot say (root spec § 9.3): its
     duration over the three values, and the amount left on a counting-down
     shield after a present flag; zeros on any other card. Its links are
     relations, and what it does is its source lines' ``e``."""
-    found = command_zone_object(record, entity.id)
+    found = command_zone_object(card.state, card.entity.id)
     out += one_hot(found.duration if found is not None else None, EFFECT_DURATIONS)
     push_optional(out, found.shield_left if found is not None else None)
 
 
-def _push_comparable_amounts(out, entity: EntityState, record, masked) -> None:
+def _push_comparable_amounts(out: list[float], card: CardContext) -> None:
     """Thermometers of total power, total toughness, and the toughness left
     after marked damage, subtracted here so the trunk need not learn to."""
+    entity = card.entity
     if entity.pt is None:
         out += NO_THERMOMETER * 3
         return

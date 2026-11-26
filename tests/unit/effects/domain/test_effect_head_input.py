@@ -1516,12 +1516,15 @@ class TestTheTargetsAsCast:
     def _fizzled(**refs):
         return _record(state=_snapshot(refs=Refs(**refs)))
 
-    def test_a_fizzled_half_reads_its_targets_as_cast(self):
-        from effects.domain.card_features import _push_relation_to_act
+    @staticmethod
+    def _relation_to_act(entity, record):
+        from effects.domain.card_features import card_features, card_segments
 
+        return card_features(entity, record)[card_segments(entity, record)["relation_to_act"]]
+
+    def test_a_fizzled_half_reads_its_targets_as_cast(self):
         record = self._fizzled(targets=(), targets_at_cast=("E2", "P1"), targets_on_stack=())
-        out: list[float] = []
-        _push_relation_to_act(out, record.state.entities[1], record, frozenset())
+        out = self._relation_to_act(record.state.entities[1], record)
         assert out[1] == 1.0
         assert player_features(record.state.players[1], record)[-1 - THERMOMETER_STEPS] == 1.0
         unknown = self._fizzled(targets=("P1",), targets_at_cast=None)
@@ -1535,12 +1538,9 @@ class TestTheTargetsAsCast:
         assert fizzled == resolved
 
     def test_a_permanent_whose_ability_is_targeted_is_not_itself_targeted(self):
-        from effects.domain.card_features import _push_relation_to_act
-
         record = self._fizzled(targets=("E2",), targets_at_cast=("E2",),
                                targets_on_stack=("E2",))
-        out: list[float] = []
-        _push_relation_to_act(out, record.state.entities[1], record, frozenset())
+        out = self._relation_to_act(record.state.entities[1], record)
         assert out[1] == 0.0
 
     def test_the_act_slot_targets_what_it_was_cast_at(self):
