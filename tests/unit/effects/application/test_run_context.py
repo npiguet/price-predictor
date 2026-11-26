@@ -7,16 +7,83 @@ import torch
 from effects.application.run_context import parameter_groups
 
 
-def test_groups_are_named_and_cover_every_parameter():
-    encoder, head = torch.nn.Linear(2, 2), torch.nn.Linear(2, 3)
-    groups = parameter_groups(encoder, head)
-    assert [g["name"] for g in groups] == ["encoder", "head"]
-    total_params = len(list(encoder.parameters())) + len(list(head.parameters()))
-    assert sum(len(g["params"]) for g in groups) == total_params
-    identity = torch.nn.Embedding(4, 2)
-    assert [g["name"] for g in parameter_groups(encoder, head, identity)][-1] == "identity"
+def _modules():
+    from effects.application.surface_batching import IdentityTable
+    from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
+    from effects.domain.effect_model import EffectModel, EffectModelConfig
+
+    torch.manual_seed(0)
+    encoder = AbilityEncoder(AbilityEncoderConfig(
+        vocab_size=16, d_model=8, n_layers=1, n_heads=2))
+    model = EffectModel(EffectModelConfig(
+        global_features=4, act_features=4, player_features=4, card_features=4,
+        e_dim=4, vocab_size=16, n_api_types=3, n_param_keys=5,
+        encoder_d_model=8, d_model=8, n_layers=1, n_heads=2, ff_dim=16))
+    return encoder, model, IdentityTable(["a", "b"], 4)
 
 
+def _decay_by_name(groups, modules):
+    """Each parameter's group name and weight decay, keyed ``module.param``."""
+    owner = {id(p): f"{label}.{name}" for label, module in zip(
+        ("encoder", "head", "identity"), modules, strict=False)
+        for name, p in module.named_parameters()}
+    return {owner[id(p)]: (g["name"], g["weight_decay"])
+            for g in groups for p in g["params"]}
+
+
+def test_groups_are_named_and_hold_every_parameter_once():
+    modules = _modules()
+    groups = parameter_groups(*modules)
+    assert {g["name"] for g in groups} == {"encoder", "head", "identity"}
+    ids = [id(p) for g in groups for p in g["params"]]
+    assert len(ids) == len(set(ids)) == sum(len(list(m.parameters())) for m in modules)
+    assert all(g["params"] for g in groups)
+
+
+def test_no_decay_reaches_a_bias_a_gain_a_table_or_a_learned_vector():
+    """Finding 15.3: decay only on the matrices."""
+    modules = _modules()
+    found = _decay_by_name(parameter_groups(*modules), modules)
+    for name, (_, decay) in found.items():
+        tail = name.rsplit(".", 1)[-1]
+        no_decay = (
+            tail in {"bias", "in_proj_bias", "log_dispersion", "real_face_subtype_offset",
+                     "rel_k", "rel_v", "base", "direction"}
+            or "embedding" in name or name.startswith("identity.")
+            or ".norm" in name
+        )
+        assert decay == (0.0 if no_decay else 0.01), name
+    assert found["head.verdict_dispersion.log_dispersion"][1] == 0.0
+    assert found["head.real_face_subtype_offset"][1] == 0.0
+    assert found["head.counter_embedding.weight"][1] == 0.0
+    assert found["identity.embedding.weight"][1] == 0.0
+    assert 0.01 in {decay for _, decay in found.values()}
+
+
+def test_each_module_keeps_one_name_over_both_its_halves():
+    encoder, head, identity = modules = _modules()
+    names = [g["name"] for g in parameter_groups(*modules)]
+    assert set(names) == {"encoder", "head", "identity"}
+    assert names.count("encoder") == names.count("head") == 2
+    assert [g["name"] for g in parameter_groups(encoder, head)][-1] == "head"
+
+
+def test_a_resume_file_with_other_optimizer_groups_is_refused_by_name():
+    import pytest
+
+    from effects.application.resume_state import require_optimizer_groups
+    from effects.infrastructure.effect_model_store import ResumeMismatchError
+
+    modules = _modules()
+    optimizer = torch.optim.AdamW(parameter_groups(*modules))
+    saved = optimizer.state_dict()
+    require_optimizer_groups(saved, optimizer)
+    old = torch.optim.AdamW([
+        {"name": "encoder", "params": list(modules[0].parameters())},
+        {"name": "head", "params": list(modules[1].parameters())},
+    ]).state_dict()
+    with pytest.raises(ResumeMismatchError, match="optimizer groups"):
+        require_optimizer_groups(old, optimizer)
 
 
 def test_a_run_records_a_digest_of_every_layout_vocabulary():

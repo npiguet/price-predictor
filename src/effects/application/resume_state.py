@@ -119,6 +119,22 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
         copy_atomically(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
 
 
+def require_optimizer_groups(saved: dict, optimizer: torch.optim.Optimizer) -> None:
+    """Refuse a resume file whose optimizer holds other groups than this run's
+    (one written before the weight decay was split off the biases, gains and
+    tables), by name instead of torch's group-count error."""
+    def shape(groups) -> list[tuple]:
+        return [(g.get("name"), g.get("weight_decay"), len(g["params"])) for g in groups]
+
+    if shape(saved["param_groups"]) != shape(optimizer.param_groups):
+        raise ResumeMismatchError(
+            "The resume file's optimizer groups (name, weight decay, parameters) "
+            f"{shape(saved['param_groups'])} differ from this run's "
+            f"{shape(optimizer.param_groups)}: it was written before weight "
+            "decay was limited to the weight matrices; train from scratch."
+        )
+
+
 def restore_resume(run: RunContext) -> int | None:
     """The first epoch to train, with ``run`` where it left off; None when
     nothing is left. Raises ``ResumeMismatchError`` for a resume file written
@@ -134,6 +150,7 @@ def restore_resume(run: RunContext) -> int | None:
     run.model.load_state_dict(state["model"])
     if run.identity_table is not None and state["identity_table"] is not None:
         run.identity_table.load_state_dict(state["identity_table"])
+    require_optimizer_groups(state["optimizer"], run.optimizer)
     run.optimizer.load_state_dict(state["optimizer"])
     try:
         run.stopper.load_state_dict(state["stopper"])

@@ -48,12 +48,31 @@ def kl_divergence(
     return (p * log_ratio).sum(dim=-1)
 
 
+def _clip_sets(optimizer: torch.optim.Optimizer) -> list[tuple[str, list]]:
+    """The parameters each clip covers: a named group's, joined with every
+    other group of its name; an unnamed group stands alone."""
+    joined: dict[str, list] = {}
+    sets: list[tuple[str, list]] = []
+    for group in optimizer.param_groups:
+        name = group.get("name")
+        if name is None:
+            sets.append(("group", list(group["params"])))
+        elif name in joined:
+            joined[name].extend(group["params"])
+        else:
+            joined[name] = list(group["params"])
+            sets.append((name, joined[name]))
+    return sets
+
+
 def clip_per_group(
     optimizer: torch.optim.Optimizer, *, max_norm: float, read: bool = True,
 ) -> dict[str, float] | dict[str, torch.Tensor]:
     """Clip each parameter group at ``max_norm``; return the **pre-clip** L2 norms.
 
-    Keyed by each group's ``"name"`` (``"group"`` when unnamed). The pre-clip
+    Keyed by each group's ``"name"`` (``"group"`` when unnamed). Groups that
+    share a name are clipped as one: a module split over two groups (one with
+    weight decay, one without) keeps one norm. The pre-clip
     values are the diagnostic signal — post-clip norms are bounded by ``max_norm``
     and carry no shape information.
 
@@ -63,8 +82,7 @@ def clip_per_group(
     CPU then cannot prepare the next batch while the GPU finishes this one.
     """
     norms: dict = {}
-    for group in optimizer.param_groups:
-        name = group.get("name", "group")
-        pre_clip = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=max_norm)
+    for name, params in _clip_sets(optimizer):
+        pre_clip = torch.nn.utils.clip_grad_norm_(params, max_norm=max_norm)
         norms[name] = float(pre_clip) if read else pre_clip.detach()
     return norms

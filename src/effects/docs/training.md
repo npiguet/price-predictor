@@ -35,6 +35,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 ## Optimizer and memory
 
 - The encoder and the head are separate parameter groups, clipped and reported apart. The encoder's own gradient norm is the only evidence that gradient reaches it through `e`; one shared norm would be dominated by the head.
+- Each module is two optimizer groups under one `"name"`: weight matrices with decay 0.01 (`WEIGHT_DECAY`), and every bias, layer-norm gain, embedding table (the identity baseline's included), log-dispersion and learned vector (`rel_k`, `rel_v`, `real_face_subtype_offset`, the number embedding's base and direction) with none (`run_context.parameter_groups`, finding 15.3). `clip_per_group` clips the groups that share a name as one norm, so the clip is still one per module. A `resume.pt` written with fewer groups is refused by name (`resume_state.require_optimizer_groups`).
 - On CUDA the per-process memory reservation is capped and the allocator's cache is released once per shard. The corpus's variable batch shapes fragment the caching allocator, and a Windows driver pages the excess to host RAM instead of raising out-of-memory.
 - The hot-path invariants are in `training-hot-paths.md`.
 

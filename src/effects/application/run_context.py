@@ -54,18 +54,49 @@ from effects.infrastructure.vocabulary_file import vocabulary_surface
 logger = logging.getLogger(__name__)
 
 
+#: Learned vectors and tables the weight decay would pull toward zero though
+#: they are not matrices: the relation tables (zero-initialised, so decay is
+#: no neutral pull) and the real-face subtype offset.
+_NO_DECAY_PARAMETERS = frozenset({"rel_k", "rel_v", "real_face_subtype_offset"})
+
+
+def _decays(owner: torch.nn.Module, name: str, param: torch.Tensor) -> bool:
+    """Whether weight decay reaches ``param``: only a weight matrix does, never
+    a bias, a gain, a dispersion, an embedding table or a learned vector."""
+    return (
+        param.ndim >= 2
+        and not isinstance(owner, torch.nn.Embedding)
+        and name not in _NO_DECAY_PARAMETERS
+    )
+
+
+def _split_by_decay(module: torch.nn.Module) -> tuple[list, list]:
+    """``module``'s parameters, those weight decay reaches and the rest."""
+    decayed, plain = [], []
+    for owner in module.modules():
+        for name, param in owner.named_parameters(recurse=False):
+            (decayed if _decays(owner, name, param) else plain).append(param)
+    return decayed, plain
+
+
 def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
-    """One optimizer group per module, named for ``clip_per_group``.
+    """Per module, a group with weight decay and one without, both named for
+    ``clip_per_group``, which clips the two halves as one norm.
 
     Clipped apart (FR-095): the head's gradient norm runs several times the
     encoder's, and a joint clip would shrink the encoder's update by it.
+    Decay reaches the weight matrices only (finding 15.3); an empty half is
+    left out.
     """
-    groups = [
-        {"name": "encoder", "params": list(encoder.parameters())},
-        {"name": "head", "params": list(model.parameters())},
-    ]
+    modules = [("encoder", encoder), ("head", model)]
     if identity_table is not None:
-        groups.append({"name": "identity", "params": list(identity_table.parameters())})
+        modules.append(("identity", identity_table))
+    groups = []
+    for name, module in modules:
+        decayed, plain = _split_by_decay(module)
+        for params, decay in ((decayed, WEIGHT_DECAY), (plain, 0.0)):
+            if params:
+                groups.append({"name": name, "params": params, "weight_decay": decay})
     return groups
 
 
@@ -217,7 +248,7 @@ def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) ->
         encoder=encoder, model=model,
         optimizer=torch.optim.AdamW(
             parameter_groups(encoder, model, identity_table),
-            lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
+            lr=LEARNING_RATE,
         ),
         warmup=warmup,
         preparer=preparer,
