@@ -585,7 +585,7 @@ PINNED_X = [
 
 
 class TestStepWiring:
-    """``StepPreparer._counterfactuals``: copies per qualifying record, staged."""
+    """``LethalityAugmenter.copies_of``: copies per qualifying record, staged."""
 
     class _Batcher:
         def __init__(self):
@@ -602,18 +602,14 @@ class TestStepWiring:
             self.overrides[edit.key] = (edit.text, edit.like)
 
     def test_each_qualifying_record_gets_its_copies_and_their_texts(self):
-        from effects.application.step_preparation import StepPreparer
+        from effects.application.lethality_augmenter import LethalityAugmenter
 
-        preparer = SimpleNamespace(
-            config=SimpleNamespace(lethality_copies=3),
-            _keywords=SimpleNamespace(keywords_of=_no_keywords), sidecars=None,
-        )
+        augmenter = LethalityAugmenter(3, _no_keywords, None)
         lethal_bolt = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         contradicted = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 9)])
         records = [lethal_bolt, contradicted]
         batcher = self._Batcher()
-        copies = StepPreparer._counterfactuals(
-            preparer, records, [derive_targets(r) for r in records], batcher)
+        copies = augmenter.copies_of(records, [derive_targets(r) for r in records], batcher)
         assert len(copies) == 3
         assert {copy.edit.key for copy in copies} == set(batcher.overrides)
         assert all(batcher.overrides[copy.edit.key] == (copy.edit.text, KEY) for copy in copies)

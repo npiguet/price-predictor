@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import random
 from dataclasses import replace
-from types import SimpleNamespace
 
-from effects.application.step_preparation import StepPreparer
+from effects.application.lethality_augmenter import LethalityAugmenter
 from effects.domain.effect_targets import derive_targets
 from effects.domain.records import Curation
 from tests.unit.effects.domain.test_lethality_counterfactuals import (
@@ -40,12 +39,8 @@ class _Batcher:
 
 
 def _copies_of(records) -> list:
-    preparer = SimpleNamespace(
-        config=SimpleNamespace(lethality_copies=2),
-        _keywords=SimpleNamespace(keywords_of=_no_keywords), sidecars=None,
-    )
-    return StepPreparer._counterfactuals(
-        preparer, records, [derive_targets(r) for r in records], _Batcher())
+    augmenter = LethalityAugmenter(2, _no_keywords, None)
+    return augmenter.copies_of(records, [derive_targets(r) for r in records], _Batcher())
 
 
 def _bolt():

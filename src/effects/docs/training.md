@@ -78,7 +78,7 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 - `--lethality-copies K` appends counterfactual copies of damage and -X/-X resolutions with the toughness and the amount redrawn and the deaths relabelled by rule 704.5f-g (`domain/lethality_counterfactuals.py`). Forge's AI aims removal at creatures it can kill, so the corpus alone rarely shows damage falling short, and the model learns "small creatures die" instead of comparing amount with toughness.
 - `K = 0` must train bit for bit as a run without the feature.
 - A copy redraws an X only where the source paid it (`source.x_paid == refs.x`): it sets `refs.x`, the source's `x_paid` and the mana of the source's `costs_paid` (the record cannot say how many `{X}` the cost has, so one is assumed: colourless mana added, or taken from the largest pools) together. An X the board computes ("damage equal to the number of creatures you control") keeps its amount and only the toughness moves. A copy's record carries no events; its labels are the copy's `targets`, so `derive_targets(copy.record)` names no outcome.
-- Copies are made for a record's first natural row of a step alone (`step_preparation._first_natural_rows`): a record's other natural rows and its added rows, which repeat its `record_id`, get none.
+- Copies are made for a record's first natural row of a step alone (`lethality_augmenter.first_natural_rows`): a record's other natural rows and its added rows, which repeat its `record_id`, get none.
 - Only natural records qualify for a copy: no fork, intervention, directed fork or synthetic record, no hit creature whose zone outcome is unknown, and no record whose hit creature a regeneration shield or a replacement of its move or destruction may save.
 
 ## Losses

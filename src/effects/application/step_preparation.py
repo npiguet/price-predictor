@@ -16,6 +16,7 @@ from pathlib import Path
 import torch
 
 from effects.application.ability_text import KeyResolver
+from effects.application.lethality_augmenter import LethalityAugmenter
 from effects.application.line_preparation import TruncationLog
 from effects.application.mlm_masking import MaskedTokens
 from effects.application.shard_plan import ShardPlan
@@ -49,14 +50,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.grid_edits import TextOverride
 from effects.domain.head_targets import HeadTargetParts
-from effects.domain.lethality_counterfactuals import (
-    BoardReading,
-    CopyMaterial,
-    counterfactual,
-    qualify,
-)
 from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import RarityCoverage, TextGames
 from effects.domain.record_head_losses import CreatedTargets, RecordHeadTargets
@@ -248,6 +242,9 @@ class StepPreparer:
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)
+        self.lethality = LethalityAugmenter(
+            self.config.lethality_copies, self._keywords.keywords_of, self.sidecars,
+        )
 
     def training_batcher(self, rng: random.Random) -> SurfaceBatcher:
         """One training step's records-to-inputs pipeline, drawing keyword
@@ -296,7 +293,7 @@ class StepPreparer:
         weights = self.rule_mask(records)
         copies = []
         if self.config.lethality_copies > 0:
-            copies = self._counterfactuals(records, targets, batcher)
+            copies = self.lethality.copies_of(records, targets, batcher)
             records = [*records, *(copy.record for copy in copies)]
             targets = [*targets, *(copy.targets for copy in copies)]
             # A lethality copy trains every output at full weight (FR-061),
@@ -342,35 +339,6 @@ class StepPreparer:
             targets=entity_target_tensors(batch.surfaces, targets, fields, weights),
             heads=self._head_targets(records, weights, batcher, batch, heads=heads),
         )
-
-    def _counterfactuals(self, records, targets, batcher) -> list:
-        """``--lethality-copies`` copies of each step record that qualifies
-        (FR-063e), drawn before the build's own draws so a run without copies
-        draws exactly as before. Only a record's first natural row is copied:
-        its other natural rows and its added rows are not (D15)."""
-        copies = []
-        first_naturals = _first_natural_rows(records)
-        for index, (record, record_targets) in enumerate(zip(records, targets)):
-            if not record.ability or index not in first_naturals:
-                continue
-            key = record.ability[0]
-            line = batcher.line_of(key)
-            qualified = qualify(record, line, record_targets,
-                                BoardReading(self._keywords.keywords_of, self.sidecars))
-            if qualified is None:
-                continue
-            for number in range(self.config.lethality_copies):
-                material = CopyMaterial(record, qualified, record_targets, line,
-                                        batcher.text_of(key))
-                copy = counterfactual(material, batcher.rng, number)
-                edit = copy.edit
-                if edit.key is not None:
-                    batcher.override_text(TextOverride(
-                        edit.key, edit.text, key,
-                        script=edit.script, role_spans=edit.role_spans,
-                    ))
-                copies.append(copy)
-        return copies
 
     def _head_targets(
         self, records, weights: list[CopyWeights], batcher, batch: PreparedBatch,
@@ -510,20 +478,6 @@ class StepPreparer:
         unresolved = dict(self.sidecars.join_gaps().unresolved - before)
         truncated, self.truncated = tuple(self.truncated), []
         yield ShardClosed(unresolved=unresolved, truncated=truncated)
-
-
-def _first_natural_rows(records: Sequence[EffectRecord]) -> frozenset[int]:
-    """The indices of each record's first natural row in a step: a natural row
-    has no drawn rule, and a record's later natural copies repeat its id (D15)."""
-    seen: set[str] = set()
-    firsts = set()
-    for index, record in enumerate(records):
-        if record.curation is not None and record.curation.is_added:
-            continue
-        if record.record_id not in seen:
-            seen.add(record.record_id)
-            firsts.add(index)
-    return frozenset(firsts)
 
 
 def stripped(batch: PreparedBatch) -> PreparedBatch:
