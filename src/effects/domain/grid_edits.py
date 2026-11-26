@@ -49,7 +49,13 @@ import numpy as np
 from effects.domain.board_edits import BoardEdit
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import derive_targets
-from effects.domain.lethality_counterfactuals import amount_edit, qualify, stated_effect
+from effects.domain.lethality_counterfactuals import (
+    AmountText,
+    BoardReading,
+    amount_edit,
+    qualify,
+    stated_effect,
+)
 from effects.domain.records import CombatPayload, PlayabilityBlockersPayload, RecordKind
 from effects.domain.rule_detectors.sba_board import game_ends
 from effects.domain.rule_outcomes import (
@@ -499,7 +505,7 @@ def damage_target(lines, keywords_of: KeywordsOf):
         line = lines.line_or_none(key)
         if line is None:
             return None
-        qualified = qualify(record, line, derive_targets(record), keywords_of, lines=lines)
+        qualified = qualify(record, line, derive_targets(record), BoardReading(keywords_of, lines))
         if not _one_text_damage_hit(qualified) or not _edits_on_both_surfaces(
                 record, qualified.effect, line, lines.prose_for(key)):
             return None
@@ -523,7 +529,7 @@ def _edits_on_both_surfaces(record, effect, line, prose: str | None) -> bool:
     alone) would leave every cell reading the real text against outcomes that
     vary by amount."""
     texts = (line.script_text, prose) if prose else (line.script_text,)
-    return all(amount_edit(record, effect, line, text, effect.amount).key is not None
+    return all(amount_edit(record, AmountText(effect, line, text), effect.amount).key is not None
                for text in texts)
 
 
@@ -542,7 +548,7 @@ def damage_cells(record, entity: str, texts: AbilityTexts) -> list[CellRead]:
     cells: list[CellRead] = []
     for amount in VALUES:
         edit = None if effect is None else amount_edit(
-            record, effect, line, texts.text_of(key), amount)
+            record, AmountText(effect, line, texts.text_of(key)), amount)
         overrides: tuple[TextOverride, ...] = ()
         if edit is not None and edit.key is not None:
             overrides = (TextOverride(edit.key, edit.text, key, script=edit.script,

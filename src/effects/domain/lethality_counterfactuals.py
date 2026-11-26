@@ -211,6 +211,48 @@ class Counterfactual:
     edit: TextEdit
 
 
+@dataclass(frozen=True)
+class BoardReading:
+    """What :func:`qualify` reads the board through beside the record.
+
+    ``keywords_of(entity)`` names a card's keywords. ``lines`` reads the
+    sidecars of the board's replacements and floating effects: a death a
+    regeneration shield or a replacement may turn is refused (P3a #14).
+    Without it they are not read.
+    """
+
+    keywords_of: KeywordsOf
+    lines: SidecarLookup | None = None
+
+
+@dataclass(frozen=True)
+class AmountText:
+    """Where a copy edits the amount: the chain's stated effect, its acting
+    line, and the text the run encodes that line from (None or empty where
+    it encodes none)."""
+
+    effect: StatedEffect
+    line: SidecarLine
+    text: str | None
+
+
+@dataclass(frozen=True)
+class CopyMaterial:
+    """What a record's copies are made from: the record, its qualification,
+    its targets, its acting line and the text the run encodes that line from."""
+
+    record: EffectRecord
+    qualified: Qualified
+    targets: dict[str, EntityTargets]
+    line: SidecarLine
+    text: str | None
+
+    @property
+    def amount_text(self) -> AmountText:
+        """Where a copy of a literal amount edits it."""
+        return AmountText(self.qualified.effect, self.line, self.text)
+
+
 def _blocked(found: dict[str, str]) -> bool:
     for key, value in found.items():
         if key in BLOCKED_PARAMS or key.startswith(BLOCKED_PREFIXES):
@@ -371,14 +413,12 @@ def _death_obeys_the_rule(entity: EntityState, entry: EntityTargets, found: Stat
 
 
 def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, EntityTargets],
-            keywords_of: KeywordsOf, *, lines: SidecarLookup | None = None) -> Qualified | None:
-    """``record`` as copy material, or None. ``keywords_of(entity)`` names its keywords.
+            reading: BoardReading) -> Qualified | None:
+    """``record`` as copy material, or None; ``reading`` reads the board's
+    keywords and, where it carries them, the sidecars (:class:`BoardReading`).
 
     Only natural records qualify, as for the other two derivations: no fork,
-    intervention, directed fork or other synthetic record. ``lines`` reads
-    the sidecars of the board's replacements and floating effects: a death a
-    regeneration shield or a replacement may turn is refused (P3a #14).
-    Without it they are not read.
+    intervention, directed fork or other synthetic record.
     """
     if not _natural_resolution(record):
         return None
@@ -387,11 +427,11 @@ def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, E
     found = stated_effect(line, record)
     if found is None:
         return None
-    hits = _subjects_hit(record.state, targets, found, keywords_of)
+    hits = _subjects_hit(record.state, targets, found, reading.keywords_of)
     if hits is None or not hits[0]:
         return None
     hit, hit_players = hits
-    if _death_read_as_replaced(record.state, hit, lines):
+    if _death_read_as_replaced(record.state, hit, reading.lines):
         return None
     return Qualified(effect=found, hit=tuple(hit), players=tuple(hit_players))
 
@@ -572,13 +612,13 @@ def _relabel(entry: EntityTargets, effect: StatedEffect, amount: int, dies: bool
     return replace(entry, affected=True, fields=fields)
 
 
-def amount_edit(record: EffectRecord, effect: StatedEffect, line: SidecarLine,
-                 text: str | None, drawn: int) -> TextEdit:
+def amount_edit(record: EffectRecord, stated: AmountText, drawn: int) -> TextEdit:
     """A literal amount set to ``drawn`` in the script and the encoded text,
     both or neither, so the text never disagrees with the labels."""
-    found = _edited_reading(text, line, effect, drawn) if text else None
+    text = stated.text
+    found = _edited_reading(text, stated.line, stated.effect, drawn) if text else None
     if found is None:
-        return TextEdit(effect.amount)
+        return TextEdit(stated.effect.amount)
     edited, script, spans = found
     original = record.ability[0]
     # A tree of its own, so the edited text never shares a key with the real line's.
@@ -660,17 +700,18 @@ def _relabelled_targets(targets: dict[str, EntityTargets], qualified: Qualified,
     return relabelled
 
 
-def counterfactual(record: EffectRecord, qualified: Qualified,
-                   targets: dict[str, EntityTargets], line: SidecarLine, text: str | None,
-                   rng: random.Random, copy: int) -> Counterfactual:
-    """One copy of ``record``: a new amount, a new toughness on one hit creature,
-    and every creature and player the amount hit relabelled by the rule.
+def counterfactual(material: CopyMaterial, rng: random.Random, copy: int) -> Counterfactual:
+    """Copy number ``copy`` of ``material.record``: a new amount, a new
+    toughness on one hit creature, and every creature and player the amount
+    hit relabelled by the rule.
 
-    ``text`` is what the run encodes ``line`` from. A literal amount is edited
-    in the text under a key of its own, a paid X in the references; where the
-    text names neither, or the X is one the board computes, only the toughness
-    moves. The copy's record carries no events: its labels are ``targets``.
+    ``material.text`` is what the run encodes ``material.line`` from. A
+    literal amount is edited in the text under a key of its own, a paid X in
+    the references; where the text names neither, or the X is one the board
+    computes, only the toughness moves. The copy's record carries no events:
+    its labels are ``targets``.
     """
+    record, qualified = material.record, material.qualified
     low, high = DRAW_RANGE
     drawn = rng.randint(low, high)
     chosen = rng.choice(qualified.hit)
@@ -684,7 +725,7 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
     elif stated is Stated.COMPUTED:
         edit = TextEdit(qualified.effect.amount)
     else:
-        edit = amount_edit(record, qualified.effect, line, text, drawn)
+        edit = amount_edit(record, material.amount_text, drawn)
     copied = replace(
         record,
         record_id=f"{record.record_id}~cf{copy}",
@@ -694,6 +735,6 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
     )
     return Counterfactual(
         record=copied,
-        targets=_relabelled_targets(targets, qualified, edit.amount, entities),
+        targets=_relabelled_targets(material.targets, qualified, edit.amount, entities),
         edit=edit,
     )

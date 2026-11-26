@@ -11,6 +11,7 @@ import random
 from dataclasses import replace
 
 from effects.domain.effect_targets import derive_targets
+from effects.domain.lethality_counterfactuals import CopyMaterial
 from effects.domain.state_snapshot import CostsPaid
 from tests.unit.effects.domain.test_lethality_counterfactuals import (
     BOLT,
@@ -37,8 +38,9 @@ def _paid_x_record(mana: dict[str, int]):
 
 def _copies(record, count=40):
     qualified = _qualify(record, X_BOLT)
-    return [counterfactual(record, qualified, derive_targets(record), _line(X_BOLT), X_BOLT,
-                           random.Random(seed), 0) for seed in range(count)]
+    return [counterfactual(CopyMaterial(record, qualified, derive_targets(record),
+                                        _line(X_BOLT), X_BOLT), random.Random(seed), 0)
+            for seed in range(count)]
 
 
 def test_a_redrawn_paid_x_rewrites_the_total_mana_the_source_paid():

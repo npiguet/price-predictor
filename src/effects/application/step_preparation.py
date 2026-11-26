@@ -48,7 +48,12 @@ from effects.domain.effect_head_layout import (
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.head_targets import HeadTargetParts
-from effects.domain.lethality_counterfactuals import counterfactual, qualify
+from effects.domain.lethality_counterfactuals import (
+    BoardReading,
+    CopyMaterial,
+    counterfactual,
+    qualify,
+)
 from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import RarityCoverage, TextGames
 from effects.domain.record_head_losses import CreatedTargets, RecordHeadTargets
@@ -362,15 +367,14 @@ class StepPreparer:
                 continue
             key = record.ability[0]
             line = batcher.line_of(key)
-            qualified = qualify(record, line, record_targets, self._keywords.keywords_of,
-                                lines=self.sidecars)
+            qualified = qualify(record, line, record_targets,
+                                BoardReading(self._keywords.keywords_of, self.sidecars))
             if qualified is None:
                 continue
             for number in range(self.config.lethality_copies):
-                copy = counterfactual(
-                    record, qualified, record_targets, line, batcher.text_of(key),
-                    batcher.rng, number,
-                )
+                material = CopyMaterial(record, qualified, record_targets, line,
+                                        batcher.text_of(key))
+                copy = counterfactual(material, batcher.rng, number)
                 edit = copy.edit
                 if edit.key is not None:
                     batcher.override_text(

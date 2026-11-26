@@ -19,6 +19,8 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (
     SOURCE_EXCLUSIONS,
+    BoardReading,
+    CopyMaterial,
     EffectKind,
     counterfactual,
     edit_text,
@@ -89,7 +91,7 @@ def _no_keywords(entity) -> set[str]:
 
 
 def _qualify(record, text=BOLT, keywords_of=_no_keywords):
-    return qualify(record, _line(text), derive_targets(record), keywords_of)
+    return qualify(record, _line(text), derive_targets(record), BoardReading(keywords_of))
 
 
 class TestTheRule:
@@ -212,19 +214,19 @@ class TestQualify:
                 return _line(text[key]) if key in text else None
 
         record = _record([_damage("E1", 3)], [_creature("E1", 5)])
-        assert qualify(record, _line(BOLT), derive_targets(record), _no_keywords,
-                       lines=Lines()) is not None
+        assert qualify(record, _line(BOLT), derive_targets(record),
+                       BoardReading(_no_keywords, Lines())) is not None
         shield = CommandZoneObject(id="E50", source_lines=(regen_key,), affected=("E1",))
         shielded = replace(record, state=replace(record.state, global_=replace(
             record.state.global_, floating_effects=(shield,))))
-        assert qualify(shielded, _line(BOLT), derive_targets(shielded), _no_keywords,
-                       lines=Lines()) is None
+        assert qualify(shielded, _line(BOLT), derive_targets(shielded),
+                       BoardReading(_no_keywords, Lines())) is None
         rip = make_entity("R1", "rest in peace", types=("enchantment",), lines=(
             CardLine(keys=(rip_key,), kind="replacement", granted=False),))
         exiling = replace(record, state=replace(
             record.state, entities=(*record.state.entities, rip)))
-        assert qualify(exiling, _line(BOLT), derive_targets(exiling), _no_keywords,
-                       lines=Lines()) is None
+        assert qualify(exiling, _line(BOLT), derive_targets(exiling),
+                       BoardReading(_no_keywords, Lines())) is None
 
     def test_an_aura_no_longer_on_the_battlefield_is_no_attachment(self):
         """A last-known copy (no zone) of an Aura or a phased-out one attaches
@@ -275,7 +277,8 @@ class TestCopies:
         rng = random.Random(7)
         outcomes = set()
         for number in range(200):
-            copy = counterfactual(record, qualified, targets, _line(BOLT), BOLT, rng, number)
+            material = CopyMaterial(record, qualified, targets, _line(BOLT), BOLT)
+            copy = counterfactual(material, rng, number)
             amount = int(copy.edit.text.split("NumDmg$ ")[1].split()[0])
             creature = copy.record.state.entity("E1")
             fields = copy.targets["E1"].fields
@@ -288,8 +291,8 @@ class TestCopies:
 
     def test_a_copy_reads_its_text_under_a_key_of_its_own(self):
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
-                              random.Random(1), 0)
+        copy = counterfactual(CopyMaterial(record, _qualify(record), derive_targets(record),
+                                           _line(BOLT), BOLT), random.Random(1), 0)
         assert copy.edit.key.tree == SourceTree.COUNTERFACTUAL
         assert copy.record.ability == (copy.edit.key,)
         assert copy.record.record_id == "r.0-0.1~cf0"
@@ -301,8 +304,8 @@ class TestCopies:
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
         for seed in range(6):
-            copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
-                                  random.Random(seed), 0)
+            copy = counterfactual(CopyMaterial(record, qualified, derive_targets(record),
+                                               _line(text), text), random.Random(seed), 0)
             assert copy.edit.key is None and copy.edit.text is None
             x = copy.record.state.refs.x
             assert copy.targets["E1"].fields["damage_taken"] == x
@@ -318,8 +321,8 @@ class TestCopies:
         assert qualified.effect.stated == "computed"
         toughnesses = set()
         for seed in range(30):
-            copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
-                                  random.Random(seed), 0)
+            copy = counterfactual(CopyMaterial(record, qualified, derive_targets(record),
+                                               _line(text), text), random.Random(seed), 0)
             assert copy.record.state.refs.x == copy.edit.amount == 4
             assert copy.edit.key is None
             assert copy.record.state.entity("S1").x_paid is None
@@ -332,8 +335,8 @@ class TestCopies:
     def test_a_player_s_life_follows_the_amount(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
         record = _record([_damage("E1", 3), _died("E1"), life], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
-                              random.Random(5), 0)
+        copy = counterfactual(CopyMaterial(record, _qualify(record), derive_targets(record),
+                                           _line(BOLT), BOLT), random.Random(5), 0)
         assert copy.targets["P1"].fields["life_delta"] == -copy.targets["E1"].fields[
             "damage_taken"]
 
@@ -352,8 +355,8 @@ class TestTheProseSurface:
 
     def test_a_copy_edits_the_amount_in_the_prose_and_the_script_alike(self):
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record),
-                              _line(BOLT), self.PROSE, random.Random(1), 0)
+        copy = counterfactual(CopyMaterial(record, _qualify(record), derive_targets(record),
+                                           _line(BOLT), self.PROSE), random.Random(1), 0)
         amount = copy.targets["E1"].fields["damage_taken"]
         assert copy.edit.text == f"cardname deals {int(amount)} damage to target creature."
         assert f"NumDmg$ {int(amount)}" in copy.edit.script
@@ -361,8 +364,8 @@ class TestTheProseSurface:
     def test_prose_naming_no_amount_keeps_the_amount_and_moves_the_toughness(self):
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         prose = "cardname deals damage to target creature."
-        copy = counterfactual(record, _qualify(record), derive_targets(record),
-                              _line(BOLT), prose, random.Random(1), 0)
+        copy = counterfactual(CopyMaterial(record, _qualify(record), derive_targets(record),
+                                           _line(BOLT), prose), random.Random(1), 0)
         assert copy.edit.key is None
         assert copy.targets["E1"].fields["damage_taken"] == 3.0
 
@@ -374,10 +377,9 @@ class TestTheProseSurface:
         prose = "cardname deals 10 damage to target creature."
         target = prose.index("target")
         spans = (RoleSpan(0, target, "effect"), RoleSpan(target, len(prose), "target-spec"))
-        copy = counterfactual(
+        copy = counterfactual(CopyMaterial(
             record, _qualify(record, script), derive_targets(record),
-            _line(script, spans), prose, random.Random(1), 0,
-        )
+            _line(script, spans), prose), random.Random(1), 0)
         moved = copy.edit.text.index("target")
         assert [(s.start, s.end) for s in copy.edit.role_spans] == [
             (0, moved), (moved, len(copy.edit.text)),
@@ -431,13 +433,11 @@ class TestThePinnedOutput:
         targets = derive_targets(record)
         before = {subject: replace(entry, fields=dict(entry.fields))
                   for subject, entry in targets.items()}
-        qualified = qualify(record, line, targets, _no_keywords)
+        qualified = qualify(record, line, targets, BoardReading(_no_keywords))
         assert qualified is not None
         rng = random.Random(seed)
-        out = [
-            self._summary(record, counterfactual(record, qualified, targets, line, text, rng, n))
-            for n in range(3)
-        ]
+        material = CopyMaterial(record, qualified, targets, line, text)
+        out = [self._summary(record, counterfactual(material, rng, n)) for n in range(3)]
         assert targets == before
         return out
 
