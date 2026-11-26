@@ -21,6 +21,7 @@ from effects.application.identity_table import (
     IDENTITY_TABLE_KEY as IDENTITY_TABLE_KEY,  # re-exported: where importers look for it
 )
 from effects.application.identity_table import IdentityTable
+from effects.application.input_masking import apply_masks
 from effects.application.mlm_masking import MaskedTokens, MlmMasker
 from effects.application.noise_state import NoiseState
 from effects.application.text_resolution import StagedLines, TextResolution
@@ -34,7 +35,7 @@ from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
 from effects.domain.grid_edits import TextOverride
-from effects.domain.input_layout import ACT_SLOT, KIND_FLAG_WIDTH, SlotKind
+from effects.domain.input_layout import SlotKind
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
 from effects.domain.slot_lines import slot_lines
@@ -276,9 +277,14 @@ class SurfaceBatcher:
         """The lines of ``record``'s board, and the modes that follow each."""
         for entity in board_entities(record):
             for line in slot_lines(entity, self.board_keys):
-                if self._note(found, line.key) is not None:
-                    for mode in self.options_for(line.key):
-                        self._note(found, mode)
+                self._note_with_modes(found, line.key)
+
+    def _note_with_modes(self, found: BatchLines, key) -> None:
+        """``key``'s text into ``found``, then its charm modes' where it has one."""
+        if self._note(found, key) is None:
+            return
+        for mode in self.options_for(key):
+            self._note(found, mode)
 
     def _note(self, found: BatchLines, key) -> str | None:
         """``key``'s text into ``found``, with its line; None for a key that
@@ -351,40 +357,10 @@ class SurfaceBatcher:
         strips = strip_per_record or [NO_STRIP] * len(records)
         builder = self.surface_builder(staged.rows)
         surfaces = [builder.build(record, strip) for record, strip in zip(records, strips)]
-        inputs = self._masked(collate_surfaces(
+        inputs = apply_masks(collate_surfaces(
             surfaces, e_dim=self.spec.e_dim, widths=self.spec.widths,
-        ))
+        ), self.spec.masks)
         return PreparedBatch(
             texts=texts, staged=staged, surfaces=surfaces, inputs=inputs,
             value_lines=found.value_lines(),
         )
-
-    def _masked(self, inputs: TrunkInputs) -> TrunkInputs:
-        """The collated inputs with the variant's masks applied (FR-094),
-        zeroed rather than dropped so the per-entity targets keep their shape."""
-        masks = self.spec.masks
-        features = inputs.slot_features
-        if masks.zero_state:
-            for kind in (SlotKind.PLAYER, SlotKind.CARD, SlotKind.ABILITY):
-                if kind in features:
-                    features[kind] = torch.zeros_like(features[kind])
-            features[SlotKind.GLOBAL][..., :-KIND_FLAG_WIDTH] = 0.0
-            # A card's subtypes and counters are card features too.
-            inputs = dataclasses.replace(inputs, **{
-                name: torch.zeros_like(getattr(inputs, name))
-                for name in ("subtype_ids", "chosen_type_ids", "real_face_subtype_ids",
-                             "counter_ids", "counter_counts")
-                if getattr(inputs, name) is not None
-            })
-            # The board's links are state too: no-state reads none.
-            if inputs.relations is not None:
-                inputs = dataclasses.replace(inputs, relations=inputs.relations[:0])
-        if masks.zero_act_e or masks.zero_context_e:
-            zeroed = torch.full(
-                (inputs.e_rows.shape[1],), masks.zero_context_e, dtype=torch.bool,
-            )
-            if zeroed.numel() > ACT_SLOT:
-                zeroed[ACT_SLOT] = masks.zero_act_e
-            inputs.e_rows[:, zeroed] = -1
-            inputs.e_vectors[:, zeroed] = 0.0
-        return inputs

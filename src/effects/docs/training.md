@@ -60,9 +60,9 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 
 ## One batching pipeline
 
-- `application/surface_batching.py` turns records into the trunk's inputs (`TrunkInputs`), and the trainer and gate 1's evaluator both go through it. They must agree exactly.
-- The encoding text has one definition, `SurfaceBatcher.text_of`. With two, one caller keys a batch's encodings by prose and the other looks them up by script: the effect head trains on an all-zero `e`, every loss still falls, and the four evaluation baselines come out identical to the shipping model.
-- The variant masks have one definition, `SurfaceBatcher._masked`. They are the whole difference between a baseline and the model gate 1 compares it against.
+- `application/surface_batching.py` turns records into the trunk's inputs (`TrunkInputs`), and the trainer and gate 1's evaluator both go through it. They must agree exactly. The noise on `e` (`NoiseState`, `noise_state.py`) and the `identity` baseline's table (`IdentityTable`, `identity_table.py`) are modules of their own that `surface_batching` re-exports.
+- The encoding text has one definition, `TextResolution.text_of` (`application/text_resolution.py`, which the batcher holds and `SurfaceBatcher.text_of` asks). With two, one caller keys a batch's encodings by prose and the other looks them up by script: the effect head trains on an all-zero `e`, every loss still falls, and the four evaluation baselines come out identical to the shipping model.
+- The variant masks have one definition, `input_masking.apply_masks`. They are the whole difference between a baseline and the model gate 1 compares it against.
   - `state-only` zeroes every `e`, `[ACT]`'s included.
   - `no-state` zeroes the context abilities' `e` but keeps `[ACT]`'s, and zeroes every card and player feature and every `[GLOBAL]` input except the trailing record-kind, moment and subkind one-hots (`KIND_FLAG_WIDTH`). The average-effect control sees which ability acts and what kind of record it is, and nothing of the board.
   - The masks zero inputs and never drop slots, so the per-entity targets keep their shape.
