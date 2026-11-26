@@ -42,8 +42,10 @@ final class CombatEntryAndSearchApiRules {
      * {@code ChangeZoneEffect} alone), so a count that moved is a search,
      * which no bus event announces; written as a look at that library named
      * {@value BusEvents#SEARCHED_LIBRARY}, Forge's trigger mode for it, so a
-     * search reads apart from a scry and a surveil. A search of another
-     * player's library is not counted by Forge and reaches no event. One
+     * search reads apart from a scry and a surveil. A search whose
+     * chooser is not the library's owner is not counted by Forge: {@link
+     * UncountedSearches} reads it from the clause, and its event names the
+     * library's owner. One
      * event per clause: a clause that both searched and put its card in
      * attacking reports the attack.
      */
@@ -52,7 +54,7 @@ final class CombatEntryAndSearchApiRules {
                         (sa, host, before) -> enteredCombat(host, before)),
                 "Token", "CopyPermanent", "ChangeZoneAll");
         put(rules, Rule.one(EventType.STATE_FLAG_CHANGE, CombatEntryAndSearchApiRules::beforeChangeZone,
-                        (sa, host, before) -> changedZone(host, before)),
+                        (sa, host, before) -> changedZone(sa, host, before)),
                 "ChangeZone");
         put(rules, Rule.one(EventType.BECAME_BLOCKED, CombatEntryAndSearchApiRules::unblockedAttackers,
                         (sa, host, before) -> becameBlocked(host, before)),
@@ -97,7 +99,8 @@ final class CombatEntryAndSearchApiRules {
     }
 
     /** What a zone change is read against: the combatants and every player's searches. */
-    private record BeforeChangeZone(Set<Integer> combatants, Map<Player, Integer> searches) {
+    private record BeforeChangeZone(
+            Set<Integer> combatants, Map<Player, Integer> searches, Map<Player, Integer> uncounted) {
     }
 
     private static BeforeChangeZone beforeChangeZone(SpellAbility sa, Card host) {
@@ -105,10 +108,10 @@ final class CombatEntryAndSearchApiRules {
         for (Player player : host.getGame().getPlayers()) {
             searches.put(player, player.getLibrarySearched());
         }
-        return new BeforeChangeZone(combatants(sa, host), searches);
+        return new BeforeChangeZone(combatants(sa, host), searches, UncountedSearches.before(sa, host));
     }
 
-    private static Optional<EffectEvent> changedZone(Card host, BeforeChangeZone before) {
+    private static Optional<EffectEvent> changedZone(SpellAbility sa, Card host, BeforeChangeZone before) {
         if (before == null) {
             return Optional.empty();
         }
@@ -124,6 +127,7 @@ final class CombatEntryAndSearchApiRules {
                 searched.subject(Refs.of(player));
             }
         });
+        UncountedSearches.happened(sa, before.uncounted()).forEach(owner -> searched.subject(Refs.of(owner)));
         return searched.subjects().isEmpty() ? Optional.empty() : Optional.of(searched);
     }
 
