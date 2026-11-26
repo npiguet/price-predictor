@@ -15,6 +15,7 @@ from effects.domain.lethality_counterfactuals import CopyMaterial
 from effects.domain.state_snapshot import CostsPaid
 from tests.unit.effects.domain.test_lethality_counterfactuals import (
     BOLT,
+    Scene,
     _creature,
     _damage,
     _died,
@@ -28,7 +29,8 @@ X_BOLT = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
 
 
 def _paid_x_record(mana: dict[str, int]):
-    record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4, source_x_paid=4)
+    record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)],
+                     scene=Scene(x=4, source_x_paid=4))
     state = record.state
     entities = tuple(
         replace(e, costs_paid=CostsPaid(mana=mana)) if e.id == "S1" else e
