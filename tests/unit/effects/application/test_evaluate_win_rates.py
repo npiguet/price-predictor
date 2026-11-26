@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from effects.application.evaluation_context import EvaluateEffectModelConfig
-from effects.domain.evaluation_report import EvaluationReport
 from effects.infrastructure.cli import build_parser
 from tests.unit.effects.cli_args import cli_args
 from tests.unit.effects.configs import evaluation_config
@@ -21,9 +20,9 @@ from tests.unit.effects.domain.test_corpus_manifest import manifest
 def _config_from(argv, monkeypatch) -> EvaluateEffectModelConfig:
     seen = {}
 
-    def fake_run(config):
+    def fake_run(config, report):
         seen["config"] = config
-        return EvaluationReport()
+        return report
 
     monkeypatch.setattr("effects.application.evaluate_effect_model.run", fake_run)
     args = build_parser().parse_args(cli_args(["evaluate-effect-model", *argv]))
