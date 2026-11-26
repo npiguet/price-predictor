@@ -15,7 +15,6 @@ once at startup.
 from __future__ import annotations
 
 import logging
-import random
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
@@ -26,7 +25,7 @@ import torch
 
 from effects.application.control_score import FrozenSelection
 from effects.application.denominator_pass import denominator_shards, loss_denominators
-from effects.application.resume_state import restore_resume, save_resume
+from effects.application.resume_state import restore_resume, run_seed, save_resume
 from effects.application.run_context import (
     RunContext,
     build_run,
@@ -193,8 +192,7 @@ class TrainingLoop:
         self.validation_samples = dict(validation_samples)
         self.spec = RunSpec(
             config, facts,
-            config.seed if config.seed is not None
-            else random.SystemRandom().getrandbits(32),
+            run_seed(config),
             tokenizer_hashes,
         )
         torch.manual_seed(self.spec.seed)
@@ -257,7 +255,19 @@ class TrainingLoop:
         finally:
             if run.pool is not None:
                 run.pool.close()
-        return 0
+        return self._exit_code(run)
+
+    def _exit_code(self, run: RunContext) -> int:
+        """1 when no epoch set a best control score, so no checkpoint was
+        written for this run's objective; ``resume.pt`` stays for a resume."""
+        if run.stopper.best_score is not None:
+            return 0
+        logger.error(
+            "The run ended with no best epoch: no epoch past warmup's end (step "
+            "%d of %d) had a finite control score, so no checkpoint was written "
+            "for the current field set. Train longer, or resume.", run.step, run.warmup,
+        )
+        return 1
 
     def _cap_cuda_memory(self) -> None:
         if self.is_cuda:

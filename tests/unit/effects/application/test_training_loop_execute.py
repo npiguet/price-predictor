@@ -176,3 +176,31 @@ def test_the_best_control_score_epoch_is_the_one_checkpoint_and_patience_counts_
     # Epochs 3 and 4 set no best: patience 2 stops the run before epoch 5.
     assert last["epoch"] == 4
     assert last["stopper"]["since_best"] == 2
+
+
+def test_a_run_with_no_best_epoch_logs_an_error_and_exits_1(
+    tmp_path, make_record, monkeypatch, caplog,
+):
+    combat = [make_record(record_id=f"r{i}", game_id=f"g{i % 2}",
+                          kind=RecordKind.COMBAT, payload=CombatPayload())
+              for i in range(8)]
+    shard = tmp_path / "train.jsonl.gz"
+    write_shard(shard, combat)
+    samples = write_validation_samples(tmp_path, combat[:2])
+    model, _encoder = stub_below_the_loop(monkeypatch)
+    monkeypatch.setattr(
+        StepPreparer, "prepare_training_step",
+        lambda self, plan, *a, fields=None, **k: ({"fields": fields}, 0),
+    )
+    config = TrainEffectModelConfig.unpathed(
+        corpus=str(tmp_path), epochs=2, curriculum_epoch=1, steps_per_epoch=2,
+        shards_per_epoch=1, batch_size=2, seed=7, model_output=tmp_path / "out",
+        prefetch_workers=0,
+    )
+    loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
+    loop.losses = StubLosses(lambda prepared: model.p.sum())
+    stub_validator(loop, controls=[float("nan"), float("nan")])
+
+    assert loop.execute() == 1
+    assert "no best epoch" in caplog.text
+    assert (tmp_path / "out" / "resume.pt").exists()

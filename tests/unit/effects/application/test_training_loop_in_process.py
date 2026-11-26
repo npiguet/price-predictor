@@ -107,7 +107,7 @@ def epoch(tmp_path, make_record, monkeypatch):
             ]),
         )
         config = TrainEffectModelConfig.unpathed(
-            corpus=str(tmp_path), epochs=1, steps_per_epoch=SHARDS,
+            corpus=str(tmp_path), epochs=1, curriculum_epoch=1, steps_per_epoch=SHARDS,
             shards_per_epoch=SHARDS, batch_size=2, seed=SEED,
             model_output=tmp_path / "out", prefetch_workers=0,
         )

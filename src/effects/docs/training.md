@@ -16,6 +16,10 @@ Rules to respect when running or changing `train-effect-model`. Each says what m
 - `--keyword-definitions` must name a file, and its sha256 must equal the corpus manifest's `keyword_definitions_digest` (`application/tokenizer_inputs.py`, `KeywordDefinitionsError`, exit 1 before any step); a manifest with no digest was built without a table and is warned of, not refused. The vocabulary and keyword hashes are taken there once and ride on the `RunSpec` into every save.
 - The sampling classes that fix every epoch's field set are those the manifest's `per_class` counts training records of (`CorpusFacts.trained_classes`, read by `run_context.epoch_fields`), never those the validation samples hold: a class a sample happened to miss would leave the fields only it supervises untrained for the whole run. A class the manifest counts no training record of is warned at startup, naming the manifest (`warn_untrained_classes`).
 - A corpus with no frozen selection set stops the run at startup (`SelectionSetError`). Freezing one: `evaluation.md`.
+- The flags are checked when the config is built, before the corpus, the tokenizer or the denominators are touched (`train_effect_model.require_runnable_schedule`, a `ValueError` logged by the CLI, exit 1): `--grad-accum`, `--batch-size`, `--steps-per-epoch` and `--epochs` below 1, a negative or NaN `--lr-scale`, and a `--curriculum-epoch` above `--epochs` (the sparse group would never train).
+- A resume without `--seed` takes the seed `resume.pt` records (`resume_state.run_seed`), logged and written to `run.json` as any seed; with `--seed` given and different it is the usual settings mismatch (`ResumeMismatchError`, exit 1).
+- A run that ends with no best epoch (every epoch ended before warmup's end, or every control score was NaN, or the curriculum switch reset the best and no epoch after it set one) logs an error and exits 1; `resume.pt` stays on disk.
+- The epoch summary line's numbers may be negative (worse than the constant) or `nan`/`inf`; `training_log.parse_epoch_summaries` keeps those epochs. The `epoch N | non-finite readings: ...` line is no summary.
 
 ## Sampling
 

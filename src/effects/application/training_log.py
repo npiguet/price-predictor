@@ -75,12 +75,15 @@ def format_terms(terms: Mapping[str, float]) -> str:
     return f"\n  heads: {body}"
 
 
+#: A logged number: negative when worse than the constant, ``nan`` or ``inf``
+#: when a loss blew up. Every one is an epoch the plots must keep.
+_NUMBER = r"-?(?:[\d.]+|nan|inf)"
 _EPOCH_LINE = re.compile(
-    r"epoch (\d+) \| train ([\d.]+) \| card-disjoint ([\d.]+) \| "
-    r"game-disjoint ([\d.]+) \| gate F1 ([\d.]+) \| zone acc ([\d.]+) \| "
-    r"deviance ([\d.]+)"
+    rf"epoch (\d+) \| train ({_NUMBER}) \| card-disjoint ({_NUMBER}) \| "
+    rf"game-disjoint ({_NUMBER}) \| gate F1 ({_NUMBER}) \| zone acc ({_NUMBER}) \| "
+    rf"deviance ({_NUMBER})"
 )
-_FIELD_ITEM = re.compile(r"(\w+) ([\d.]+) \((-?\d+%|n/a)\)")
+_FIELD_ITEM = re.compile(rf"(\w+) ({_NUMBER}) \((-?\d+%|n/a)\)")
 
 
 @dataclass(frozen=True)

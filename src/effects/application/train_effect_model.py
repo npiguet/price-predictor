@@ -95,6 +95,28 @@ def on_off(value: str) -> str:
     return value
 
 
+def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
+    """Refuse the flags no run can train with, before any start-up work: a
+    count below one fails minutes in (or writes nothing), a negative
+    ``--lr-scale`` ascends, and a ``--curriculum-epoch`` past ``--epochs``
+    never trains the sparse group."""
+    for name in ("grad_accum", "batch_size", "steps_per_epoch", "epochs"):
+        if getattr(config, name) < 1:
+            raise ValueError(
+                f"--{name.replace('_', '-')} must be at least 1, got {getattr(config, name)}."
+            )
+    if not config.lr_scale >= 0:
+        raise ValueError(
+            f"--lr-scale must not be negative, got {config.lr_scale}: a negative "
+            "factor makes the optimizer ascend."
+        )
+    if config.curriculum_epoch > config.epochs:
+        raise ValueError(
+            f"--curriculum-epoch {config.curriculum_epoch} is above --epochs "
+            f"{config.epochs}: the sparse field group would never train."
+        )
+
+
 @dataclass
 class TrainEffectModelConfig:
     """The trainer's flag surface (contracts/cli.md § train-effect-model).
@@ -218,6 +240,7 @@ class TrainEffectModelConfig:
     )})
 
     def __post_init__(self) -> None:
+        require_runnable_schedule(self)
         # Imported here because the encoder module loads torch (FR-062).
         from effects.domain.ability_encoder import ENCODER_N_HEADS
 

@@ -3,6 +3,8 @@ reading the epoch summaries back."""
 
 from __future__ import annotations
 
+import math
+
 from effects.application.step_preparation import NO_TEXT_BUCKET
 from effects.application.training_log import (
     format_floor,
@@ -114,5 +116,28 @@ class TestEpochSummaries:
 
     def test_a_shard_line_is_not_an_epoch_summary(self) -> None:
         line = "epoch 3 | shard 1/40 a.jsonl.gz | 2000 records | 50 steps | loss 4.1000"
+
+        assert parse_epoch_summaries([line]) == []
+
+
+class TestEpochSummariesOfBadEpochs:
+    """An epoch worse than the constant or with a NaN loss is still an epoch."""
+
+    def test_a_negative_deviance_is_kept(self) -> None:
+        line = _epoch_line(1, 3.0).replace("deviance 0.014", "deviance -0.123")
+
+        [summary] = parse_epoch_summaries([line])
+
+        assert summary.deviance == -0.123
+
+    def test_a_nan_loss_is_kept(self) -> None:
+        line = _epoch_line(2, 3.0).replace("game-disjoint 2.6789", "game-disjoint nan")
+
+        [summary] = parse_epoch_summaries([line])
+
+        assert summary.epoch == 2 and math.isnan(summary.game_disjoint)
+
+    def test_the_non_finite_readings_line_is_not_a_summary(self) -> None:
+        line = "epoch 3 | non-finite readings: card-disjoint 0 | game-disjoint 3"
 
         assert parse_epoch_summaries([line]) == []

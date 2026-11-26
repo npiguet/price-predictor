@@ -126,3 +126,19 @@ def test_a_resume_against_another_shard_listing_is_a_mismatch():
     assert resume_mismatches(saved, settings("listing-a")) == []
     mismatches = resume_mismatches(saved, settings("listing-b"))
     assert [line.split(":")[0] for line in mismatches] == ["corpus_shards_digest"]
+
+
+def test_a_resume_without_a_seed_takes_the_one_the_resume_file_holds(tmp_path, monkeypatch):
+    from effects.application import resume_state
+
+    monkeypatch.setattr(resume_state, "load_resume_state", lambda d: {"settings": {"seed": 99}})
+    config = TrainEffectModelConfig.unpathed(resume=True, model_output=tmp_path)
+    assert resume_state.run_seed(config) == 99
+    assert resume_state.run_seed(replace(config, seed=5)) == 5
+
+
+def test_a_fresh_run_without_a_seed_draws_one(tmp_path):
+    from effects.application import resume_state
+
+    config = TrainEffectModelConfig.unpathed(model_output=tmp_path)
+    assert isinstance(resume_state.run_seed(config), int)

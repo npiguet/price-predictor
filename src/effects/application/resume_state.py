@@ -8,6 +8,7 @@ under different settings is refused.
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import fields
 from typing import TYPE_CHECKING
 
@@ -46,6 +47,18 @@ RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
     "vocab_path", "keyword_definitions", "reports_dir",
 })
+
+
+def run_seed(config: TrainEffectModelConfig) -> int:
+    """The seed every draw of the run uses: ``--seed``; else, on a resume, the
+    one ``resume.pt`` records (a resume compares it, so a drawn one could never
+    match); else one drawn from the OS."""
+    if config.seed is not None:
+        return config.seed
+    if config.resume:
+        state = load_resume_state(config.resolved_model_output())
+        return state["settings"]["seed"]
+    return random.SystemRandom().getrandbits(32)
 
 
 def compared_flags() -> tuple[str, ...]:

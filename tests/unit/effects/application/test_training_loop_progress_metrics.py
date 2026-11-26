@@ -78,7 +78,7 @@ def scored(corpus, records, tmp_path_factory):
         )
         loop = make_training_loop(
             fixture_training_config(
-                corpus, root / "out", prefetch_workers=0, epochs=1,
+                corpus, root / "out", prefetch_workers=0, epochs=1, curriculum_epoch=1,
                 batch_size=BATCH_SIZE,
             ),
             training_shards=corpus.shards,
