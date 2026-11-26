@@ -18,7 +18,12 @@ import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.mlm_masking import MaskedTokens, MlmMasker
-from effects.application.text_staging import StagedTexts, TextStager, encode_by_length
+from effects.application.text_staging import (
+    StagedTexts,
+    StageInputs,
+    TextStager,
+    encode_by_length,
+)
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
@@ -477,10 +482,9 @@ class SurfaceBatcher:
         return self.resolver.keys_of(text) + overridden
 
     def stage(self, texts: Mapping[str, SidecarLine | None]) -> StagedTexts:
-        return self.stager.stage(
-            texts, masks=self.spec.masks, e_dim=self.spec.e_dim, rng=self.rng,
-            keys_of=self._keys_of,
-        )
+        return self.stager.stage(texts, draw=StageInputs(
+            self.spec.masks, self.spec.e_dim, self.rng, self._keys_of,
+        ))
 
     def encode_texts(
         self, texts: Mapping[str, SidecarLine | None], encoder: AbilityEncoder,

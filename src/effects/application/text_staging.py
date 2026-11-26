@@ -49,6 +49,33 @@ def _length_chunks(attention_mask: torch.Tensor) -> list[tuple[torch.Tensor, int
     ]
 
 
+def _encode_rows(
+    encoder: AbilityEncoder, inputs: dict[str, torch.Tensor],
+    chunk: tuple[torch.Tensor, int], device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``encoder`` over one ``(rows, width)`` group of ``inputs``."""
+    rows, width = chunk
+    batch = {
+        k: v.index_select(0, rows)[:, :width].to(device, non_blocking=True)
+        for k, v in inputs.items()
+    }
+    return encoder(**batch)
+
+
+def _padded_tokens(
+    chunks: list[tuple[torch.Tensor, int]], outputs: list[torch.Tensor],
+    inputs: dict[str, torch.Tensor], device,
+) -> torch.Tensor:
+    """Each group's token outputs in the inputs' row order, padded to their width."""
+    count = sum(rows.numel() for rows, _ in chunks)
+    full = outputs[0].new_zeros(
+        (count, inputs["attention_mask"].shape[1], outputs[0].shape[-1]),
+    )
+    for (rows, width), tokens in zip(chunks, outputs):
+        full[rows.to(device, non_blocking=True), :width] = tokens
+    return full
+
+
 def encode_by_length(
     encoder: AbilityEncoder, inputs: dict[str, torch.Tensor], device,
     *, hidden: bool = False,
@@ -64,28 +91,16 @@ def encode_by_length(
         batch = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
         vectors, tokens = encoder(**batch)
         return vectors, tokens if hidden else None
-    parts, outputs = [], []
-    for rows, width in chunks:
-        batch = {
-            k: v.index_select(0, rows)[:, :width].to(device, non_blocking=True)
-            for k, v in inputs.items()
-        }
-        vectors, tokens = encoder(**batch)
-        parts.append(vectors)
-        if hidden:
-            outputs.append(tokens)
+    results = [_encode_rows(encoder, inputs, chunk, device) for chunk in chunks]
     order = torch.cat([rows for rows, _ in chunks])
     inverse = torch.empty_like(order)
     inverse[order] = torch.arange(order.numel())
-    vectors = torch.cat(parts).index_select(0, inverse.to(device, non_blocking=True))
+    vectors = torch.cat([v for v, _ in results]).index_select(
+        0, inverse.to(device, non_blocking=True),
+    )
     if not hidden:
         return vectors, None
-    full = outputs[0].new_zeros(
-        (order.numel(), inputs["attention_mask"].shape[1], outputs[0].shape[-1]),
-    )
-    for (rows, width), tokens in zip(chunks, outputs):
-        full[rows.to(device, non_blocking=True), :width] = tokens
-    return vectors, full
+    return vectors, _padded_tokens(chunks, [t for _, t in results], inputs, device)
 
 
 # ── the encoder's inputs ────────────────────────────────────────────────
@@ -119,6 +134,17 @@ class StagedTexts:
 
 
 @dataclass(frozen=True)
+class StageInputs:
+    """What one staging draws on besides the texts: the variant's masks and
+    ``e`` width, the generator, and how a truncated text is named."""
+
+    masks: BaselineMasks
+    e_dim: int
+    rng: random.Random
+    keys_of: Callable[[str], list]
+
+
+@dataclass(frozen=True)
 class TextStager:
     """Ability texts to encoder inputs, the one way every caller agrees on."""
 
@@ -142,12 +168,10 @@ class TextStager:
             keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P, truncations=truncations,
         )
 
-    def stage(
-        self, texts: Mapping[str, SidecarLine], *, masks: BaselineMasks, e_dim: int,
-        rng: random.Random, keys_of: Callable[[str], list],
-    ) -> StagedTexts:
+    def stage(self, texts: Mapping[str, SidecarLine], *, draw: StageInputs) -> StagedTexts:
         """``texts`` (each to its sidecar line) staged for this variant;
-        ``keys_of`` names a truncated text by the keys that resolved to it."""
+        ``draw.keys_of`` names a truncated text by the keys that resolved to it."""
+        masks = draw.masks
         if not texts:
             return StagedTexts({}, [], None, None)
         ordered = sorted(texts)
@@ -155,8 +179,10 @@ class TextStager:
         if masks.identity_embedding:
             return StagedTexts(rows, [], None, None)
         if masks.taxonomy_embedding:
-            return StagedTexts(rows, [], None, _taxonomy_vectors(ordered, texts, e_dim))
-        prepared = self.prepare_texts(ordered, texts, rng=rng, keys_of=keys_of)
+            return StagedTexts(rows, [], None, _taxonomy_vectors(ordered, texts, draw.e_dim))
+        prepared = self.prepare_texts(
+            ordered, texts, rng=draw.rng, keys_of=draw.keys_of,
+        )
         return StagedTexts(
             rows, prepared, collate_lines(prepared, self.tokenizer.pad_id), None,
         )
