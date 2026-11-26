@@ -25,6 +25,7 @@ from effects.domain.baselines import Baseline
 from effects.domain.checkpoint_layout import layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+from effects.domain.settings_shape import SETTINGS_SHAPE, SETTINGS_SHAPE_KEY
 from effects.domain.split_provenance import SplitProvenance
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
@@ -103,7 +104,8 @@ def corpus(tmp_path):
             vocab_hash=content_hash(vocab),
             keyword_definitions_hash=content_hash(keywords),
         ),
-        training_settings={**layout_settings(), TOKENIZER_RULES_KEY: TOKENIZER_RULES},
+        training_settings={**layout_settings(), TOKENIZER_RULES_KEY: TOKENIZER_RULES,
+                           SETTINGS_SHAPE_KEY: SETTINGS_SHAPE},
     ))
     return cards, tokens, store.latest_path(), vocab
 
@@ -333,7 +335,8 @@ class TestTheRealEncoder:
                 vocab_hash=content_hash(vocab),
                 keyword_definitions_hash=content_hash(keywords),
             ),
-            training_settings={**layout_settings(), TOKENIZER_RULES_KEY: TOKENIZER_RULES},
+            training_settings={**layout_settings(), TOKENIZER_RULES_KEY: TOKENIZER_RULES,
+                               SETTINGS_SHAPE_KEY: SETTINGS_SHAPE},
         ))
         return EncodeAbilitiesConfig(
             cards_folders=(cards,),

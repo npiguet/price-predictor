@@ -174,28 +174,17 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
                for stratum in selection.halves}
     loaded = context.main_model()
     half = str(Half.REPORTING)
+    flags = main.scored_under()
     score = score_half(
         selection, readers, half=half, encoder=loaded.encoder, model=loaded.model,
         batcher=loaded.batcher(),
         rule_outputs=context.manifest.effective_rule_outputs,
-        mask=main.rule_mask or None,
-        stratum_weight=_recorded(main.stratum_weight, "stratum_weight"),
-        deviance_floor=_recorded(main.deviance_floor, "deviance_floor"),
+        mask=flags.mask, stratum_weight=flags.stratum_weight,
+        deviance_floor=flags.deviance_floor,
     )
     games = {stratum: len(selection.halves[stratum].get(half, ())) for stratum in readers}
     return half_score_checks(score, half=half, games=games,
                              selection_control=main.control_score, note=note)
-
-
-def _recorded(value: float | None, name: str) -> float:
-    """A flag the checkpoint recorded: every gen-3 checkpoint holds it, and one
-    recording none is refused rather than scored under a default."""
-    if value is None:
-        raise ValueError(
-            f"the checkpoint records no {name}: a gen-3 checkpoint always does, "
-            "so its reporting half cannot be scored under a guessed one"
-        )
-    return float(value)
 
 
 def _sidecar_index(context: EvaluationContext):

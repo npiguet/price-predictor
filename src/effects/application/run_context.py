@@ -48,6 +48,7 @@ from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.loss_denominators import LossDenominators
+from effects.domain.settings_shape import SETTINGS_SHAPE, SETTINGS_SHAPE_KEY
 from effects.infrastructure.sidecar_io import script_vocabularies
 from effects.infrastructure.vocabulary_file import vocabulary_surface
 
@@ -122,7 +123,8 @@ class RunContext:
     noise: NoiseState
     #: The identity baseline's table; None for every other variant.
     identity_table: IdentityTable | None
-    #: What the checkpoint and the resume file record of the run (FR-063).
+    #: The run's settings (``training_settings``), which every checkpoint and
+    #: the resume file record and a resume compares (FR-063).
     training_settings: dict
     #: Each epoch's field set, fixed up front so tasks queued for the workers
     #: before an epoch began read the same one.
@@ -180,10 +182,20 @@ def preparer_settings(spec: RunSpec) -> PreparerSettings:
 
 
 def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
-    """The recorded flags (``recorded_flags``), the script-API vocabularies,
-    and the tokenizer rules and input layout the run trained under (FR-063)."""
+    """The run's settings, recorded once (FR-063): every checkpoint and
+    ``resume.pt`` hold this dict and a resume compares it. The recorded flags
+    (``recorded_flags``), the corpus, selection set (FR-069) and shard listing
+    (11.4) by digest, the tokenizer files by hash, the script-API
+    vocabularies, and the tokenizer rules and input layout the run trained
+    under."""
+    facts = spec.facts
     return {
+        SETTINGS_SHAPE_KEY: SETTINGS_SHAPE,
         **recorded_flags(spec.config, seed=spec.seed),
+        "corpus_digest": facts.digest,
+        "selection_set_digest": facts.selection_set_digest,
+        "corpus_shards_digest": facts.shards_digest,
+        **spec.tokenizer_hashes,
         "api_types": list(api_types),
         "param_keys": list(param_keys),
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,

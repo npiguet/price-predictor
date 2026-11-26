@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import torch
 
@@ -18,6 +18,7 @@ from effects.domain.aux_heads import TRAINING_ONLY_PREFIXES
 from effects.domain.baselines import Baseline
 from effects.domain.checkpoint_layout import require_input_layout
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.settings_shape import require_settings_shape
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
 from price_predictor.infrastructure.torch_checkpoint import (
@@ -78,6 +79,15 @@ def verify_hashes(provenance: SplitProvenance, files: TokenizerFiles) -> None:
             )
 
 
+class ScoringFlags(NamedTuple):
+    """The flags a saved checkpoint's control score is computed under: its
+    run's ``--rule-mask``, ``--stratum-weight`` and ``--deviance-floor``."""
+
+    mask: str
+    stratum_weight: float
+    deviance_floor: float
+
+
 @dataclass(frozen=True, slots=True)
 class EffectCheckpoint:
     """One saved effect model, weights plus provenance."""
@@ -92,7 +102,10 @@ class EffectCheckpoint:
     extra: dict[str, Any] = field(default_factory=dict)
     #: The sidecar roots the run resolved keys against (FR-063b).
     cards_folders: tuple[str, ...] = ()
-    #: ``run_context.training_settings`` (FR-063).
+    #: The run's settings, ``run_context.training_settings`` (FR-063): every
+    #: flag its field records, ``--rule-mask``, ``--deviance-floor``,
+    #: ``--ema-epochs``, ``--stratum-weight`` and ``--relation-values``
+    #: included, as ``resume.pt`` holds them.
     training_settings: dict[str, Any] = field(default_factory=dict)
     #: ``LossDenominators.as_dict()`` of the run (FR-062).
     loss_denominators: dict[str, Any] = field(default_factory=dict)
@@ -108,19 +121,20 @@ class EffectCheckpoint:
     #: Whether the weights are the averaged ones; False for an epoch that
     #: ended before warmup did, saved with the raw weights.
     averaged: bool = True
-    #: ``--rule-mask``, ``--deviance-floor``, ``--ema-epochs``,
-    #: ``--stratum-weight`` and ``--relation-values`` of the run; empty or None
-    #: where the flag was not set.
-    rule_mask: str = ""
-    deviance_floor: float | None = None
-    ema_epochs: float | None = None
-    stratum_weight: float | None = None
-    relation_values: str = ""
     #: The corpus manifest's rule-map digest (FR-060a).
     rule_map_digest: str = ""
     #: The digest of the selection set the run's control score read (E1);
     #: None when the run read none.
     selection_set_digest: str | None = None
+
+    def scored_under(self) -> ScoringFlags:
+        """The flags this checkpoint's control score is computed under, as
+        its settings record them (every loaded checkpoint records them)."""
+        settings = self.training_settings
+        return ScoringFlags(
+            settings["rule_mask"], float(settings["stratum_weight"]),
+            float(settings["deviance_floor"]),
+        )
 
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
@@ -211,8 +225,6 @@ PAYLOAD_MEMBERS: tuple[PayloadMember, ...] = (
     _member("training_settings", dict, dict),
     _member("loss_denominators", dict, dict),
     _member("best_control_score"), _member("control_score"), _member("averaged"),
-    _member("rule_mask"), _member("deviance_floor"), _member("ema_epochs"),
-    _member("stratum_weight"), _member("relation_values"),
     _member("rule_map_digest"), _member("selection_set_digest"),
     #: What a variant carries beyond the model (the identity baseline's
     #: embedding table, ``surface_batching.IDENTITY_TABLE_KEY``), nested here so
@@ -275,6 +287,7 @@ class EffectModelStore:
         # another input layout would read inputs this code no longer builds,
         # and an older one is told apart by its recorded layout alone.
         require_input_layout(payload["training_settings"])
+        require_settings_shape(payload["training_settings"], holder="checkpoint")
         return EffectCheckpoint(
             model_config=model_config,
             **{member.attribute: member.read(payload[member.key]) for member in PAYLOAD_MEMBERS},

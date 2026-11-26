@@ -409,13 +409,22 @@ class TestTheBatchersTheLoopBuilds:
 
         from effects.domain.checkpoint_layout import LAYOUT_VOCABULARIES
 
-        rest = [
-            "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
-            "api_weight", "api_types", "param_keys", "tokenizer_rules", "input_layout",
+        before = [
+            "settings_shape", "variant_scripts", "seed", "variant", "e_dim",
+            "relation_values", "rule_mask", "deviance_floor", "ema_epochs",
+            "stratum_weight", "e_noise", "value_weight", "encoder_layers",
+            "encoder_d_model", "keyword_expand_p", "context_dropout",
+        ]
+        after = [
+            "lr_scale", "mlm_weight", "mlm_mask_prob", "api_weight", "curriculum_epoch",
+            "curriculum_rewarm_steps", "batch_size", "grad_accum", "steps_per_epoch",
+            "shards_per_epoch", "epochs", "patience", "withhold_keyword",
+            "corpus_digest", "selection_set_digest", "corpus_shards_digest",
+            "api_types", "param_keys", "tokenizer_rules", "input_layout",
             "relation_target_indices", *(f"{name}_digest" for name, _ in LAYOUT_VOCABULARIES),
         ]
-        assert keys() == rest
-        assert keys(lethality_copies=2) == ["lethality_copies", *rest]
+        assert keys() == [*before, *after]
+        assert keys(lethality_copies=2) == [*before, "lethality_copies", *after]
 
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""

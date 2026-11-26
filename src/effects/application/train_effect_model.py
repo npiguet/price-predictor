@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from effects.application.closed_list_check import require_closed_lists
+from effects.application.run_settings import OnResume, Recorded, recorded_settings, setting
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
@@ -32,6 +33,9 @@ from effects.infrastructure.shard_io import require_generation
 
 logger = logging.getLogger(__name__)
 
+#: The classes each config field declares (``run_settings.setting``).
+COMPARED, MAY_CHANGE = OnResume.COMPARED, OnResume.MAY_CHANGE
+ALWAYS, WHEN_SET, NEVER = Recorded.ALWAYS, Recorded.WHEN_SET, Recorded.NEVER
 
 #: Unique-text resolution records the card-disjoint stratum should hold
 #: before gate 1's margins mean anything: below it the run warns.
@@ -130,129 +134,135 @@ def _require_runnable_curriculum(config: TrainEffectModelConfig) -> None:
 class TrainEffectModelConfig:
     """The trainer's flag surface (contracts/cli.md § train-effect-model).
 
-    ``help`` metadata is the flag's help, so a default lives here alone.
+    ``help`` metadata is the flag's help, so a default lives here alone. Each
+    field also declares whether a resume may change it and whether the run's
+    settings record it (``run_settings.setting``): the settings every
+    checkpoint and ``resume.pt`` hold, and what a resume compares, are read
+    off those classes.
     """
 
     #: A curated dataset directory built by ``build-corpus``.
-    corpus: str | None = None
-    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
-    variant_scripts: Path | None = None
-    vocab_path: Path = field(kw_only=True, metadata={"help": (
+    corpus: str | None = setting(MAY_CHANGE, NEVER, default=None)
+    cards_folders: tuple[Path, ...] = setting(
+        MAY_CHANGE, NEVER, default=default_paths.DEFAULT_CARDS_FOLDER_PATHS,
+    )
+    variant_scripts: Path | None = setting(MAY_CHANGE, ALWAYS, default=None)
+    vocab_path: Path = setting(MAY_CHANGE, NEVER, kw_only=True, help=(
         "The vocabulary the encoder tokenizes with; the checkpoint records it"
-    )})
+    ))
     #: ``None`` draws one, so runs do not all measure one arrangement of the
     #: corpus; the checkpoint records the drawn value.
-    seed: int | None = field(default=None, metadata={"help": (
+    seed: int | None = setting(COMPARED, ALWAYS, default=None, help=(
         "Seeds weight init, batch planning and each epoch's shard draw; drawn "
         "from the OS and logged when omitted, so any run can be repeated"
-    )})
-    keyword_definitions: Path = field(kw_only=True, metadata={"help": (
+    ))
+    keyword_definitions: Path = setting(MAY_CHANGE, NEVER, kw_only=True, help=(
         "The keyword table the tokenizer expands with; the checkpoint records it"
-    )})
-    reports_dir: Path = field(kw_only=True, metadata={"help": (
+    ))
+    reports_dir: Path = setting(MAY_CHANGE, NEVER, kw_only=True, help=(
         "Where the selection set frozen for --corpus is found, by the corpus "
         "digest: the training run's reports run"
-    )})
-    model_output: Path = field(kw_only=True, metadata={"help": (
+    ))
+    model_output: Path = setting(MAY_CHANGE, NEVER, kw_only=True, help=(
         "Checkpoint directory (models/effects/<gen>/effect-model/<run>/)"
-    )})
-    variant: Baseline = Baseline.FULL
-    e_dim: int = 256
-    relation_values: str = field(default="on", metadata={"type": on_off, "help": (
+    ))
+    variant: Baseline = setting(COMPARED, ALWAYS, default=Baseline.FULL)
+    e_dim: int = setting(COMPARED, ALWAYS, default=256)
+    relation_values: str = setting(COMPARED, ALWAYS, default="on", type=on_off, help=(
         "on: the trunk's relations change what a slot receives as well as how "
         "much it attends; off: the value tables stay at zero and untrained "
         "(default: %(default)s)"
-    )})
-    rule_mask: RuleMask = field(default=RuleMask.HARD, metadata={"type": RuleMask, "help": (
+    ))
+    rule_mask: RuleMask = setting(COMPARED, ALWAYS, default=RuleMask.HARD, type=RuleMask, help=(
         "hard: a copy rule budgets added trains only the outputs the rule map "
         "names for the rules its record was drawn for, and the affected gate on "
         "its rule's entities; soft: every copy trains every output, the rest "
         "weighing natural share / copies (default: %(default)s)"
-    )})
-    deviance_floor: float = field(default=0.04, metadata={"help": (
+    ))
+    deviance_floor: float = setting(COMPARED, ALWAYS, default=0.04, help=(
         "Floor on each output term's loss denominator, its constant-prediction "
         "loss on a sample of training shards, in nats per record "
         "(default: %(default)s)"
-    )})
-    ema_epochs: float = field(default=1.0, metadata={"help": (
+    ))
+    ema_epochs: float = setting(COMPARED, ALWAYS, default=1.0, help=(
         "Span of the averaged weights validation, stopping and checkpoints "
         "read, in epochs: each optimizer step after the average starts (warmup's "
         "end, or one epoch after the curriculum switch when later) weighs "
         "grad-accum / (steps-per-epoch x this) (default: %(default)s)"
-    )})
-    stratum_weight: float = field(default=0.5, metadata={"help": (
+    ))
+    stratum_weight: float = setting(COMPARED, ALWAYS, default=0.5, help=(
         "Card-disjoint share of the control score, in [0, 1]; the game-disjoint "
         "stratum takes the rest (default: %(default)s)"
-    )})
-    e_noise: float = field(default=0.1, metadata={"help": (
+    ))
+    e_noise: float = setting(COMPARED, ALWAYS, default=0.1, help=(
         "Noise ratio on e relative to e's running covariance (FR-056), ramped "
         "in over the first --steps-per-epoch steps (default: %(default)s)"
-    )})
-    value_weight: float = field(default=0.05, metadata={"help": (
+    ))
+    value_weight: float = setting(COMPARED, ALWAYS, default=0.05, help=(
         "Loss weight of the training-only value head (default: %(default)s)"
-    )})
-    encoder_layers: int = field(default=4, metadata={"help": (
+    ))
+    encoder_layers: int = setting(COMPARED, ALWAYS, default=4, help=(
         "Ability-encoder layers, recorded in the checkpoint (default: %(default)s)"
-    )})
-    encoder_d_model: int = field(default=256, metadata={"help": (
+    ))
+    encoder_d_model: int = setting(COMPARED, ALWAYS, default=256, help=(
         "Ability-encoder width, recorded in the checkpoint; must divide by the "
         "encoder's head count (default: %(default)s)"
-    )})
-    keyword_expand_p: float = 0.25
-    context_dropout: float = 0.15
-    lethality_copies: int = field(default=0, metadata={"help": (
+    ))
+    keyword_expand_p: float = setting(COMPARED, ALWAYS, default=0.25)
+    context_dropout: float = setting(COMPARED, ALWAYS, default=0.15)
+    lethality_copies: int = setting(COMPARED, WHEN_SET, default=0, help=(
         "Counterfactual copies per qualifying damage or -X/-X resolution per "
         "step, toughness and amount redrawn and the death labelled by the rules "
         "(default: %(default)s)"
-    )})
-    lr_scale: float = field(default=1.0, metadata={"help": (
+    ))
+    lr_scale: float = setting(MAY_CHANGE, ALWAYS, default=1.0, help=(
         "Factor on the learning rate; may differ from the run a --resume continues"
-    )})
-    save_every_epoch: bool = field(default=False, metadata={"help": (
+    ))
+    save_every_epoch: bool = setting(MAY_CHANGE, NEVER, default=False, help=(
         "Also keep every epoch's checkpoint under <model-output>/epochs/, so "
         "any epoch can be probed"
-    )})
-    mlm_weight: float = 0.1
-    mlm_mask_prob: float = 0.15
+    ))
+    mlm_weight: float = setting(COMPARED, ALWAYS, default=0.1)
+    mlm_mask_prob: float = setting(COMPARED, ALWAYS, default=0.15)
     #: Small because the script-API term sums a BCE per parameter key, which
     #: starts two orders of magnitude above the value term.
-    api_weight: float = 0.003
+    api_weight: float = setting(COMPARED, ALWAYS, default=0.003)
     #: An epoch rather than a step, so the field set never changes inside an
     #: epoch whose end validates the new fields' untrained heads.
-    curriculum_epoch: int = field(default=3, metadata={"help": (
+    curriculum_epoch: int = setting(COMPARED, ALWAYS, default=3, help=(
         "Epoch whose first step enables the sparse field group (default: %(default)s)"
-    )})
-    curriculum_rewarm_steps: int = field(default=500, metadata={"help": (
+    ))
+    curriculum_rewarm_steps: int = setting(COMPARED, ALWAYS, default=500, help=(
         "Training steps over which the learning rate ramps linearly from 0 back "
         "to the scheduled rate at the curriculum switch; 0 turns the re-warm off "
         "(default: %(default)s)"
-    )})
-    batch_size: int = 32
-    grad_accum: int = 1
-    steps_per_epoch: int = 5_000
-    shards_per_epoch: int = field(default=DEFAULT_SHARDS_PER_EPOCH, metadata={"help": (
+    ))
+    batch_size: int = setting(COMPARED, ALWAYS, default=32)
+    grad_accum: int = setting(COMPARED, ALWAYS, default=1)
+    steps_per_epoch: int = setting(COMPARED, ALWAYS, default=5_000)
+    shards_per_epoch: int = setting(COMPARED, ALWAYS, default=DEFAULT_SHARDS_PER_EPOCH, help=(
         "Record shards an epoch reads, drawn at random across the corpus: "
         "--steps-per-epoch fixes how long an epoch takes, this how many shards "
         "its steps spread over (default: %(default)s)"
-    )})
-    prefetch_workers: int = field(default=DEFAULT_PREFETCH_WORKERS, metadata={"help": (
+    ))
+    prefetch_workers: int = setting(MAY_CHANGE, NEVER, default=DEFAULT_PREFETCH_WORKERS, help=(
         "Worker processes preparing each step's host half while this process "
         "trains; 0 prepares each step here, just before it trains. Changes speed, never results "
         "(default: %(default)s)"
-    )})
-    epochs: int = 40
-    patience: int = field(default=5, metadata={"help": (
+    ))
+    epochs: int = setting(MAY_CHANGE, ALWAYS, default=40)
+    patience: int = setting(MAY_CHANGE, ALWAYS, default=5, help=(
         "Epochs without a new best control score before stopping, counted from "
         "the averaged weights' start; 0 never stops early (default: %(default)s)"
-    )})
-    withhold_keyword: str | None = field(default=None, metadata={"help": (
+    ))
+    withhold_keyword: str | None = setting(COMPARED, ALWAYS, default=None, help=(
         "Hold one implemented keyword's token out of training, always expanding "
         "it instead, so the zero-shot check has something to measure"
-    )})
-    resume: bool = field(default=False, metadata={"help": (
+    ))
+    resume: bool = setting(MAY_CHANGE, NEVER, default=False, help=(
         "Continue an interrupted run from the resume.pt in --model-output; "
         "every setting that shapes the run, --seed included, must match"
-    )})
+    ))
 
     def __post_init__(self) -> None:
         require_runnable_schedule(self)
@@ -311,31 +321,11 @@ class TrainEffectModelConfig:
         })
 
 
-#: The flags a sweep arm differs by: the checkpoint's training settings record
-#: each under its own name, and a resume compares them there, as recorded.
-SWEEP_FLAGS: tuple[str, ...] = (
-    "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob", "api_weight",
-)
-#: Flags the training settings record only when set, so a run without one
-#: resumes against the settings it always had.
-RECORDED_WHEN_SET: tuple[str, ...] = ("lethality_copies",)
-#: Every flag the checkpoint's training settings record, which a resume
-#: compares there as recorded rather than off the config: ``seed`` as the
-#: value the run drew, and :data:`RECORDED_WHEN_SET` only when set.
-RECORDED_IN_TRAINING_SETTINGS: frozenset[str] = frozenset({
-    "seed", *RECORDED_WHEN_SET, *SWEEP_FLAGS,
-})
-
-
 def recorded_flags(config: TrainEffectModelConfig, *, seed: int) -> dict:
-    """:data:`RECORDED_IN_TRAINING_SETTINGS` as the training settings write
-    them, in the order they always have (FR-063): ``seed`` is the one the run
-    drew, which ``config`` may not hold."""
-    return {
-        **{name: getattr(config, name) for name in RECORDED_WHEN_SET if getattr(config, name)},
-        "seed": seed,
-        **{name: getattr(config, name) for name in SWEEP_FLAGS},
-    }
+    """Every flag the run's settings record, as each field's ``recorded``
+    class says, in declaration order: ``seed`` is the one the run drew, which
+    ``config`` may not hold."""
+    return recorded_settings(replace(config, seed=seed))
 
 
 @dataclass(frozen=True)

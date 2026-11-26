@@ -2,25 +2,24 @@
 
 Not a checkpoint: it keeps what a checkpoint drops. Every draw is seeded by
 ``(seed, epoch, position, step)``, so no other state needs saving, and a resume
-under different settings is refused.
+under different settings is refused: the run's settings, the dict every
+checkpoint records too, compared but for the flags whose field declares that a
+resume may change them (``run_settings``).
 """
 
 from __future__ import annotations
 
 import logging
 import random
-from dataclasses import fields
 from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.train_effect_model import (
-    RECORDED_IN_TRAINING_SETTINGS,
-    RunSpec,
-    TrainEffectModelConfig,
-)
+from effects.application.run_settings import compared_settings
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_schedule import StopperStateError
 from effects.domain.loss_denominators import LossDenominators
+from effects.domain.settings_shape import SettingsShapeError, require_settings_shape
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
@@ -36,19 +35,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Flags a resumed run may set differently from the run it continues. The
-#: corpus is compared by its digest instead, the selection set by its digest,
-#: the vocabulary and keyword definitions by their bytes.
-#: Every other flag is compared, ``--rule-mask``, ``--deviance-floor``,
-#: ``--ema-epochs``, ``--stratum-weight`` and ``--relation-values`` included
-#: (story 7 acceptance 5).
-RESUME_MAY_CHANGE: frozenset[str] = frozenset({
-    "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
-    "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
-    "vocab_path", "keyword_definitions", "reports_dir",
-})
-
-
 def run_seed(config: TrainEffectModelConfig) -> int:
     """The seed every draw of the run uses: ``--seed``; else, on a resume, the
     one ``resume.pt`` records (a resume compares it, so a drawn one could never
@@ -61,35 +47,28 @@ def run_seed(config: TrainEffectModelConfig) -> int:
     return random.SystemRandom().getrandbits(32)
 
 
-def compared_flags() -> tuple[str, ...]:
-    """The config fields a resume compares directly, in declaration order."""
-    return tuple(
-        spec.name for spec in fields(TrainEffectModelConfig)
-        if spec.name not in RESUME_MAY_CHANGE | RECORDED_IN_TRAINING_SETTINGS
+def settings_mismatches(saved: dict, current: dict) -> list[str]:
+    """Every compared setting whose value differs between a resume file's
+    settings and this run's: every one recorded but the flags whose field
+    declares that a resume may change them."""
+    return resume_mismatches(
+        compared_settings(saved, TrainEffectModelConfig),
+        compared_settings(current, TrainEffectModelConfig),
     )
 
 
-def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
-    """Every setting a resumed epoch has to share with the interrupted run:
-    every flag but :data:`RESUME_MAY_CHANGE`, so a flag added later is checked
-    by default, the corpus by its digest, and the training settings as
-    recorded."""
-    config = spec.config
-    return {
-        "seed": spec.seed,
-        "corpus_digest": spec.facts.digest,
-        # Scores against another selection set do not compare (FR-069).
-        "selection_set_digest": spec.facts.selection_set_digest,
-        # Outside the corpus digest: which shards the run trains on (11.4).
-        "corpus_shards_digest": spec.facts.shards_digest,
-        **spec.tokenizer_hashes,
-        **{name: getattr(config, name) for name in compared_flags()},
-        **training_settings,
-    }
-
-
-def _settings_of(run: RunContext) -> dict:
-    return resume_settings(run.spec, training_settings=run.training_settings)
+def _require_same_settings(saved: dict, run: RunContext) -> None:
+    """Refuse a resume file recording its settings in the old shape, by name,
+    or under other settings than this run's."""
+    try:
+        require_settings_shape(saved, holder="resume file")
+    except SettingsShapeError as error:
+        raise ResumeMismatchError(str(error)) from error
+    mismatches = settings_mismatches(saved, run.training_settings)
+    if mismatches:
+        raise ResumeMismatchError(
+            "The resume file was written under other settings: " + "; ".join(mismatches)
+        )
 
 
 def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
@@ -100,7 +79,7 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
         "epoch": epoch,
         "step": run.step,
         "warmup": run.warmup,
-        "settings": _settings_of(run),
+        "settings": dict(run.training_settings),
         "encoder": run.encoder.state_dict(),
         "model": run.model.state_dict(),
         "identity_table": (
@@ -153,12 +132,7 @@ def restore_resume(run: RunContext) -> int | None:
     nothing is left. Raises ``ResumeMismatchError`` for a resume file written
     under other settings."""
     state = load_resume_state(run.spec.config.resolved_model_output())
-    mismatches = resume_mismatches(state["settings"], _settings_of(run))
-    if mismatches:
-        raise ResumeMismatchError(
-            "The resume file was written under other settings: "
-            + "; ".join(mismatches)
-        )
+    _require_same_settings(state["settings"], run)
     run.encoder.load_state_dict(state["encoder"])
     run.model.load_state_dict(state["model"])
     if run.identity_table is not None and state["identity_table"] is not None:

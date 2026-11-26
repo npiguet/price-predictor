@@ -373,11 +373,6 @@ class TrainingLoop:
                 {} if run.loss_denominators is None else run.loss_denominators.as_dict()
             ),
             best_control_score=run.best_control_score,
-            rule_mask=str(self.config.rule_mask),
-            deviance_floor=self.config.deviance_floor,
-            ema_epochs=self.config.ema_epochs,
-            stratum_weight=self.config.stratum_weight,
-            relation_values=self.config.relation_values,
             rule_map_digest=self.spec.facts.rule_map_digest,
             selection_set_digest=self.spec.facts.selection_set_digest or None,
         )

@@ -21,6 +21,7 @@ from effects.domain.baselines import (
 )
 from effects.domain.checkpoint_layout import INPUT_LAYOUT, INPUT_LAYOUT_KEY, layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.settings_shape import SETTINGS_SHAPE, SETTINGS_SHAPE_KEY
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import (
@@ -72,7 +73,7 @@ def _checkpoint(files, **overrides) -> EffectCheckpoint:
         "encoder_state": {"token_embedding.weight": torch.zeros(32, 16)},
         "model_state": model.state_dict(),
         "provenance": _provenance(files),
-        "training_settings": layout_settings(),
+        "training_settings": {**layout_settings(), SETTINGS_SHAPE_KEY: SETTINGS_SHAPE},
     }
     defaults.update(overrides)
     return EffectCheckpoint(**defaults)
@@ -455,7 +456,7 @@ class TestSweepSettings:
         settings = {"e_noise": 0.2, "value_weight": 0.05, "mlm_weight": 0.1,
                     "mlm_mask_prob": 0.15, "api_weight": 0.05,
                     "api_types": ["Draw"], "param_keys": ["NumCards"],
-                    **layout_settings()}
+                    **layout_settings(), SETTINGS_SHAPE_KEY: SETTINGS_SHAPE}
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(
             files, encoder_config=encoder,
@@ -478,22 +479,35 @@ class TestGen3Checkpoint:
     def test_the_gen3_fields_round_trip(self, tmp_path, files):
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(
-            files, best_control_score=0.42, rule_mask="soft", deviance_floor=0.05,
-            ema_epochs=2.0, stratum_weight=0.25, relation_values="off",
+            files, best_control_score=0.42,
             rule_map_digest="map", selection_set_digest="set",
             loss_denominators={"floor": 0.04, "values": {}},
         ))
         loaded = store.load()
-        assert (loaded.best_control_score, loaded.rule_mask, loaded.deviance_floor) == (
-            0.42, "soft", 0.05,
-        )
-        assert (loaded.ema_epochs, loaded.stratum_weight, loaded.relation_values) == (
-            2.0, 0.25, "off",
-        )
+        assert loaded.best_control_score == 0.42
         assert (loaded.rule_map_digest, loaded.selection_set_digest) == ("map", "set")
         assert loaded.loss_denominators == {"floor": 0.04, "values": {}}
         # Each under its own name, never in ``extra``.
         assert loaded.extra == {}
+
+    def test_a_checkpoint_is_scored_under_the_flags_its_settings_record(self, tmp_path, files):
+        """One accessor for the reporting half (S18 R6), never a default."""
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files, training_settings={
+            **_checkpoint(files).training_settings,
+            "rule_mask": "soft", "stratum_weight": 0.25, "deviance_floor": 0.05,
+        }))
+        assert tuple(store.load().scored_under()) == ("soft", 0.25, 0.05)
+
+    def test_a_checkpoint_recording_its_settings_in_the_old_shape_is_refused(
+        self, tmp_path, files,
+    ):
+        """No backward compatibility (D19): settings recorded before they were
+        one dict are refused by name on load."""
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files, training_settings=layout_settings()))
+        with pytest.raises(ValueError, match="settings_shape"):
+            store.load()
 
     def test_the_relation_tables_layout_rides_the_training_settings(self, tmp_path, files):
         from effects.domain.checkpoint_layout import RELATION_TARGET_INDICES_KEY

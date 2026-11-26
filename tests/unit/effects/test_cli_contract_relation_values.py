@@ -26,10 +26,11 @@ def test_off_is_accepted_and_anything_else_refused():
 
 
 def test_a_resume_refuses_a_change_of_relation_values():
-    """Every config field not listed as changeable is compared on resume."""
-    from effects.application.resume_state import RESUME_MAY_CHANGE
+    """A config field is compared on resume unless it declares otherwise."""
+    from effects.application.run_settings import free_on_resume
+    from effects.application.train_effect_model import TrainEffectModelConfig
 
-    assert "relation_values" not in RESUME_MAY_CHANGE
+    assert "relation_values" not in free_on_resume(TrainEffectModelConfig)
 
 
 def test_off_builds_a_model_without_value_parameters():

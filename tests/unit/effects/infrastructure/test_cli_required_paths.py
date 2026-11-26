@@ -124,6 +124,7 @@ def _checkpoint(root: Path, corpus: Path) -> tuple[Path, Path, Path]:
     from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
     from effects.domain.checkpoint_layout import layout_settings
     from effects.domain.effect_model import EffectModel, EffectModelConfig
+    from effects.domain.settings_shape import SETTINGS_SHAPE, SETTINGS_SHAPE_KEY
     from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure.effect_model_store import (
         EffectCheckpoint,
@@ -150,7 +151,7 @@ def _checkpoint(root: Path, corpus: Path) -> tuple[Path, Path, Path]:
             vocab_hash=content_hash(vocab), keyword_definitions_hash=content_hash(keywords),
             corpus_path=str(corpus), corpus_digest="digest",
         ),
-        training_settings=layout_settings(),
+        training_settings={**layout_settings(), SETTINGS_SHAPE_KEY: SETTINGS_SHAPE},
     ))
     return store.latest_path(), vocab, keywords
 

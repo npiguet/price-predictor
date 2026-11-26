@@ -204,3 +204,62 @@ def test_early_stopping_with_no_patience_never_stops():
     for _ in range(50):
         stopper.update(0.5)
     assert not stopper.should_stop
+
+
+#: Each class a field's metadata may declare (``run_settings.setting``).
+ON_RESUME = {"compared", "may change"}
+RECORDED = {"always", "when set", "never"}
+
+
+def test_every_flag_declares_how_a_resume_and_the_settings_treat_it():
+    """The classification sits beside each field's help, so a flag added later
+    cannot be left out of the settings or the resume's comparison unseen."""
+    from dataclasses import fields
+
+    unclassified = [
+        spec.name for spec in fields(TrainEffectModelConfig)
+        if spec.metadata.get("resume") not in ON_RESUME
+        or spec.metadata.get("recorded") not in RECORDED
+    ]
+    assert unclassified == []
+
+
+def test_a_flag_a_resume_compares_is_one_the_settings_record():
+    """The comparison reads the recorded settings, so a compared flag recorded
+    nowhere would be compared against nothing."""
+    from dataclasses import fields
+
+    assert [
+        spec.name for spec in fields(TrainEffectModelConfig)
+        if spec.metadata.get("resume") == "compared"
+        and spec.metadata.get("recorded") == "never"
+    ] == []
+
+
+def test_the_settings_record_every_flag_that_shapes_a_step(tmp_path):
+    """Finding 19.1: these were in no checkpoint. The variant tree is the one
+    the run read, the manifest's when no flag named one (finding 16.6)."""
+    from effects.application.run_context import training_settings
+    from effects.application.train_effect_model import CorpusFacts, RunSpec
+
+    config = TrainEffectModelConfig.unpathed(
+        batch_size=8, grad_accum=2, steps_per_epoch=50, shards_per_epoch=4,
+        curriculum_epoch=2, context_dropout=0.2, keyword_expand_p=0.5, lr_scale=0.5,
+        variant_scripts=tmp_path / "variants",
+    )
+    settings = training_settings(
+        RunSpec(config, CorpusFacts(digest="d"), seed=3), api_types=[], param_keys=[],
+    )
+    assert {name: settings[name] for name in (
+        "batch_size", "grad_accum", "steps_per_epoch", "shards_per_epoch",
+        "curriculum_epoch", "context_dropout", "keyword_expand_p", "lr_scale",
+        "variant_scripts", "rule_mask", "variant", "seed",
+    )} == {
+        "batch_size": 8, "grad_accum": 2, "steps_per_epoch": 50, "shards_per_epoch": 4,
+        "curriculum_epoch": 2, "context_dropout": 0.2, "keyword_expand_p": 0.5,
+        "lr_scale": 0.5, "variant_scripts": str(tmp_path / "variants"),
+        "rule_mask": "hard", "variant": "full", "seed": 3,
+    }
+    # Paths a run names but compares by digest or hash, and speed-only flags,
+    # are not settings.
+    assert not {"corpus", "model_output", "prefetch_workers", "resume"} & settings.keys()

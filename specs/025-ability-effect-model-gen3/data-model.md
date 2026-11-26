@@ -321,9 +321,14 @@ collected corpus (the present lists come from pilot collections). Each count fie
 ### EffectCheckpoint (extended)
 
 Adds the relation tables (inside the model state), the averaged weights (as the saved state),
-`best_control_score`, `rule_mask`, `deviance_floor`, `ema_epochs`, `stratum_weight`,
-`relation_values`, `rule_map_digest`, `loss_denominators`, `selection_set_digest`, each under its
-own key. Removes `best_val_loss`. `training_settings` holds `input_layout = "gen-3"` and, from
+`best_control_score`, `control_score`, `averaged`, `rule_map_digest`, `loss_denominators`,
+`selection_set_digest`, each under its own key. Removes `best_val_loss`. `training_settings` is the
+run's settings, the dict `resume.pt` holds under `settings`: every `TrainEffectModelConfig` field
+whose metadata records it (`run_settings.setting`; `rule_mask`, `deviance_floor`, `ema_epochs`,
+`stratum_weight` and `relation_values` among them), the corpus, selection-set and shard-listing
+digests, the tokenizer hashes, the script-API vocabularies, `tokenizer_rules` and
+`settings_shape = "one-dict"`, refused by name when another or none. It also holds
+`input_layout = "gen-3"` and, from
 `layout_settings()`, the relation target indices and, as `<name>_digest`, the sha256 of every ordered
 name list that fixes a row or column of the model's tables (`checkpoint_layout.LAYOUT_VOCABULARIES`:
 the relation types, the input vocabularies, each output head's fields and classes); any other layout,

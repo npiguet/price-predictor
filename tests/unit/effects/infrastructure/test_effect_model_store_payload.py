@@ -41,11 +41,13 @@ def test_a_payload_missing_a_member_raises_a_key_error_naming_it(tmp_path, files
     assert raised.value.args == (key,)
 
 
-def test_a_payload_without_rule_mask_raises_key_error_rule_mask(tmp_path, files):
-    path = _saved_path(tmp_path, files)
-    _without(path, "rule_mask")
+def test_settings_without_rule_mask_raise_key_error_rule_mask(tmp_path, files):
+    """The flags are settings, not payload members, and none is read with a
+    default (task H09)."""
+    assert "rule_mask" not in _KEYS
+    loaded = EffectModelStore(tmp_path).load(_saved_path(tmp_path, files))
     with pytest.raises(KeyError, match="rule_mask"):
-        EffectModelStore(tmp_path).load(path)
+        loaded.scored_under()
 
 
 def test_an_empty_encoder_state_is_refused(tmp_path, files):
