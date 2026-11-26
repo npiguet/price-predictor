@@ -13,7 +13,6 @@ import math
 import random
 import re
 import shutil
-import zlib
 from collections import Counter, defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -30,6 +29,7 @@ from effects.infrastructure.record_codec import (
     parse_record_line,
     record_from_dict,
 )
+from effects.infrastructure.shard_members import MemberDamage, gzip_member_chunks
 from price_predictor.infrastructure.append_only import (
     count_complete_lines,
     iter_complete_lines,
@@ -301,32 +301,40 @@ def reset_decode_tally() -> None:
     _TALLY.damaged_tails.clear()
 
 
-#: Compressed bytes read at a time.
-_GZIP_CHUNK = 1 << 20
-#: A gzip member's first bytes: its magic and the deflate method.
-_GZIP_MAGIC = b"\x1f\x8b\x08"
-#: Compressed bytes tried at each place a member may start.
-_MEMBER_PROBE = 1 << 16
+class _LineSplitter:
+    """Decompressed chunks cut into numbered lines: the text after the last
+    newline waits for the next chunk, and a final unterminated one is dropped."""
 
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.number = 0
+        self.pending = b""
 
-def _member_follows(path: Path, after: int) -> bool:
-    """Whether a gzip member that decompresses starts past byte ``after``:
-    every place its magic recurs is tried, since deflate data can hold the
-    three bytes by chance."""
-    with Path(path).open("rb") as handle:
-        handle.seek(after + 1)
-        rest = handle.read()
-    at = rest.find(_GZIP_MAGIC)
-    while at >= 0:
-        probe = zlib.decompressobj(31)
+    def lines(self, chunk: bytes) -> Iterator[tuple[int, str]]:
+        """Each line ``chunk`` completes, its terminator stripped."""
+        *complete, self.pending = (self.pending + chunk).split(b"\n")
+        for line in complete:
+            self.number += 1
+            yield self.number, self._text(line)
+
+    def _text(self, line: bytes) -> str:
         try:
-            out = probe.decompress(rest[at:at + _MEMBER_PROBE])
-        except zlib.error:
-            out = None
-        if out is not None and (out or probe.eof):
-            return True
-        at = rest.find(_GZIP_MAGIC, at + 1)
-    return False
+            return line.decode("utf-8").removesuffix("\r")
+        except UnicodeDecodeError as exc:
+            raise RecordDecodeError.at(self.path, self.number, exc) from exc
+
+
+def _end_at_damage(damage: MemberDamage, number: int, *, tally: bool) -> None:
+    """End a read at a damaged member after line ``number``: quietly, but for
+    a warning and a tally entry, when no member follows it; an error otherwise."""
+    if damage.follows:
+        raise CorruptShardError(
+            f"{damage.where}; a member follows it, so the shard is read no "
+            f"further, past line {number}") from damage.cause
+    if tally:
+        logger.warning("%s; it is the shard's last, so its read ends "
+                       "there, past line %d", damage.where, number)
+        _TALLY.damaged_tails.append(f"{damage.path}, byte {damage.start}")
 
 
 def _gzip_numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[int, str]]:
@@ -343,52 +351,12 @@ def _gzip_numbered_lines(path: Path, *, tally: bool = True) -> Iterator[tuple[in
     damaged tail neither in the tally nor in the log: a read beside the one
     that reports the shard (:func:`ended_games`).
     """
-    number = 0
-    pending = b""
-    member_start = 0
-    consumed = 0
-    decoder = zlib.decompressobj(31)
-    with Path(path).open("rb") as handle:
-        while chunk := handle.read(_GZIP_CHUNK):
-            data = chunk
-            while data:
-                if decoder is None:
-                    # Between members: the gzip module also skips zero padding.
-                    stripped = data.lstrip(b"\x00")
-                    consumed += len(data) - len(stripped)
-                    data = stripped
-                    if not data:
-                        break
-                    decoder = zlib.decompressobj(31)
-                    member_start = consumed
-                try:
-                    out = decoder.decompress(data)
-                except zlib.error as exc:
-                    where = (f"{path}: the gzip member starting at byte {member_start} "
-                             f"is corrupt ({exc})")
-                    if _member_follows(path, member_start):
-                        raise CorruptShardError(
-                            f"{where}; a member follows it, so the shard is read no "
-                            f"further, past line {number}") from exc
-                    if tally:
-                        logger.warning("%s; it is the shard's last, so its read ends "
-                                       "there, past line %d", where, number)
-                        _TALLY.damaged_tails.append(f"{path}, byte {member_start}")
-                    return
-                rest = decoder.unused_data if decoder.eof else b""
-                consumed += len(data) - len(rest)
-                data = rest
-                if decoder.eof:
-                    decoder = None
-                pending += out
-                *lines, pending = pending.split(b"\n")
-                for line in lines:
-                    number += 1
-                    try:
-                        text = line.decode("utf-8")
-                    except UnicodeDecodeError as exc:
-                        raise RecordDecodeError.at(path, number, exc) from exc
-                    yield number, text.removesuffix("\r")
+    splitter = _LineSplitter(path)
+    try:
+        for chunk in gzip_member_chunks(path):
+            yield from splitter.lines(chunk)
+    except MemberDamage as damage:
+        _end_at_damage(damage, splitter.number, tally=tally)
 
 
 def _plain_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
