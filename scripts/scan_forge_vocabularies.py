@@ -49,6 +49,10 @@ def subtype_spelling(name: str) -> str:
     return name.strip().lower().replace(" ", "_")
 
 
+def _is_section_header(line: str) -> bool:
+    return line.startswith("[") and line.endswith("]")
+
+
 def subtypes(type_lists: str) -> tuple[str, ...]:
     """Every subtype ``TypeLists.txt`` names, in file order, each once: a line is
     ``Singular`` or ``Singular:Plural``, and every section lists subtypes, the basic
@@ -56,7 +60,7 @@ def subtypes(type_lists: str) -> tuple[str, ...]:
     found: dict[str, None] = {}
     for raw in type_lists.splitlines():
         line = raw.strip()
-        if not line or (line.startswith("[") and line.endswith("]")):
+        if not line or _is_section_header(line):
             continue
         found.setdefault(subtype_spelling(line.split(":", 1)[0]), None)
     return tuple(found)
@@ -71,7 +75,7 @@ def subtype_sections(type_lists: str) -> tuple[tuple[str, int], ...]:
     section = ""
     for raw in type_lists.splitlines():
         line = raw.strip()
-        if line.startswith("[") and line.endswith("]"):
+        if _is_section_header(line):
             section = line[1:-1]
         elif line:
             seen.add(subtype_spelling(line.split(":", 1)[0]))
