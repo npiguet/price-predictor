@@ -285,25 +285,41 @@ def _single(tensor: torch.Tensor):
     """One tensor's smallest form, without the row codecs."""
     if tensor.numel() == 0 or tensor.dim() == 0:
         return tensor
-    options: list = [tensor]
+    return min([tensor, *_options(tensor)], key=_size)
+
+
+def _options(tensor: torch.Tensor) -> list:
+    """The forms a non-empty tensor of one or more dimensions may be kept in,
+    in the order they are tried (of equal sizes, the first wins, the tensor
+    itself before any)."""
     if tensor.dtype == torch.bool:
+        return [_Bits.of(tensor)]
+    if tensor.is_floating_point():
+        return _float_options(tensor)
+    return _integer_options(tensor)
+
+
+def _float_options(tensor: torch.Tensor) -> list:
+    options: list = []
+    nonzero = int(_present(tensor).sum())
+    if nonzero * 8 < _bytes(tensor):
+        options.append(_Coo.of(tensor))
+    if tensor.dim() >= 2:
+        options.append(_Rows.of(tensor))
+    return options
+
+
+def _integer_options(tensor: torch.Tensor) -> list:
+    options: list = []
+    low, high = int(tensor.min()), int(tensor.max())
+    if low >= 0 and high <= 1:
         options.append(_Bits.of(tensor))
-    elif tensor.is_floating_point():
-        nonzero = int(_present(tensor).sum())
-        if nonzero * 8 < _bytes(tensor):
-            options.append(_Coo.of(tensor))
-        if tensor.dim() >= 2:
-            options.append(_Rows.of(tensor))
-    else:
-        low, high = int(tensor.min()), int(tensor.max())
-        if low >= 0 and high <= 1:
-            options.append(_Bits.of(tensor))
-        narrow = _narrowest(tensor)
-        if narrow is not tensor:
-            options.append(_Narrow(tensor.dtype, narrow))
-        if int(torch.count_nonzero(tensor)) * 6 < _bytes(narrow):
-            options.append(_Coo.of(tensor))
-    return min(options, key=_size)
+    narrow = _narrowest(tensor)
+    if narrow is not tensor:
+        options.append(_Narrow(tensor.dtype, narrow))
+    if int(torch.count_nonzero(tensor)) * 6 < _bytes(narrow):
+        options.append(_Coo.of(tensor))
+    return options
 
 
 def _packed(tensor: torch.Tensor, rows: int | None):
