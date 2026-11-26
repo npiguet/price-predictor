@@ -235,8 +235,9 @@ def test_a_changeling_has_every_creature_type():
     from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
 
     goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
-    assert goblins.covers(Characteristics.made(["creature"], ["shapeshifter"], changeling=True))
-    assert not goblins.covers(Characteristics.made(["creature"], ["shapeshifter"]))
+    shapeshifter = Characteristics.made(["creature"], ["shapeshifter"])
+    assert goblins.covers(shapeshifter.with_changeling(True))
+    assert not goblins.covers(shapeshifter)
     changeling = Combatant.made(["changeling"], ["U"], ["creature"], ["shapeshifter"])
     assert BlockingRestriction.PROTECTION in blocking_restrictions(
         Combatant.made(["protection_from_goblin"], ["R"]), changeling)

@@ -49,6 +49,7 @@ import numpy as np
 from effects.domain.board_edits import BoardEdit
 from effects.domain.rule_outcomes import (
     COLOUR_WORDS,
+    BlockKeywords,
     Combatant,
     ProtectionQuality,
     QualityKind,
@@ -327,7 +328,7 @@ def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
             row.append(edited)
             a, a_kw = side_of(edited, attacker)
             b, b_kw = side_of(edited, blocker)
-            attacker_dies, blocker_dies = step_deaths(a, b, a_kw, b_kw, step)
+            attacker_dies, blocker_dies = step_deaths(a, b, BlockKeywords(a_kw, b_kw), step)
             rule.append(blocker_dies if which == "blocker" else attacker_dies)
         rows.append(row)
         rules.append(rule)

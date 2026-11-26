@@ -13,7 +13,7 @@ from effect_knowledge_probes import (
 )
 from effect_knowledge_probes.board_edits import BoardEdit
 
-from effects.domain.rule_outcomes import Combatant
+from effects.domain.rule_outcomes import BlockKeywords, Combatant
 from tests.unit.scripts.knowledge_probe_support import (
     LETHAL_STEP,
     block_pair,
@@ -56,7 +56,8 @@ class TestCombatGrid:
     def test_the_rule(self, case):
         attacker, blocker, keywords, step, expected = case
         assert combat_grid.step_deaths(
-            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1]), step) == expected
+            attacker, blocker, BlockKeywords(frozenset(keywords[0]), frozenset(keywords[1])),
+            step) == expected
 
     def test_power_edits_one_entity_only(self, records):
         record, attacker, _ = one_on_one(records)

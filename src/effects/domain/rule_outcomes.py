@@ -81,14 +81,23 @@ def strikes_in_step(keywords: Collection[str], step: str) -> bool:
     return "first_strike" not in keywords or "double_strike" in keywords
 
 
+@dataclass(frozen=True, slots=True)
+class BlockKeywords:
+    """The keywords of a one-on-one block's two creatures, as
+    :func:`step_deaths` reads them."""
+
+    attacker: Iterable[str] = frozenset()
+    blocker: Iterable[str] = frozenset()
+
+
 def step_deaths(
     attacker: tuple[int, int, int], blocker: tuple[int, int, int],
-    attacker_keywords: Iterable[str] = frozenset(),
-    blocker_keywords: Iterable[str] = frozenset(), step: str = "regular",
+    keywords: BlockKeywords = BlockKeywords(), step: str = "regular",
 ) -> tuple[bool, bool]:
     """``(attacker dies, blocker dies)`` in one damage step of a one-on-one block.
 
-    Each creature is ``(power, toughness, damage already marked)``. Rules 510 and
+    Each creature is ``(power, toughness, damage already marked)``, ``keywords``
+    their keywords. Rules 510 and
     702.7, 702.4, 702.2 and 702.12: a first or double striker deals damage in the
     first-strike step, a creature without first strike or with double strike in the
     regular step, both creatures striking in a step at once. Lethal damage is marked
@@ -98,16 +107,16 @@ def step_deaths(
     power = {"a": attacker[0], "b": blocker[0]}
     toughness = {"a": attacker[1], "b": blocker[1]}
     marked = {"a": attacker[2], "b": blocker[2]}
-    keywords = {"a": set(attacker_keywords), "b": set(blocker_keywords)}
+    held = {"a": set(keywords.attacker), "b": set(keywords.blocker)}
     deathtouched = {"a": False, "b": False}
     other = {"a": "b", "b": "a"}
 
-    for side in [s for s in ("a", "b") if strikes_in_step(keywords[s], step) and power[s] > 0]:
+    for side in [s for s in ("a", "b") if strikes_in_step(held[s], step) and power[s] > 0]:
         marked[other[side]] += power[side]
-        if "deathtouch" in keywords[side]:
+        if "deathtouch" in held[side]:
             deathtouched[other[side]] = True
     dead = {side: _dies(toughness[side], marked[side], deathtouched[side],
-                        "indestructible" in keywords[side])
+                        "indestructible" in held[side])
             for side in ("a", "b")}
     return dead["a"], dead["b"]
 
@@ -141,18 +150,22 @@ class Characteristics(NamedTuple):
 
     @classmethod
     def of(cls, entity: EntityState) -> Characteristics:
-        return cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value,
-                        changeling=has_changeling(entity))
+        made = cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value)
+        return made.with_changeling(has_changeling(entity))
 
     @classmethod
     def made(cls, types: Iterable[str] = (), subtypes: Iterable[str] = (),
-             colours: Iterable[str] = (), mana_value: int = 0, *,
-             changeling: bool = False) -> Characteristics:
+             colours: Iterable[str] = (), mana_value: int = 0) -> Characteristics:
+        """Characteristics from their parts, without changeling
+        (:meth:`with_changeling` adds it)."""
         return cls(
             frozenset(t.lower() for t in types), frozenset(s.lower() for s in subtypes),
             frozenset(c for c in colours if c in COLOUR_WORDS), int(mana_value),
-            bool(changeling),
         )
+
+    def with_changeling(self, changeling: bool) -> Characteristics:
+        """These characteristics, with or without changeling."""
+        return self._replace(changeling=bool(changeling))
 
 
 def has_changeling(entity: EntityState) -> bool:
@@ -264,13 +277,8 @@ class ProtectionQuality:
         if not lowered.startswith("protection:"):
             return None
         value = lowered.split(":")[1].strip()
-        if not value or "." in value or value in ("true", "player"):
-            return None
-        if value in COLOUR_WORDS.values():
-            return cls(QualityKind.COLOUR, value)
-        if value in CARD_TYPES:
-            return cls(QualityKind.CARD_TYPE, value)
-        return cls(QualityKind.CREATURE_TYPE, value)
+        kind = _filter_kind(value)
+        return None if kind is None else cls(kind, value)
 
     @classmethod
     def of_keyword(cls, keyword: str) -> ProtectionQuality | None:
@@ -292,6 +300,25 @@ class ProtectionQuality:
         if value in _SUBTYPES:
             return cls(QualityKind.CREATURE_TYPE, value)
         return None
+
+
+def _filter_kind(value: str) -> QualityKind | None:
+    """What a ``Protection:<filter>`` fragment's lower-case filter names: a
+    colour, a card type, else a creature type; None for a filter naming no
+    quality of the five kinds (:func:`_names_no_quality`)."""
+    if _names_no_quality(value):
+        return None
+    if value in COLOUR_WORDS.values():
+        return QualityKind.COLOUR
+    if value in CARD_TYPES:
+        return QualityKind.CARD_TYPE
+    return QualityKind.CREATURE_TYPE
+
+
+def _names_no_quality(value: str) -> bool:
+    """An empty filter, a property filter (``card.chosencolor``), everything
+    (``true``) or a player."""
+    return not value or "." in value or value in ("true", "player")
 
 
 def _covered(qualities: Iterable[ProtectionQuality], obj: Characteristics) -> bool:
@@ -355,12 +382,12 @@ class Combatant(NamedTuple):
 
     @classmethod
     def made(cls, keywords: Iterable[str] = (), colours: Iterable[str] = (),
-             types: Iterable[str] = (), subtypes: Iterable[str] = (), mana_value: int = 0,
-             power: int | None = None) -> Combatant:
-        """A combatant from its parts, for a case no entity states."""
+             types: Iterable[str] = (), subtypes: Iterable[str] = ()) -> Combatant:
+        """A combatant from its parts, for a case no entity states, with mana
+        value 0 and no power: a case needing either builds the tuple itself."""
         found = frozenset(keywords)
-        return cls(found, Characteristics.made(
-            types, subtypes, colours, mana_value, changeling="changeling" in found), power)
+        made = Characteristics.made(types, subtypes, colours)
+        return cls(found, made.with_changeling("changeling" in found))
 
 
 def blocking_restrictions(
@@ -373,42 +400,64 @@ def blocking_restrictions(
     from a colour, from each colour or from everything; ``attacker_protections``
     adds the ones only a keyword line's fragment states (a card type, a
     creature type, a condition)."""
-    a, b = attacker.keywords, blocker.keywords
-    found: set[BlockingRestriction] = set()
-    if "unblockable" in a:
-        found.add(BlockingRestriction.UNBLOCKABLE)
-    if "flying" in a and not b & {"flying", "reach"}:
-        found.add(BlockingRestriction.FLYING)
-    if "horsemanship" in a and "horsemanship" not in b:
-        found.add(BlockingRestriction.HORSEMANSHIP)
-    if _fear_blocks(a, blocker.characteristics):
-        found.add(BlockingRestriction.FEAR)
-    if _intimidate_blocks(a, attacker.characteristics, blocker.characteristics):
-        found.add(BlockingRestriction.INTIMIDATE)
-    if ("shadow" in a) != ("shadow" in b):
-        found.add(BlockingRestriction.SHADOW)
-    if _skulk_blocks(attacker, blocker):
-        found.add(BlockingRestriction.SKULK)
-    qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
+    found = {restriction for restriction, keeps_out in _BLOCKING_RULES
+             if keeps_out(attacker, blocker)}
+    qualities = _keyword_qualities(attacker.keywords)
     if _covered((*qualities, *attacker_protections), blocker.characteristics):
         found.add(BlockingRestriction.PROTECTION)
     return frozenset(found)
 
 
-def _fear_blocks(attacker_keywords: Collection[str], blocker: Characteristics) -> bool:
-    return "fear" in attacker_keywords and "artifact" not in blocker.types and (
-        "B" not in blocker.colours)
+def _keyword_qualities(keywords: Iterable[str]) -> list[ProtectionQuality]:
+    """The protection qualities a keyword list states, in keyword order."""
+    return [q for q in map(ProtectionQuality.of_keyword, sorted(keywords)) if q is not None]
 
 
-def _intimidate_blocks(attacker_keywords: Collection[str], attacker: Characteristics,
-                       blocker: Characteristics) -> bool:
-    return ("intimidate" in attacker_keywords and "artifact" not in blocker.types
-            and not attacker.colours & blocker.colours)
+def _unblockable(attacker: Combatant, blocker: Combatant) -> bool:
+    return "unblockable" in attacker.keywords
+
+
+def _flying_blocks(attacker: Combatant, blocker: Combatant) -> bool:
+    return "flying" in attacker.keywords and not blocker.keywords & {"flying", "reach"}
+
+
+def _horsemanship_blocks(attacker: Combatant, blocker: Combatant) -> bool:
+    return "horsemanship" in attacker.keywords and "horsemanship" not in blocker.keywords
+
+
+def _fear_blocks(attacker: Combatant, blocker: Combatant) -> bool:
+    held = blocker.characteristics
+    return "fear" in attacker.keywords and "artifact" not in held.types and (
+        "B" not in held.colours)
+
+
+def _intimidate_blocks(attacker: Combatant, blocker: Combatant) -> bool:
+    held = blocker.characteristics
+    return ("intimidate" in attacker.keywords and "artifact" not in held.types
+            and not attacker.characteristics.colours & held.colours)
+
+
+def _shadow_blocks(attacker: Combatant, blocker: Combatant) -> bool:
+    return ("shadow" in attacker.keywords) != ("shadow" in blocker.keywords)
 
 
 def _skulk_blocks(attacker: Combatant, blocker: Combatant) -> bool:
     return ("skulk" in attacker.keywords and attacker.power is not None
             and blocker.power is not None and blocker.power > attacker.power)
+
+
+#: Each restriction but protection, with whether it keeps a blocker out, in
+#: the order :func:`blocking_restrictions` tests them.
+_BLOCKING_RULES: tuple[tuple[BlockingRestriction, Callable[[Combatant, Combatant], bool]],
+                       ...] = (
+    (BlockingRestriction.UNBLOCKABLE, _unblockable),
+    (BlockingRestriction.FLYING, _flying_blocks),
+    (BlockingRestriction.HORSEMANSHIP, _horsemanship_blocks),
+    (BlockingRestriction.FEAR, _fear_blocks),
+    (BlockingRestriction.INTIMIDATE, _intimidate_blocks),
+    (BlockingRestriction.SHADOW, _shadow_blocks),
+    (BlockingRestriction.SKULK, _skulk_blocks),
+)
 
 
 def may_block(attacker: Combatant, blocker: Combatant, *,
@@ -430,20 +479,25 @@ def landwalk_lands(selector: str, land: EntityState) -> bool | None:
     base, *properties = selector.split(".")
     if base in ("ChosenType", "YourBasic"):
         return None
-    types = {t.lower() for t in land.types}
-    if "land" not in types:
+    if "land" not in {t.lower() for t in land.types}:
         return False
     supertypes = {s.lower() for s in land.supertypes}
-    if base.lower() != "land" and base.lower() not in {s.lower() for s in land.subtypes}:
+    if not _names_land_type(base.lower(), land):
         return False
-    for prop in properties:
-        wanted = prop.lower()
-        if wanted == "nonbasic":
-            if "basic" in supertypes:
-                return False
-        elif wanted not in supertypes:
-            return False
-    return True
+    return all(_has_property(prop.lower(), supertypes) for prop in properties)
+
+
+def _names_land_type(base: str, land: EntityState) -> bool:
+    """Whether a selector's lower-case base, ``land`` or a land type, names ``land``."""
+    return base == "land" or base in {s.lower() for s in land.subtypes}
+
+
+def _has_property(wanted: str, supertypes: Collection[str]) -> bool:
+    """Whether a land with these lower-case supertypes has a selector's
+    lower-case property: ``nonbasic``, or a supertype (``snow``, ``legendary``)."""
+    if wanted == "nonbasic":
+        return "basic" not in supertypes
+    return wanted in supertypes
 
 
 # ── targeting (702.11, 702.16b, 702.18) ──────────────────────────────────
@@ -473,14 +527,18 @@ def targeting_restrictions(
         found.add(TargetingRestriction.SHROUD)
     if opponents and "hexproof" in keywords:
         found.add(TargetingRestriction.HEXPROOF)
-    hexproof_from = [ProtectionQuality.of_keyword(PROTECTION_FROM + k.removeprefix(HEXPROOF_FROM))
-                     for k in keywords if k.startswith(HEXPROOF_FROM)]
-    if opponents and _covered([q for q in hexproof_from if q is not None], source):
+    if opponents and _covered(_hexproof_qualities(keywords), source):
         found.add(TargetingRestriction.HEXPROOF_FROM)
-    protections = [q for q in map(ProtectionQuality.of_keyword, sorted(keywords)) if q is not None]
-    if not may_target(protections, source):
+    if not may_target(_keyword_qualities(keywords), source):
         found.add(TargetingRestriction.PROTECTION)
     return frozenset(found)
+
+
+def _hexproof_qualities(keywords: Iterable[str]) -> list[ProtectionQuality]:
+    """The qualities a keyword list's ``hexproof_from_<x>`` keywords name (702.11d)."""
+    found = [ProtectionQuality.of_keyword(PROTECTION_FROM + k.removeprefix(HEXPROOF_FROM))
+             for k in keywords if k.startswith(HEXPROOF_FROM)]
+    return [q for q in found if q is not None]
 
 
 # ── turn structure (500.1, 307.1, 702.61) ────────────────────────────────
@@ -519,23 +577,33 @@ def forge_phases(value: str | None) -> frozenset[str] | None:
         return None
     out: set[str] = set()
     for part in value.split(","):
-        if "->" in part:
-            start, _, end = part.partition("->")
-            first, last = _phase(start), _phase(end) if end.strip() else "cleanup"
-            if first is None or last is None:
-                return None
-            i, j = PHASE_ORDER.index(first), PHASE_ORDER.index(last)
-            if i > j:
-                return None
-            out.update(PHASE_ORDER[i : j + 1])
-        elif part.strip() == "Main":
-            out.update(MAIN_PHASES)
-        else:
-            phase = _phase(part)
-            if phase is None:
-                return None
-            out.add(phase)
+        phases = _part_phases(part)
+        if phases is None:
+            return None
+        out.update(phases)
     return frozenset(out)
+
+
+def _part_phases(part: str) -> Iterable[str] | None:
+    """The phases one comma-separated part of a phase list names; None for a
+    part naming no phase Forge knows."""
+    if "->" in part:
+        return _range_phases(part)
+    if part.strip() == "Main":
+        return MAIN_PHASES
+    phase = _phase(part)
+    return None if phase is None else (phase,)
+
+
+def _range_phases(part: str) -> tuple[str, ...] | None:
+    """The steps ``A->B`` runs over, ``A->`` to cleanup; None for an end
+    naming no phase, or a range running backwards."""
+    start, _, end = part.partition("->")
+    first, last = _phase(start), _phase(end) if end.strip() else "cleanup"
+    if first is None or last is None:
+        return None
+    i, j = PHASE_ORDER.index(first), PHASE_ORDER.index(last)
+    return None if i > j else PHASE_ORDER[i : j + 1]
 
 
 def sorcery_timing(*, own_turn: bool, phase: str, stack_size: int) -> bool:

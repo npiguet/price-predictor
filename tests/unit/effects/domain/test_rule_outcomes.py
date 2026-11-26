@@ -8,6 +8,7 @@ import pytest
 
 from effects.domain.rule_outcomes import (
     PHASE_ORDER,
+    BlockKeywords,
     Characteristics,
     Combatant,
     EffectKind,
@@ -69,7 +70,8 @@ class TestStepDeaths:
     ])
     def test_the_rule(self, attacker, blocker, keywords, step, expected):
         assert step_deaths(
-            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1]), step) == expected
+            attacker, blocker, BlockKeywords(frozenset(keywords[0]), frozenset(keywords[1])),
+            step) == expected
 
     @pytest.mark.parametrize("attacker, blocker, keywords, step, expected", [
         # 704.5f: toughness 0 or less is put into the graveyard, indestructible or not.
@@ -86,7 +88,8 @@ class TestStepDeaths:
     ])
     def test_the_hard_cases(self, attacker, blocker, keywords, step, expected):
         assert step_deaths(
-            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1]), step) == expected
+            attacker, blocker, BlockKeywords(frozenset(keywords[0]), frozenset(keywords[1])),
+            step) == expected
 
     @pytest.mark.parametrize("keywords, step, strikes", [
         (set(), "regular", True),
@@ -136,8 +139,9 @@ class TestMayBlock:
             self, protection, blocker, expected):
         assert may_block(
             Combatant.made((), ("R",)),
-            Combatant.made((), blocker.get("colours", ("G",)), blocker.get("types", ("creature",)),
-                           blocker.get("subtypes", ()), blocker.get("mana_value", 2)),
+            Combatant(frozenset(), Characteristics.made(
+                blocker.get("types", ("creature",)), blocker.get("subtypes", ()),
+                blocker.get("colours", ("G",)), blocker.get("mana_value", 2))),
             attacker_protections=(protection,),
         ) is expected
 
