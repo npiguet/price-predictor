@@ -23,6 +23,7 @@ from tests.unit.effects.domain.effect_head_input_support import (
     _WARD,
     _ZERO,
     E_DIM,
+    BuildSettings,
     _build,
     _entity,
     _flags,
@@ -58,8 +59,8 @@ class TestAbilityTokens:
 
     def test_context_dropout_can_drop_a_context_ability(self):
         record = _record()
-        kept = _build(record, context_dropout=0.0)
-        dropped = _build(record, context_dropout=1.0, rng=random.Random(1))
+        kept = _build(record, BuildSettings(context_dropout=0.0))
+        dropped = _build(record, BuildSettings(context_dropout=1.0, rng=random.Random(1)))
         assert len(slots_of_kind(dropped, SlotKind.ABILITY)) < len(
             slots_of_kind(kept, SlotKind.ABILITY)
         )
@@ -68,15 +69,15 @@ class TestAbilityTokens:
         """Dropping the ability under study would make the record unanswerable."""
         state = _snapshot(refs=Refs(source="E1"))
         surface = _build(
-            _record(state=state), context_dropout=1.0, rng=random.Random(1),
+            _record(state=state), BuildSettings(context_dropout=1.0, rng=random.Random(1)),
         )
         acting = [s for s in slots_of_kind(surface, SlotKind.ABILITY) if s.entity_id == "E1"]
         assert len(acting) == 1
 
     def test_dropout_is_reproducible_under_a_seeded_rng(self):
         record = _record()
-        first = _build(record, context_dropout=0.5, rng=random.Random(3))
-        second = _build(record, context_dropout=0.5, rng=random.Random(3))
+        first = _build(record, BuildSettings(context_dropout=0.5, rng=random.Random(3)))
+        second = _build(record, BuildSettings(context_dropout=0.5, rng=random.Random(3)))
         assert len(first.slots) == len(second.slots)
 
 
@@ -94,7 +95,7 @@ class TestKeysWithNoLine:
         record = _record(state=_snapshot(entities=(
             _entity("E1", lines=lines_of(printed=(self._PHANTOM, _ANTHEM))),
         )))
-        surface = _build(record, has_line=lambda key: key in _VECTORS)
+        surface = _build(record, BuildSettings(has_line=lambda key: key in _VECTORS))
         abilities = slots_of_kind(surface, SlotKind.ABILITY)
         assert [slot.e_vector for slot in abilities] == [_VECTORS[_ANTHEM]]
 
@@ -102,7 +103,7 @@ class TestKeysWithNoLine:
         record = _record(state=_snapshot(entities=(
             _entity("E1", lines=lines_of(printed=(self._PHANTOM, _ANTHEM, _WARD))),
         )))
-        surface = _build(record, has_line=lambda key: key in _VECTORS)
+        surface = _build(record, BuildSettings(has_line=lambda key: key in _VECTORS))
         positions = [
             slot.position for slot in surface.slots
             if slot.kind in (SlotKind.CARD, SlotKind.ABILITY)
@@ -113,7 +114,7 @@ class TestKeysWithNoLine:
         """The state-only control zeroes ``e`` but keeps the geometry."""
         record = _record(state=_snapshot(entities=(
             _entity("E1", lines=lines_of(printed=(_ANTHEM,))),)))
-        surface = _build(record, e_for=lambda key: None, has_line=lambda key: True)
+        surface = _build(record, BuildSettings(e_for=lambda key: None, has_line=lambda key: True))
         assert [slot.e_vector for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [_ZERO]
 
     def test_without_the_predicate_every_key_keeps_its_token(self):
@@ -142,8 +143,8 @@ class TestOptionRows:
             _entity("E1", lines=lines_of(printed=(self._CHARM, _ANTHEM))),
         )))
         return _build(
-            record, e_for=lambda key: vectors.get(key, _VECTORS.get(key)),
-            options_for=options_for,
+            record, BuildSettings(e_for=lambda key: vectors.get(key, _VECTORS.get(key)),
+                                  options_for=options_for),
         )
 
     def test_a_charm_gets_its_root_then_its_modes_in_choices_order(self):

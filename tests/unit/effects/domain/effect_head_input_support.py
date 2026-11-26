@@ -6,7 +6,7 @@ a surface's slots and relations by what they stand for."""
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 
 from effects.domain.card_features import card_features, card_segments
@@ -108,18 +108,31 @@ def _record(**overrides) -> EffectRecord:
     return make_record(kind, **defaults)
 
 
-def _build(
-    record, *, rng=None, e_for=_e_for, has_line=None, options_for=None,
-    context_dropout=0.0, stripped=NO_STRIP,
-):
-    lines = _Lines(e_for=e_for)
-    if has_line is not None:
-        lines = replace(lines, has_line=has_line)
-    if options_for is not None:
-        lines = replace(lines, options_for=options_for)
+@dataclass(frozen=True)
+class BuildSettings:
+    """How :func:`_build` builds a surface: the builder's rng (``None`` is a
+    fresh ``Random(0)``) and context dropout, the line lookup's ``e_for``,
+    ``has_line`` and ``options_for`` (``None`` keeps :class:`_Lines`' own),
+    and gate 2's strip."""
+
+    rng: random.Random | None = None
+    e_for: Callable = _e_for
+    has_line: Callable | None = None
+    options_for: Callable | None = None
+    context_dropout: float = 0.0
+    stripped: Mapping = NO_STRIP
+
+
+def _build(record, settings: BuildSettings = BuildSettings()):
+    lines = _Lines(e_for=settings.e_for)
+    if settings.has_line is not None:
+        lines = replace(lines, has_line=settings.has_line)
+    if settings.options_for is not None:
+        lines = replace(lines, options_for=settings.options_for)
     return SurfaceBuilder(
-        lines, e_dim=E_DIM, rng=rng or random.Random(0), context_dropout=context_dropout,
-    ).build(record, stripped)
+        lines, e_dim=E_DIM, rng=settings.rng or random.Random(0),
+        context_dropout=settings.context_dropout,
+    ).build(record, settings.stripped)
 
 
 _CHOICE = ProvenanceKey("cardsfolder/c/charm.txt", 0, "spell", 0)
@@ -150,11 +163,22 @@ def _subject_slot(surface, subject):
                 if slot.kind in (SlotKind.CARD, SlotKind.PLAYER) and slot.subject_id == subject)
 
 
-def _linked(surface, a, b, family, index=None) -> bool:
-    """Whether the surface relates slots ``a`` and ``b`` by ``family``, both ways."""
+@dataclass(frozen=True)
+class SlotLink:
+    """Slots ``a`` and ``b`` and the family (with its target ``index``, for
+    ``targets``) a relation between them is of."""
+
+    a: int
+    b: int
+    family: str
+    index: int | None = None
+
+
+def _linked(surface, link: SlotLink) -> bool:
+    """Whether the surface relates ``link``'s two slots by its family, both ways."""
     relations = set(surface.relations)
-    return ((a, b, _relation(family, "forward", index)) in relations
-            and (b, a, _relation(family, "reverse", index)) in relations)
+    return ((link.a, link.b, _relation(link.family, "forward", link.index)) in relations
+            and (link.b, link.a, _relation(link.family, "reverse", link.index)) in relations)
 
 
 def _gen3_entity(entity_id, name="Serra Angel", lines=(), **fields):

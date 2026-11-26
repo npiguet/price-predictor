@@ -12,6 +12,7 @@ from tests.unit.effects.domain.effect_head_input_support import (
     _ANTHEM,
     _CHOICE,
     _WARD,
+    BuildSettings,
     _build,
     _entity,
     _flags,
@@ -27,9 +28,9 @@ _SLIVER = ProvenanceKey("cardsfolder/f/fungus_sliver.txt", 0, "trigger", 0)
 class TestLineFlags:
     """Root spec § 9.2: every ability slot carries its line's flags."""
 
-    def _abilities(self, entity, **build):
+    def _abilities(self, entity, settings: BuildSettings = BuildSettings()):
         return slots_of_kind(
-            _build(_record(state=_snapshot(entities=(entity,))), **build), SlotKind.ABILITY)
+            _build(_record(state=_snapshot(entities=(entity,))), settings), SlotKind.ABILITY)
 
     def test_every_ability_slot_has_the_flags_width(self):
         from effects.domain.slot_lines import ABILITY_FEATURE_WIDTH
@@ -95,7 +96,8 @@ class TestLineFlags:
         entity = _entity("E1", lines=(
             _line(None, kind="keyword", granted=True, grant="effect", fragment="Flying"),))
         keys = []
-        abilities = self._abilities(entity, e_for=lambda key: keys.append(key) or None)
+        abilities = self._abilities(
+            entity, BuildSettings(e_for=lambda key: keys.append(key) or None))
         flags = _flags(abilities[0])
         assert (flags["granted"], flags["by_effect"]) == (1.0, 1.0)
         assert keyword_line_fragment(keys[-1]) == "Flying"
@@ -119,7 +121,7 @@ class TestLineFlags:
         modes = tuple(ProvenanceKey(_CHOICE.script_file, 0, "spell", 0, n) for n in range(3))
         entity = _entity("E1", lines=(_line(_CHOICE, kind="spell", chosen=(0, 2)),))
         abilities = self._abilities(
-            entity, options_for=lambda key: modes if key == _CHOICE else ())
+            entity, BuildSettings(options_for=lambda key: modes if key == _CHOICE else ()))
         assert [_flags(slot)["chosen"] for slot in abilities] == [0.0, 1.0, 0.0, 1.0]
 
     def test_a_keyword_counter_is_a_granted_keyword_line_not_a_counter(self):
@@ -147,7 +149,7 @@ class TestLineFlags:
         )
         record = _record(state=_snapshot(entities=(entity,)))
         base = _build(record)
-        stripped = _build(record, stripped={"E1": frozenset({"first_strike"})})
+        stripped = _build(record, BuildSettings(stripped={"E1": frozenset({"first_strike"})}))
         assert len(slots_of_kind(base, SlotKind.ABILITY)) == 2
         assert len(slots_of_kind(stripped, SlotKind.ABILITY)) == 1
         flags = card_segments(entity, record)["keyword_flags"]

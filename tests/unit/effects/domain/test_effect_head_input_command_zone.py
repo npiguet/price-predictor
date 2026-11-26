@@ -4,7 +4,7 @@ other extra cards are card slots their links relate."""
 from __future__ import annotations
 
 import math
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -14,6 +14,8 @@ from effects.domain.state_snapshot import GlobalState
 from tests.unit.effects.builders import slots_of_kind
 from tests.unit.effects.domain.effect_head_input_support import (
     _RUN,
+    BuildSettings,
+    SlotLink,
     _build,
     _card_part,
     _flags,
@@ -38,6 +40,23 @@ def _with_mutate_component(record, component_id, creature_id):
         record.state, entities=(*record.state.entities, component),
         links=(*record.state.links, Link(from_=component_id, to=creature_id,
                                          type="merged_with"))))
+
+
+@dataclass(frozen=True)
+class ExtraLink:
+    """A fixture record, by its id, and the link of ``family`` it holds from
+    the extra card ``a`` to ``b``."""
+
+    record_id: str
+    family: str
+    a: str
+    b: str
+
+
+@pytest.fixture
+def extra_link(record_id, family, a, b) -> ExtraLink:
+    """The parametrized record id, family and ends as one :class:`ExtraLink`."""
+    return ExtraLink(record_id, family, a, b)
 
 
 _FALTER = ProvenanceKey("cardsfolder/f/falter.txt", 0, "spell", 0)
@@ -68,7 +87,8 @@ class TestCommandZoneSlots:
 
         record = self._falter_record()
         falter_e = (0.5, 0.5, 0.0, 0.0)
-        surface = _build(record, e_for=lambda key: falter_e if key == _FALTER else None)
+        surface = _build(
+            record, BuildSettings(e_for=lambda key: falter_e if key == _FALTER else None))
         at = _subject_slot(surface, "F40")
         assert at not in surface.entity_slots
         line = surface.slots[at + 1]
@@ -77,10 +97,10 @@ class TestCommandZoneSlots:
         # Its lines are an effect's, whose duration the card reads apart.
         assert _flags(line)["by_effect"] == 1.0
         for creature in ("E1", "E2"):
-            assert _linked(surface, at, _subject_slot(surface, creature), "affects")
+            assert _linked(surface, SlotLink(at, _subject_slot(surface, creature), "affects"))
         # created_by ends at the casting line's own slot, not its card.
         caster_line = _subject_slot(surface, "E3") + 1
-        assert _linked(surface, at, caster_line, "created_by")
+        assert _linked(surface, SlotLink(at, caster_line, "created_by"))
         effect, = command_zone_entities(record)
         assert effect.controller == "P0" and effect.zone == "command"
         duration = _card_part(effect, record, "command_zone")
@@ -118,23 +138,25 @@ class TestCommandZoneSlots:
         floating = next(f for f in record.state.global_.floating_effects if f.id == "F37")
         source = floating.source_lines[0]
         vector = (0.0, 0.0, 0.0, 1.0)
-        surface = _build(record, e_for=lambda key: vector if key == source else None)
+        surface = _build(
+            record, BuildSettings(e_for=lambda key: vector if key == source else None))
         at = _subject_slot(surface, "F37")
         assert surface.slots[at + 1].e_vector == vector
         assert floating.affected == ("E52", "E173", "E174")
         for creature in floating.affected:
-            assert _linked(surface, at, _subject_slot(surface, creature), "affects")
+            assert _linked(surface, SlotLink(at, _subject_slot(surface, creature), "affects"))
 
     def test_a_real_delayed_trigger_is_a_card_reading_its_source_line(self, gen3_records):
         record = gen3_records[f"{_RUN}.0-mwqvqdyrb9c0.424"]
         trigger, = record.state.global_.delayed_triggers
         vector = (0.0, 1.0, 1.0, 0.0)
-        surface = _build(record, e_for=lambda key: vector if key in trigger.source_lines else None)
+        surface = _build(record, BuildSettings(
+            e_for=lambda key: vector if key in trigger.source_lines else None))
         at = _subject_slot(surface, trigger.id)
         assert surface.slots[at + 1].e_vector == vector
         # Pending on a card of the board: the record's own link relates them.
         assert trigger.remembered == ("E240",)
-        assert _linked(surface, at, _subject_slot(surface, "E240"), "pending_on")
+        assert _linked(surface, SlotLink(at, _subject_slot(surface, "E240"), "pending_on"))
 
     def test_a_delayed_trigger_is_pending_on_its_card(self):
         from effects.domain.state_snapshot import CommandZoneObject, Link
@@ -145,22 +167,21 @@ class TestCommandZoneSlots:
                                   stack_size=0, delayed_triggers=(CommandZoneObject(
                                       id="D7", source_lines=(_FALTER,), remembered=("E1",)),)))
         surface = _build(record)
-        assert _linked(surface, _subject_slot(surface, "D7"), _subject_slot(surface, "E1"),
-                       "pending_on")
+        assert _linked(surface, SlotLink(_subject_slot(surface, "D7"),
+                                         _subject_slot(surface, "E1"), "pending_on"))
 
     @pytest.mark.parametrize(("record_id", "family", "a", "b"), [
         (f"{_RUN}.0-mwqvqdyrb9c0.5", "last_known_state_of", "L74", "E74"),
         (f"{_RUN}.0-mwqvqdyrb9c0.81", "merged_with", "E9001", "E52"),
         (f"{_RUN}.2-mwqvwtly1zvq.1597", "in_dungeon", "E81", "P0"),
     ])
-    def test_the_extra_cards_are_slots_their_links_relate(
-        self, gen3_records, record_id, family, a, b,
-    ):
-        record = gen3_records[record_id]
-        if family == "merged_with":
-            record = _with_mutate_component(record, a, b)
+    def test_the_extra_cards_are_slots_their_links_relate(self, gen3_records, extra_link):
+        record = gen3_records[extra_link.record_id]
+        if extra_link.family == "merged_with":
+            record = _with_mutate_component(record, extra_link.a, extra_link.b)
         surface = _build(record)
-        assert _linked(surface, _subject_slot(surface, a), _subject_slot(surface, b), family)
+        assert _linked(surface, SlotLink(_subject_slot(surface, extra_link.a),
+                                         _subject_slot(surface, extra_link.b), extra_link.family))
 
     def test_a_librarys_top_card_reads_order_rank_zero(self, gen3_records):
         """A card below the top gets no slot (``test_library_card_slots.py``)."""

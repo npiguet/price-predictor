@@ -13,6 +13,14 @@ from tests.unit.effects.domain.effect_head_input_support import (
 )
 
 
+def _entities_and_lines(records):
+    """Every entity of ``records``' boards, and every slot line of those."""
+    from effects.domain.slot_lines import slot_lines
+
+    entities = [entity for record in records for entity in record.state.entities]
+    return entities, [line for entity in entities for line in slot_lines(entity)]
+
+
 class TestTheGen3Fixture:
     """The real gen-3 records lay out at one width per slot kind."""
 
@@ -34,10 +42,9 @@ class TestTheGen3Fixture:
         assert seen == {kind: {widths[kind]} for kind in seen}
 
     def test_the_fixture_reaches_the_new_inputs(self, records):
-        from effects.domain.slot_lines import keyword_line_fragment, slot_lines
+        from effects.domain.slot_lines import keyword_line_fragment
 
-        entities = [entity for record in records for entity in record.state.entities]
-        lines = [line for entity in entities for line in slot_lines(entity)]
+        entities, lines = _entities_and_lines(records)
         assert any(not line.active for line in lines)
         # Cut before ``grant`` existed: its granted keyword lines carry none.
         assert any(line.granted and keyword_line_fragment(line.key) for line in lines)

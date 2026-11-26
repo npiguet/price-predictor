@@ -31,6 +31,7 @@ from effects.domain.state_snapshot import (
     Refs,
 )
 from tests.unit.effects.domain.effect_head_input_support import (
+    SlotLink,
     _build,
     _gen3_entity,
     _gen3_record,
@@ -198,4 +199,4 @@ class TestTheTargetsAsCast:
             refs=Refs(targets=(), targets_at_cast=("E2",), source="E1"),
         )
         surface = _build(record)
-        assert _linked(surface, ACT_SLOT, _subject_slot(surface, "E2"), "targets", 0)
+        assert _linked(surface, SlotLink(ACT_SLOT, _subject_slot(surface, "E2"), "targets", 0))

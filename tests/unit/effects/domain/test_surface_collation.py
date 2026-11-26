@@ -64,6 +64,17 @@ class TestCollateSurfaces:
     """
 
     @staticmethod
+    def _put_e_reference(e_rows, e_vectors, at, slot):
+        """The reference's ``e`` of the slot at ``at`` (row, column): its row
+        index where it names one, else its vector."""
+        row, column = at
+        if slot.e_row is not None:
+            e_rows[row, column] = slot.e_row
+        elif slot.e_vector is not None:
+            vector = torch.tensor(slot.e_vector, dtype=torch.float32)
+            e_vectors[row, column, : vector.shape[0]] = vector
+
+    @staticmethod
     def _collate_reference(surfaces, *, e_dim, widths):
         """``collate_surfaces`` as it stood before it was vectorised."""
         batch = len(surfaces)
@@ -88,11 +99,7 @@ class TestCollateSurfaces:
                 if slot.features and slot.kind in features:
                     values = torch.tensor(slot.features, dtype=torch.float32)
                     features[slot.kind][row, column, : values.shape[0]] = values
-                if slot.e_row is not None:
-                    e_rows[row, column] = slot.e_row
-                elif slot.e_vector is not None:
-                    vector = torch.tensor(slot.e_vector, dtype=torch.float32)
-                    e_vectors[row, column, : vector.shape[0]] = vector
+                TestCollateSurfaces._put_e_reference(e_rows, e_vectors, (row, column), slot)
 
         return {
             "slot_features": features,
