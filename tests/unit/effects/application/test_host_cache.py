@@ -159,6 +159,26 @@ def test_nested_values_are_packed_and_unpacked_through_and_through():
         _same(want, got)
 
 
+def _creature_cells(records) -> list:
+    """One fixture record edited into 64 toughness and power cells."""
+    from effects.domain.board_edits import BoardEdit
+
+    record = next(r for r in records if _creatures(r))
+    creature = _creatures(record)[0]
+    return [BoardEdit(record).set_power(creature.id, p).set_toughness(creature.id, t).record
+            for p in range(1, 9) for t in range(1, 9)]
+
+
+def _creatures(record) -> list:
+    return [e for e in record.state.entities if e.pt is not None and e.is_creature]
+
+
+def _tensors_of(value) -> list[torch.Tensor]:
+    tensors: list[torch.Tensor] = []
+    map_tensors(value, lambda t: tensors.append(t) or t)
+    return tensors
+
+
 def test_one_grid_records_real_cells_cost_a_fraction_of_their_packed_cells(run, records):
     """A combat-free stand-in for a grid: one fixture record edited into 64
     toughness and power cells, prepared together as the control score
@@ -166,20 +186,11 @@ def test_one_grid_records_real_cells_cost_a_fraction_of_their_packed_cells(run, 
     rebuilt exactly."""
     from dataclasses import replace
 
-    from effects.domain.board_edits import BoardEdit
-
-    record = next(r for r in records if any(
-        e.pt is not None and e.is_creature for e in r.state.entities))
-    creature = next(e for e in record.state.entities if e.pt is not None and e.is_creature)
-    cells = [BoardEdit(record).set_power(creature.id, p).set_toughness(creature.id, t).record
-             for p in range(1, 9) for t in range(1, 9)]
+    cells = _creature_cells(records)
     batch = run.preparer.scoring_batcher().prepare(cells)
     stripped = replace(batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[])
     together = pack(stripped, rows=len(cells))
     alone = pack(stripped)
     assert host_bytes(together) < host_bytes(alone) / 4
-    before, after = [], []
-    map_tensors(stripped, lambda t: before.append(t) or t)
-    map_tensors(unpack(together), lambda t: after.append(t) or t)
-    for want, got in zip(before, after, strict=True):
+    for want, got in zip(_tensors_of(stripped), _tensors_of(unpack(together)), strict=True):
         _same(want, got)
