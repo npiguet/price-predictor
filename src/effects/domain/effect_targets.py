@@ -13,6 +13,12 @@ fields train on every entity they name whether or not the gate's target fires.
 A cost half trains no gate either (D7): whether an entity was affected is the
 effect half's question, and what its payment did trains without the gate at
 the entities that paid (:mod:`effects.domain.cost_targets`).
+
+The legality fields are read off the payload in
+:mod:`effects.domain.legality_targets`, and where an event Forge names no
+subject for lands is :mod:`effects.domain.event_placement`'s;
+``target_legality_subjects`` and ``placed_subjects`` are importable from here
+too.
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ from effects.domain.effect_head_layout import (
     counter_delta_field,
     mana_field,
 )
+from effects.domain.event_placement import from_zone, placed_subjects, to_zone
 from effects.domain.event_schema import DamageType, Event, EventType, StateFlag, signed_delta
 from effects.domain.input_vocabularies import (
     CARD_TYPES,
@@ -52,6 +59,8 @@ from effects.domain.lasting_change_labels import (
     mixed_pt_durations,
     mixed_type_color_durations,
 )
+from effects.domain.legality_targets import apply_playability
+from effects.domain.legality_targets import target_legality_subjects as target_legality_subjects
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
     ContinuousPayload,
@@ -99,16 +108,27 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
     EventType.LIBRARY_SHUFFLED: LibraryEvent.SHUFFLE,
 }
 
-#: ``type -> (field, parameter, default when absent, sign)``.
-_ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
-    EventType.DAMAGE_HEALED: (HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
-    EventType.DAMAGE_PREVENTED: (HeadField.DAMAGE_PREVENTED, "amount", 0, 1.0),
-    EventType.POISON_CHANGE: (HeadField.POISON_DELTA, "delta", 0, 1.0),
-    EventType.ENERGY_CHANGE: (HeadField.ENERGY_DELTA, "delta", 0, 1.0),
-    EventType.RADIATION_CHANGE: (HeadField.RAD_DELTA, "delta", 0, 1.0),
-    EventType.CARD_DRAWN: (HeadField.CARDS_DRAWN, "count", 1, 1.0),
-    EventType.CARD_DISCARDED: (HeadField.CARDS_DISCARDED, "count", 1, 1.0),
-    EventType.CARD_MILLED: (HeadField.CARDS_MILLED, "count", 1, 1.0),
+@dataclass(frozen=True)
+class _Additive:
+    """An event that adds to one field: the parameter it reads, the value
+    that parameter takes when absent, and the sign the sum takes it with."""
+
+    name: str
+    parameter: str
+    default: float
+    sign: float
+
+
+#: ``type -> what it adds to``.
+_ADDITIVE: dict[EventType, _Additive] = {
+    EventType.DAMAGE_HEALED: _Additive(HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
+    EventType.DAMAGE_PREVENTED: _Additive(HeadField.DAMAGE_PREVENTED, "amount", 0, 1.0),
+    EventType.POISON_CHANGE: _Additive(HeadField.POISON_DELTA, "delta", 0, 1.0),
+    EventType.ENERGY_CHANGE: _Additive(HeadField.ENERGY_DELTA, "delta", 0, 1.0),
+    EventType.RADIATION_CHANGE: _Additive(HeadField.RAD_DELTA, "delta", 0, 1.0),
+    EventType.CARD_DRAWN: _Additive(HeadField.CARDS_DRAWN, "count", 1, 1.0),
+    EventType.CARD_DISCARDED: _Additive(HeadField.CARDS_DISCARDED, "count", 1, 1.0),
+    EventType.CARD_MILLED: _Additive(HeadField.CARDS_MILLED, "count", 1, 1.0),
 }
 
 _SETTERS: dict[EventType, tuple[str, int]] = {
@@ -270,7 +290,7 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
 
     if events:
         _RecordPass(record, events, targets).run()
-    _apply_playability(record, targets.entry)
+    apply_playability(record, targets.entry)
     _apply_continuous(record, targets.entry)
     apply_paid_costs(record, targets.entry)
     targets.unsupervised.update(closed_list_misses(record))
@@ -331,11 +351,11 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
         apply(entry, event)
 
 
-def _apply_additive(
-    entry: EntityTargets, event: Event, *,
-    name: str, parameter: str, default: float, sign: float,
-) -> None:
-    entry.add(name, sign * float(event.params.get(parameter, default)))
+def _apply_additive(entry: EntityTargets, event: Event, *, additive: _Additive) -> None:
+    entry.add(
+        additive.name,
+        additive.sign * float(event.params.get(additive.parameter, additive.default)),
+    )
 
 
 def _apply_setter(entry: EntityTargets, _event: Event, *, name: str, value: int) -> None:
@@ -362,7 +382,26 @@ def _apply_card_revealed(entry: EntityTargets, event: Event) -> None:
 
 
 def _from_a_library(event: Event) -> bool:
-    return str(event.params.get("from_zone", "")).lower() == Zone.LIBRARY
+    return from_zone(event) == Zone.LIBRARY
+
+
+def _move_is_the_outcome(entry: EntityTargets, destination: str) -> bool:
+    """Whether the entity's zone outcome is still the one a move to
+    ``destination`` wrote, a destination the outcomes name."""
+    outcome = _ZONE_BY_DESTINATION.get(destination)
+    if outcome is None:
+        return False
+    return entry.fields.get(HeadField.ZONE_OUTCOME) == ZONE_OUTCOMES.index(outcome)
+
+
+def _is_library_bottom(position: int, size: int | None) -> bool:
+    """Whether a card put ``position`` cards deep into a library of ``size``
+    went to the bottom: a negative position counts from the bottom, 0 is the
+    top, and a position at or past the library's size (or any but 0, where
+    the size is unknown) is the bottom."""
+    if position < 0:
+        return True
+    return position > 0 and (size is None or position >= size)
 
 
 def _flag_library(entry: EntityTargets, library_event: LibraryEvent) -> None:
@@ -372,7 +411,7 @@ def _flag_library(entry: EntityTargets, library_event: LibraryEvent) -> None:
 
 
 def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
-    outcome = _ZONE_BY_DESTINATION.get(str(event.params.get("to_zone", "")).lower())
+    outcome = _ZONE_BY_DESTINATION.get(to_zone(event))
     if outcome is None:
         entry.forget(HeadField.ZONE_OUTCOME)
         return
@@ -528,9 +567,8 @@ def _appliers() -> dict[EventType, Callable[[EntityTargets, Event], None]]:
     """Every event's applier: the tables' events and the ones read off their
     own parameters, each type named once."""
     tabled: list[tuple[EventType, Callable[[EntityTargets, Event], None]]] = [
-        *((event_type, partial(
-            _apply_additive, name=name, parameter=parameter, default=default, sign=sign,
-        )) for event_type, (name, parameter, default, sign) in _ADDITIVE.items()),
+        *((event_type, partial(_apply_additive, additive=additive))
+          for event_type, additive in _ADDITIVE.items()),
         *((event_type, partial(_apply_setter, name=name, value=value))
           for event_type, (name, value) in _SETTERS.items()),
         *((event_type, partial(_apply_zone_outcome, outcome=outcome))
@@ -622,19 +660,35 @@ class _RecordPass:
         which the record's ``counter_change`` adds: each such hit matched by a
         -1/-1 counter change of its amount on its subject is taken back out of
         the marked damage."""
-        counters: dict[str, list[float]] = defaultdict(list)
-        for event in self.by_type[EventType.COUNTER_CHANGE]:
-            if str(event.params.get("counter_type", "")) == "M1M1":
-                for subject in event.subjects:
-                    counters[subject].append(signed_delta(event))
+        counters = self._m1m1_counters()
         for event in self.by_type[EventType.DAMAGE_DEALT]:
-            if event.params.get("damage_type") != DamageType.DEATHTOUCH:
-                continue
-            amount = float(event.params.get("amount", 0))
+            if event.params.get("damage_type") == DamageType.DEATHTOUCH:
+                self._take_back_counters(event, counters)
+
+    def _m1m1_counters(self) -> dict[str, list[float]]:
+        """``subject -> the -1/-1 counter changes the record makes on it``, in
+        event order."""
+        counters: dict[str, list[float]] = defaultdict(list)
+        m1m1 = (
+            event for event in self.by_type[EventType.COUNTER_CHANGE]
+            if str(event.params.get("counter_type", "")) == "M1M1"
+        )
+        for event in m1m1:
             for subject in event.subjects:
-                if amount and amount in counters[subject]:
-                    counters[subject].remove(amount)
-                    self.targets[subject].add(HeadField.DAMAGE_TAKEN, -amount)
+                counters[subject].append(signed_delta(event))
+        return counters
+
+    def _take_back_counters(self, event: Event, counters: dict[str, list[float]]) -> None:
+        """One deathtouch hit's damage taken back out of the marked damage at
+        each subject holding a -1/-1 counter change of its amount, using that
+        change up."""
+        amount = float(event.params.get("amount", 0))
+        if not amount:
+            return
+        for subject in event.subjects:
+            if amount in counters[subject]:
+                counters[subject].remove(amount)
+                self.targets[subject].add(HeadField.DAMAGE_TAKEN, -amount)
 
     # ── zone outcomes ──
 
@@ -643,56 +697,81 @@ class _RecordPass:
         only after leaving it in the same record, else it entered; into a
         library is the top, the bottom or a shuffle, and unknown where the
         record cannot say which."""
+        for subject, history in self._moves().items():
+            self._refine_move(subject, history)
+
+    def _moves(self) -> dict[str, list[Event]]:
+        """``subject -> its zone changes``, in event order."""
         moves: dict[str, list[Event]] = defaultdict(list)
         for event in self.by_type[EventType.ZONE_CHANGE]:
             for subject in event.subjects:
                 moves[subject].append(event)
-        for subject, history in moves.items():
-            entry = self.targets[subject]
-            last = history[-1]
-            destination = str(last.params.get("to_zone", "")).lower()
-            outcome = _ZONE_BY_DESTINATION.get(destination)
-            if outcome is None or entry.fields.get(HeadField.ZONE_OUTCOME) != (
-                    ZONE_OUTCOMES.index(outcome)):
-                continue  # unnamed, or a later event (destroyed, countered, phased) said more
-            if destination == Zone.BATTLEFIELD:
-                self._entered(entry, subject, history)
-            elif destination == Zone.LIBRARY:
-                self._into_library(entry, subject, last)
+        return moves
+
+    def _refine_move(self, subject: str, history: list[Event]) -> None:
+        """One subject's last move refined, unless its destination is unnamed
+        or a later event (destroyed, countered, phased) said more."""
+        entry = self.targets[subject]
+        last = history[-1]
+        destination = to_zone(last)
+        if not _move_is_the_outcome(entry, destination):
+            return
+        if destination == Zone.BATTLEFIELD:
+            self._entered(entry, subject, history)
+        elif destination == Zone.LIBRARY:
+            self._into_library(entry, subject, last)
 
     def _entered(self, entry: EntityTargets, subject: str, history: list[Event]) -> None:
-        left = any(
-            str(event.params.get("from_zone", "")).lower() == Zone.BATTLEFIELD
-            for event in history[:-1]
-        )
+        left = any(from_zone(event) == Zone.BATTLEFIELD for event in history[:-1])
         if not left:
             entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(ZoneOutcome.ENTERED))
-        # A spell enters with the face it was cast with; from anywhere else
-        # the record does not say which face is up.
+        self._face_cast_with(entry, subject, history[-1])
+
+    def _face_cast_with(self, entry: EntityTargets, subject: str, move: Event) -> None:
+        """A spell enters with the face it was cast with; from anywhere else
+        the record does not say which face is up. A face an event named
+        stays."""
+        if HeadField.FACE_AFTER in entry.fields or from_zone(move) != Zone.STACK:
+            return
         entity = self.entities.get(subject)
-        source = str(history[-1].params.get("from_zone", "")).lower()
-        if (
-            HeadField.FACE_AFTER not in entry.fields and entity is not None
-            and source == Zone.STACK and entity.face_state is not None
-        ):
-            face = vocabulary_slot(entity.face_state, FACE_STATES)
-            if face is not None:
-                entry.set(HeadField.FACE_AFTER, face)
+        if entity is None or entity.face_state is None:
+            return
+        face = vocabulary_slot(entity.face_state, FACE_STATES)
+        if face is not None:
+            entry.set(HeadField.FACE_AFTER, face)
 
     def _into_library(self, entry: EntityTargets, subject: str, move: Event) -> None:
-        owner = self._owner(subject)
-        position = move.params.get("library_position")
-        if position is not None:
-            size = self.players[owner].library if owner in self.players else None
-            position = int(position)
-            bottom = position < 0 or (position > 0 and (size is None or position >= size))
-            outcome = ZoneOutcome.LIBRARY_BOTTOM if bottom else ZoneOutcome.LIBRARY_TOP
-        elif owner in self.shuffled or (owner is None and self.shuffled):
-            outcome = ZoneOutcome.SHUFFLED_INTO_LIBRARY
-        else:
+        outcome = self._library_outcome(subject, move)
+        if outcome is None:
             entry.forget(HeadField.ZONE_OUTCOME)
             return
         entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(outcome))
+
+    def _library_outcome(self, subject: str, move: Event) -> ZoneOutcome | None:
+        """Where in its owner's library a card went: the position the move
+        names, else shuffled in where its owner's library was shuffled (any
+        shuffle, for a card whose owner the snapshot does not hold); None
+        where the record cannot say."""
+        owner = self._owner(subject)
+        position = move.params.get("library_position")
+        if position is not None:
+            return self._placed_in_library(owner, int(position))
+        if self._shuffled(owner):
+            return ZoneOutcome.SHUFFLED_INTO_LIBRARY
+        return None
+
+    def _placed_in_library(self, owner: str | None, position: int) -> ZoneOutcome:
+        size = self.players[owner].library if owner in self.players else None
+        if _is_library_bottom(position, size):
+            return ZoneOutcome.LIBRARY_BOTTOM
+        return ZoneOutcome.LIBRARY_TOP
+
+    def _shuffled(self, owner: str | None) -> bool:
+        """Whether ``owner``'s library was shuffled; any library, for an owner
+        the snapshot does not name."""
+        if owner is None:
+            return bool(self.shuffled)
+        return owner in self.shuffled
 
     def _owner(self, subject: str) -> str | None:
         entity = self.entities.get(subject)
@@ -728,14 +807,15 @@ class _RecordPass:
         base moved or a boost did, so the field stays unwritten."""
         for event in self.by_type[EventType.PT_CHANGE]:
             set_pt = event.params.get("set_pt")
-            if not isinstance(set_pt, (list, tuple)) or len(set_pt) != 2:
-                continue
-            for subject in event.subjects:
-                entity = self.entities.get(subject)
-                base = entity.pt.base if entity is not None and entity.pt is not None else (0, 0)
-                entry = self.targets[subject]
-                entry.set(HeadField.BASE_POWER_DELTA, float(set_pt[0]) - base[0])
-                entry.set(HeadField.BASE_TOUGHNESS_DELTA, float(set_pt[1]) - base[1])
+            if _is_pt_pair(set_pt):
+                self._set_base_pt(event.subjects, set_pt)
+
+    def _set_base_pt(self, subjects, set_pt) -> None:
+        for subject in subjects:
+            base = _snapshot_base(self.entities.get(subject))
+            entry = self.targets[subject]
+            entry.set(HeadField.BASE_POWER_DELTA, float(set_pt[0]) - base[0])
+            entry.set(HeadField.BASE_TOUGHNESS_DELTA, float(set_pt[1]) - base[1])
 
     # ── copies and retargets ──
 
@@ -779,129 +859,6 @@ class _RecordPass:
                         lambda entry: entry.set(HeadField.VENTURED, 1))
 
 
-def placed_subjects(record: EffectRecord, event: Event,
-                    events: tuple[Event, ...] | None = None) -> tuple[str, ...]:
-    """Where an event's outcome is placed: its subjects, or, for the events
-    Forge names no subject for, the object they happened to.
-
-    A Clone's copy is placed on the Clone, which is the cause and enters
-    from the stack in the same record; a spell copy or a retarget on the
-    stack objects the acting ability targets, else on its cause when that is
-    a stack object; venturing on the venturing ability's controller, the
-    cause's where the snapshot holds it. Empty where none is found.
-    ``events`` are the record's target events (``events_of``), read for a
-    copy's entry."""
-    if event.subjects:
-        return tuple(event.subjects)
-    entities = {entity.id: entity for entity in record.state.entities}
-    cause = event.params.get("cause")
-    if event.type is EventType.PERMANENT_COPIED:
-        entered = {
-            subject for other in (events if events is not None else events_of(record))
-            if other.type is EventType.ZONE_CHANGE
-            and str(other.params.get("from_zone", "")).lower() == Zone.STACK
-            and str(other.params.get("to_zone", "")).lower() == Zone.BATTLEFIELD
-            for subject in other.subjects
-        }
-        return (cause,) if cause in entered else ()
-    if event.type in (EventType.SPELL_COPIED, EventType.TARGETS_CHANGED):
-        on_stack = tuple(
-            ref for ref in record.state.refs.targets
-            if ref in entities and entities[ref].zone == Zone.STACK
-        )
-        if on_stack:
-            return on_stack
-        if cause in entities and entities[cause].zone == Zone.STACK:
-            return (cause,)
-        return ()
-    if event.type is EventType.DUNGEON_VENTURED:
-        found = entities.get(cause)
-        player = found.controller if found is not None else record.actor_player
-        return (player,) if player in {p.id for p in record.state.players} else ()
-    return ()
-
-
-def _apply_playability(record: EffectRecord, slot) -> None:
-    """Legality fields from the payload rather than from events, on every
-    entity each one is defined for, the gate untouched (root spec § 11.4)."""
-    payload = record.payload
-    if isinstance(payload, PlayabilityDecisionPayload):
-        _decision_legality(record, payload, slot)
-    elif isinstance(payload, PlayabilityAttackersPayload):
-        _attackers_legality(record, payload, slot)
-    elif isinstance(payload, PlayabilityBlockersPayload):
-        _mark_legality(slot, HeadField.BLOCKER_LEGAL, payload.legal_blockers, payload)
-        # min_blockers is read at the anchored attacker, not at the blockers.
-        slot(payload.anchor_attacker).set(HeadField.MIN_BLOCKERS, payload.min_blockers)
-        if payload.must_block is not None:
-            must = set(payload.must_block)
-            for listed in (*payload.legal_blockers, *(f.entity for f in payload.forbidden)):
-                slot(listed).set(HeadField.COMBAT_REQUIREMENT, 1 if listed in must else 0)
-
-
-def target_legality_subjects(record: EffectRecord) -> tuple[str, ...]:
-    """Every card and player a decision record writes ``target_legal`` at:
-    each of the snapshot's, and each of the candidate's ``legal_targets``,
-    when the candidate has a targeting clause (a legal target, or
-    ``has_legal_target`` false for want of one); none otherwise."""
-    payload = record.payload
-    if not isinstance(payload, PlayabilityDecisionPayload) or not payload.candidates:
-        return ()
-    candidate = payload.candidates[0]
-    if not candidate.legal_targets and candidate.has_legal_target:
-        return ()
-    return tuple(dict.fromkeys((
-        *(e.id for e in record.state.entities), *(p.id for p in record.state.players),
-        *candidate.legal_targets)))
-
-
-def _decision_legality(record, payload: PlayabilityDecisionPayload, slot) -> None:
-    """``target_legal`` at :func:`target_legality_subjects`: 1 in the
-    candidate's ``legal_targets`` (the union over its targeting clauses), 0
-    elsewhere."""
-    subjects = target_legality_subjects(record)
-    if not subjects:
-        return
-    legal = set(payload.candidates[0].legal_targets)
-    for ref in subjects:
-        slot(ref).set(HeadField.TARGET_LEGAL, 1 if ref in legal else 0)
-
-
-def _attackers_legality(record, payload: PlayabilityAttackersPayload, slot) -> None:
-    """The declaration's legal and forbidden attackers; on an anchored record
-    which players, planeswalkers and battles the anchor may attack, whether
-    it must, and on a declared anchor the tap the attack made (FR-037)."""
-    _mark_legality(slot, HeadField.ATTACKER_LEGAL, payload.legal_attackers, payload)
-    anchor = payload.anchor_attacker
-    if anchor is None:
-        return
-    defenders = set(payload.legal_defenders)
-    candidates = [player.id for player in record.state.players] + [
-        entity.id for entity in record.state.entities
-        if entity.on_battlefield  # a phased-out one is no defender at all
-        and {"planeswalker", "battle"} & {kind.lower() for kind in entity.types}
-    ]
-    for ref in candidates:
-        slot(ref).set(HeadField.ATTACK_TARGET_LEGAL, 1 if ref in defenders else 0)
-    entry = slot(anchor)
-    entry.set(HeadField.COMBAT_REQUIREMENT, 1 if payload.must_attack else 0)
-    if payload.tapped_by_attack is not None:
-        # The tap is what the declaration did to the anchor, so the anchor
-        # is affected; the record trains no gate, so that is all it says.
-        entity = next((e for e in record.state.entities if e.id == anchor), None)
-        before = 1 if entity is not None and entity.tapped else 0
-        entry.affected = True
-        entry.set(HeadField.TAP_STATE, 1 if payload.tapped_by_attack else before)
-
-
-def _mark_legality(slot, name: str, legal, payload) -> None:
-    """One combat declaration's legal entities as 1, its forbidden ones as 0."""
-    for entity in legal:
-        slot(entity).set(name, 1)
-    for forbidden in payload.forbidden:
-        slot(forbidden.entity).set(name, 0)
-
-
 def _apply_continuous(record: EffectRecord, slot) -> None:
     """A continuous record's contributions are its targets directly, read
     against its board, which is the board without the static."""
@@ -937,10 +894,23 @@ def _apply_set_pt(entry: EntityTargets, set_pt, entity) -> None:
     a base of 0/0."""
     if set_pt is None:
         return
-    base = entity.pt.base if entity is not None and entity.pt is not None else (0, 0)
+    base = _snapshot_base(entity)
     for half, field_name in ((0, HeadField.BASE_POWER_DELTA), (1, HeadField.BASE_TOUGHNESS_DELTA)):
         if set_pt[half] is not None:
             entry.set(field_name, float(set_pt[half]) - base[half])
+
+
+def _snapshot_base(entity) -> tuple[int, int]:
+    """An entity's base power and toughness on the snapshot; 0/0 for one
+    the snapshot does not hold or that was no creature there."""
+    if entity is None or entity.pt is None:
+        return (0, 0)
+    return entity.pt.base
+
+
+def _is_pt_pair(set_pt) -> bool:
+    """Whether a ``set_pt`` names both a power and a toughness."""
+    return isinstance(set_pt, (list, tuple)) and len(set_pt) == 2
 
 
 def _apply_channel(entry: EntityTargets, line: LineChange) -> None:
