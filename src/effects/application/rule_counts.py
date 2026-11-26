@@ -41,7 +41,6 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -93,11 +92,11 @@ class RuleCounts:
     #: Games without a game-end marker, left out of every count.
     cut_games: int = 0
 
-    def to_json(self, standing: CatalogueStanding | Mapping[str, str] | None = None) -> dict:
-        """The counts file; ``standing`` a bare ``rule -> reason`` map of the
-        ``none`` rules where a caller has nothing more of the catalogue."""
-        if not isinstance(standing, CatalogueStanding):
-            standing = CatalogueStanding(none=dict(standing or {}))
+    def to_json(self, standing: CatalogueStanding | None = None) -> dict:
+        """The counts file; ``standing`` the catalogue's say of the rules no
+        count can show, none where a caller has nothing of the catalogue."""
+        if standing is None:
+            standing = CatalogueStanding()
         by_rule: dict[str, dict[str, dict[str, int]]] = {}
         for (rule, polarity, source), n in sorted(self.counts.items()):
             by_rule.setdefault(rule, {}).setdefault(polarity, {})[source] = n

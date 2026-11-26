@@ -89,7 +89,7 @@ def gen3_dir(tmp_path):
 
 def test_the_fixture_s_deaths_are_counted_per_side(tmp_path, gen3_dir):
     counts, _ = count(_config(tmp_path, gen3_dir))
-    document = counts.to_json({})
+    document = counts.to_json()
     assert document["records"] == 396
     assert document["generation"] == "gen-3"
     assert document["rules"]["704.5f"] == {
@@ -121,7 +121,7 @@ def test_a_game_s_source_follows_any_of_its_records(tmp_path, gen3_dir):
     ``random_seat``.
     """
     original, _ = count(_config(tmp_path / "a", gen3_dir))
-    assert original.to_json({})["rules"]["704.5f"] == {
+    assert original.to_json()["rules"]["704.5f"] == {
         "fires": {str(RuleSource.FORGE_AI): 3, str(RuleSource.RANDOM_SEAT): 2},
         "does_not_fire": {str(RuleSource.FORGE_AI): 1}}
     path = gen3_dir / GEN3.name
@@ -132,7 +132,7 @@ def test_a_game_s_source_follows_any_of_its_records(tmp_path, gen3_dir):
     with gzip.open(path, "wt", encoding="utf-8") as out:
         out.write("".join(json.dumps(r) + "\n" for r in records))
     counts, _ = count(_config(tmp_path / "b", gen3_dir))
-    rule = counts.to_json({})["rules"]["704.5f"]
+    rule = counts.to_json()["rules"]["704.5f"]
     assert rule["fires"] == {str(RuleSource.FORGE_AI): 2, str(RuleSource.RANDOM_SEAT): 3}
     assert rule["does_not_fire"] == {str(RuleSource.RANDOM_SEAT): 1}
 
