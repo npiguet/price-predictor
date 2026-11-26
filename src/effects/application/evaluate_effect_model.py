@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from effects.application.breakdown_table import BREAKDOWNS_CSV, write_breakdowns_csv
 from effects.application.breakdowns import breakdown_checks, half_score_checks
 from effects.application.evaluation_context import (
     EvaluateEffectModelConfig,
@@ -108,10 +109,16 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
         for stratum, rows in strata.items()
     }
     games_by_text: dict[str, int] = dict(manifest.rarity)
-    return breakdown_checks(
+    checks = breakdown_checks(
         scored, games_by_text=games_by_text,
         withheld_keyword=context.main.provenance.withheld_keyword,
     )
+    table = context.config.output_dir / BREAKDOWNS_CSV
+    rows = write_breakdowns_csv(table, checks)
+    return [*checks, CheckResult(
+        CheckName.BREAKDOWNS, CheckStatus.REPORTED,
+        f"{rows} per-field figures of the lines above: {table}",
+    )]
 
 
 def run(config: EvaluateEffectModelConfig) -> EvaluationReport:

@@ -17,6 +17,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from effects.domain.check_label import CheckLabel, TableRow
 from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, TextGames
@@ -227,21 +228,21 @@ def breakdown_checks(
     checks += _memorization_gap_checks(card, game)
     for stratum, rows in ((Stratum.CARD_DISJOINT, card), (Stratum.GAME_DISJOINT, game)):
         checks += _slice_checks(
-            f"{stratum} policy", policy_slice(rows), present=OFF_POLICY,
-            skipped=f"{stratum} off-policy",
+            CheckLabel.of(stratum, "policy"), policy_slice(rows), present=OFF_POLICY,
+            skipped=CheckLabel.of(stratum, "off-policy"),
             why="no record in this stratum was acted by the random seat",
         )
         checks += _slice_checks(
-            f"{stratum} legality", decision_slice(rows),
+            CheckLabel.of(stratum, "legality"), decision_slice(rows),
             present=LegalityDecision.REAL,
-            skipped=f"{stratum} real-decision legality",
+            skipped=CheckLabel.of(stratum, "real-decision legality"),
             why="no legality record in this stratum is classed a real decision",
         )
     if withheld_keyword:
         checks += _slice_checks(
-            f"{CheckName.ZERO_SHOT_KEYWORD} {withheld_keyword}",
+            CheckLabel.of(CheckName.ZERO_SHOT_KEYWORD, withheld_keyword),
             keyword_slice([*card, *game], withheld_keyword),
-            present=WITHHELD, skipped=CheckName.ZERO_SHOT_KEYWORD,
+            present=WITHHELD, skipped=CheckLabel.of(CheckName.ZERO_SHOT_KEYWORD),
             why=(
                 f"no validation record carries the withheld keyword "
                 f"{withheld_keyword!r}"
@@ -257,15 +258,15 @@ def _card_disjoint_checks(card: list, games_by_text: Mapping[str, int]) -> list[
             Stratum.CARD_DISJOINT, CheckStatus.SKIPPED,
             "the card-disjoint stratum holds no record to break down",
         )]
-    checks = [_group_check(Stratum.CARD_DISJOINT, overall(card))]
+    checks = [_group_check(CheckLabel.of(Stratum.CARD_DISJOINT), overall(card))]
     for bucket, group in by_rarity_bucket(card, games_by_text).items():
-        checks.append(_group_check(f"{Stratum.CARD_DISJOINT} rarity {bucket}", group))
+        checks.append(_group_check(CheckLabel.of(Stratum.CARD_DISJOINT, "rarity", bucket), group))
     families = by_family(card)
     for family, group in families.items():
-        checks.append(_group_check(f"{Stratum.CARD_DISJOINT} family {family}", group))
+        checks.append(_group_check(CheckLabel.of(Stratum.CARD_DISJOINT, "family", family), group))
     if families:
         checks.append(_group_check(
-            f"{Stratum.CARD_DISJOINT} mean over families",
+            CheckLabel.of(Stratum.CARD_DISJOINT, "mean over families"),
             mean_over_families(families),
             detail=f"{len(families)} families, each weighted once",
         ))
@@ -280,38 +281,51 @@ def _memorization_gap_checks(card: list, game: list) -> list[CheckResult]:
             CheckName.MEMORIZATION_GAP, CheckStatus.SKIPPED,
             "no family has records in both validation strata",
         )]
-    return [
-        CheckResult(
-            f"{CheckName.MEMORIZATION_GAP} {family}", CheckStatus.REPORTED,
-            "game-disjoint minus card-disjoint loss, per field", values,
-        )
-        for family, values in gaps.items()
-    ]
+    return [_gap_check(family, values) for family, values in gaps.items()]
+
+
+def _gap_check(family: str, gaps: Mapping[str, float]) -> CheckResult:
+    """One family's gap: the total on the line, every field's in the table."""
+    return CheckResult(
+        str(CheckLabel.of(CheckName.MEMORIZATION_GAP, family)), CheckStatus.REPORTED,
+        "game-disjoint minus card-disjoint loss; the per-field gaps are in the table",
+        {TOTAL: gaps[TOTAL]} if TOTAL in gaps else {},
+        tuple(TableRow(name, value) for name, value in gaps.items()),
+    )
 
 
 def _slice_checks(
-    prefix: str, groups: dict, *, present, skipped: str, why: str,
+    head: CheckLabel, groups: dict, *, present, skipped: CheckLabel, why: str,
 ) -> list[CheckResult]:
     """Every group of one slice as a line, or one skip when the ``present``
     group is missing and the comparison would have one side."""
     if present not in groups:
-        return [CheckResult(skipped, CheckStatus.SKIPPED, why)]
-    return [
-        _group_check(f"{prefix} {name}", group) for name, group in groups.items()
-    ]
+        return [CheckResult(str(skipped), CheckStatus.SKIPPED, why)]
+    return [_group_check(head.then(name), group) for name, group in groups.items()]
 
 
-def _group_check(name: str, group: GroupResult, *, detail: str | None = None) -> CheckResult:
-    """One group's report line: per-record field means, then ``text:``-prefixed
-    per-text ones, with both counts in the detail unless ``detail`` is given."""
+def _group_check(
+    label: CheckLabel, group: GroupResult, *, detail: str | None = None,
+) -> CheckResult:
+    """One group's report line: the total loss per record and per text
+    (``text:``-prefixed) with both counts in the detail unless ``detail`` is
+    given. Every field's mean is in the table, beside the records it read."""
+    per_record, per_text = group.per_record, group.per_text
     values = {
-        **group.per_record.means,
-        **{f"text:{key}": value for key, value in group.per_text.means.items()},
+        key: value for key, value in (
+            (TOTAL, per_record.means.get(TOTAL)), (f"text:{TOTAL}", per_text.means.get(TOTAL)),
+        ) if value is not None
     }
-    texts = group.per_text.counts.get(TOTAL, 0)
+    table = (
+        *(TableRow(name, value, per_record.counts[name])
+          for name, value in per_record.means.items()),
+        *(TableRow(f"text:{name}", value, per_text.counts[name])
+          for name, value in per_text.means.items()),
+    )
+    texts = per_text.counts.get(TOTAL, 0)
     return CheckResult(
-        name, CheckStatus.REPORTED,
-        detail or f"{group.per_record.records} records, {texts} texts", values,
+        str(label), CheckStatus.REPORTED,
+        detail or f"{per_record.records} records, {texts} texts", values, table,
     )
 
 
@@ -330,7 +344,7 @@ def half_score_checks(
     prefix = f"{half}-half"
     checks: list[CheckResult] = []
     for stratum, scored in sorted(score.strata.items()):
-        where = f"{prefix} {stratum}"
+        where = CheckLabel.of(prefix, stratum)
         missing = [name for name in COMPONENTS if name in scored.components
                    and math.isnan(scored.components[name])]
         detail = f"{games.get(stratum, 0)} games; score = the mean of the four components"
@@ -338,16 +352,16 @@ def half_score_checks(
             detail += f"; nothing to score in {', '.join(missing)}"
         if scored.non_finite:
             detail += f"; {scored.non_finite} non-finite reading(s) scored at -1"
-        checks.append(CheckResult(where, CheckStatus.REPORTED, detail, {
+        checks.append(CheckResult(str(where), CheckStatus.REPORTED, detail, {
             **dict(scored.components), "score": scored.score}))
         for component in COMPONENTS:
             if component not in scored.components:
                 continue
             items = dict(scored.items.get(component, {}))
             left_out = tuple(scored.left_out.get(component, ()))
-            name = (f"{CheckName.RULE_TESTS} {stratum} {half}" if component == RULE_TESTS
-                    else f"{where} {component}")
-            checks.append(CheckResult(name, CheckStatus.REPORTED,
+            name = (CheckLabel.of(CheckName.RULE_TESTS, stratum, half) if component == RULE_TESTS
+                    else where.then(component))
+            checks.append(CheckResult(str(name), CheckStatus.REPORTED,
                                       _items_detail(component, items, left_out), items))
     values = {"control": score.control} if len(score.strata) == 2 else {}
     if selection_control is not None:
@@ -357,7 +371,8 @@ def half_score_checks(
                   + ("; selection_control is the control score of the epoch the checkpoint holds"
                      if selection_control is not None else "")
                   + (f"; {note}" if note else ""))
-        checks.append(CheckResult(f"{prefix} control", CheckStatus.REPORTED, detail, values))
+        checks.append(CheckResult(
+            str(CheckLabel.of(prefix, "control")), CheckStatus.REPORTED, detail, values))
     return checks
 
 

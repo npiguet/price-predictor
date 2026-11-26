@@ -353,6 +353,8 @@ and its report line names both: `umap.png`, one panel per script API type (the t
 the rest as `other`), and `umap.csv`, one row per unique cached text with columns
 `x,y,api_type,text`. The report itself is printed, not written.
 
+Each breakdown line prints a group's total loss, per record and per text, and its record count. Every field's mean goes to `breakdowns.csv` in the same directory, columns `check,qualifier,field,value,records` (one row per line and field), and a closing `breakdowns` report line names the file.
+
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
 command fails fast when a `--variant-checkpoint` records a different split, or different vocabulary or
 keyword-definition hashes, than `--checkpoint`. It also fails fast when the dataset `--corpus` names

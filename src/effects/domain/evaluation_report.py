@@ -11,6 +11,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from effects.domain.check_label import TableRow
+
 
 class CheckStatus(StrEnum):
     PASS = "pass"
@@ -70,6 +72,9 @@ class CheckResult:
     status: CheckStatus
     detail: str = ""
     values: dict[str, float] = field(default_factory=dict)
+    #: Figures the line carries beside its values: written to the run's table
+    #: file and never rendered.
+    table: tuple[TableRow, ...] = ()
 
     @property
     def blocks(self) -> bool:
