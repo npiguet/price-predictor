@@ -17,6 +17,7 @@ from dataclasses import replace
 import pytest
 
 from effects.application.freeze_selection_set import (
+    FreezePorts,
     ProbeItem,
     RuleTestRules,
     SelectionSetRefused,
@@ -87,8 +88,10 @@ def _freeze(records, tags, *, entity_read={RULE: OUTPUTS}):
     rules = RuleTestRules(tag=lambda record: tags.get(record.record_id, []),
                           declared=frozenset({RULE}), trained=frozenset({RULE}),
                           entity_read=entity_read)
-    return freeze_selection_set(_manifest(HALVES), {GD: _reader(records)}, rules=rules,
-                                probes=_Probes(), grids=[_Grid()], deviance=_Losses(), **LENIENT)
+    return freeze_selection_set(
+        _manifest(HALVES), {GD: _reader(records)},
+        ports=FreezePorts(rules=rules, probes=_Probes(), grids=[_Grid()], deviance=_Losses()),
+        thresholds=LENIENT)
 
 
 def test_a_per_entity_rule_whose_near_misses_name_no_entity_is_left_out_and_named(

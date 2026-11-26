@@ -14,6 +14,7 @@ from dataclasses import replace
 import pytest
 
 from effects.application.freeze_selection_set import (
+    FreezePorts,
     RuleTestRules,
     SelectionSetRefused,
     freeze_selection_set,
@@ -98,8 +99,10 @@ def test_a_polarity_with_no_row_reading_an_output_leaves_the_rule_out(carrying, 
             records.append(copy)
             tags[copy.record_id] = [_tag(NOT, (record.actor_player,))]
     with pytest.raises(SelectionSetRefused) as refused:
-        freeze_selection_set(_manifest(HALVES), {GD: _reader(records)}, rules=_rules(tags),
-                             probes=_Probes(), grids=[_Grid()], deviance=_Losses(), **LENIENT)
+        freeze_selection_set(_manifest(HALVES), {GD: _reader(records)},
+                             ports=FreezePorts(rules=_rules(tags), probes=_Probes(),
+                                               grids=[_Grid()], deviance=_Losses()),
+                             thresholds=LENIENT)
     for half in ("selection", "reporting"):
         left = refused.value.selection.left_out[GD][half]["rule_tests"]
         assert [item.item for item in left] == [RULE]

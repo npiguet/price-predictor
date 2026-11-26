@@ -9,6 +9,9 @@ from dataclasses import dataclass, replace
 import pytest
 
 from effects.application.freeze_selection_set import (
+    FreezePorts,
+    FreezeRunPorts,
+    FreezeThresholds,
     GridQualification,
     ProbeItem,
     RuleTestRules,
@@ -41,7 +44,7 @@ from effects.domain.selection_set import (
 FIRES, NOT = Polarity.FIRES, Polarity.DOES_NOT_FIRE
 GD = "game-disjoint"
 #: Thresholds a handful of fake records can meet; the precision tests pass E5's.
-LENIENT = dict(min_games_per_half=1, max_item_error=10.0, max_component_error=10.0)
+LENIENT = FreezeThresholds(min_games_per_half=1, max_item_error=10.0, max_component_error=10.0)
 
 
 @dataclass(frozen=True)
@@ -153,10 +156,14 @@ def _balanced_records(halves: dict, per_game: int = 4) -> tuple[list, dict]:
 
 
 def _freeze(halves, records, tags, **options):
-    defaults = dict(rules=_rules(tags), probes=_Probes(), grids=[_Grid()],
-                    deviance=_Losses(), **LENIENT)
-    defaults.update(options)
-    return freeze_selection_set(_manifest(halves), {GD: _reader(records)}, **defaults)
+    """Freeze at ``LENIENT`` with the toy readers; ``options`` replace a
+    reader (``rules=``, ``probes=``, ``grids=``, ``deviance=``) or the
+    ``thresholds``."""
+    thresholds = options.pop("thresholds", LENIENT)
+    ports = dict(rules=_rules(tags), probes=_Probes(), grids=[_Grid()], deviance=_Losses())
+    ports.update(options)
+    return freeze_selection_set(_manifest(halves), {GD: _reader(records)},
+                                ports=FreezePorts(**ports), thresholds=thresholds)
 
 
 def _misses(refused) -> set[tuple[str, str, str]]:
@@ -173,8 +180,9 @@ def test_a_half_under_the_game_minimum_refuses_before_reading() -> None:
         raise AssertionError("the strata were read")
 
     with pytest.raises(SelectionSetRefused) as refused:
-        freeze_selection_set(_manifest(halves), {GD: unread}, rules=_rules({}), probes=None,
-                             grids=[], deviance=None, min_games_per_half=4)
+        freeze_selection_set(_manifest(halves), {GD: unread},
+                             ports=FreezePorts(_rules({}), probes=None, grids=[], deviance=None),
+                             thresholds=FreezeThresholds(min_games_per_half=4))
     assert _misses(refused) == {(GD, "selection", "games"), (GD, "reporting", "games")}
     assert "3 game(s)" in refused.value.misses[0].detail
 
@@ -226,8 +234,8 @@ def test_three_rules_at_68_each_miss_the_component_target() -> None:
                     records.append(record)
                     tags[record.record_id] = [_tag(rule, polarity)]
     with pytest.raises(SelectionSetRefused) as refused:
-        _freeze(halves, records, tags, min_games_per_half=1, max_item_error=0.1,
-                max_component_error=0.05)
+        _freeze(halves, records, tags,
+                thresholds=replace(LENIENT, max_item_error=0.1, max_component_error=0.05))
     misses = [m for m in refused.value.misses if m.component == "rule_tests"]
     assert {m.half for m in misses} == {"selection", "reporting"}
     assert "0.0574 over 3 item(s)" in misses[0].detail
@@ -249,10 +257,11 @@ def test_the_larger_polarity_is_cut_to_r_times_the_smaller() -> None:
                 record = _Record(f"{game}.{polarity}.{i}", game)
                 records.append(record)
                 tags[record.record_id] = [_tag("R", polarity)]
-    frozen = _freeze(halves, records, tags, r=2)
+    frozen = _freeze(halves, records, tags, thresholds=replace(LENIENT, r=2))
     sides = frozen.rule_tests[GD]["selection"]["R"]
     assert (len(sides["fires"]), len(sides["does_not_fire"])) == (200, 100)
-    again = _freeze(halves, records, tags, r=2).rule_tests[GD]["selection"]["R"]["fires"]
+    again = _freeze(halves, records, tags, thresholds=replace(LENIENT, r=2))
+    again = again.rule_tests[GD]["selection"]["R"]["fires"]
     assert again == sides["fires"]
 
 
@@ -371,11 +380,11 @@ def test_copies_are_read_once_by_tests_and_probes_and_every_time_by_the_deviance
 def test_the_deviance_sample_is_capped_by_a_seeded_draw() -> None:
     halves = _two_halves(2)
     records, tags = _balanced_records(halves, per_game=10)
-    frozen = _freeze(halves, records, tags, deviance_cap=7)
+    frozen = _freeze(halves, records, tags, thresholds=replace(LENIENT, deviance_cap=7))
     for half in ("selection", "reporting"):
         assert len(frozen.deviance_samples[GD][half]) == 7
-    assert frozen.deviance_samples == _freeze(halves, records, tags,
-                                              deviance_cap=7).deviance_samples
+    assert frozen.deviance_samples == _freeze(
+        halves, records, tags, thresholds=replace(LENIENT, deviance_cap=7)).deviance_samples
     # A draw, not the first seven read: the halves' records in read order.
     for half in ("selection", "reporting"):
         drawn = [sample.record_id for sample in frozen.deviance_samples[GD][half]]
@@ -400,7 +409,8 @@ class _TwoProbes:
 def test_probe_types_are_cut_to_r_times_the_smallest() -> None:
     halves = _two_halves(4)
     records, tags = _balanced_records(halves, per_game=8)
-    frozen = _freeze(halves, records, tags, probes=_TwoProbes(), r=2)
+    frozen = _freeze(halves, records, tags, probes=_TwoProbes(),
+                     thresholds=replace(LENIENT, r=2))
     for half in ("selection", "reporting"):
         sizes = {t: len(rows) for t, rows in frozen.probes[GD][half].items()}
         assert sizes["dies"] == 2 * sizes["rare"]
@@ -471,8 +481,8 @@ def test_every_heads_terms_are_deviance_items_judged_together() -> None:
         # The toy rule tests, probes and grids miss the strict targets; only
         # the deviance component is looked at, on the set as assembled.
         try:
-            return _freeze(halves, records, tags, deviance=_EveryHead(), min_games_per_half=1,
-                           max_item_error=0.1, max_component_error=max_component_error), set()
+            return _freeze(halves, records, tags, deviance=_EveryHead(), thresholds=replace(
+                LENIENT, max_item_error=0.1, max_component_error=max_component_error)), set()
         except SelectionSetRefused as refused:
             return refused.selection, {m for m in refused.misses if m.component == "deviance"}
 
@@ -512,7 +522,8 @@ def test_run_exits_one_naming_each_small_half(tmp_path) -> None:
     store.manifest_path.write_text(
         __import__("json").dumps(_manifest(_two_halves(3)).as_dict()), encoding="utf-8")
     printed: list[str] = []
-    code = run(store.directory, reports_dir=tmp_path / "reports", echo=printed.append)
+    code = run(store.directory, reports_dir=tmp_path / "reports",
+               ports=FreezeRunPorts(echo=printed.append))
     assert code == 1
     assert printed[1:] == [
         f"  {GD} selection, games: 3 game(s), fewer than the 300 a half needs",
@@ -537,8 +548,9 @@ def test_sc010_on_the_fixture_every_component_and_balance_holds(tmp_path) -> Non
     rules = RuleTestRules(rules.tag, rules.declared, rules.declared, rules.blocked)
     limits = dict(min_games_per_half=1, max_item_error=2.0, max_component_error=2.0, r=4)
     frozen = freeze_selection_set(
-        manifest, {GD: _reader(records)}, rules=rules, probes=_TwoProbes(),
-        grids=[_Grid()], deviance=_Losses(), **limits)
+        manifest, {GD: _reader(records)},
+        ports=FreezePorts(rules=rules, probes=_TwoProbes(), grids=[_Grid()], deviance=_Losses()),
+        thresholds=FreezeThresholds(**limits))
     assert any(frozen.rule_tests[GD][half] for half in ("selection", "reporting"))
     for half in ("selection", "reporting"):
         for component in ("rule_tests", "probes", "grids"):
@@ -573,7 +585,7 @@ def test_a_grid_freezes_the_fewest_records_its_precision_target_needs() -> None:
     assert grid_records_needed([1.0, 1.0]) == 0
     halves = _two_halves(10)
     records, tags = _balanced_records(halves)
-    frozen = _freeze(halves, records, tags, grid_target_error=0.5)
+    frozen = _freeze(halves, records, tags, thresholds=replace(LENIENT, grid_target_error=0.5))
     for half in ("selection", "reporting"):
         grid = frozen.grids[GD][half]["combat"]
         assert len(grid.records) == 4
@@ -594,7 +606,8 @@ def test_a_capped_grid_is_judged_on_the_records_it_keeps() -> None:
     halves = _two_halves(10)
     records, tags = _balanced_records(halves)
     with pytest.raises(SelectionSetRefused) as refused:
-        _freeze(halves, records, tags, grid_record_cap=1, max_item_error=0.9)
+        _freeze(halves, records, tags,
+                thresholds=replace(LENIENT, grid_record_cap=1, max_item_error=0.9))
     assert _misses(refused) == {(GD, "selection", "grids"), (GD, "reporting", "grids")}
     frozen = refused.value.selection
     for half in ("selection", "reporting"):

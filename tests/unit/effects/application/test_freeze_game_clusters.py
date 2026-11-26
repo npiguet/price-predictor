@@ -14,6 +14,7 @@ from dataclasses import replace
 import pytest
 
 from effects.application.freeze_selection_set import (
+    FreezePorts,
     ProbeItem,
     RuleTestRules,
     freeze_selection_set,
@@ -76,7 +77,9 @@ def _freeze(records):
         by_game.setdefault(record.game_id, []).append(record)
     return freeze_selection_set(
         _manifest(HALVES), {GD: lambda: [list(rows) for rows in by_game.values()]},
-        rules=rules, probes=_GameProbes(), grids=[_Grid()], deviance=_Losses(), **LENIENT)
+        ports=FreezePorts(rules=rules, probes=_GameProbes(), grids=[_Grid()],
+                          deviance=_Losses()),
+        thresholds=LENIENT)
 
 
 def test_forty_rule_test_records_from_four_games_have_the_error_of_four_clusters(records):

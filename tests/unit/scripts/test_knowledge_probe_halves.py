@@ -41,6 +41,8 @@ def frozen_corpus(tmp_path_factory, records, sidecars, keywords_of):
     third record repeated as an added copy is, and a selection set frozen over
     it by the probe suite's own ports at thresholds a fixture can meet."""
     from effects.application.freeze_selection_set import (
+        FreezePorts,
+        FreezeThresholds,
         RuleTestRules,
         SelectionSetRefused,
         freeze_selection_set,
@@ -72,11 +74,14 @@ def frozen_corpus(tmp_path_factory, records, sidecars, keywords_of):
     rules = RuleTestRules(rules.tag, rules.declared, rules.declared, rules.blocked)
     try:
         frozen = freeze_selection_set(
-            manifest, {GD: stratum_reader((stratum / "shard-00000.jsonl.gz",))}, rules=rules,
-            probes=selection.ProbeItems(
-                sidecars, common.acting_text_function(sidecars, "script")),
-            grids=selection.grid_sources(sidecars, keywords_of), deviance=_NoDeviance(),
-            min_games_per_half=1, max_item_error=10.0, max_component_error=10.0)
+            manifest, {GD: stratum_reader((stratum / "shard-00000.jsonl.gz",))},
+            ports=FreezePorts(
+                rules=rules,
+                probes=selection.ProbeItems(
+                    sidecars, common.acting_text_function(sidecars, "script")),
+                grids=selection.grid_sources(sidecars, keywords_of), deviance=_NoDeviance()),
+            thresholds=FreezeThresholds(min_games_per_half=1, max_item_error=10.0,
+                                        max_component_error=10.0))
     except SelectionSetRefused as refused:
         frozen = refused.selection
     return SimpleNamespace(root=root, stratum=stratum, manifest=manifest,

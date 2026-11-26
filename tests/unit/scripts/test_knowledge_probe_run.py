@@ -140,10 +140,10 @@ class TestFreezeSelectionSet:
                          "--cards-folder", str(GEN3_SIDECAR_FOLDERS[0])])
         assert code == 1
         assert seen["corpus"] == corpus and seen["reports_dir"] == tmp_path / "sets"
-        names = [grid.name for grid in seen["grids"]]
+        names = [grid.name for grid in seen["ports"].grids]
         assert names[0] == "damage" and names[-1] == "evasion"
         assert len([n for n in names if n.startswith("combat/")]) == 2 * len(combat_grid.VARIANTS)
-        assert callable(seen["deviance"])
+        assert callable(seen["ports"].deviance)
 
     def test_probe_items_are_the_board_targets_labelled_with_their_kind(
         self, records, sidecars, acting,

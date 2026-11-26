@@ -59,8 +59,8 @@ their labels alone:
    otherwise the freeze refuses, naming stratum, half and component.
 6. Write the set.
 
-The thresholds are keyword arguments with E5's values as defaults, so a test
-can pass small ones; no operator flag sets them.
+The thresholds are a :class:`FreezeThresholds`, E5's values its defaults, so
+a test can pass small ones; no operator flag sets them.
 
 Torch-free: the readers that need torch (:class:`DevianceLosses`) are passed in.
 """
@@ -70,11 +70,16 @@ from __future__ import annotations
 import heapq
 import math
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from effects.application.stratum_records import (
+    StratumReader,
+    shard_copies,
+    stratum_copies,
+)
 from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.grid_edits import GridQualification
 from effects.domain.provenance import SidecarLookup
@@ -117,14 +122,17 @@ from effects.domain.selection_set import (
     ProbeRecord,
     SampleRecord,
     SelectionSet,
+    SelectionSetError,
     StandardError,
     TaggedRecord,
     balanced,
     error_value,
     grid_records_needed,
     item_key,
+    selection_set_path,
+    write_selection_set,
 )
-from effects.domain.strata import Half
+from effects.domain.strata import VALIDATION_STRATA, Half
 from effects.domain.stratum_placement import (
     MAX_COMPONENT_ERROR,
     MAX_ITEM_ERROR,
@@ -307,18 +315,20 @@ def left_out_lines(selection: SelectionSet, *, limit: int = 12) -> list[str]:
     ``limit`` items by name and the rest counted; untested rules are counted
     rather than listed, as most rules are untested in a small half. The set
     itself names every one."""
-    lines = []
-    for stratum, by_half in sorted(selection.left_out.items()):
-        for half, by_component in sorted(by_half.items()):
-            for component, items in sorted(by_component.items()):
-                untested = sum(1 for item in items if item.reason in UNTESTED_REASONS)
-                named = [f"{item.item} ({item.reason})" for item in items
-                         if item.reason not in UNTESTED_REASONS]
-                if len(named) > limit:
-                    named = [*named[:limit], f"{len(named) - limit} more"]
-                parts = named + ([f"{untested} rule(s) untested"] if untested else [])
-                lines.append(f"{stratum} {half}, {component} left out: " + "; ".join(parts))
-    return lines
+    return [_left_out_line(f"{stratum} {half}, {component}", items, limit)
+            for stratum, by_half in sorted(selection.left_out.items())
+            for half, by_component in sorted(by_half.items())
+            for component, items in sorted(by_component.items())]
+
+
+def _left_out_line(where: str, items: Sequence[LeftOut], limit: int) -> str:
+    untested = sum(1 for item in items if item.reason in UNTESTED_REASONS)
+    named = [f"{item.item} ({item.reason})" for item in items
+             if item.reason not in UNTESTED_REASONS]
+    if len(named) > limit:
+        named = [*named[:limit], f"{len(named) - limit} more"]
+    parts = named + ([f"{untested} rule(s) untested"] if untested else [])
+    return f"{where} left out: " + "; ".join(parts)
 
 
 def small_halves(manifest: CorpusManifest, minimum: int) -> list[FreezeMiss]:
@@ -337,16 +347,14 @@ def small_halves(manifest: CorpusManifest, minimum: int) -> list[FreezeMiss]:
     return misses
 
 
-# ── the freeze ───────────────────────────────────────────────────────────
 
-#: Reads one stratum: a fresh iterable of its shards in path order, each an
-#: iterable of its records in line order.
-StratumReader = Callable[[], Iterable[Iterable[EffectRecord]]]
+# ── the freeze ───────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
 class FreezeThresholds:
-    """Research E5's thresholds and E3's r; keyword arguments, never flags."""
+    """Research E5's thresholds and E3's r, handed to the freeze and to
+    :func:`run`; never flags."""
 
     r: int = BALANCE_RATIO
     min_games_per_half: int = MIN_GAMES_PER_HALF
@@ -355,6 +363,18 @@ class FreezeThresholds:
     deviance_cap: int = DEVIANCE_SAMPLE_CAP
     grid_target_error: float = GRID_TARGET_ERROR
     grid_record_cap: int = GRID_RECORD_CAP
+
+
+@dataclass(frozen=True)
+class FreezePorts:
+    """The rules and readers the freeze is handed: which rules have tests,
+    the probe items' labeller, the edit grids and the deviance sample's loss
+    reader. A component given no reader (None, or no grid) holds no item."""
+
+    rules: RuleTestRules
+    probes: ProbeItemSource | None
+    grids: Sequence[GridSource]
+    deviance: DevianceLosses | None
 
 
 @dataclass
@@ -374,104 +394,134 @@ class _Half:
         default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class _HalfId:
+    """One half of one stratum, as pass two names it."""
+
+    stratum: str
+    half: str
+
+    def key(self, component: str, item: str) -> str:
+        return item_key(self.stratum, self.half, component, item)
+
+
 def freeze_selection_set(
     manifest: CorpusManifest,
     strata: Mapping[str, StratumReader],
     *,
-    rules: RuleTestRules,
-    probes: ProbeItemSource | None,
-    grids: Sequence[GridSource],
-    deviance: DevianceLosses | None,
-    r: int = BALANCE_RATIO,
-    min_games_per_half: int = MIN_GAMES_PER_HALF,
-    max_item_error: float = MAX_ITEM_ERROR,
-    max_component_error: float = MAX_COMPONENT_ERROR,
-    deviance_cap: int = DEVIANCE_SAMPLE_CAP,
-    grid_target_error: float = GRID_TARGET_ERROR,
-    grid_record_cap: int = GRID_RECORD_CAP,
+    ports: FreezePorts,
+    thresholds: FreezeThresholds = FreezeThresholds(),
 ) -> SelectionSet:
     """The corpus's selection set, unsealed; raises :class:`SelectionSetRefused`
     naming every miss. ``strata`` reads each validation stratum the manifest
     halves."""
-    limits = FreezeThresholds(r, min_games_per_half, max_item_error, max_component_error,
-                              deviance_cap, grid_target_error, grid_record_cap)
-    small = small_halves(manifest, limits.min_games_per_half)
+    small = small_halves(manifest, thresholds.min_games_per_half)
     if small:
         raise SelectionSetRefused(small)
-    seed = manifest.seed
-    half_of = {
-        game: (stratum, half)
-        for stratum, by_half in manifest.halves.items()
-        for half, games in by_half.items() for game in games
-    }
-    gathered: dict[tuple[str, str], _Half] = {
-        (stratum, half): _Half()
-        for stratum, by_half in manifest.halves.items() for half in by_half
-    }
-    probe_kinds: dict[str, str] = {}
+    gathering = _Gathering(manifest, ports, cap=thresholds.deviance_cap)
     for stratum in sorted(manifest.halves):
-        _gather(strata[stratum], stratum, half_of, gathered, rules=rules, probes=probes,
-                grids=grids, probe_kinds=probe_kinds, seed=seed, cap=limits.deviance_cap)
-    out = _Assembly(manifest, limits, seed, probe_kinds, rules)
-    order = {str(half): i for i, half in enumerate(Half)}
-    for (stratum, half), found in sorted(
-            gathered.items(), key=lambda item: (item[0][0], order.get(item[0][1], 2))):
-        out.rule_tests(stratum, half, found)
-        out.probes(stratum, half, found)
-        out.grids(stratum, half, found, grids)
-        out.deviance(stratum, half, found, strata[stratum], deviance)
+        gathering.read(strata[stratum], stratum)
+    out = _Assembly(manifest, thresholds, gathering.probe_kinds, ports.rules)
+    for where, found in gathering.in_half_order():
+        out.half(where, found, strata[where.stratum], ports)
     if out.misses:
         raise SelectionSetRefused(out.misses, out.selection())
     return out.selection()
 
 
-def _gather(
-    read: StratumReader, stratum: str, half_of: Mapping[str, tuple[str, str]],
-    gathered: dict[tuple[str, str], _Half], *, rules: RuleTestRules,
-    probes: ProbeItemSource | None, grids: Sequence[GridSource],
-    probe_kinds: dict[str, str], seed: int, cap: int,
-) -> None:
-    """Pass one over a stratum: rule tests, probe items and grid records over
-    distinct records, the deviance sample over every copy."""
-    occurrences: dict[str, int] = defaultdict(int)
-    for shard in read():
-        distinct: list[EffectRecord] = []
-        for record in shard:
-            placed = half_of.get(record.game_id)
-            copy = occurrences[record.record_id]
-            occurrences[record.record_id] += 1
-            if placed is None or placed[0] != stratum:
+class _Gathering:
+    """Pass one over each stratum: rule tests, probe items and grid records
+    over distinct records, the deviance sample over every copy."""
+
+    def __init__(self, manifest: CorpusManifest, ports: FreezePorts, *, cap: int) -> None:
+        self.ports = ports
+        self.seed = manifest.seed
+        self.cap = cap
+        self.half_of = {
+            game: (stratum, half)
+            for stratum, by_half in manifest.halves.items()
+            for half, games in by_half.items() for game in games
+        }
+        self.gathered: dict[tuple[str, str], _Half] = {
+            (stratum, half): _Half()
+            for stratum, by_half in manifest.halves.items() for half in by_half
+        }
+        self.probe_kinds: dict[str, str] = {}
+
+    def in_half_order(self) -> list[tuple[_HalfId, _Half]]:
+        """Each half's gathering, by stratum, then selection before reporting."""
+        order = {str(half): i for i, half in enumerate(Half)}
+        return [(_HalfId(stratum, half), found) for (stratum, half), found in sorted(
+            self.gathered.items(), key=lambda item: (item[0][0], order.get(item[0][1], 2)))]
+
+    def read(self, read: StratumReader, stratum: str) -> None:
+        """Pass one over ``stratum``, shard by shard: a game never spans a
+        shard, so the probes label each shard's distinct records together."""
+        for shard in shard_copies(read):
+            distinct = [record for record, copy in shard if self._hold(record, copy, stratum)]
+            self._probe_items(distinct)
+
+    def _hold(self, record: EffectRecord, copy: int, stratum: str) -> bool:
+        """Hold ``record`` where its half of ``stratum`` reads it: every copy
+        in the deviance sample, a first occurrence in the rule tests and,
+        unless synthetic, in the grids; whether the probes read it too."""
+        placed = self.half_of.get(record.game_id)
+        if placed is None or placed[0] != stratum:
+            return False
+        found = self.gathered[placed]
+        self._sample(found.sample, record, copy)
+        if copy:
+            return False
+        _hold_rule_tests(found, self.ports.rules, record)
+        if record.synthetic:
+            return False
+        self._hold_grids(found, record)
+        return True
+
+    def _sample(self, heap: list, record: EffectRecord, copy: int) -> None:
+        """Keep the ``cap`` copies of smallest keyed hash, as a max-heap."""
+        if self.cap <= 0:
+            return
+        order = keyed_hash(f"{record.record_id}#{copy}", self.seed)
+        entry = (-order, record.record_id, record.game_id, copy)
+        if len(heap) < self.cap:
+            heapq.heappush(heap, entry)
+        elif order < -heap[0][0]:
+            heapq.heapreplace(heap, entry)
+
+    def _hold_grids(self, found: _Half, record: EffectRecord) -> None:
+        """``record`` as its game's record of each grid it qualifies, where its
+        keyed hash is the game's smallest so far (the first read on a tie)."""
+        for grid in self.ports.grids:
+            qualified = grid.qualify(record)
+            if qualified is None:
                 continue
-            found = gathered[placed]
-            _sample(found.sample, record, copy, seed=seed, cap=cap)
-            if copy:
-                continue
-            _hold_rule_tests(found, rules, record)
-            if record.synthetic:
-                continue
-            distinct.append(record)
-            for grid in grids:
-                qualified = grid.qualify(record)
-                if qualified is None:
-                    continue
-                # Keyed by the record alone, so grids qualifying the same
-                # records (the combat grid's variants) choose the same ones.
-                order = keyed_hash(record.record_id, seed)
-                held = found.grids[grid.name].get(record.game_id)
-                if held is None or order < held[0]:
-                    found.grids[grid.name][record.game_id] = (order, record.record_id, qualified)
-        if probes is not None and distinct:
-            game_of = {record.record_id: record.game_id for record in distinct}
-            for item in probes.items(distinct):
-                game = game_of.get(item.record_id)
-                if game is None:
-                    continue
-                known = probe_kinds.setdefault(item.probe_type, item.kind)
-                if known != item.kind:
-                    raise ValueError(f"probe type {item.probe_type} is labelled both "
-                                     f"{known} and {item.kind}")
-                gathered[half_of[game]].probes[item.probe_type].append(
-                    ProbeRecord(item.record_id, game, item.entity, float(item.label)))
+            # Keyed by the record alone, so grids qualifying the same
+            # records (the combat grid's variants) choose the same ones.
+            order = keyed_hash(record.record_id, self.seed)
+            held = found.grids[grid.name].get(record.game_id)
+            if held is None or order < held[0]:
+                found.grids[grid.name][record.game_id] = (order, record.record_id, qualified)
+
+    def _probe_items(self, distinct: list[EffectRecord]) -> None:
+        """The probe items of one shard's distinct records, each held in its
+        game's half."""
+        probes = self.ports.probes
+        if probes is None or not distinct:
+            return
+        game_of = {record.record_id: record.game_id for record in distinct}
+        for item in probes.items(distinct):
+            game = game_of.get(item.record_id)
+            if game is not None:
+                self._hold_probe(item, game)
+
+    def _hold_probe(self, item: ProbeItem, game: str) -> None:
+        known = self.probe_kinds.setdefault(item.probe_type, item.kind)
+        if known != item.kind:
+            raise ValueError(f"probe type {item.probe_type} is labelled both "
+                             f"{known} and {item.kind}")
+        self.gathered[self.half_of[game]].probes[item.probe_type].append(
+            ProbeRecord(item.record_id, game, item.entity, float(item.label)))
 
 
 def _hold_rule_tests(found: _Half, rules: RuleTestRules, record: EffectRecord) -> None:
@@ -493,26 +543,14 @@ def _games_error(positives: Sequence, negatives: Sequence) -> float:
                                         [row.game_id for row in negatives])
 
 
-def _sample(heap: list, record: EffectRecord, copy: int, *, seed: int, cap: int) -> None:
-    """Keep the ``cap`` copies of smallest keyed hash, as a max-heap."""
-    if cap <= 0:
-        return
-    order = keyed_hash(f"{record.record_id}#{copy}", seed)
-    entry = (-order, record.record_id, record.game_id, copy)
-    if len(heap) < cap:
-        heapq.heappush(heap, entry)
-    elif order < -heap[0][0]:
-        heapq.heapreplace(heap, entry)
-
-
 class _Assembly:
     """Pass two: balance, standard errors, left-out items and the checks."""
 
-    def __init__(self, manifest: CorpusManifest, limits: FreezeThresholds, seed: int,
+    def __init__(self, manifest: CorpusManifest, limits: FreezeThresholds,
                  probe_kinds: Mapping[str, str], rules: RuleTestRules) -> None:
         self.manifest = manifest
         self.limits = limits
-        self.seed = seed
+        self.seed = manifest.seed
         self.probe_kinds = dict(probe_kinds)
         self.testable = sorted(rules.testable)
         self.unreadable = sorted(rules.unreadable_testable)
@@ -526,24 +564,30 @@ class _Assembly:
         self.frozen_grids: dict = defaultdict(dict)
         self.frozen_samples: dict = defaultdict(dict)
 
-    def _leave_out(self, stratum: str, half: str, component: str, item: str,
-                   reason: str) -> None:
-        self.left_out[stratum][half][component].append(LeftOut(item, reason))
+    def half(self, where: _HalfId, found: _Half, read: StratumReader,
+             ports: FreezePorts) -> None:
+        """Pass two over one half: rule tests, probes, grids, deviance."""
+        self.rule_tests(where, found)
+        self.probes(where, found)
+        self.grids(where, found, ports.grids)
+        self.deviance(where, found, read, ports.deviance)
 
-    def _leave_out_all(self, stratum: str, half: str, component: str,
+    def _leave_out(self, where: _HalfId, component: str, item: str, reason: str) -> None:
+        self.left_out[where.stratum][where.half][component].append(LeftOut(item, reason))
+
+    def _leave_out_all(self, where: _HalfId, component: str,
                        items: Iterable[tuple[str, str]]) -> None:
-        self.left_out[stratum][half][component] += [LeftOut(*item) for item in items]
+        self.left_out[where.stratum][where.half][component] += [LeftOut(*item) for item in items]
 
-    def _enters(self, stratum: str, half: str, component: str, item: str,
-                error: float) -> bool:
+    def _enters(self, where: _HalfId, component: str, item: str, error: float) -> bool:
         """Record ``item``'s standard error; whether it meets the item target."""
-        self.errors[item_key(stratum, half, component, item)] = error_value(error)
+        self.errors[where.key(component, item)] = error_value(error)
         if error <= self.limits.max_item_error:
             return True
-        self._leave_out(stratum, half, component, item, _above(error, self.limits))
+        self._leave_out(where, component, item, _above(error, self.limits))
         return False
 
-    def _check(self, stratum: str, half: str, component: str, errors: Sequence[float],
+    def _check(self, where: _HalfId, component: str, errors: Sequence[float],
                *, mode: str | None = None) -> None:
         """Refuse a component above its precision target (FR-068b)."""
         combined = component_standard_error(errors)
@@ -553,45 +597,46 @@ class _Assembly:
         detail = ("no item meets its precision target" + under if not errors else
                   f"standard error {combined:.4f} over {len(errors)} item(s){under}, "
                   f"above {self.limits.max_component_error}")
-        self.misses.append(FreezeMiss(stratum, half, component, detail))
+        self.misses.append(FreezeMiss(where.stratum, where.half, component, detail))
 
     # ── rule tests ──
 
-    def rule_tests(self, stratum: str, half: str, found: _Half) -> None:
+    def rule_tests(self, where: _HalfId, found: _Half) -> None:
         errors, kept = [], {}
         for rule in self.unreadable:
-            self._leave_out(stratum, half, RULE_TESTS, rule, NO_READABLE_OUTPUT)
+            self._leave_out(where, RULE_TESTS, rule, NO_READABLE_OUTPUT)
         for rule in self.testable:
-            tested = self._rule_test(stratum, half, rule, found)
+            tested = self._rule_test(where, rule, found)
             if tested is None:
                 continue
             drawn, error = tested
-            if self._enters(stratum, half, RULE_TESTS, rule, error):
+            if self._enters(where, RULE_TESTS, rule, error):
                 errors.append(error)
                 kept[rule] = {str(p): tuple(rows) for p, rows in drawn.items()}
-        self.frozen_rule_tests[stratum][half] = kept
-        self._check(stratum, half, RULE_TESTS, errors)
+        self.frozen_rule_tests[where.stratum][where.half] = kept
+        self._check(where, RULE_TESTS, errors)
 
-    def _rule_test(self, stratum: str, half: str, rule: str, found: _Half,
+    def _rule_test(self, where: _HalfId, rule: str, found: _Half,
                    ) -> tuple[dict[Polarity, list[TaggedRecord]], float] | None:
         """A rule's drawn rows and their standard error, counting the rows a
         kept output reads; None, the rule named in ``left_out``, when it is
         left out before its error, and each output left out named too."""
         sides = found.rule_tests.get(rule)
         if not sides or not any(sides.values()):
-            self._leave_out(stratum, half, RULE_TESTS, rule, UNTESTED)
+            self._leave_out(where, RULE_TESTS, rule, UNTESTED)
             return None
         rows, reason = self._test_rows(rule, sides)
         if reason is None:
             drawn = balanced(rows, self.limits.r, draw=BalanceDraw(
-                self.seed, f"rule-test|{stratum}|{half}|{rule}", lambda row: row.record_id))
+                self.seed, f"rule-test|{where.stratum}|{where.half}|{rule}",
+                lambda row: row.record_id))
             read, left = informative_rows(rule, drawn, found.rule_targets)
-            self._leave_out_all(stratum, half, RULE_TESTS, left)
+            self._leave_out_all(where, RULE_TESTS, left)
             if read is not None:
                 return drawn, _games_error(read[Polarity.FIRES], read[Polarity.DOES_NOT_FIRE])
         else:
-            self._leave_out(stratum, half, RULE_TESTS, rule, reason)
-        self.errors[item_key(stratum, half, RULE_TESTS, rule)] = None
+            self._leave_out(where, RULE_TESTS, rule, reason)
+        self.errors[where.key(RULE_TESTS, rule)] = None
         return None
 
     def _test_rows(self, rule: str, sides: Mapping[Polarity, list[TaggedRecord]],
@@ -606,13 +651,7 @@ class _Assembly:
                 f"{n} {polarity}" for polarity, n in counts.items())
         if rule not in self.entity_read:
             return rows, None
-        named = {polarity: [row for row in found if row.entities]
-                 for polarity, found in rows.items()}
-        if all(named.values()):
-            return named, None
-        return {}, f"{NO_OUTCOME_ENTITY}: " + ", ".join(
-            f"{len(named[polarity])} of {n} {polarity}" for polarity, n in counts.items()
-        ) + " name one"
+        return _rows_naming_an_entity(rows, counts)
 
     # ── probes ──
 
@@ -626,9 +665,24 @@ class _Assembly:
         return loss_ratio_standard_error(
             [row.game_id for row in rows], [(row.label - mean) ** 2 for row in rows])
 
-    def probes(self, stratum: str, half: str, found: _Half) -> None:
+    def probes(self, where: _HalfId, found: _Half) -> None:
         """Probe types meeting the item target, balanced against the smallest of
         them, and checked again after the draw."""
+        drawn = balanced(self._probe_candidates(where, found), self.limits.r, draw=BalanceDraw(
+            self.seed, f"probe|{where.stratum}|{where.half}",
+            lambda row: f"{row.record_id}|{row.entity}"))
+        errors, kept = [], {}
+        for probe_type, rows in sorted(drawn.items()):
+            error = self._probe_error(probe_type, rows)
+            if self._enters(where, PROBES, probe_type, error):
+                errors.append(error)
+                kept[probe_type] = tuple(rows)
+        self.frozen_probes[where.stratum][where.half] = kept
+        self._check(where, PROBES, errors)
+
+    def _probe_candidates(self, where: _HalfId, found: _Half) -> dict[str, list[ProbeRecord]]:
+        """Each probe type's distinct rows where they meet the item target
+        before the draw; a type that does not is left out and named."""
         candidates = {}
         for probe_type in sorted(found.probes):
             rows = _distinct(found.probes[probe_type])
@@ -636,87 +690,73 @@ class _Assembly:
             if error <= self.limits.max_item_error:
                 candidates[probe_type] = rows
             else:
-                self._enters(stratum, half, PROBES, probe_type, error)
-        drawn = balanced(candidates, self.limits.r, draw=BalanceDraw(
-            self.seed, f"probe|{stratum}|{half}", lambda row: f"{row.record_id}|{row.entity}"))
-        errors, kept = [], {}
-        for probe_type, rows in sorted(drawn.items()):
-            error = self._probe_error(probe_type, rows)
-            if self._enters(stratum, half, PROBES, probe_type, error):
-                errors.append(error)
-                kept[probe_type] = tuple(rows)
-        self.frozen_probes[stratum][half] = kept
-        self._check(stratum, half, PROBES, errors)
+                self._enters(where, PROBES, probe_type, error)
+        return candidates
 
     # ── grids ──
 
-    def grids(self, stratum: str, half: str, found: _Half,
-              sources: Sequence[GridSource]) -> None:
+    def grids(self, where: _HalfId, found: _Half, sources: Sequence[GridSource]) -> None:
         errors, kept = [], {}
         for grid in sources:
-            qualified = found.grids.get(grid.name, {})
-            if not qualified:
-                self.misses.append(FreezeMiss(stratum, half, GRIDS,
-                                              f"grid {grid.name}: every cell is empty"))
-                continue
-            # Sized to the grid's precision target over every qualifying game,
-            # then judged on the records kept (FR-068b).
-            by_hash = sorted((order, game, record_id, q)
-                             for game, (order, record_id, q) in qualified.items())
-            needed = grid_records_needed(
-                _answers([q for *_, q in by_hash], len(grid.cells)),
-                target=self.limits.grid_target_error, cap=self.limits.grid_record_cap)
-            chosen = sorted((game, record_id, q)
-                            for _, game, record_id, q in by_hash[:max(needed, 1)])
-            records = tuple(TaggedRecord(record_id, game, q.entities)
-                            for game, record_id, q in chosen)
-            answers = _answers([q for *_, q in chosen], len(grid.cells))
-            error = grid_standard_error(answers)
-            if not self._enters(stratum, half, GRIDS, grid.name, error):
-                continue
-            errors.append(error)
-            kept[grid.name] = FrozenGrid(
-                tuple(GridCell(cell, answer) for cell, answer in zip(grid.cells, answers)),
-                records)
-        self.frozen_grids[stratum][half] = kept
-        self._check(stratum, half, GRIDS, errors)
+            frozen = self._grid(where, grid, found.grids.get(grid.name, {}))
+            if frozen is not None:
+                errors.append(frozen[1])
+                kept[grid.name] = frozen[0]
+        self.frozen_grids[where.stratum][where.half] = kept
+        self._check(where, GRIDS, errors)
+
+    def _grid(self, where: _HalfId, grid: GridSource,
+              qualified: Mapping[str, tuple]) -> tuple[FrozenGrid, float] | None:
+        """The grid frozen over the records it keeps, with its standard error;
+        None when every cell is empty (a miss) or the grid is left out."""
+        if not qualified:
+            self.misses.append(FreezeMiss(where.stratum, where.half, GRIDS,
+                                          f"grid {grid.name}: every cell is empty"))
+            return None
+        chosen = _grid_records(qualified, len(grid.cells), self.limits)
+        records = tuple(TaggedRecord(record_id, game, q.entities)
+                        for game, record_id, q in chosen)
+        answers = _answers([q for *_, q in chosen], len(grid.cells))
+        error = grid_standard_error(answers)
+        if not self._enters(where, GRIDS, grid.name, error):
+            return None
+        return FrozenGrid(
+            tuple(GridCell(cell, answer) for cell, answer in zip(grid.cells, answers)),
+            records), error
 
     # ── deviance ──
 
-    def deviance(self, stratum: str, half: str, found: _Half, read: StratumReader,
+    def deviance(self, where: _HalfId, found: _Half, read: StratumReader,
                  losses: DevianceLosses | None) -> None:
         chosen = sorted(((record_id, game, copy) for _, record_id, game, copy in found.sample),
                         key=lambda row: (row[1], row[0], row[2]))
-        self.frozen_samples[stratum][half] = tuple(SampleRecord(*row) for row in chosen)
+        self.frozen_samples[where.stratum][where.half] = tuple(SampleRecord(*row) for row in chosen)
         if losses is None:
-            self.misses.append(FreezeMiss(stratum, half, DEVIANCE,
+            self.misses.append(FreezeMiss(where.stratum, where.half, DEVIANCE,
                                           "no reader of the constant-prediction losses"))
             return
         wanted = {(record_id, copy) for record_id, _, copy in chosen}
         games: list[str] = []
-
-        def streamed() -> Iterable[EffectRecord]:
-            # Streamed rather than held: a sample is up to 16,384 parsed records.
-            for record in _copies(read, wanted):
-                games.append(record.game_id)
-                yield record
-
-        by_field = losses.losses(streamed())
+        by_field = losses.losses(_streamed(read, wanted, games))
         for mode in MASK_MODES:
-            errors = []
-            for name in sorted(by_field):
-                per_record = by_field[name].get(mode)
-                error = (math.inf if per_record is None
-                         else loss_ratio_standard_error(games, per_record))
-                key = item_key(stratum, half, DEVIANCE, name)
-                held = self.errors.setdefault(key, {})
-                held[mode] = error_value(error)
-                if error <= self.limits.max_item_error:
-                    errors.append(error)
-                else:
-                    self._leave_out(stratum, half, DEVIANCE, name,
-                                    f"{_above(error, self.limits)} under the {mode} rule mask")
-            self._check(stratum, half, DEVIANCE, errors, mode=mode)
+            self._deviance_mode(where, by_field, games, mode)
+
+    def _deviance_mode(self, where: _HalfId,
+                       by_field: Mapping[str, Mapping[str, Sequence[float]]],
+                       games: Sequence[str], mode: str) -> None:
+        """Each deviance item's standard error under the ``mode`` rule mask,
+        and the component's check."""
+        errors = []
+        for name in sorted(by_field):
+            error = _loss_ratio_error(games, by_field[name].get(mode))
+            held = self.errors.setdefault(where.key(DEVIANCE, name), {})
+            held[mode] = error_value(error)
+            if error <= self.limits.max_item_error:
+                errors.append(error)
+            else:
+                self._leave_out(where, DEVIANCE, name,
+                                f"{_above(error, self.limits)} under the {mode} rule mask")
+        self._check(where, DEVIANCE, errors, mode=mode)
 
     def selection(self) -> SelectionSet:
         return SelectionSet(
@@ -745,10 +785,42 @@ class _Assembly:
         )
 
 
+def _rows_naming_an_entity(
+    rows: Mapping[Polarity, list[TaggedRecord]], counts: Mapping[Polarity, int],
+) -> tuple[dict[Polarity, list[TaggedRecord]], str | None]:
+    """A rule read at entities only: its rows naming an outcome entity, or,
+    when a polarity has none, why the rule is left out."""
+    named = {polarity: [row for row in found if row.entities]
+             for polarity, found in rows.items()}
+    if all(named.values()):
+        return named, None
+    return {}, f"{NO_OUTCOME_ENTITY}: " + ", ".join(
+        f"{len(named[polarity])} of {n} {polarity}" for polarity, n in counts.items()
+    ) + " name one"
+
+
+def _grid_records(qualified: Mapping[str, tuple], cells: int,
+                  limits: FreezeThresholds) -> list[tuple[str, str, GridQualification]]:
+    """``(game, record, qualification)`` of the records a grid keeps, by game:
+    sized to the grid's precision target over every qualifying game, then
+    judged on the records kept (FR-068b)."""
+    by_hash = sorted((order, game, record_id, q)
+                     for game, (order, record_id, q) in qualified.items())
+    needed = grid_records_needed(
+        _answers([q for *_, q in by_hash], cells),
+        target=limits.grid_target_error, cap=limits.grid_record_cap)
+    return sorted((game, record_id, q) for _, game, record_id, q in by_hash[:max(needed, 1)])
+
+
 def _answers(qualifications: Sequence[GridQualification],
              cells: int) -> list[tuple[float, ...]]:
     """Each cell's rule outcome for each of a grid's records, in their order."""
     return [tuple(q.outcomes[c] for q in qualifications) for c in range(cells)]
+
+
+def _loss_ratio_error(games: Sequence[str], per_record: Sequence[float] | None) -> float:
+    """A deviance item's standard error; infinite where the item has no losses."""
+    return math.inf if per_record is None else loss_ratio_standard_error(games, per_record)
 
 
 def _above(error: float, limits: FreezeThresholds) -> str:
@@ -772,15 +844,19 @@ def _plain(nested: Mapping) -> dict:
     return {stratum: dict(by_half) for stratum, by_half in nested.items()}
 
 
-def _copies(read: StratumReader, wanted: set[tuple[str, int]]) -> Iterable[EffectRecord]:
+def _copies(read: StratumReader, wanted: set[tuple[str, int]]) -> Iterator[EffectRecord]:
     """The stratum's copies named in ``wanted``, in reading order."""
-    occurrences: dict[str, int] = defaultdict(int)
-    for shard in read():
-        for record in shard:
-            copy = occurrences[record.record_id]
-            occurrences[record.record_id] += 1
-            if (record.record_id, copy) in wanted:
-                yield record
+    return (record for record, copy in stratum_copies(read) if (record.record_id, copy) in wanted)
+
+
+def _streamed(read: StratumReader, wanted: set[tuple[str, int]],
+              games: list[str]) -> Iterator[EffectRecord]:
+    """The copies named in ``wanted``, each one's game appended to ``games``
+    as it is read: streamed rather than held, since a sample is up to 16,384
+    parsed records."""
+    for record in _copies(read, wanted):
+        games.append(record.game_id)
+        yield record
 
 
 # ── the command ──────────────────────────────────────────────────────────
@@ -798,73 +874,104 @@ def stratum_reader(shards: Sequence[Path]) -> StratumReader:
     return read
 
 
+@dataclass(frozen=True)
+class FreezeRunPorts:
+    """What :func:`run` freezes a corpus with: the rules catalogue and the
+    sidecars its detectors read, the probe and grid readers, the builder of
+    the deviance loss reader from the manifest, and where its lines go."""
+
+    rules_dir: Path = Path("rules")
+    lines: SidecarLookup | None = None
+    probes: ProbeItemSource | None = None
+    grids: Sequence[GridSource] = ()
+    deviance: Callable[[CorpusManifest], DevianceLosses] | None = None
+    echo: Callable[[str], None] = print
+
+    def freeze_ports(self, manifest: CorpusManifest) -> FreezePorts:
+        """The freeze's ports over ``manifest``, the deviance reader built
+        last; called once every half holds its games."""
+        from effects.infrastructure.rules_catalogue_io import load_scenarios
+
+        return FreezePorts(
+            rules=RuleTestRules.of(load_scenarios(self.rules_dir), manifest, self.lines),
+            probes=self.probes, grids=self.grids,
+            deviance=None if self.deviance is None else self.deviance(manifest),
+        )
+
+
 def run(
     corpus: Path,
     *,
     reports_dir: Path,
-    rules_dir: Path = Path("rules"),
-    lines: SidecarLookup | None = None,
-    probes: ProbeItemSource | None = None,
-    grids: Sequence[GridSource] = (),
-    deviance: Callable[[CorpusManifest], DevianceLosses] | None = None,
-    echo: Callable[[str], None] = print,
-    **thresholds,
+    ports: FreezeRunPorts = FreezeRunPorts(),
+    thresholds: FreezeThresholds = FreezeThresholds(),
 ) -> int:
     """Freeze ``corpus``'s selection set into ``reports_dir``: 0 once written,
-    1 after naming every miss. ``deviance`` builds the loss reader from the
-    manifest, and is called only once every half holds its games."""
-    from effects.domain.selection_set import (
-        SelectionSetError,
-        selection_set_path,
-        write_selection_set,
-    )
-    from effects.domain.strata import VALIDATION_STRATA
+    1 after naming every miss. ``ports.deviance`` builds the loss reader from
+    the manifest, and is called only once every half holds its games."""
     from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.curated_shards import require_listed_shards
-    from effects.infrastructure.rules_catalogue_io import load_scenarios
 
     store = CorpusStore(Path(corpus))
     manifest = store.load()
     try:
-        small = small_halves(manifest, thresholds.get("min_games_per_half", MIN_GAMES_PER_HALF))
-        if small:
-            raise SelectionSetRefused(small)
-        listed = require_listed_shards(store, manifest)
-        selection = freeze_selection_set(
-            manifest,
-            {str(stratum): stratum_reader(listed[str(stratum)])
-             for stratum in VALIDATION_STRATA},
-            rules=RuleTestRules.of(load_scenarios(rules_dir), manifest, lines),
-            probes=probes, grids=grids,
-            deviance=None if deviance is None else deviance(manifest),
-            **thresholds,
-        )
+        selection = _freeze_corpus(store, manifest, ports, thresholds)
     except SelectionSetRefused as refused:
-        echo(f"selection set not frozen for {corpus}:")
-        for miss in refused.misses:
-            echo(f"  {miss.describe()}")
-        if refused.selection is not None:
-            for line in left_out_lines(refused.selection):
-                echo(f"  {line}")
+        _echo_refusal(ports.echo, corpus, refused)
         return 1
+    return _write(corpus, selection_set_path(reports_dir, manifest.digest()), selection,
+                  ports.echo)
+
+
+def _freeze_corpus(store, manifest: CorpusManifest, ports: FreezeRunPorts,
+                   thresholds: FreezeThresholds) -> SelectionSet:
+    """The corpus's set over the validation strata's listed shards, once every
+    half holds its games and the shards on disk are the listed ones."""
+    from effects.infrastructure.curated_shards import require_listed_shards
+
+    small = small_halves(manifest, thresholds.min_games_per_half)
+    if small:
+        raise SelectionSetRefused(small)
+    listed = require_listed_shards(store, manifest)
+    return freeze_selection_set(
+        manifest,
+        {str(stratum): stratum_reader(listed[str(stratum)]) for stratum in VALIDATION_STRATA},
+        ports=ports.freeze_ports(manifest), thresholds=thresholds,
+    )
+
+
+def _echo_refusal(echo: Callable[[str], None], corpus: Path,
+                  refused: SelectionSetRefused) -> None:
+    echo(f"selection set not frozen for {corpus}:")
+    for miss in refused.misses:
+        echo(f"  {miss.describe()}")
+    lines = [] if refused.selection is None else left_out_lines(refused.selection)
+    for line in lines:
+        echo(f"  {line}")
+
+
+def _write(corpus: Path, path: Path, selection: SelectionSet,
+           echo: Callable[[str], None]) -> int:
     try:
-        path = write_selection_set(selection_set_path(reports_dir, manifest.digest()), selection)
+        written = write_selection_set(path, selection)
     except SelectionSetError as refused:
         echo(f"selection set not written for {corpus}: {refused}")
         return 1
-    rule_tests = sum(len(rules) for by_half in selection.rule_tests.values()
-                     for rules in by_half.values())
-    echo(f"froze {rule_tests} rule test(s), "
-         f"{sum(len(p) for b in selection.probes.values() for p in b.values())} probe type(s), "
-         f"{sum(len(g) for b in selection.grids.values() for g in b.values())} grid(s) "
-         f"over {len(selection.halves)} strata -> {path}")
+    echo(_froze_line(selection, written))
     return 0
 
 
+def _froze_line(selection: SelectionSet, path: Path) -> str:
+    rule_tests = sum(len(rules) for by_half in selection.rule_tests.values()
+                     for rules in by_half.values())
+    probes = sum(len(p) for b in selection.probes.values() for p in b.values())
+    grids = sum(len(g) for b in selection.grids.values() for g in b.values())
+    return (f"froze {rule_tests} rule test(s), {probes} probe type(s), {grids} grid(s) "
+            f"over {len(selection.halves)} strata -> {path}")
+
+
 __all__ = [
-    "AMOUNT", "BINARY", "MASK_MODES", "DevianceLosses", "FreezeMiss", "FreezeThresholds",
-    "GridQualification", "GridSource", "ProbeItem", "ProbeItemSource", "RuleTestRules",
-    "SelectionSetRefused", "blocked_rules", "freeze_selection_set", "left_out_lines", "run",
-    "small_halves",
-    "stratum_reader",
+    "AMOUNT", "BINARY", "MASK_MODES", "DevianceLosses", "FreezeMiss", "FreezePorts",
+    "FreezeRunPorts", "FreezeThresholds", "GridQualification", "GridSource", "ProbeItem",
+    "ProbeItemSource", "RuleTestRules", "SelectionSetRefused", "blocked_rules",
+    "freeze_selection_set", "left_out_lines", "run", "small_halves", "stratum_reader",
 ]

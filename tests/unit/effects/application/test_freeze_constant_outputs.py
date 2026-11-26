@@ -17,6 +17,7 @@ from dataclasses import replace
 import pytest
 
 from effects.application.freeze_selection_set import (
+    FreezePorts,
     ProbeItem,
     RuleTestRules,
     SelectionSetRefused,
@@ -103,8 +104,9 @@ def _freeze(tagged, outputs):
     games = [r.game_id for r, _ in tagged]
     halves = {GD: {"selection": games[0::2], "reporting": games[1::2]}}
     return freeze_selection_set(
-        _manifest(halves), {GD: _reader([r for r, _ in tagged])}, rules=rules,
-        probes=_Probes(), grids=[_Grid()], deviance=_Losses(), **LENIENT)
+        _manifest(halves), {GD: _reader([r for r, _ in tagged])},
+        ports=FreezePorts(rules=rules, probes=_Probes(), grids=[_Grid()], deviance=_Losses()),
+        thresholds=LENIENT)
 
 
 def _left_out(frozen, half):

@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from effects.application.freeze_selection_set import run, stratum_reader
+from effects.application.freeze_selection_set import FreezeThresholds, run, stratum_reader
 from effects.domain.corpus_manifest import CuratedShard
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.curated_shards import CorpusShardsError
@@ -32,7 +32,8 @@ def test_an_extra_shard_in_a_validation_stratum_is_refused_by_name(store, tmp_pa
     write_shard(store.output_dir("game-disjoint") / "stale.jsonl.gz",
                 [make_record(record_id="old", game_id="g0")])
     with pytest.raises(CorpusShardsError, match=f"{GD}: stale.jsonl.gz is not listed"):
-        run(store.directory, reports_dir=tmp_path / "reports", min_games_per_half=1)
+        run(store.directory, reports_dir=tmp_path / "reports",
+            thresholds=FreezeThresholds(min_games_per_half=1))
     assert not (tmp_path / "reports").exists()
 
 

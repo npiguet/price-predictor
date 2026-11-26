@@ -25,6 +25,8 @@ from effects.application.control_score import (
 )
 from effects.application.control_stratum import HalfScope, ScoringSource
 from effects.application.freeze_selection_set import (
+    FreezePorts,
+    FreezeThresholds,
     RuleTestRules,
     SelectionSetRefused,
     freeze_selection_set,
@@ -146,9 +148,10 @@ def _deviance_errors(stratum, reader) -> dict:
                           blocked=frozenset(), unreadable=frozenset())
     try:
         frozen = freeze_selection_set(
-            _freeze_manifest(stratum), {GD: lambda: [stratum]}, rules=rules, probes=None,
-            grids=[], deviance=reader, min_games_per_half=1, max_item_error=10.0,
-            max_component_error=10.0)
+            _freeze_manifest(stratum), {GD: lambda: [stratum]},
+            ports=FreezePorts(rules=rules, probes=None, grids=[], deviance=reader),
+            thresholds=FreezeThresholds(min_games_per_half=1, max_item_error=10.0,
+                                        max_component_error=10.0))
     except SelectionSetRefused as refused:  # no probe or grid: those components miss
         frozen = refused.selection
     prefix = item_key(GD, "selection", DEVIANCE, "")

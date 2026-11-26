@@ -43,8 +43,11 @@ def freeze_selection(args: argparse.Namespace) -> int:
 
     progress(f"freezing the selection set of {corpus}")
     return freeze_selection_set.run(
-        corpus, reports_dir=args.probe_set_dir or args.reports_dir, lines=sidecars,
-        probes=selection.ProbeItems(sidecars, common.acting_text_function(sidecars, surface)),
-        grids=selection.grid_sources(sidecars, keywords_of), deviance=deviance,
-        echo=progress,
+        corpus, reports_dir=args.probe_set_dir or args.reports_dir,
+        ports=freeze_selection_set.FreezeRunPorts(
+            lines=sidecars,
+            probes=selection.ProbeItems(sidecars, common.acting_text_function(sidecars, surface)),
+            grids=selection.grid_sources(sidecars, keywords_of), deviance=deviance,
+            echo=progress,
+        ),
     )
