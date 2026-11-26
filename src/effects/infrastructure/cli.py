@@ -38,7 +38,9 @@ from effects.application.evaluation_context import (
     CorpusMismatchError,
 )
 from effects.application.extract_keyword_definitions import ExtractKeywordDefinitionsConfig
+from effects.application.field_coverage import FieldCoverageConfig
 from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
+from effects.application.rule_counts_flags import RuleCountsFlags
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
     HoldoutMismatchError,
@@ -63,7 +65,6 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
-from price_predictor.infrastructure.forge_worker_pool import MAX_WORKERS, worker_count
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     add_directed_fork_flags,
@@ -829,11 +830,7 @@ def _field_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_field_coverage)
-    _add_effect_records(parser, help_text="Shard directory to read")
-    parser.add_argument(
-        "--all", action="store_true",
-        help="List every field, not only the constant ones",
-    )
+    add_config_flags(parser, FieldCoverageConfig)
 
 
 #: Every reader's "nothing to read"; named, as its module is not imported here.
@@ -858,39 +855,19 @@ def _rule_counts_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_rule_counts)
-    parser.add_argument(
-        "--records-dir", type=Path, required=True,
-        help="Shards to count: gen-3 records only",
-    )
-    parser.add_argument(
-        "--output", type=Path, required=True,
-        help="Counts file, inside an inputs run",
-    )
+    add_config_flags(parser, RuleCountsFlags, only=("records_dir", "output"))
     _add_cards_folder(parser)
     _add_variant_scripts(
         parser, required=True, help_text="Variant sidecars the detectors read; empty reads none",
     )
-    parser.add_argument(
-        "--rules-dir", type=Path, default=Path("rules"),
-        help="Scenarios and their detector declarations (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--workers", type=worker_count, default=MAX_WORKERS,
-        help=f"Parallel shard readers, 1 to {MAX_WORKERS} (default: %(default)s)",
-    )
+    add_config_flags(parser, RuleCountsFlags, only=("rules_dir", "workers"))
 
 
 @exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
 def run_rule_counts(args: argparse.Namespace) -> int:
-    from effects.application.rule_counts import RuleCountsConfig
     from effects.application.rule_counts import run as rule_counts
-    from effects.infrastructure.converted_trees import SourceTrees
 
-    roots = SourceTrees.of(args.cards_folders, args.variant_scripts).sidecar_roots()
-    return rule_counts(RuleCountsConfig(
-        records_dir=args.records_dir, output=args.output, rules_dir=args.rules_dir,
-        sidecar_roots=roots, workers=args.workers,
-    ))
+    return rule_counts(config_from_args(RuleCountsFlags, args).config())
 
 
 @exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
@@ -904,7 +881,8 @@ def run_field_coverage(args: argparse.Namespace) -> int:
         take_decode_tally,
     )
 
-    root = args.effect_records
+    config = config_from_args(FieldCoverageConfig, args)
+    root = config.effect_records
     shards = require_shards(root)
     require_generation(shard.path(root) for shard in shards)
     reset_decode_tally()
@@ -915,7 +893,7 @@ def run_field_coverage(args: argparse.Namespace) -> int:
         print(f"no records under {root}")
         return 1
     print(f"{len(coverage)} fields over {root}\n")
-    for line in report_lines(coverage, all_fields=args.all):
+    for line in report_lines(coverage, all_fields=config.all):
         print(line)
     for line in take_decode_tally().report_lines():
         print(line)

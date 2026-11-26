@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
@@ -33,6 +34,19 @@ _REQUIRED = object()
 #: An event parameter the event did not write: its cell's default, so a
 #: parameter the collector never writes reads populated 0.
 _UNWRITTEN = object()
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class FieldCoverageConfig:
+    """The ``field-coverage`` flags; ``help`` metadata is the flag's help, and
+    ``cli.add_config_flags`` turns the fields into flags."""
+
+    effect_records: Path = dataclasses.field(kw_only=True, metadata={"help": (
+        "Shard directory to read"
+    )})
+    all: bool = dataclasses.field(default=False, metadata={"help": (
+        "List every field, not only the constant ones"
+    )})
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
