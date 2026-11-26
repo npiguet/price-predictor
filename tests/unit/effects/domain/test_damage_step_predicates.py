@@ -156,21 +156,26 @@ def _printed_first_strike(entity) -> set[str]:
     return found
 
 
+def _participant_of(state, carrier, keywords_of=_overlay_keywords):
+    """The carrier's participant in a combat record of ``state``."""
+    return combat_participant(_combat_record(state), carrier, keywords_of)
+
+
 def _qualifies(keyword: str, state, carrier, keywords_of=_overlay_keywords) -> bool:
-    participant = combat_participant(state, carrier)
+    participant = _participant_of(state, carrier, keywords_of)
     assert participant is not None
-    return KEYWORDS_BY_NAME[keyword].qualifies(participant, keywords_of)
+    return KEYWORDS_BY_NAME[keyword].qualifies(participant)
 
 
 def _observable(
     keyword: str, state, carrier, keywords_of=_overlay_keywords,
 ) -> list[str]:
     """The labels of the effects this combat can actually show."""
-    participant = combat_participant(state, carrier)
+    participant = _participant_of(state, carrier, keywords_of)
     assert participant is not None
     return [
         effect.label for effect in KEYWORDS_BY_NAME[keyword].effects
-        if effect.observable(participant, keywords_of)
+        if effect.observable(participant)
     ]
 
 
@@ -179,55 +184,55 @@ class TestCombatParticipant:
 
     def test_an_attacker_faces_every_creature_blocking_it(self):
         state, carrier = _attacker_and_blockers(blockers=((1, 1), (2, 2)))
-        participant = combat_participant(state, carrier)
+        participant = _participant_of(state, carrier)
         assert [o.id for o in participant.opponents] == ["B0", "B1"]
 
     def test_an_attackers_controller_and_defending_player_are_the_two_sides(self):
         state, carrier = _attacker_and_blockers()
-        participant = combat_participant(state, carrier)
+        participant = _participant_of(state, carrier)
         assert participant.carrier.controller == "P0"
         assert participant.defending_player == "P1"
 
     def test_an_unblocked_attacker_has_no_opponent_but_still_has_a_defender(self):
         state, carrier = _unblocked_attacker()
-        participant = combat_participant(state, carrier)
+        participant = _participant_of(state, carrier)
         assert participant.opponents == ()
         assert participant.defending_player == "P1"
 
     def test_a_blocker_faces_the_attacker_it_blocks(self):
         state, _ = _attacker_and_blockers()
         blocker = state.entity("B0")
-        participant = combat_participant(state, blocker)
+        participant = _participant_of(state, blocker)
         assert [o.id for o in participant.opponents] == ["A"]
         assert participant.carrier.controller == "P1"
 
     def test_a_blocker_has_no_defending_player(self):
         """Its damage lands on the attacker, never on a player."""
         state, _ = _attacker_and_blockers()
-        participant = combat_participant(state, state.entity("B0"))
+        participant = _participant_of(state, state.entity("B0"))
         assert participant.defending_player is None
 
     def test_it_carries_the_damage_step_the_record_covers(self):
         state, carrier = _attacker_and_blockers(substep="first_strike")
-        assert combat_participant(state, carrier).combat_substep == "first_strike"
+        assert _participant_of(state, carrier).combat_substep == "first_strike"
 
     def test_the_defending_player_is_the_ref_the_attack_names(self):
         """The defender's ref is the defending player as it is."""
         carrier = _creature(
             "A", 2, 2, combat=CombatStatus(attacking="P1"),
         )
-        participant = combat_participant(_board(carrier), carrier)
+        participant = _participant_of(_board(carrier), carrier)
         assert participant.defending_player == "P1"
 
     def test_a_creature_outside_combat_is_no_participant(self):
         carrier = _creature("A", 2, 2)
-        assert combat_participant(_board(carrier), carrier) is None
+        assert _participant_of(_board(carrier), carrier) is None
 
     def test_a_blocker_whose_attacker_left_the_board_has_no_opponent(self):
         carrier = _creature(
             "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
         )
-        participant = combat_participant(_board(carrier), carrier)
+        participant = _participant_of(_board(carrier), carrier)
         assert participant.opponents == ()
 
     def test_an_attack_on_a_planeswalker_has_no_defending_player(self):
@@ -235,7 +240,7 @@ class TestCombatParticipant:
         carrier = _creature(
             "A", 4, 4, combat=CombatStatus(attacking=_PLANESWALKER_DEFENDER),
         )
-        participant = combat_participant(
+        participant = _participant_of(
             _board(carrier, _planeswalker()), carrier,
         )
         assert participant.defending_player is None
@@ -245,7 +250,7 @@ class TestCombatParticipant:
         carrier = _creature(
             "A", 4, 4, combat=CombatStatus(attacking="E51"),
         )
-        participant = combat_participant(_board(carrier), carrier)
+        participant = _participant_of(_board(carrier), carrier)
         assert participant.defending_player is None
 
     def test_an_attack_on_a_departed_planeswalker_has_no_defending_player(self):
@@ -253,7 +258,7 @@ class TestCombatParticipant:
         carrier = _creature(
             "A", 4, 4, combat=CombatStatus(attacking="E-1"),
         )
-        participant = combat_participant(_board(carrier), carrier)
+        participant = _participant_of(_board(carrier), carrier)
         assert participant.defending_player is None
 
     def test_trample_over_a_planeswalkers_blockers_is_not_an_observation(self):
@@ -727,7 +732,7 @@ class TestWhatTheHitReaches:
                                                 attacker_keywords=("lifelink",))
         gone = dataclasses.replace(state.entities[1], designations=("phased_out",))
         state = dataclasses.replace(state, entities=(carrier, gone))
-        assert combat_participant(state, carrier).opponents == ()
+        assert _participant_of(state, carrier).opponents == ()
         ghost = dataclasses.replace(carrier, id="L9", zone=None)
         record = _combat_record(dataclasses.replace(state, entities=(ghost,)))
         assert qualifying_observations(record, (KEYWORDS_BY_NAME["lifelink"],),
@@ -833,7 +838,7 @@ class TestSubjectResolution:
     ])
     def test_a_blocked_attackers_subjects(self, subject, expected):
         state, carrier = _attacker_and_blockers()
-        assert combat_participant(state, carrier).subject(subject) == expected
+        assert _participant_of(state, carrier).subjects(subject) == (expected,)
 
 
 #: White Knight's printed first strike, as its sidecar line spells it.

@@ -489,7 +489,7 @@ _ACTIVE = frozenset(spec.name for spec in _FIELDS)
 
 
 def _participant(record, entity_id: str):
-    return combat_participant(record.state, record.state.entity(entity_id))
+    return combat_participant(record, record.state.entity(entity_id), _overlay_keywords)
 
 
 class TestScoreObservation:
@@ -504,7 +504,7 @@ class TestScoreObservation:
         row = _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken")
         return score_observation(
             row, participant, base, stripped,
-            active=_ACTIVE, keywords_of=_overlay_keywords,
+            active=_ACTIVE,
         )
 
     def test_a_change_in_the_rules_direction_agrees(self):
@@ -543,7 +543,7 @@ class TestScoreObservation:
         agreed, per_effect = score_observation(
             _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken"), participant,
             {"B0": hit}, {"B0": untouched},
-            active=_ACTIVE, keywords_of=_overlay_keywords,
+            active=_ACTIVE,
         )
         assert agreed
         assert per_effect == {"opponent.damage_taken": True}
@@ -555,7 +555,7 @@ class TestScoreObservation:
         stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=1.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
-            active=_ACTIVE, keywords_of=_overlay_keywords,
+            active=_ACTIVE,
         )
         # Damage moved the right way; the death probability moved the wrong way.
         assert per_effect == {
@@ -574,7 +574,7 @@ class TestScoreObservation:
         stripped = {"A": torch.zeros(PER_ENTITY_WIDTH), "P1": _player(poison=0.0, life=-2.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["infect"], participant, base, stripped,
-            active=_ACTIVE, keywords_of=_overlay_keywords,
+            active=_ACTIVE,
         )
         assert set(per_effect) == {
             "defending_player.poison_delta", "defending_player.life_delta",
@@ -588,7 +588,7 @@ class TestScoreObservation:
         stripped = {"B0": _wither_side(counters=0.0, damage=2.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["infect"], participant, base, stripped,
-            active=_ACTIVE, keywords_of=_overlay_keywords,
+            active=_ACTIVE,
         )
         assert set(per_effect) == {
             "opponent.counters_delta_m1m1", "opponent.damage_taken",
@@ -603,7 +603,7 @@ class TestScoreObservation:
         vectors = {"P0": torch.zeros(PER_ENTITY_WIDTH)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["lifelink"], participant, vectors, vectors,
-            active=_ACTIVE, keywords_of=_overlay_keywords,
+            active=_ACTIVE,
         )
         assert per_effect == {}
         assert not agreed
@@ -615,7 +615,7 @@ class TestScoreObservation:
         stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=0.0)}
         _agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
-            active=_ACTIVE - {"damage_taken"}, keywords_of=_overlay_keywords,
+            active=_ACTIVE - {"damage_taken"},
         )
         assert set(per_effect) == {"opponent.zone_outcome/died"}
 

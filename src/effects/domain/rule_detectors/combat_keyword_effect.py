@@ -74,8 +74,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from effects.domain.damage_step_keywords import (
+    CombatBoard,
     CombatParticipant,
-    combat_participant,
     defender_ref,
 )
 from effects.domain.event_schema import EventType, damage_source
@@ -125,10 +125,11 @@ class _Combat:
         return self.record.state
 
     def combatants(self) -> Iterator[tuple[EntityState, CombatParticipant]]:
+        board = CombatBoard.of(self.record, self.keywords_of)
         for entity in self.state.entities:
             if entity.combat is None:
                 continue
-            participant = combat_participant(self.state, entity)
+            participant = board.participant(entity)
             if participant is not None:
                 yield entity, participant
 

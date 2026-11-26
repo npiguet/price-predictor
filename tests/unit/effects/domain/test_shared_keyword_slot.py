@@ -97,7 +97,7 @@ def test_gate_two_leaves_a_carrier_with_a_shared_statement_unqualified(record):
     row = replace(DAMAGE_STEP_KEYWORDS[0], keyword="haste")
     carrier = SimpleNamespace(carrier=SimpleNamespace(id=_CARRIER))
     scores = {"haste": KeywordScore()}
-    _Tally(scores, active=frozenset(), keywords_of=lambda entity: set()).fold(
+    _Tally(scores, active=frozenset()).fold(
         [Observation(record, row, carrier)], _paired(record, "haste"))
     assert (scores["haste"].unqualified, scores["haste"].observations) == (1, 0)
     assert "1 carriers unqualified" in render(scores["haste"])

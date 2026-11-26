@@ -28,8 +28,8 @@ from effects.domain.damage_step_keywords import (
     MIN_QUALIFYING_RECORDS,
     CombatParticipant,
     DamageStepKeyword,
+    KeywordEffect,
     KeywordResolver,
-    KeywordsOf,
     qualifying_observations,
 )
 from effects.domain.effect_head_input import NO_STRIP
@@ -149,35 +149,37 @@ def score_observation(
     stripped: dict[str, torch.Tensor],
     *,
     active: frozenset[str],
-    keywords_of: KeywordsOf,
 ) -> tuple[bool, dict[str, bool]]:
     """Whether one perturbation moved every field it should have.
 
     ``present`` and ``stripped`` map a subject id to its output vector in the
     two builds. An effect agrees when present minus stripped has the row's
-    sign, so a prediction that did not move disagrees. An effect this combat
+    sign, so a prediction that did not move disagrees; an effect read at
+    several subjects (infect's counters on each creature its damage was dealt
+    to) agrees when it moves the rules' way at every one. An effect this combat
     cannot show (infect's creature and player fields are exclusive) or a field
     outside ``active`` is left unscored rather than counted against the keyword.
     """
     per_effect: dict[str, bool] = {}
     for effect in row.effects:
-        if effect.field not in active:
+        if effect.field not in active or not effect.observable(participant):
             continue
-        if not effect.observable(participant, keywords_of):
-            continue
-        subject = participant.subject(effect.subject)
-        before, after = present.get(subject), stripped.get(subject)
-        if before is None or after is None:
-            continue
-        spec = FIELDS_BY_NAME[effect.field]
-        change = (
-            read_field(before, spec, effect.category)
-            - read_field(after, spec, effect.category)
-        )
-        per_effect[effect.label] = (
-            change > 0 if effect.direction > 0 else change < 0
-        )
+        moved = [
+            _moved(effect, present[subject], stripped[subject])
+            for subject in participant.subjects(effect.subject)
+            if subject in present and subject in stripped
+        ]
+        if moved:
+            per_effect[effect.label] = all(moved)
     return bool(per_effect) and all(per_effect.values()), per_effect
+
+
+def _moved(effect: KeywordEffect, before: torch.Tensor, after: torch.Tensor) -> bool:
+    """Whether one subject's field moved the effect's way, keyword present
+    minus stripped."""
+    spec = FIELDS_BY_NAME[effect.field]
+    change = read_field(before, spec, effect.category) - read_field(after, spec, effect.category)
+    return change > 0 if effect.direction > 0 else change < 0
 
 
 def score_keywords(
@@ -194,7 +196,6 @@ def score_keywords(
     tally = _Tally(
         {row.keyword: KeywordScore() for row in rows},
         active=frozenset(spec.name for spec in runnable.fields),
-        keywords_of=resolver.keywords_of,
     )
     progress = _Progress()
     forward = runnable.forward()
@@ -272,7 +273,6 @@ class _Tally:
 
     scores: dict[str, KeywordScore]
     active: frozenset[str]
-    keywords_of: KeywordsOf
 
     def fold(self, chunk: list[Observation], paired: RecordChunk) -> None:
         """Score one paired chunk and fold it into :attr:`scores`.
@@ -291,7 +291,7 @@ class _Tally:
                 row, participant,
                 _subject_vectors(surfaces[offset], outputs[offset], row, participant),
                 _subject_vectors(surfaces[twin], outputs[twin], row, participant),
-                active=self.active, keywords_of=self.keywords_of,
+                active=self.active,
             )
             self.scores[row.keyword].add(record.record_id, agreed, per_effect)
 
@@ -307,9 +307,7 @@ def _subject_vectors(
     slot after it.
     """
     wanted = {
-        subject for subject in (
-            participant.subject(effect.subject) for effect in row.effects
-        ) if subject is not None
+        subject for effect in row.effects for subject in participant.subjects(effect.subject)
     }
     found: dict[str, torch.Tensor] = {}
     for column, index in enumerate(surface.entity_slots):
