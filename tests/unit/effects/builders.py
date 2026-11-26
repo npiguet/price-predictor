@@ -640,7 +640,7 @@ class StubLosses:
     def use_denominators(self, denominators) -> None:
         self.denominators = denominators
 
-    def device_loss(self, prepared, modules, materializer, **kwargs):
+    def device_loss(self, prepared, modules, materializer, request=None):
         from effects.application.step_loss import StepLoss
         from effects.domain.effect_losses import LossParts
 
