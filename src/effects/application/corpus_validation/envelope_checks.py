@@ -5,7 +5,7 @@ and forks."""
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from typing import NamedTuple
 
@@ -309,7 +309,7 @@ class GameEndMarkers:
         measured = (f"{len(without)} of {games} game(s) have no game-end marker "
                     f"({share:.1%}): cut, or still running at the window's end")
         closed = self._closed()
-        if games and not self.ended and closed:
+        if self._no_marker_at_all(closed):
             yield Finding(name=name, ok=False, measured=measured, detail=(
                 f"{len(closed)} game(s) a later game of their JVM lifetime follows ended "
                 "or were cut, and no game of the window wrote a marker: the collection "
@@ -321,6 +321,10 @@ class GameEndMarkers:
         yield Finding.watch(
             "records the per-game cap withheld",
             f"{self.withheld} record(s) withheld over {self.markers} game-end marker(s)")
+
+    def _no_marker_at_all(self, closed: set[str]) -> bool:
+        """Games, some of them closed, and not one marker among them."""
+        return bool(self.games) and not self.ended and bool(closed)
 
     def _unmarked_closed_finding(self, limits: Thresholds, closed: set[str]) -> Finding:
         """Games a later game of their JVM lifetime follows cannot have been
@@ -365,12 +369,28 @@ def _joined(halves: list[_LinkHalf]) -> bool:
     FR-042b)."""
     costs = [half.keys for half in halves if half.moment is Moment.ACTIVATION]
     effects = [half.keys for half in halves if half.moment is Moment.RESOLUTION]
-    if len(costs) == 1 and len(halves) == 1:
+    if _is_cost_alone(costs, halves):
         return True
-    if len(costs) != 1 or not effects or len(costs) + len(effects) != len(halves):
+    if _is_malformed(costs, effects, halves):
         return False
-    if len(effects) == 1:
-        return True
+    return len(effects) == 1 or _modes_of_one_root(effects)
+
+
+def _is_cost_alone(costs: list[tuple[ProvenanceKey, ...]], halves: list[_LinkHalf]) -> bool:
+    return len(costs) == 1 and len(halves) == 1
+
+
+def _is_malformed(
+    costs: list[tuple[ProvenanceKey, ...]],
+    effects: list[tuple[ProvenanceKey, ...]],
+    halves: list[_LinkHalf],
+) -> bool:
+    """Not one cost half, no effect half, or a half that is neither."""
+    return len(costs) != 1 or not effects or len(costs) + len(effects) != len(halves)
+
+
+def _modes_of_one_root(effects: list[tuple[ProvenanceKey, ...]]) -> bool:
+    """Every effect half acts through mode keys, all of one charm root."""
     roots = set()
     for keys in effects:
         if not keys or any(key.option is None for key in keys):
@@ -461,6 +481,17 @@ class _ActingCounts:
     #: Why the records with an empty ``ability`` have none.
     unresolved: Counter[UnresolvedReason] = field(default_factory=Counter)
 
+    @staticmethod
+    def total(groups: Iterable[_ActingCounts]) -> _ActingCounts:
+        """The counts of several labels added up."""
+        groups = list(groups)
+        return _ActingCounts(
+            records=sum(counts.records for counts in groups),
+            present=sum(counts.present for counts in groups),
+            keyed=sum(counts.keyed for counts in groups),
+            unresolved=sum((counts.unresolved for counts in groups), Counter()),
+        )
+
 
 class ActingLines:
     """Whether the kinds that act through a line name it, and why when not."""
@@ -507,32 +538,32 @@ class ActingLines:
         ``ability`` writes ``null``, a resolver that cannot reach a line ``[]``.
         """
         for name, labels in self.GROUPS.items():
-            groups = [self.acting.get(label, _ActingCounts()) for label in labels]
-            seen = sum(counts.records for counts in groups)
-            present = sum(counts.present for counts in groups)
-            keyed = sum(counts.keyed for counts in groups)
-            unresolved = sum((counts.unresolved for counts in groups), Counter())
-            title = f"{name} records name an acting line"
-            if not seen:
-                yield Finding(
-                    name=title, ok=True,
-                    measured="no records of this kind in the window",
-                )
-                continue
-            keyed_rate = keyed / seen
-            yield Finding(
-                name=title,
-                ok=present == seen and keyed_rate >= limits.min_keyed_rate,
-                measured=(
-                    f"{present}/{seen} carry the field, {keyed}/{seen} resolve "
-                    f"to a key ({keyed_rate:.1%}, floor "
-                    f"{limits.min_keyed_rate:.1%})"
-                ),
-                detail=tuple(
-                    f"unresolved: {reason} x {count}"
-                    for reason, count in sorted(unresolved.items())
-                ),
+            yield self._group_finding(name, labels, limits)
+
+    def _group_finding(self, name: str, labels: tuple[str, ...], limits: Thresholds) -> Finding:
+        total = _ActingCounts.total(self.acting.get(label, _ActingCounts()) for label in labels)
+        seen, present, keyed = total.records, total.present, total.keyed
+        unresolved = total.unresolved
+        title = f"{name} records name an acting line"
+        if not seen:
+            return Finding(
+                name=title, ok=True,
+                measured="no records of this kind in the window",
             )
+        keyed_rate = keyed / seen
+        return Finding(
+            name=title,
+            ok=present == seen and keyed_rate >= limits.min_keyed_rate,
+            measured=(
+                f"{present}/{seen} carry the field, {keyed}/{seen} resolve "
+                f"to a key ({keyed_rate:.1%}, floor "
+                f"{limits.min_keyed_rate:.1%})"
+            ),
+            detail=tuple(
+                f"unresolved: {reason} x {count}"
+                for reason, count in sorted(unresolved.items())
+            ),
+        )
 
     def _empty_ability_says_why(self) -> Finding:
         """An empty ``ability`` needs an ``ability_unresolved`` reason: "the
