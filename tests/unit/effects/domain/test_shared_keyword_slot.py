@@ -77,26 +77,27 @@ def test_stripping_the_only_keyword_of_a_slot_drops_the_slot(record):
     assert stripped.unremovable == ()
 
 
-class _Runnable:
-    """Builds the surfaces for real; gate 2 reads only their ``unremovable``
-    where the observation is refused, so no model runs."""
+def _paired(record, keyword: str):
+    """The pair's surfaces built for real; gate 2 reads only the twin's
+    ``unremovable`` where the observation is refused, so no model runs."""
+    from types import SimpleNamespace
 
-    def per_entity_outputs(self, records, strips):
-        builder = SurfaceBuilder(_Lines(), e_dim=E_DIM, rng=random.Random(0))
-        return None, [builder.build(r, s) for r, s in zip(records, strips, strict=True)]
+    builder = SurfaceBuilder(_Lines(), e_dim=E_DIM, rng=random.Random(0))
+    surfaces = [builder.build(record), builder.build(record, {_CARRIER: frozenset({keyword})})]
+    return SimpleNamespace(surfaces=surfaces, at_entities=lambda: None)
 
 
 def test_gate_two_leaves_a_carrier_with_a_shared_statement_unqualified(record):
     from types import SimpleNamespace
 
-    from effects.application.gate_two import KeywordScore, Observation, _score_chunk
+    from effects.application.gate_two import KeywordScore, Observation, _Tally
     from effects.application.gate_two import _render_unqualified as render
     from effects.domain.damage_step_keywords import DAMAGE_STEP_KEYWORDS
 
     row = replace(DAMAGE_STEP_KEYWORDS[0], keyword="haste")
     carrier = SimpleNamespace(carrier=SimpleNamespace(id=_CARRIER))
     scores = {"haste": KeywordScore()}
-    _score_chunk([Observation(record, row, carrier)], _Runnable(), scores,
-                 active=frozenset(), keywords_of=lambda entity: set())
+    _Tally(scores, active=frozenset(), keywords_of=lambda entity: set()).fold(
+        [Observation(record, row, carrier)], _paired(record, "haste"))
     assert (scores["haste"].unqualified, scores["haste"].observations) == (1, 0)
     assert "1 carriers unqualified" in render(scores["haste"])

@@ -1,10 +1,11 @@
 """One chunked forward over records: the device half every scorer runs
 (research E2).
 
-Validation's loss, gate 1's margins, the evaluation's breakdowns, the knowledge
-probes and the control score all run the same few steps over a list of
-records — the host half of a chunk (``SurfaceBatcher.prepare``, or a scoring
-step a cache prepared once), its texts encoded and scattered
+Validation's loss, gate 1's margins, gate 2's paired records, the
+evaluation's breakdowns, the knowledge probes and the control score all run
+the same few steps over a list of records — the host half of a chunk
+(``SurfaceBatcher.prepare``, or a scoring step a cache prepared once), its
+texts encoded and scattered
 (``Materializer.materialize``), the trunk, and one head or another — with both
 modules in evaluation mode, no gradient, and the bf16 autocast validation
 runs under on CUDA. Running them here, one way, keeps the number a

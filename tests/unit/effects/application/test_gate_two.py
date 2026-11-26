@@ -404,18 +404,15 @@ def _overlay_column(features: tuple[float, ...], keyword: str) -> float:
     return features[flags][KEPT_KEYWORD_FLAGS.index(keyword)]
 
 
-class _NoEncoder:
+class _NoEncoder(torch.nn.Module):
     """The encoder the identity batcher never calls.
 
-    It still has to be an object with ``eval()``, because the scorer puts both
-    halves of the model into evaluation mode before it reads anything.
+    It is still a module, because the forward puts both halves of the model
+    into evaluation mode before it reads anything and back after.
     """
 
-    def __call__(self, **batch):
+    def forward(self, **batch):
         raise AssertionError("the identity batcher must not encode")
-
-    def eval(self):
-        return self
 
 
 # ── decoding one head into one number ────────────────────────────────────
@@ -680,7 +677,7 @@ def _zone_and_damage(*, damage: float, died_logit: float) -> torch.Tensor:
 # ── the whole scorer, against a model that reacts to the strip ───────────
 
 
-class _AbilityCountingModel:
+class _AbilityCountingModel(torch.nn.Module):
     """A stand-in whose predicted damage and death rise with the record's
     ability count.
 
@@ -692,10 +689,7 @@ class _AbilityCountingModel:
     first strike moves its opponent.
     """
 
-    def eval(self):
-        return self
-
-    def __call__(self, inputs):
+    def forward(self, inputs):
         """Every slot's "hidden" is its record's ability count."""
         slot_kinds = inputs.slot_kinds
         abilities = (slot_kinds == int(SlotKind.ABILITY)).sum(dim=1).float()

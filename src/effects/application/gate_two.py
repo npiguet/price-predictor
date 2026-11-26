@@ -2,7 +2,9 @@
 
 The perturbation is model-side and paired: each record is built twice in one
 batch, as collected and with the keyword stripped from its carrier, so the two
-predictions differ in the keyword alone. The count and the agreement describe
+predictions differ in the keyword alone. The pairs run through the one chunked
+forward (:mod:`effects.application.record_forward`), at the precision every
+other scorer reads. The count and the agreement describe
 one population, decided by the table's own predicate
 (:mod:`effects.domain.damage_step_keywords`).
 """
@@ -13,13 +15,13 @@ import logging
 import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
-from itertools import chain, islice
+from itertools import batched, chain, islice
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
-from effects.application.model_loading import BATCH_OBSERVATIONS
+from effects.application.record_forward import BATCH_RECORDS
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     MIN_DIRECTION_AGREEMENT,
@@ -45,6 +47,8 @@ from effects.domain.strata import Stratum
 if TYPE_CHECKING:
     from effects.application.evaluation_context import EvaluationContext
     from effects.application.model_loading import Runnable
+    from effects.application.record_forward import RecordChunk, RecordForward
+    from effects.application.surface_batching import SurfaceBatcher
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +57,10 @@ logger = logging.getLogger(__name__)
 SLOT_WIDTH_SAMPLE = 8
 
 PROGRESS_EVERY_RECORDS = 50_000
+
+#: Observations per forward pass: each is built twice, as collected and
+#: perturbed, in one batch.
+BATCH_OBSERVATIONS = BATCH_RECORDS // 2
 
 
 class Observation(NamedTuple):
@@ -178,20 +186,25 @@ def score_keywords(
     """Run every qualifying perturbation and tally the eight rows.
 
     ``records`` is consumed as a stream; only a chunk's worth is ever held.
+    Every read is taken inside the forward's ``running()``, so the modules
+    stay in evaluation mode, with no gradient and the scorers' autocast,
+    until the last one.
     """
     resolver = runnable.keyword_resolver()
-    scores = {row.keyword: KeywordScore() for row in rows}
+    tally = _Tally(
+        {row.keyword: KeywordScore() for row in rows},
+        active=frozenset(spec.name for spec in runnable.fields),
+        keywords_of=resolver.keywords_of,
+    )
     progress = _Progress()
-    active = frozenset(spec.name for spec in runnable.fields)
-
+    forward = runnable.forward()
     observations = _qualifying(records, rows, resolver, progress)
-    for chunk in runnable.inference_chunks(observations, BATCH_OBSERVATIONS):
-        _score_chunk(
-            chunk, runnable, scores,
-            active=active, keywords_of=resolver.keywords_of,
-        )
+    with forward.running():
+        for chunk in batched(observations, BATCH_OBSERVATIONS):
+            chunk = list(chunk)
+            tally.fold(chunk, _paired(chunk, forward, runnable.batcher))
     progress.log()
-    return scores
+    return tally.scores
 
 
 @dataclass(slots=True)
@@ -231,39 +244,56 @@ def _qualifying(
             yield Observation(record, row, participant)
 
 
-def _score_chunk(
-    chunk: list[Observation], runnable: Runnable, scores: dict[str, KeywordScore], *,
-    active: frozenset[str], keywords_of: KeywordsOf,
-) -> None:
-    """Run one chunk of observations, paired, and fold it into ``scores``.
+def _paired(
+    chunk: list[Observation], forward: RecordForward, batcher: SurfaceBatcher,
+) -> RecordChunk:
+    """One chunk of observations through the forward, paired in one batch:
+    every record as collected, then each twin in the same order.
 
     The twin strips the row's keyword from its carrier in both places the
     input states it (root spec § 9.6, research M5): the kept flag is cleared
     and every line of the keyword is dropped, printed or granted, so the
-    carrier is left with no line of it (``SurfaceBuilder.build``). A carrier
-    whose keyword shares an ability slot with others keeps the slot's
-    statement, so the twin differs by more than the keyword's absence: that
-    observation is counted unqualified, not scored.
+    carrier is left with no line of it (``SurfaceBuilder.build``). The damage
+    assignment is no input, so nothing else in the twin states what the
+    keyword does.
     """
     built = [observation.record for observation in chunk] * 2
     strips = [NO_STRIP] * len(chunk) + [
         {observation.participant.carrier.id: frozenset({observation.row.keyword})}
         for observation in chunk
     ]
-    outputs, surfaces = runnable.per_entity_outputs(built, strips)
+    (paired,) = forward.records(built, batcher, size=len(built), strips=strips)
+    return paired
 
-    for offset, (record, row, participant) in enumerate(chunk):
-        twin = len(chunk) + offset
-        if participant.carrier.id in surfaces[twin].unremovable:
-            scores[row.keyword].refuse()
-            continue
-        agreed, per_effect = score_observation(
-            row, participant,
-            _subject_vectors(surfaces[offset], outputs[offset], row, participant),
-            _subject_vectors(surfaces[twin], outputs[twin], row, participant),
-            active=active, keywords_of=keywords_of,
-        )
-        scores[row.keyword].add(record.record_id, agreed, per_effect)
+
+@dataclass(frozen=True, slots=True)
+class _Tally:
+    """The eight rows' scores, and what reading one observation needs."""
+
+    scores: dict[str, KeywordScore]
+    active: frozenset[str]
+    keywords_of: KeywordsOf
+
+    def fold(self, chunk: list[Observation], paired: RecordChunk) -> None:
+        """Score one paired chunk and fold it into :attr:`scores`.
+
+        A carrier whose keyword shares an ability slot with others keeps the
+        slot's statement, so the twin differs by more than the keyword's
+        absence: that observation is counted unqualified, not scored.
+        """
+        outputs, surfaces = paired.at_entities(), paired.surfaces
+        for offset, (record, row, participant) in enumerate(chunk):
+            twin = len(chunk) + offset
+            if participant.carrier.id in surfaces[twin].unremovable:
+                self.scores[row.keyword].refuse()
+                continue
+            agreed, per_effect = score_observation(
+                row, participant,
+                _subject_vectors(surfaces[offset], outputs[offset], row, participant),
+                _subject_vectors(surfaces[twin], outputs[twin], row, participant),
+                active=self.active, keywords_of=self.keywords_of,
+            )
+            self.scores[row.keyword].add(record.record_id, agreed, per_effect)
 
 
 def _subject_vectors(

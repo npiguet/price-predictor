@@ -12,9 +12,7 @@ from __future__ import annotations
 
 import logging
 import random
-from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from itertools import batched
 
 import torch
 
@@ -40,7 +38,6 @@ from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
-from effects.domain.surface_collation import entity_index
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import EffectCheckpoint, load_weights
 from effects.infrastructure.sidecar_io import SidecarCache
@@ -55,10 +52,6 @@ EVALUATION_SEED = 42
 #: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
 BATCH_RECORDS = FORWARD_BATCH_RECORDS
 
-#: Observations per forward pass in gate 2: each is built twice, as collected
-#: and perturbed, in one batch.
-BATCH_OBSERVATIONS = BATCH_RECORDS // 2
-
 
 @dataclass(frozen=True, slots=True)
 class Runnable:
@@ -68,27 +61,6 @@ class Runnable:
     model: EffectModel
     batcher: SurfaceBatcher
     fields: tuple[FieldSpec, ...]
-
-    def inference_chunks[T](self, items: Iterable[T], size: int) -> Iterator[list[T]]:
-        """``items`` in chunks of ``size``, each yielded under inference mode
-        and evaluation mode, since a probe's own ``Runnable`` may hand over
-        modules still training."""
-        self.encoder.eval()
-        self.model.eval()
-        with torch.inference_mode():
-            for chunk in batched(items, size):
-                yield list(chunk)
-
-    def per_entity_outputs(self, records, strips=None) -> tuple[torch.Tensor, list]:
-        """``(outputs, surfaces)``: the per-entity head at each record's
-        ``[CARD]`` and ``[PLAYER]`` slots, ``(records, entities, width)`` on
-        the host in each surface's ``entity_slots`` order, and the surfaces
-        built. ``strips`` is gate 2's per-record perturbation
-        (:meth:`SurfaceBatcher.build`)."""
-        batch, surfaces, _encoded = self.batcher.build(records, self.encoder, strips)
-        hidden = self.model(batch)
-        index = entity_index(surfaces).to(hidden.device)
-        return self.model.per_entity_at(hidden, index).float().cpu(), surfaces
 
     def forward(self) -> RecordForward:
         """The one chunked forward (:mod:`effects.application.record_forward`)
