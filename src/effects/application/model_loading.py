@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import torch
 
 from effects.application.ability_text import KeyResolver
+from effects.application.line_preparation import TruncationLog, log_truncation
 from effects.application.record_forward import BATCH_RECORDS as FORWARD_BATCH_RECORDS
 from effects.application.record_forward import RecordForward
 from effects.application.surface_batching import (
@@ -29,11 +30,7 @@ from effects.application.surface_batching import (
 )
 from effects.application.text_resolution import TextResolution
 from effects.application.text_staging import TextStager
-from effects.domain.ability_encoder import (
-    AbilityEncoder,
-    TruncationLog,
-    log_truncation,
-)
+from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver

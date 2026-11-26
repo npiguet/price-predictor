@@ -16,16 +16,11 @@ from dataclasses import dataclass, replace
 import numpy as np
 import torch
 
+from effects.application.line_preparation import TruncationLog, collate_lines
 from effects.application.text_staging import TextStager, encode_by_length
-from effects.domain.ability_encoder import (
-    AbilityEncoder,
-    AbilityEncoderConfig,
-    TruncationLog,
-    collate_lines,
-    encoding_role_spans,
-    encoding_text,
-)
+from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
+from effects.domain.line_text import encoding_role_spans, encoding_text
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import default_device
 

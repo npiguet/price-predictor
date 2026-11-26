@@ -64,11 +64,11 @@ from effect_embedding_probes.common import (  # noqa: E402
     load_manifest_sets,
     resolve_paths,
 )
-from effects.domain.ability_encoder import (  # noqa: E402
-    AbilityEncoder,
+from effects.application.line_preparation import (  # noqa: E402
     collate_lines,
     prepare_line,
 )
+from effects.domain.ability_encoder import AbilityEncoder  # noqa: E402
 from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,

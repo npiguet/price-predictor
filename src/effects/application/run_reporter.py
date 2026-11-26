@@ -13,6 +13,7 @@ from pathlib import Path
 
 import torch
 
+from effects.application.line_preparation import TruncationLog, log_truncation
 from effects.application.step_loss import StepLoss, read_back
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
@@ -33,7 +34,6 @@ from effects.application.training_log import (
     format_terms,
 )
 from effects.application.validation_pass import EpochScores
-from effects.domain.ability_encoder import TruncationLog, log_truncation
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.selection_set import COMPONENTS, DEVIANCE, deviance_by_head
 

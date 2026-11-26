@@ -13,13 +13,9 @@ import pytest
 import torch
 
 from effects.application import text_staging
+from effects.application.line_preparation import EncodedLine, collate_lines
 from effects.application.text_staging import encode_by_length
-from effects.domain.ability_encoder import (
-    AbilityEncoder,
-    AbilityEncoderConfig,
-    EncodedLine,
-    collate_lines,
-)
+from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 
 _VOCAB = 40
 _PAD = 0

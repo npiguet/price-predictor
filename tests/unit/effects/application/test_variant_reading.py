@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 
 from effects.application.build_vocab import BuildVocabConfig, run
-from effects.domain.ability_encoder import encoding_text
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.line_text import encoding_text
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.script_text import RELABELLED_KEYS
 from effects.domain.tokenizer_files import TokenizerFiles

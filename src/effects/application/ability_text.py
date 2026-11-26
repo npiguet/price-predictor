@@ -10,8 +10,8 @@ from collections import defaultdict
 from collections.abc import Mapping
 from pathlib import Path
 
-from effects.domain.ability_encoder import encoding_text
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.line_text import encoding_text
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup, first_text
 from effects.domain.records import EffectRecord, acting_keys
 from effects.infrastructure.sidecar_io import (

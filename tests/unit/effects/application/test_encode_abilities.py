@@ -562,13 +562,14 @@ class TestTruncation:
         return AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3})
 
     def test_a_line_inside_the_window_is_not_truncated(self, tokenizer):
-        from effects.domain.ability_encoder import prepare_line
+        from effects.application.line_preparation import prepare_line
 
         tokens = tokenizer.tokenize(" ".join(["x"] * 511))
         assert prepare_line(tokenizer, tokens).truncated is False
 
     def test_a_line_past_the_window_is_truncated(self, tokenizer):
-        from effects.domain.ability_encoder import MAX_ABILITY_TOKENS, prepare_line
+        from effects.application.line_preparation import prepare_line
+        from effects.domain.ability_encoder import MAX_ABILITY_TOKENS
 
         tokens = tokenizer.tokenize(" ".join(["x"] * 512))
         line = prepare_line(tokenizer, tokens)
@@ -577,7 +578,7 @@ class TestTruncation:
 
     def test_training_batchers_sharing_a_log_report_a_text_once(self, tokenizer):
         """The trainer hands one log to every per-batch batcher."""
-        from effects.domain.ability_encoder import TruncationLog
+        from effects.application.line_preparation import TruncationLog
         from effects.domain.baselines import BaselineMasks
         from tests.unit.effects.builders import make_batcher
 
@@ -594,7 +595,7 @@ class TestTruncation:
         assert reported == [long_text]
 
     def test_a_text_is_reported_once_per_run(self):
-        from effects.domain.ability_encoder import TruncationLog
+        from effects.application.line_preparation import TruncationLog
 
         reported = []
         log = TruncationLog(lambda text, keys: reported.append((text, keys)))
@@ -615,18 +616,18 @@ class TestEncodingText:
         )
 
     def test_a_scripted_line_encodes_its_script(self):
-        from effects.domain.ability_encoder import encoding_text
+        from effects.domain.line_text import encoding_text
 
         chained = "Execute$ SV1 | Mode$ Attacks [SEG] SV1: DB$ Draw"
         assert encoding_text(self._line(chained), "draw a card.", "script") == chained
 
     def test_a_keyword_derived_line_encodes_its_prose(self):
-        from effects.domain.ability_encoder import encoding_text
+        from effects.domain.line_text import encoding_text
 
         assert encoding_text(self._line(None), "flying", "script") == "flying"
 
     def test_a_synthetic_land_mana_line_encodes_its_prose(self):
-        from effects.domain.ability_encoder import encoding_text
+        from effects.domain.line_text import encoding_text
 
         assert encoding_text(self._line(""), "{T}: add {G}.", "script") == "{T}: add {G}."
 

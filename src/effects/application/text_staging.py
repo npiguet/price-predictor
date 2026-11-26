@@ -14,14 +14,13 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from effects.domain.ability_encoder import (
-    AbilityEncoder,
+from effects.application.line_preparation import (
     EncodedLine,
     TruncationLog,
     collate_lines,
-    encoding_role_spans,
     prepare_line,
 )
+from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
@@ -30,6 +29,7 @@ from effects.domain.ability_tokenizer import (
     withheld_keyword_tokens,
 )
 from effects.domain.baselines import BaselineMasks, taxonomy_vector
+from effects.domain.line_text import encoding_role_spans
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import pinned
 

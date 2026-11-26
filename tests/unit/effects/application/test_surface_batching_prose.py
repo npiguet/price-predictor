@@ -30,7 +30,7 @@ from tests.unit.effects.builders import (
 
 
 def test_a_prose_text_is_encoded_with_its_lines_role_spans():
-    from effects.domain.ability_encoder import role_index
+    from effects.application.line_preparation import role_index
     from effects.domain.ability_tokenizer import AbilityTokenizer
     from effects.domain.provenance import RoleSpan
 

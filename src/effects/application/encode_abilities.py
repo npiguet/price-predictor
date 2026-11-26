@@ -181,7 +181,7 @@ def build_runner(checkpoint: EffectCheckpoint, files: TokenizerFiles):
         AbilityEncoderRunner,
         RunnerSettings,
     )
-    from effects.domain.ability_encoder import TruncationLog, log_truncation
+    from effects.application.line_preparation import TruncationLog, log_truncation
     from effects.infrastructure.tokenizer_loading import tokenizer_for
 
     tokenizer = tokenizer_for(checkpoint, files)

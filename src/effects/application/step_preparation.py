@@ -17,6 +17,7 @@ from typing import NamedTuple
 import torch
 
 from effects.application.ability_text import KeyResolver
+from effects.application.line_preparation import TruncationLog
 from effects.application.mlm_masking import MaskedTokens
 from effects.application.surface_batching import (
     PreparedBatch,
@@ -30,7 +31,6 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     ValidationGameInTrainingError,
 )
-from effects.domain.ability_encoder import TruncationLog
 from effects.domain.aux_head_targets import (
     created_objects_targets,
     global_targets,

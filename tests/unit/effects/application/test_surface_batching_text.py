@@ -35,7 +35,7 @@ class _EchoEncoder:
 def _mlm_lines(lengths, *, number: float | None = None) -> list:
     """Prepared lines of ``lengths`` tokens, each token after [CLS] a number
     when ``number`` is given."""
-    from effects.domain.ability_encoder import EncodedLine
+    from effects.application.line_preparation import EncodedLine
 
     return [
         EncodedLine(
@@ -52,7 +52,7 @@ def _mlm_batcher() -> SurfaceBatcher:
 
 
 def _mlm_inputs(lines) -> dict:
-    from effects.domain.ability_encoder import collate_lines
+    from effects.application.line_preparation import collate_lines
 
     return collate_lines(lines, _MaskTokens.pad_id)
 

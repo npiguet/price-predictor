@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from effects.domain.ability_encoder import encoding_role_spans, encoding_text
 from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
 from effects.domain.keyword_definitions import KeywordDefinition
+from effects.domain.line_text import encoding_role_spans, encoding_text
 from effects.domain.provenance import Role, RoleSpan
 from effects.domain.script_text import SCRIPT_READING, SEG, script_reading
 

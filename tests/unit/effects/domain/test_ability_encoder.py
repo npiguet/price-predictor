@@ -6,8 +6,8 @@ The surface itself is the vocabulary file's header
 
 from __future__ import annotations
 
-from effects.domain.ability_encoder import encoding_text
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.line_text import encoding_text
 from effects.domain.script_text import script_reading
 
 

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
+from effects.domain.line_text import encoding_text
 from effects.domain.provenance import (
     JOIN_GAP_KINDS,
     Joined,
@@ -309,10 +310,6 @@ def encoded_lines(
     """Every line of one sidecar as ``surface`` encodes it, row-aligned with
     the ability cache: the one spelling of read the prose, cut the line's
     out, fall back to the other surface (``encoding_text``)."""
-    # Here rather than at the top: the encoder module imports torch, and the
-    # survey workers that read sidecars must not.
-    from effects.domain.ability_encoder import encoding_text
-
     rendered = rendered_prose(sidecar_path, sidecar)
     out = []
     for line in sidecar.lines:

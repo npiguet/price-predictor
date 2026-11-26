@@ -109,7 +109,7 @@ def _cached_matrix(cache, sidecar) -> tuple[bool, np.ndarray | None]:
 
 def _row_text(line, rendered, surface: Surface) -> str | None:
     """A line's encoding text, None for one without provenance."""
-    from effects.domain.ability_encoder import encoding_text
+    from effects.domain.line_text import encoding_text
 
     if not line.provenance:
         return None
@@ -187,7 +187,7 @@ def checked_cache(context: ProbeContext, abilities_root: Path, surface: Surface)
 def acting_text_function(sidecars, surface: Surface):
     """``key -> text or None``: a key's encoding text on ``surface``, the
     checkpoint-independent text the probes' fold groups and line labels key on."""
-    from effects.domain.ability_encoder import encoding_text
+    from effects.domain.line_text import encoding_text
 
     memo: dict = {}
 
