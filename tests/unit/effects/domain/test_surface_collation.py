@@ -118,7 +118,7 @@ class TestCollateSurfaces:
             assert torch.equal(getattr(got, name), want[name]), name
 
     def test_a_batch_of_real_surfaces_collates_identically(self):
-        from tests.unit.effects.domain.test_effect_head_input import (
+        from tests.unit.effects.domain.effect_head_input_support import (
             _build,
             _entity,
             _record,

@@ -59,3 +59,12 @@ def make_record(snapshot, ability_key):
         return builders.make_record(kind, **defaults)
 
     return build
+
+
+@pytest.fixture(scope="module")
+def gen3_records():
+    from effects.infrastructure.record_codec import record_from_dict
+    from tests.unit.effects.builders import gen3_fixture_records
+
+    return {record.record_id: record
+            for record in map(record_from_dict, gen3_fixture_records())}
