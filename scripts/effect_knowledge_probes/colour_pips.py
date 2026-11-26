@@ -40,6 +40,7 @@ altogether (``{1}{R}`` given no Mountain: it only has to see the colour).
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -133,15 +134,19 @@ def land_payable(sidecars):
     return choose
 
 
-def main() -> None:
-    args, context = common.grid_run(__doc__, records=300, per_game=2)
-    records = record_walk.qualifying(
-        context.validation_shards(args.shards), land_payable(context.sidecars()), args.records,
-        per_game=args.per_game)
-    probe_model = context.model(records)
-    common.heading(args, context, f"{len(records)} validation decisions with a land-payable cost")
+@dataclass(frozen=True)
+class Grid:
+    """Every record's predicted verdict and the rule's answer in each configuration, and
+    the record's cost shape and whether its missing pip's colour stays among the lands."""
 
-    # predicted[name][i], rule[name][i] for record i
+    predicted: dict[str, np.ndarray]
+    rule: dict[str, np.ndarray]
+    shapes: np.ndarray
+    present: np.ndarray
+
+
+def read_grid(records, probe_model) -> Grid:
+    """Predict every record in every configuration."""
     predicted: dict[str, list[float]] = {name: [] for name in CONFIGURATIONS}
     rule: dict[str, list[bool]] = {name: [] for name in CONFIGURATIONS}
     shapes, present, edited, answers = [], [], [], []
@@ -157,19 +162,24 @@ def main() -> None:
             probe_model, edited, readout.of_record("affordable"))):
         predicted[name].append(p)
         rule[name].append(answer)
-    predicted = {k: np.asarray(v) for k, v in predicted.items()}
-    rule = {k: np.asarray(v, bool) for k, v in rule.items()}
-    shapes, present = np.asarray(shapes), np.asarray(present, bool)
+    return Grid({k: np.asarray(v) for k, v in predicted.items()},
+                {k: np.asarray(v, bool) for k, v in rule.items()},
+                np.asarray(shapes), np.asarray(present, bool))
 
+
+def report_configurations(grid: Grid) -> None:
     print("\nby configuration")
-    exact = predicted["exact"]
+    exact = grid.predicted["exact"]
     print_table(["configuration", "records", "rule: affordable", "predicted, mean",
                  "below exact, mean", "below exact, share"],
-                [[name, len(exact), f"{rule[name].mean():.2f}", common.fmt_mean(predicted[name]),
-                  common.fmt_mean(exact - predicted[name]),
-                  f"{(exact - predicted[name] > 0).mean():.2f}"] for name in CONFIGURATIONS],
-                "lrrrrr")
+                [[name, len(exact), f"{grid.rule[name].mean():.2f}",
+                  common.fmt_mean(grid.predicted[name]),
+                  common.fmt_mean(exact - grid.predicted[name]),
+                  f"{(exact - grid.predicted[name] > 0).mean():.2f}"]
+                 for name in CONFIGURATIONS], "lrrrrr")
 
+
+def report_rankings(grid: Grid) -> None:
     print("\nranking: rule-affordable configurations against unaffordable ones")
     rankings = (("every configuration", CONFIGURATIONS),
                 ("colours only (exact, surplus against pip missing, +2 and all off colour)",
@@ -177,23 +187,41 @@ def main() -> None:
                 ("amount only (exact against one short)", ("exact", "one short")))
 
     def ranking_auc(names) -> float:
-        return common.auc(np.concatenate([rule[n] for n in names]),
-                          np.concatenate([predicted[n] for n in names]))
+        return common.auc(np.concatenate([grid.rule[n] for n in names]),
+                          np.concatenate([grid.predicted[n] for n in names]))
 
     print_table(["items", "AUC"],
                 [[title, f"{ranking_auc(names):.3f}"] for title, names in rankings], "lr")
 
+
+def report_shapes(grid: Grid) -> None:
     print("\npip missing against one short, by the cost's coloured requirement "
           "(drop below exact, mean)")
-    groups = [(s, shapes == s) for s in ("one pip", "repeated pip", "several colours",
-                                         "hybrid")]
-    groups += [("missing colour still among the lands", present),
-               ("missing colour gone from the lands", ~present)]
+    exact = grid.predicted["exact"]
+    groups = [(s, grid.shapes == s) for s in ("one pip", "repeated pip", "several colours",
+                                              "hybrid")]
+    groups += [("missing colour still among the lands", grid.present),
+               ("missing colour gone from the lands", ~grid.present)]
     off = ("pip missing", "one short", "pip missing, +2", "all off colour")
     print_table(["cost", "records", *off],
                 [[title, int(mask.sum()),
-                  *(common.fmt_mean((exact - predicted[n])[mask & ~rule[n]]) for n in off)]
+                  *(common.fmt_mean((exact - grid.predicted[n])[mask & ~grid.rule[n]])
+                    for n in off)]
                  for title, mask in groups if mask.any()], "lrrrrr")
+
+
+def main() -> None:
+    args, context = common.grid_run(__doc__, records=300, per_game=2)
+    records = record_walk.qualifying(
+        context.validation_shards(args.shards), land_payable(context.sidecars()), args.records,
+        per_game=args.per_game)
+    probe_model = context.model(records)
+    common.heading(args, context, f"{len(records)} validation decisions with a land-payable cost")
+
+    grid = read_grid(records, probe_model)
+    report_configurations(grid)
+    report_rankings(grid)
+    report_shapes(grid)
 
 
 if __name__ == "__main__":
