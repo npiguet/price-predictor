@@ -393,13 +393,15 @@ def _write_validation_samples(
     if config.validation_sample <= 0:
         logger.info("no validation sample written (--validation-sample 0)")
         return
-    from effects.application.validation_samples import draw_samples, write_samples
+    from effects.application.validation_samples import SampleSpec, draw_samples, write_samples
 
     samples = draw_samples(
         {stratum: tuple(store.output_dir(stratum) / shard.name for shard in written)
          for stratum, written in shards.items()},
-        mix=config.mix(), size=config.validation_sample, seed=config.seed,
-        held_out_text_of=lambda record: context.held_out_text(acting_keys(record)),
+        spec=SampleSpec(
+            mix=config.mix(), size=config.validation_sample, seed=config.seed,
+            held_out_text_of=lambda record: context.held_out_text(acting_keys(record)),
+        ),
     )
     sampled = write_samples(store, samples)
     for stratum, count in sampled.items():

@@ -6,7 +6,12 @@ from collections import Counter
 
 import pytest
 
-from effects.application.validation_samples import _collect, class_quota, draw_samples
+from effects.application.validation_samples import (
+    SampleSpec,
+    _collect,
+    class_quota,
+    draw_samples,
+)
 from effects.domain.records import CombatPayload, Moment, RecordKind
 from effects.domain.sampling import (
     SamplingClass,
@@ -58,24 +63,28 @@ def _one_text(record) -> str:
     return "held-out text"
 
 
+def _spec(size, seed=1, mix=MIX, held_out_text_of=_one_text):
+    return SampleSpec(mix=mix, size=size, seed=seed, held_out_text_of=held_out_text_of)
+
+
 def test_each_stratum_holds_the_quota_per_class(strata):
-    samples = draw_samples(strata, mix=MIX, size=20, seed=1, held_out_text_of=_one_text)
+    samples = draw_samples(strata, spec=_spec(20))
     for stratum in ("card-disjoint", "game-disjoint"):
         by_class = Counter(sampling_class(r) for r in samples[stratum])
         assert by_class == {SamplingClass.RESOLUTION_EFFECT: 10, SamplingClass.COMBAT: 10}
 
 
 def test_card_disjoint_resolutions_come_from_the_gate_one_slice_first(strata):
-    samples = draw_samples(strata, mix=MIX, size=20, seed=1, held_out_text_of=_one_text)
+    samples = draw_samples(strata, spec=_spec(20))
     resolutions = {r.record_id for r in samples["card-disjoint"] if r.kind is RecordKind.RESOLUTION}
     assert {f"r{i}" for i in range(6)} <= resolutions      # all six gate-one records
     assert len(resolutions) == 10                           # topped up from the stratum
 
 
 def test_the_draw_is_seeded_and_shuffled(strata):
-    a = draw_samples(strata, mix=MIX, size=20, seed=1, held_out_text_of=_one_text)
-    b = draw_samples(strata, mix=MIX, size=20, seed=1, held_out_text_of=_one_text)
-    c = draw_samples(strata, mix=MIX, size=20, seed=2, held_out_text_of=_one_text)
+    a = draw_samples(strata, spec=_spec(20))
+    b = draw_samples(strata, spec=_spec(20))
+    c = draw_samples(strata, spec=_spec(20, seed=2))
     def ids(sample):
         return [r.record_id for r in sample["game-disjoint"]]
 
@@ -87,9 +96,7 @@ def test_the_draw_is_seeded_and_shuffled(strata):
 
 def test_a_short_class_takes_what_there_is(strata):
     samples = draw_samples(
-        strata, mix={SamplingClass.RESOLUTION_COST: 1.0}, size=5, seed=1,
-        held_out_text_of=_one_text,
-    )
+        strata, spec=_spec(5, mix={SamplingClass.RESOLUTION_COST: 1.0}))
     assert samples["card-disjoint"] == []
 
 
@@ -101,7 +108,7 @@ def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypa
         raise AssertionError(f"draw_samples read {shard} despite size=0")
 
     monkeypatch.setattr(shard_io, "read_shard", bomb)
-    samples = draw_samples(strata, mix=MIX, size=0, seed=1, held_out_text_of=_one_text)
+    samples = draw_samples(strata, spec=_spec(0))
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 
 
@@ -121,7 +128,7 @@ def test_the_copies_of_one_record_take_one_place(tmp_path, make_record):
         "other", "same"]
 
 
-def _copies(make_record, record_id: str, game_id: str, added: int, **fields) -> list:
+def _copies(make_record, record_id: str, game_id: str, added: int) -> list:
     """A record as a stratum writes it: its natural copy and ``added`` copies
     rule budgets drew for one rule."""
     from effects.domain.records import Curation
@@ -130,9 +137,9 @@ def _copies(make_record, record_id: str, game_id: str, added: int, **fields) -> 
     natural = Curation(natural_share=1, copies=copies, drawn_rules=("702.2b",) * bool(added))
     drawn = Curation(natural_share=1, copies=copies, drawn_rule="702.2b",
                      drawn_rules=("702.2b",))
-    return ([make_record(record_id=record_id, game_id=game_id, curation=drawn, **fields)
+    return ([make_record(record_id=record_id, game_id=game_id, curation=drawn)
              for _ in range(added)]
-            + [make_record(record_id=record_id, game_id=game_id, curation=natural, **fields)])
+            + [make_record(record_id=record_id, game_id=game_id, curation=natural)])
 
 
 def test_a_copied_class_fills_its_quota_with_distinct_natural_copies(tmp_path, make_record):
@@ -142,8 +149,7 @@ def test_a_copied_class_fills_its_quota_with_distinct_natural_copies(tmp_path, m
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT, Stratum.GATE_ONE):
         write_shard(store.output_dir(stratum) / "s.jsonl.gz", records)
     samples = draw_samples(
-        _listed(store), mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=8, seed=1,
-        held_out_text_of=_one_text)
+        _listed(store), spec=_spec(8, mix={SamplingClass.RESOLUTION_EFFECT: 1.0}))
     for stratum in ("card-disjoint", "game-disjoint"):
         sample = samples[stratum]
         assert len({r.record_id for r in sample}) == len(sample) == 8, stratum
@@ -188,8 +194,10 @@ def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, mak
     text_of = {common: "common text", rare: "rare text"}
 
     samples = draw_samples(
-        _listed(store), mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
-        held_out_text_of=lambda record: text_of[record.ability[0]],
+        _listed(store), spec=_spec(
+            10, mix={SamplingClass.RESOLUTION_EFFECT: 1.0},
+            held_out_text_of=lambda record: text_of[record.ability[0]],
+        ),
     )
     chosen = [r.record_id for r in samples["card-disjoint"]]
     assert len(chosen) == 10
