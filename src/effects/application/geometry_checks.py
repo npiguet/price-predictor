@@ -153,19 +153,24 @@ def cached_vectors(index: SidecarIndex, store: AbilityCacheStore) -> CachedVecto
     for source, matrix in index.matrices(store):
         card = normalize_prose(source.card)
         for row, line in zip(matrix, source.lines):
-            if line is None:
-                continue
-            cached.by_text.setdefault(line.text, row)
-            cached.display.setdefault(line.text, line.prose or line.text)
-            if line.api_type:
-                cached.api_types.setdefault(line.text, line.api_type)
-            if line.prose:
-                cached.by_prose.setdefault(
-                    normalize_prose(line.prose), {},
-                ).setdefault(line.text, set()).add(card)
+            if line is not None:
+                _add_line(cached, line, row, card)
         if matrix.size and Path(source.script_file).parts[:1] == (SourceTree.CARDSFOLDER,):
             cached.by_card[source.card] = pooled_card_vector(matrix)
     return cached
+
+
+def _add_line(cached: CachedVectors, line, row: np.ndarray, card: str) -> None:
+    """One sidecar line's vector, display text, API type and prose entry, each
+    kept where an earlier source already set it."""
+    cached.by_text.setdefault(line.text, row)
+    cached.display.setdefault(line.text, line.prose or line.text)
+    if line.api_type:
+        cached.api_types.setdefault(line.text, line.api_type)
+    if line.prose:
+        cached.by_prose.setdefault(
+            normalize_prose(line.prose), {},
+        ).setdefault(line.text, set()).add(card)
 
 
 # ── gate 3: collapse canaries ───────────────────────────────────────────
@@ -362,25 +367,15 @@ def check_decodability(
 ) -> CheckResult:
     """How much of each winnability label is linearly readable from pooled
     ``e``, validated on the checkpoint's held-out cards."""
-    if not cached.by_card:
-        return _uncached(CheckName.DECODABILITY, "the ability cache is empty")
-    if not Path(win_rates_path).exists():
-        return CheckResult(
-            CheckName.DECODABILITY, CheckStatus.SKIPPED,
-            f"no win-rate table at {win_rates_path}",
-        )
-    from price_predictor.application.ridge_probes import (
-        ProbeConfig,
-        build_label_table,
-        fit_probes,
-        load_labels,
-    )
+    unreadable = _decodability_unreadable(cached, win_rates_path)
+    if unreadable is not None:
+        return unreadable
+    from price_predictor.application.ridge_probes import load_labels
 
     shared = sorted(cached.by_card)
     # Sidecars name cards in lowercase, the win-rate table in Forge's case:
     # joined case-insensitively, in the cache's order.
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
-    labelled = [canonical.get(name.casefold(), name) for name in shared]
     with_rate = sum(name.casefold() in canonical for name in shared)
     if with_rate < MIN_DECODABILITY_CARDS:
         return CheckResult(
@@ -388,9 +383,39 @@ def check_decodability(
             f"only {with_rate} of {len(shared)} cached cards have a win rate, "
             "too few to fit probes",
         )
+    return _fit_decodability(cached, canonical, Path(win_rates_path), held_out_cards)
+
+
+def _decodability_unreadable(cached: CachedVectors, win_rates_path: Path) -> CheckResult | None:
+    """The skip for a cache with no cards or a missing win-rate table; ``None``
+    when both can be read."""
+    if not cached.by_card:
+        return _uncached(CheckName.DECODABILITY, "the ability cache is empty")
+    if not Path(win_rates_path).exists():
+        return CheckResult(
+            CheckName.DECODABILITY, CheckStatus.SKIPPED,
+            f"no win-rate table at {win_rates_path}",
+        )
+    return None
+
+
+def _fit_decodability(
+    cached: CachedVectors, canonical: dict[str, str], win_rates_path: Path,
+    held_out_cards: tuple[str, ...],
+) -> CheckResult:
+    """The ridge probes over every cached card, each joined to its win-rate
+    name through ``canonical`` (lowercase name to the table's), validated on
+    ``held_out_cards``."""
+    from price_predictor.application.ridge_probes import (
+        ProbeConfig,
+        build_label_table,
+        fit_probes,
+    )
+
+    shared = sorted(cached.by_card)
     table = build_label_table(
-        labelled,
-        win_rates_path=Path(win_rates_path),
+        [canonical.get(name.casefold(), name) for name in shared],
+        win_rates_path=win_rates_path,
         val_names={canonical.get(name.casefold(), name) for name in held_out_cards},
     )
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
