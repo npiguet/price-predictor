@@ -13,12 +13,13 @@ def parse(*argv: str):
 
 
 def test_the_default_is_on():
-    assert parse().relation_values == "on"
-    assert TrainEffectModelConfig.__dataclass_fields__["relation_values"].default == "on"
+    assert parse().relation_values is True
+    assert TrainEffectModelConfig.__dataclass_fields__["relation_values"].default is True
 
 
 def test_off_is_accepted_and_anything_else_refused():
-    assert parse("--relation-values", "off").relation_values == "off"
+    assert parse("--relation-values", "on").relation_values is True
+    assert parse("--relation-values", "off").relation_values is False
     with pytest.raises(SystemExit):
         parse("--relation-values", "maybe")
     with pytest.raises(ValueError):

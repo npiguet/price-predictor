@@ -92,11 +92,11 @@ def check_holdout(
     return None
 
 
-def on_off(value: str) -> str:
-    """A switch spelled ``on`` or ``off``, as the CLI contract writes it."""
+def on_off(value: str) -> bool:
+    """A switch the command line spells ``on`` or ``off``, as a bool."""
     if value not in ("on", "off"):
         raise ValueError(f"expected on or off, not {value!r}")
-    return value
+    return value == "on"
 
 
 def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
@@ -181,10 +181,10 @@ class TrainEffectModelConfig:
         "Width of each ability's vector e, the encoder's output the effect head "
         "reads (default: %(default)s)"
     ))
-    relation_values: str = setting(COMPARED, ALWAYS, default="on", type=on_off, help=(
+    relation_values: bool = setting(COMPARED, ALWAYS, default=True, type=on_off, help=(
         "on: the trunk's relations change what a slot receives as well as how "
         "much it attends; off: the value tables stay at zero and untrained "
-        "(default: %(default)s)"
+        "(default: on)"
     ))
     rule_mask: RuleMask = setting(COMPARED, ALWAYS, default=RuleMask.HARD, type=RuleMask, help=(
         "hard: a copy rule budgets added trains only the outputs the rule map "

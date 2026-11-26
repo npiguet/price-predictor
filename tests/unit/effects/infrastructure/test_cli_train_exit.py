@@ -62,7 +62,7 @@ def test_the_gen3_flags_default_as_the_contract_says():
     config = _config()
     assert config.rule_mask is RuleMask.HARD
     assert (config.deviance_floor, config.ema_epochs, config.stratum_weight) == (0.04, 1.0, 0.5)
-    assert (config.patience, config.relation_values, config.e_dim) == (5, "on", 256)
+    assert (config.patience, config.relation_values, config.e_dim) == (5, True, 256)
 
 
 def test_the_gen3_flags_reach_the_config():

@@ -55,7 +55,7 @@ def test_every_other_recorded_flag_is_compared():
 
 @pytest.mark.parametrize("flag, value", [
     ("rule_mask", RuleMask.SOFT), ("deviance_floor", 0.05), ("ema_epochs", 2.0),
-    ("stratum_weight", 0.25), ("relation_values", "off"), ("curriculum_rewarm_steps", 100),
+    ("stratum_weight", 0.25), ("relation_values", False), ("curriculum_rewarm_steps", 100),
     ("e_noise", 0.2), ("batch_size", 16), ("context_dropout", 0.3),
 ])
 def test_a_resume_changing_a_flag_that_shapes_a_step_is_a_mismatch(flag, value):

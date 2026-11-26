@@ -243,7 +243,7 @@ def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) ->
         n_api_types=len(preparer.api_types),
         n_param_keys=len(preparer.param_keys),
         encoder_d_model=encoder_config.d_model,
-        relation_values=config.relation_values == "on",
+        relation_values=config.relation_values,
     )
     encoder = AbilityEncoder(encoder_config).to(device)
     model = EffectModel(model_config).to(device)

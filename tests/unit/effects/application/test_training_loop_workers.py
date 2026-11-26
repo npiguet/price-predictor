@@ -280,7 +280,7 @@ def test_a_resume_across_warmup_starts_the_average_at_warmups_end(
 
 @pytest.mark.parametrize("flag, value", [
     ("rule_mask", "soft"), ("deviance_floor", 0.05), ("ema_epochs", 2.0),
-    ("stratum_weight", 0.25), ("relation_values", "off"),
+    ("stratum_weight", 0.25), ("relation_values", False),
 ])
 def test_a_resume_changing_a_training_objective_flag_is_refused(
     runner, tmp_path, flag, value,
