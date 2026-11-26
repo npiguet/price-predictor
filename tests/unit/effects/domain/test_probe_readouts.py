@@ -8,7 +8,7 @@ import math
 import numpy as np
 import pytest
 
-from effects.domain.probe_readouts import READOUTS, item_score, read
+from effects.domain.probe_readouts import READOUTS, ReadAt, item_score, read
 
 
 class TestItemScore:
@@ -52,9 +52,9 @@ class TestReadouts:
         verdict = torch.zeros(2, VERDICT_WIDTH)
         verdict[1, VERDICT_LAYOUT.slices["trigger_fired"][0]] = 2.0
         expected = float(torch.sigmoid(torch.tensor(2.0)))
-        assert read("fires", None, verdict, 1, 0) == pytest.approx(expected)
-        assert read("fires", None, verdict, 1, 7) == pytest.approx(expected)
-        assert read("fires", None, verdict, 0, 0) == pytest.approx(0.5)
+        assert read("fires", None, verdict, ReadAt(1, 0)) == pytest.approx(expected)
+        assert read("fires", None, verdict, ReadAt(1, 7)) == pytest.approx(expected)
+        assert read("fires", None, verdict, ReadAt(0, 0)) == pytest.approx(0.5)
 
     def test_a_failed_check_reads_its_own_member_column(self):
         import torch
@@ -69,9 +69,9 @@ class TestReadouts:
         start, end = VERDICT_LAYOUT.slices["failed_checks"]
         assert end - start == len(FAILED_CHECKS)
         verdict[0, start + FAILED_CHECKS.index("casting_speed")] = 3.0
-        assert read("failed_casting_speed", None, verdict, 0, 0) == pytest.approx(
+        assert read("failed_casting_speed", None, verdict, ReadAt(0, 0)) == pytest.approx(
             float(torch.sigmoid(torch.tensor(3.0))))
-        assert read("failed_whose_turn", None, verdict, 0, 0) == pytest.approx(0.5)
+        assert read("failed_whose_turn", None, verdict, ReadAt(0, 0)) == pytest.approx(0.5)
 
     def test_target_legality_reads_the_field_at_the_slot_ungated(self):
         import torch
@@ -80,11 +80,11 @@ class TestReadouts:
 
         outputs = torch.full((1, 3, PER_ENTITY_WIDTH), -9.0)
         outputs[0, 2, FIELD_SLICES["target_legal"][0]] = 0.0
-        assert read("target_legal", outputs, None, 0, 2) == pytest.approx(0.5)
-        assert read("target_legal", outputs, None, 0, 1) < 0.001
+        assert read("target_legal", outputs, None, ReadAt(0, 2)) == pytest.approx(0.5)
+        assert read("target_legal", outputs, None, ReadAt(0, 1)) < 0.001
         # The ladder's target-legality probe types read the same field.
         for probe_type in ("legal_target", "legal_target_protected"):
-            assert read(probe_type, outputs, None, 0, 2) == pytest.approx(0.5)
+            assert read(probe_type, outputs, None, ReadAt(0, 2)) == pytest.approx(0.5)
 
 
 class TestEntitySlots:

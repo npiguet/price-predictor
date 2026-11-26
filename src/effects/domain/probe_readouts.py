@@ -25,6 +25,7 @@ selection-set freeze can name the readouts without loading it.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -140,9 +141,17 @@ READOUTS: dict[str, Readout] = {
 }
 
 
-def read(target: str, outputs, verdict, row: int, slot: int) -> float:
-    """``target``'s answer for batch row ``row`` at ``slot``; a verdict ignores the slot."""
-    return float(READOUTS[target](outputs, verdict, row, slot))
+@dataclass(frozen=True, slots=True)
+class ReadAt:
+    """Where an answer is read: batch ``row`` and, for a field of an entity, its ``slot``."""
+
+    row: int
+    slot: int
+
+
+def read(target: str, outputs, verdict, at: ReadAt) -> float:
+    """``target``'s answer at ``at``; a verdict ignores the slot."""
+    return float(READOUTS[target](outputs, verdict, at.row, at.slot))
 
 
 def card_slots(surface) -> dict[str, int]:

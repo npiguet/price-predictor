@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from effects.domain.probe_readouts import (  # noqa: F401  (re-exported for the probes)
     READOUTS,
+    ReadAt,
     Readout,
     card_slots,
     entity_slots,
@@ -26,7 +27,9 @@ def at_card(target: str, entity_id: str):
 
     def read_one(outputs, verdict, surface, row) -> float:
         slot = card_slots(surface).get(entity_id)
-        return float("nan") if slot is None else read(target, outputs, verdict, row, slot)
+        return float("nan") if slot is None else read(
+            target, outputs, verdict, ReadAt(row, slot),
+        )
 
     return read_one
 
@@ -41,7 +44,7 @@ def at_every_card(target: str):
     """A ``common.predict`` read: ``{entity: answer}`` over every card on the board."""
 
     def read_all(outputs, verdict, surface, row) -> dict[str, float]:
-        return {entity: read(target, outputs, verdict, row, slot)
+        return {entity: read(target, outputs, verdict, ReadAt(row, slot))
                 for entity, slot in card_slots(surface).items()}
 
     return read_all
@@ -52,7 +55,7 @@ def at_every_entity(target: str):
     card and every player of the board."""
 
     def read_all(outputs, verdict, surface, row) -> dict[str, float]:
-        return {entity: read(target, outputs, verdict, row, slot)
+        return {entity: read(target, outputs, verdict, ReadAt(row, slot))
                 for entity, slot in entity_slots(surface).items()}
 
     return read_all
@@ -60,4 +63,4 @@ def at_every_entity(target: str):
 
 def of_record(target: str):
     """A ``common.predict`` read: a verdict, which is the record's and no entity's."""
-    return lambda outputs, verdict, surface, row: read(target, outputs, verdict, row, 0)
+    return lambda outputs, verdict, surface, row: read(target, outputs, verdict, ReadAt(row, 0))

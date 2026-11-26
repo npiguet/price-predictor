@@ -488,7 +488,7 @@ class ItemAt:
 
 def _readout(target: str, outputs, verdict, at: ItemAt) -> float:
     """Rung 3: the head's own prediction for one item (:mod:`readout`)."""
-    return readout.read(target, outputs, verdict, at.row, at.slot)
+    return readout.read(target, outputs, verdict, readout.ReadAt(at.row, at.slot))
 
 
 @dataclass

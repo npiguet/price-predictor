@@ -650,7 +650,7 @@ def predict_items(probe_model, items: list[ConditionItem], *, chunk: int = 32) -
             item = part[row]
             if item.readout in _ENTITY_READOUTS:
                 return readout.at_card(item.readout, item.entity)(outputs, verdict, surface, row)
-            return readout.read(item.readout, outputs, verdict, row, 0)
+            return readout.read(item.readout, outputs, verdict, readout.ReadAt(row, 0))
 
         out += common.predict(probe_model, [item.record for item in part], read)
     return out
