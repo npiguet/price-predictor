@@ -5,7 +5,7 @@ reads grouped by read (``host_cache``; contracts/selection-set.md § Score)."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -113,44 +113,51 @@ class ChunkBuilder:
         records = [record for record, _ in self.pending]
         batch = self.batcher.prepare(records)
         surfaces = batch.surfaces
-        targets = None
-        if any(r.observation is not None and r.subject is not None
-               for _, requests in self.pending for r in requests):
-            targets = _RowTargets.of(records, surfaces)
-        columns = [{surface.slots[slot].subject_id: column
-                    for column, slot in enumerate(surface.entity_slots)} for surface in surfaces]
-        asked: list[dict[int, int]] = [{} for _ in records]
-        reads: list[tuple[int, int, Read, int]] = []
+        targets = _RowTargets.of(records, surfaces) if _observes_entities(self.pending) else None
+        placing = _Placing(targets, [_columns_of(surface) for surface in surfaces],
+                           [{} for _ in records])
         for row, (_, requests) in enumerate(self.pending):
-            observations = []
-            for request in requests:
-                if request.subject is None:
-                    reads.append((row, 0, request.read, request.position))
-                    continue
-                column = columns[row].get(request.subject)
-                if column is None:
-                    self.unplaced += 1
-                    if len(self.unplaced_refs) < 5:
-                        self.unplaced_refs.append(str(request.subject))
-                    continue
-                read = request.read
-                if request.observation is not None:
-                    read = self._observed(request, targets, row, column)
-                    if read is None:
-                        continue
-                    observations.append(request.observation)
-                gather = asked[row].setdefault(column, len(asked[row]))
-                reads.append((row, gather, read, request.position))
-            for observation in {id(o): o for o in observations}.values():
-                observation.close()
-        width = max([len(a) for a in asked] + [1])
-        index = torch.zeros((len(records), width), dtype=torch.long)
-        for row, (surface, gathered) in enumerate(zip(surfaces, asked)):
-            for column, at in gathered.items():
-                index[row, at] = surface.entity_slots[column]
-        self.chunks.append(Chunk(pack(stripped(batch), rows=len(records)), index,
-                                  _grouped(reads)))
+            self._place_row(placing, row, requests)
+        self.chunks.append(Chunk(pack(stripped(batch), rows=len(records)),
+                                 _gather_index(surfaces, placing.asked),
+                                 _grouped(placing.reads)))
         self.pending = []
+
+    def _place_row(self, placing: _Placing, row: int, requests: list[Request]) -> None:
+        """One record's requests placed in the chunk; each target observation
+        they fed closed once."""
+        observations = []
+        for request in requests:
+            observation = self._place(placing, row, request)
+            if observation is not None:
+                observations.append(observation)
+        for observation in {id(o): o for o in observations}.values():
+            observation.close()
+
+    def _place(self, placing: _Placing, row: int, request: Request) -> Observation | None:
+        """One request placed at its record's row: at the record, or at its
+        entity's gathered column (counted unplaced where the surface gives the
+        entity no slot). Returns the target observation it fed, if any."""
+        if request.subject is None:
+            placing.reads.append((row, 0, request.read, request.position))
+            return None
+        column = placing.columns[row].get(request.subject)
+        if column is None:
+            self._unplaced(request)
+            return None
+        read = request.read
+        if request.observation is not None:
+            read = self._observed(request, placing.targets, row, column)
+            if read is None:
+                return None
+        gather = placing.asked[row].setdefault(column, len(placing.asked[row]))
+        placing.reads.append((row, gather, read, request.position))
+        return request.observation
+
+    def _unplaced(self, request: Request) -> None:
+        self.unplaced += 1
+        if len(self.unplaced_refs) < 5:
+            self.unplaced_refs.append(str(request.subject))
 
     def _observed(self, request: Request, targets: _RowTargets,
                   row: int, column: int) -> Read | None:
@@ -166,6 +173,42 @@ class ChunkBuilder:
             return None
         observation.add(indicators)
         return reading.at(targets.batch, row, column)
+
+
+@dataclass(frozen=True)
+class _Placing:
+    """A chunk's reads as its requests are placed: each record's entity
+    columns (``subject_id -> column``), the columns each record's reads
+    gather (``column -> gathered index``), and the reads themselves
+    (``(row, gathered index, read, value position)``)."""
+
+    targets: _RowTargets | None
+    columns: list[dict[str, int]]
+    asked: list[dict[int, int]]
+    reads: list[tuple[int, int, Read, int]] = field(default_factory=list)
+
+
+def _observes_entities(pending: Sequence[tuple[EffectRecord, list[Request]]]) -> bool:
+    """Whether a pending request observes a target at an entity, so the
+    chunk's targets are built."""
+    return any(r.observation is not None and r.subject is not None
+               for _, requests in pending for r in requests)
+
+
+def _columns_of(surface) -> dict[str, int]:
+    return {surface.slots[slot].subject_id: column
+            for column, slot in enumerate(surface.entity_slots)}
+
+
+def _gather_index(surfaces: Sequence, asked: list[dict[int, int]]) -> torch.Tensor:
+    """Each record's gathered columns as the slots they read, padded with
+    slot 0 to the widest record's (at least one column)."""
+    width = max([len(a) for a in asked] + [1])
+    index = torch.zeros((len(asked), width), dtype=torch.long)
+    for row, (surface, gathered) in enumerate(zip(surfaces, asked)):
+        for column, at in gathered.items():
+            index[row, at] = surface.entity_slots[column]
+    return index
 
 
 @dataclass(frozen=True)
