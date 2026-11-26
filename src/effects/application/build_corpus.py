@@ -418,14 +418,17 @@ def _repack_outputs(
     A part is one source shard, so unrepacked the trainer's per-shard step
     budget would be uneven and a shard's batches correlated by run.
     """
-    from effects.infrastructure.shard_io import iter_shards, repack_shards
+    from effects.infrastructure.shard_io import iter_shards
+    from effects.infrastructure.shard_repack import RepackSettings, repack_shards
 
     listing: dict[str, tuple[CuratedShard, ...]] = {}
     for stratum in OUTPUT_STRATA:
         parts = iter_shards(store.parts_dir_for(stratum))
         paths = repack_shards(
-            parts, store.output_dir(stratum), shard_records=shard_records,
-            seed=seed, records=written.strata.records.get(stratum, 0),
+            parts, store.output_dir(stratum), RepackSettings(
+                shard_records=shard_records, seed=seed,
+                records=written.strata.records.get(stratum, 0),
+            ),
         )
         logger.info(
             "%-22s %d part(s) repacked into %d shard(s)",
