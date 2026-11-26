@@ -14,6 +14,11 @@ figures) are hand-maintained in the CSVs themselves. A CSV of only such figures 
 not written here; in a CSV that mixes them with computed rows, the rows whose key the
 run directories do not produce are read back from the committed file and written out
 again. ``make_charts.py`` draws every chart from these CSVs alone.
+
+The script reads the run layout that held when the gen-2 report was written. The
+runs now sit under ``models/effects/gen2/effect-model/`` under other names, their
+probe outputs under ``output/effects/gen2/reports/``, and gen-1's scorecard is gone:
+the report is finished, and the script stays as the record of how its CSVs were built.
 """
 
 from __future__ import annotations
