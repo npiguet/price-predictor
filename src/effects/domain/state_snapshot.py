@@ -126,8 +126,8 @@ class GlobalState:
     """
 
     turn: int
-    phase: str
-    active: str
+    phase: str | None
+    active: str | None
     priority: str | None
     stack_size: int
     combat_substep: str | None = None
@@ -492,8 +492,8 @@ class EntityState:
 
     id: str
     name: str
-    zone: str
-    controller: str
+    zone: str | None
+    controller: str | None
     face: int = 0
     copy_source: str | None = None
     token_script_id: str | None = None
