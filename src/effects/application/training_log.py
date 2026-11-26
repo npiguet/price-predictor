@@ -110,6 +110,17 @@ class EpochSummary:
     fields: dict[str, tuple[float, float | None]]
 
 
+def _fields_after(lines: Sequence[str], i: int) -> dict[str, tuple[float, float | None]]:
+    """The ``fields:`` line that follows the epoch line at ``i``, if it does."""
+    following = lines[i + 1].strip() if i + 1 < len(lines) else ""
+    if not following.startswith("fields:"):
+        return {}
+    return {
+        name: (float(loss), None if pct == "n/a" else float(pct[:-1]))
+        for name, loss, pct in _FIELD_ITEM.findall(following)
+    }
+
+
 def parse_epoch_summaries(lines: Iterable[str]) -> list[EpochSummary]:
     """The epoch summaries of a training log, in epoch order of first appearance.
 
@@ -120,13 +131,9 @@ def parse_epoch_summaries(lines: Iterable[str]) -> list[EpochSummary]:
     found: dict[int, EpochSummary] = {}
     for i, line in enumerate(lines):
         m = _EPOCH_LINE.search(line)
-        if not m:
-            continue
-        fields: dict[str, tuple[float, float | None]] = {}
-        following = lines[i + 1].strip() if i + 1 < len(lines) else ""
-        if following.startswith("fields:"):
-            for name, loss, pct in _FIELD_ITEM.findall(following):
-                fields[name] = (float(loss), None if pct == "n/a" else float(pct[:-1]))
-        epoch = int(m[1])
-        found[epoch] = EpochSummary(epoch, *(float(v) for v in m.groups()[1:]), fields)
+        if m:
+            epoch = int(m[1])
+            found[epoch] = EpochSummary(
+                epoch, *(float(v) for v in m.groups()[1:]), _fields_after(lines, i),
+            )
     return list(found.values())
