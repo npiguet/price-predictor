@@ -94,13 +94,21 @@ def deaths_by_the_rule(record, attacker: str, blocker: str) -> dict:
             for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
 
 
+def report_outcomes(monkeypatch, outcome: dict) -> None:
+    """``derive_targets`` patched to return ``outcome`` for every record: in
+    ``effect_targets`` and in ``grid_edits``, which binds the name at import."""
+    import effects.domain.effect_targets as effect_targets
+    import effects.domain.grid_edits as grid_edits
+
+    for module in (effect_targets, grid_edits):
+        monkeypatch.setattr(module, "derive_targets", lambda r: outcome)
+
+
 def outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> dict:
     """``derive_targets`` patched to report the deaths the damage-step rule gives the
     block; returned so a test can change one creature's outcome."""
-    import effects.domain.effect_targets as effect_targets
-
     outcome = deaths_by_the_rule(record, attacker, blocker)
-    monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+    report_outcomes(monkeypatch, outcome)
     return outcome
 
 

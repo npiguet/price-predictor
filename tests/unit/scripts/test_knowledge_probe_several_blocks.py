@@ -11,7 +11,11 @@ from effect_knowledge_probes import (
     selection,
 )
 
-from tests.unit.scripts.knowledge_probe_support import deaths_by_the_rule, one_on_one
+from tests.unit.scripts.knowledge_probe_support import (
+    deaths_by_the_rule,
+    one_on_one,
+    report_outcomes,
+)
 
 
 def _copy_of_pair_member(entity, attacker, blocker, copy_ids):
@@ -27,7 +31,6 @@ def _copy_of_pair_member(entity, attacker, blocker, copy_ids):
 def _two_pairs(records, monkeypatch):
     """A fixture one-on-one block with a second pair beside it (copies of the
     first, under new ids), every outcome the rule's."""
-    import effects.domain.effect_targets as effect_targets
 
     record, attacker, blocker = one_on_one(records)
     copy_ids = (f"{attacker}~2", f"{blocker}~2")
@@ -39,7 +42,7 @@ def _two_pairs(records, monkeypatch):
         state=replace(record.state, entities=(*record.state.entities, *copies)))
     outcome = {**deaths_by_the_rule(record, attacker, blocker),
                **deaths_by_the_rule(record, *copy_ids)}
-    monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+    report_outcomes(monkeypatch, outcome)
     return record, (attacker, blocker), copy_ids
 
 
@@ -63,7 +66,7 @@ class TestSeveralBlocks:
         flipped = "zone_outcome" not in outcome[second[1]].fields
         outcome[second[1]] = SimpleNamespace(
             fields={"zone_outcome": 1} if flipped else {}, unknown=set())
-        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        report_outcomes(monkeypatch, outcome)
         assert combat_grid.several_blocks(record, _plain_keywords) is None
 
     def test_the_grid_edits_one_pair_and_scores_it_by_the_rule(self, records, monkeypatch):
