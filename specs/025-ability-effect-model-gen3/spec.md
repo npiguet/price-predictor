@@ -1365,8 +1365,15 @@ and that the reporting half never enters the control score.
 - **FR-062**: Each output field's loss MUST be divided by the loss of its constant prediction on the
   same records under the same distribution, clamped below at `--deviance-floor` (default 0.04 nats).
 - **FR-063**: Count and amount fields MUST be scored by a negative binomial likelihood in place of
-  the Poisson. Gate 1's deviance margin MUST read the negative binomial deviance; its other margins
-  are unchanged.
+  the Poisson. Gate 1's deviance margin MUST read the negative binomial deviance as the mean over the
+  magnitude fields of each field's mean deviance, leaving out a field whose constant-prediction
+  deviance in the stratum is at or below the main checkpoint's `--deviance-floor`, with both models
+  read under the main model's dispersions and each model's own-dispersion deviance printed beside
+  them. Its zone-outcome accuracy MUST be balanced over the outcomes observed in at least 10 cells,
+  and is unmeasured, failing the gate, with fewer than two; so is the deviance with no field above
+  the floor (FR-118 otherwise unchanged). `evaluate-effect-model` MUST refuse (exit 1) a
+  `--variant-checkpoint NAME=PATH` trained as another variant than NAME, or recording another
+  corpus digest or withheld keyword than `--checkpoint`.
 - **FR-064**: Training MUST keep an exponential moving average of the weights over `--ema-epochs`
   (default 1) epochs, each optimizer step moving it toward the current weights by `--grad-accum` /
   (`--steps-per-epoch` × `--ema-epochs`), `--steps-per-epoch` counting micro-batches, starting from

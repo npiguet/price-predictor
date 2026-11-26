@@ -59,6 +59,8 @@ def scored(corpus, records, tmp_path_factory):
             batcher.materializer = run.scoring
             seen["measured"] = measure(
                 samples.card_disjoint, Runnable(run.encoder, run.model, batcher, fields),
+                log_dispersion=run.model.per_entity_dispersion().detach(),
+                deviance_floor=self.config.deviance_floor,
             )
             seen["loss"] = card.loss
             seen["loss without margins"] = self.score(

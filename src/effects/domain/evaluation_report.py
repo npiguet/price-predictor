@@ -122,7 +122,8 @@ class Margin:
     """One measured quantity a gate holds against a fixed limit.
 
     ``key`` names the value in the figures line, ``label`` in the prose;
-    ``verb`` reads before the value there (``explains 41.0% > 30%``).
+    ``verb`` reads before the value there (``explains 41.0% > 30%``);
+    ``unmeasured`` says why a NaN value could not be measured.
     """
 
     key: str
@@ -133,6 +134,7 @@ class Margin:
     value_format: str = ""
     limit_format: str = ""
     verb: str = ""
+    unmeasured: str = ""
 
     @property
     def breached(self) -> bool:
@@ -148,7 +150,8 @@ class Margin:
     def failure(self) -> str:
         """The report's account of this margin breached."""
         if math.isnan(self.value):
-            return f"{self.label} not measured"
+            why = f" ({self.unmeasured})" if self.unmeasured else ""
+            return f"{self.label} not measured{why}"
         breach = "<" if self.bound is Bound.FLOOR else ">"
         verb = f"{self.verb} " if self.verb else ""
         return (

@@ -68,3 +68,17 @@ class SplitProvenance:
             and set(self.card_disjoint_games) == set(other.card_disjoint_games)
             and set(self.game_disjoint_games) == set(other.game_disjoint_games)
         )
+
+    def training_mismatches(self, other: SplitProvenance) -> list[str]:
+        """What ``other`` trained on beyond the split that this provenance did
+        not, each named with both values: the curated corpus by its digest and
+        the withheld keyword. A baseline differing in either saw other
+        records or other text, and is not a baseline."""
+        return [
+            f"{label} {mine or '(none)'} vs {theirs or '(none)'}"
+            for label, mine, theirs in (
+                ("corpus digest", self.corpus_digest, other.corpus_digest),
+                ("withheld keyword", self.withheld_keyword, other.withheld_keyword),
+            )
+            if mine != theirs
+        ]

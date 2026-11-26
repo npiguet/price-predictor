@@ -298,12 +298,20 @@ def require_same_split(
     main: EffectCheckpoint, baseline: EffectCheckpoint,
     *, main_path: Path, baseline_path: Path,
 ) -> None:
-    """Fail fast when a baseline checkpoint's split or hashes differ."""
+    """Fail fast when a baseline checkpoint's split, corpus, withheld keyword
+    or hashes differ."""
     if not main.provenance.describes_same_split(baseline.provenance):
         raise SplitMismatchError(
             f"{baseline_path} records a different split than {main_path}. "
             f"Retrain it on the --corpus {main_path} trained on: a baseline "
             "that saw different games is not a baseline."
+        )
+    mismatches = main.provenance.training_mismatches(baseline.provenance)
+    if mismatches:
+        raise SplitMismatchError(
+            f"{baseline_path} trained otherwise than {main_path} (the main one's "
+            f"first): {'; '.join(mismatches)}. Retrain it on the same --corpus "
+            "and --withhold-keyword."
         )
     recorded_by_main = main.provenance.file_hashes()
     for label, actual in baseline.provenance.file_hashes().items():

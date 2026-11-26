@@ -33,7 +33,10 @@ from effects.application.collector_common import (
     collection_target,
 )
 from effects.application.corpus_validation.findings import Thresholds
-from effects.application.evaluation_context import CorpusMismatchError
+from effects.application.evaluation_context import (
+    BaselineVariantError,
+    CorpusMismatchError,
+)
 from effects.application.extract_keyword_definitions import ExtractKeywordDefinitionsConfig
 from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
 from effects.application.train_effect_model import (
@@ -1137,6 +1140,7 @@ def _baseline_checkpoint(value: str):
 @exits_with({
     f"{_EFFECT_MODEL_STORE}.HashMismatchError": 1,
     f"{_EFFECT_MODEL_STORE}.SplitMismatchError": 1,
+    BaselineVariantError: 1,
     CorpusMismatchError: 1,
     FileNotFoundError: 1,
     # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).

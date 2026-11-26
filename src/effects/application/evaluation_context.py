@@ -137,6 +137,11 @@ def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
     return Baseline(name.strip()), Path(path.strip())
 
 
+class BaselineVariantError(RuntimeError):
+    """A ``--variant-checkpoint NAME=PATH`` whose checkpoint was trained as
+    another variant than NAME."""
+
+
 class CorpusMismatchError(RuntimeError):
     """The checkpoint records no curated corpus, or it was rebuilt since."""
 
@@ -211,7 +216,8 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
 
 
 def load_baselines(config: EvaluateEffectModelConfig, main) -> dict[str, EffectCheckpoint]:
-    """Every ``--variant-checkpoint``, refused unless it shares main's split."""
+    """Every ``--variant-checkpoint``, refused unless it is the variant it is
+    named as and shares main's split, corpus and withheld keyword."""
     from effects.infrastructure.effect_model_store import (
         load_effect_checkpoint,
         require_same_split,
@@ -220,9 +226,23 @@ def load_baselines(config: EvaluateEffectModelConfig, main) -> dict[str, EffectC
     variants = {}
     for name, path in config.baseline_checkpoints.items():
         loaded = load_effect_checkpoint(path)
+        require_variant(loaded, name, path=Path(path))
         require_same_split(
             main, loaded,
             main_path=Path(config.checkpoint), baseline_path=Path(path),
         )
         variants[name] = loaded
     return variants
+
+
+def require_variant(loaded: EffectCheckpoint, name: str, *, path: Path) -> None:
+    """Refuse a checkpoint trained as another variant than ``name`` (finding
+    11.8): the batcher takes its masks from the checkpoint, so
+    ``identity=<a full model>`` would run as a full model and gate 1 would
+    compare the model with itself."""
+    if loaded.variant != name:
+        raise BaselineVariantError(
+            f"{path} is a {str(loaded.variant)!r} checkpoint, named as "
+            f"{str(name)!r} by --variant-checkpoint: pass a checkpoint trained "
+            f"with --variant {name}."
+        )

@@ -1,5 +1,5 @@
 """The gates' arithmetic: thresholds, metrics over arrays already collected,
-and gate 1's margins pooled from the per-entity head's outputs.
+and gate 1's margins read from the per-entity head's outputs.
 
 Gate 2's thresholds live in :mod:`effects.domain.damage_step_keywords`. Every
 metric reports NaN where it has nothing to measure; the gates fail a NaN
@@ -11,6 +11,7 @@ checkpoint loader.
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -35,6 +36,10 @@ from effects.domain.head_decoding import (
 GATE1_MIN_GATE_F1_GAIN = 0.05
 GATE1_MIN_ZONE_ACCURACY_GAIN = 0.05
 GATE1_MIN_DEVIANCE_REDUCTION = 0.05
+#: A zone outcome observed in fewer cells than this in the stratum is left out
+#: of gate 1's balanced zone accuracy (finding 13.5): one cell of a 3-cell
+#: class would move it by a twelfth of a class's weight.
+GATE1_MIN_ZONE_CLASS_CELLS = 10
 GATE3_MAX_MEAN_COSINE = 0.5
 GATE3_COSINE_PAIRS = 10_000
 GATE3_MAX_TOP_COMPONENT = 0.30
@@ -54,16 +59,23 @@ def f1_score(predicted: np.ndarray, observed: np.ndarray) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def balanced_accuracy(predicted: np.ndarray, observed: np.ndarray) -> float:
-    """Accuracy averaged over the observed classes, each weighing the same
-    (FR-109), so always answering the dominant ``stayed`` scores as chance."""
+def balanced_accuracy(
+    predicted: np.ndarray, observed: np.ndarray,
+    *, min_class_cells: int = GATE1_MIN_ZONE_CLASS_CELLS,
+) -> float:
+    """Accuracy averaged over the observed classes of at least
+    ``min_class_cells`` cells, each weighing the same (FR-109), so always
+    answering the dominant ``stayed`` scores as chance. NaN with fewer than
+    two such classes: one class's accuracy is one a constant answer scores
+    perfectly."""
     predicted = np.asarray(predicted)
     observed = np.asarray(observed)
-    if not observed.size:
+    classes, cells = np.unique(observed, return_counts=True)
+    kept = classes[cells >= min_class_cells]
+    if kept.size < 2:
         return float("nan")
     return float(np.mean([
-        np.mean(predicted[observed == outcome] == outcome)
-        for outcome in np.unique(observed)
+        np.mean(predicted[observed == outcome] == outcome) for outcome in kept
     ]))
 
 
@@ -71,9 +83,8 @@ def mean_deviance(
     predicted: np.ndarray, observed: np.ndarray, log_dispersion: np.ndarray,
 ) -> float:
     """Mean negative binomial deviance (FR-063), the count analogue of squared
-    error: each observation under its predicted mean and its field's
-    dispersion, the run's own. Tends to the Poisson deviance as the
-    dispersion grows."""
+    error: each observation under its predicted mean and the field's
+    dispersion given. Tends to the Poisson deviance as the dispersion grows."""
     predicted = np.asarray(predicted, dtype=np.float64)
     if predicted.size == 0:
         return float("nan")
@@ -86,6 +97,56 @@ def mean_deviance(
         ).copy()),
     )
     return float(deviance.mean())
+
+
+def constant_deviance(observed: np.ndarray, log_dispersion: float) -> float:
+    """The mean deviance of the best constant prediction, the cells' mean: at a
+    fixed dispersion the negative binomial's likelihood peaks there. NaN for
+    no cell."""
+    observed = np.minimum(np.asarray(observed, dtype=np.float64), MAGNITUDE_CAP)
+    if not observed.size:
+        return float("nan")
+    return mean_deviance(np.full(observed.shape, observed.mean()), observed, log_dispersion)
+
+
+@dataclass(frozen=True, slots=True)
+class FieldCells:
+    """One magnitude field's scored cells over a stratum: the predicted means
+    and the targets, at the cap the training loss reads."""
+
+    predicted: np.ndarray
+    observed: np.ndarray
+
+    def deviance(self, log_dispersion: float) -> float:
+        return mean_deviance(self.predicted, self.observed, log_dispersion)
+
+    def carries_signal(self, log_dispersion: float, deviance_floor: float) -> bool:
+        """Whether the field's constant-prediction deviance is above the
+        floor, as the control score keeps an output term (FR-068): a field
+        that never moves in the stratum has nothing a model could gain on."""
+        return constant_deviance(self.observed, log_dispersion) > deviance_floor
+
+
+def per_field_deviance(
+    cells: Mapping[str, FieldCells], scoring: np.ndarray, *,
+    deviance_floor: float, read: np.ndarray | None = None,
+) -> float:
+    """The mean over the magnitude fields of each field's mean deviance, each
+    field weighing the same whatever its cells (finding 13.5).
+
+    A field whose constant-prediction deviance under ``scoring`` is at or
+    below ``deviance_floor`` is left out, so the fields kept do not depend on
+    the model read. Each field is read under ``read``'s dispersions, else
+    ``scoring``'s; both are in ``DISPERSED_FIELDS`` order. NaN when no field
+    is kept: unmeasured, never zero.
+    """
+    read = scoring if read is None else read
+    deviances = [
+        field.deviance(read[DISPERSION_INDEX[name]])
+        for name, field in cells.items()
+        if field.carries_signal(scoring[DISPERSION_INDEX[name]], deviance_floor)
+    ]
+    return float(np.mean(deviances)) if deviances else float("nan")
 
 
 def mean_pairwise_cosine(
@@ -135,8 +196,12 @@ class GateOneMetrics:
 
     affected_gate_f1: float
     zone_outcome_accuracy: float
-    #: The negative binomial deviance under the model's own dispersions.
+    #: :func:`per_field_deviance` under the dispersions the gate reads every
+    #: model under, the main model's: a wider dispersion alone forgives a miss.
     mean_deviance: float
+    #: The same fields' deviance under the model's own dispersions: printed
+    #: beside it, never compared.
+    own_dispersion_deviance: float
 
 
 class MarginAccumulator:
@@ -146,9 +211,16 @@ class MarginAccumulator:
     one affected entity weighs what that one entity does.
     """
 
-    def __init__(self, fields, log_dispersion: torch.Tensor | None = None) -> None:
-        """``log_dispersion`` is the model's per-entity log-dispersions, in
-        ``DISPERSED_FIELDS`` order: each run's deviance reads its own."""
+    def __init__(
+        self, fields, log_dispersion: torch.Tensor | None = None, *,
+        deviance_floor: float, own_log_dispersion: torch.Tensor | None = None,
+    ) -> None:
+        """``log_dispersion`` is the per-entity log-dispersions, in
+        ``DISPERSED_FIELDS`` order, the deviance is read under (gate 1's
+        main model's); ``own_log_dispersion`` the model's own, read for the
+        figure beside it, ``log_dispersion`` when None. A field whose
+        constant-prediction deviance is at or below ``deviance_floor`` (the
+        checkpoint's ``--deviance-floor``) is left out of the deviance."""
         self._magnitude_specs = [
             spec for spec in fields if spec.type.has_magnitude
         ]
@@ -157,61 +229,79 @@ class MarginAccumulator:
                 "the deviance margin reads the model's own log-dispersions; "
                 "pass them beside a count or signed-delta field"
             )
-        self._log_dispersion = (
-            None if log_dispersion is None
-            else log_dispersion.detach().double().cpu().numpy()
+        self._log_dispersion = _host(log_dispersion)
+        self._own_log_dispersion = (
+            self._log_dispersion if own_log_dispersion is None
+            else _host(own_log_dispersion)
         )
-        self._count_dispersion: list[np.ndarray] = []
+        self._deviance_floor = deviance_floor
         self._gate_pred: list[np.ndarray] = []
         self._gate_true: list[np.ndarray] = []
         self._zone_pred: list[np.ndarray] = []
         self._zone_true: list[np.ndarray] = []
-        self._count_pred: list[np.ndarray] = []
-        self._count_true: list[np.ndarray] = []
+        self._count_pred: dict[str, list[np.ndarray]] = {}
+        self._count_true: dict[str, list[np.ndarray]] = {}
 
     def add(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
         """Fold one chunk in: the gate wherever it trains, zone and
         magnitude only where they train (target affected, field present)."""
-        field_targets = targets.fields
         real = targets.gate_scored
         self._gate_pred.append(
             (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
         )
         self._gate_true.append(targets.gate[real].numpy().astype(np.int8))
-
-        zone = HeadField.ZONE_OUTCOME
-        if zone in field_targets:
-            scored = targets.scored(zone)
-            logits = field_outputs(gathered, FIELDS_BY_NAME[zone])[scored]
-            if logits.numel():
-                self._zone_pred.append(logits.argmax(-1).numpy())
-                self._zone_true.append(field_targets.values[zone][scored].numpy())
+        self._add_zone(gathered, targets)
         for spec in self._magnitude_specs:
-            target = field_targets.values.get(spec.name)
-            if target is None:
-                continue
-            scored = targets.scored(spec.name)
-            slice_ = field_outputs(gathered, spec)[scored]
-            if not slice_.numel():
-                continue
-            self._count_pred.append(expected_magnitude(spec, slice_).numpy())
-            self._count_true.append(magnitude_target(spec, target[scored]).numpy())
-            self._count_dispersion.append(np.full(
-                int(slice_.shape[0]), self._log_dispersion[DISPERSION_INDEX[spec.name]],
-            ))
+            self._add_magnitude(spec, gathered, targets)
+
+    def _add_zone(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
+        zone = HeadField.ZONE_OUTCOME
+        if zone not in targets.fields:
+            return
+        scored = targets.scored(zone)
+        logits = field_outputs(gathered, FIELDS_BY_NAME[zone])[scored]
+        if logits.numel():
+            self._zone_pred.append(logits.argmax(-1).numpy())
+            self._zone_true.append(targets.fields.values[zone][scored].numpy())
+
+    def _add_magnitude(
+        self, spec, gathered: torch.Tensor, targets: EntityTargetBatch,
+    ) -> None:
+        target = targets.fields.values.get(spec.name)
+        if target is None:
+            return
+        scored = targets.scored(spec.name)
+        slice_ = field_outputs(gathered, spec)[scored]
+        if not slice_.numel():
+            return
+        self._count_pred.setdefault(spec.name, []).append(
+            expected_magnitude(spec, slice_).numpy())
+        self._count_true.setdefault(spec.name, []).append(
+            magnitude_target(spec, target[scored]).numpy())
 
     def metrics(self) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
+        cells = {
+            name: FieldCells(_cat(predicted), _cat(self._count_true[name]))
+            for name, predicted in self._count_pred.items()
+        }
         return GateOneMetrics(
             affected_gate_f1=f1_score(_cat(self._gate_pred), _cat(self._gate_true)),
             zone_outcome_accuracy=balanced_accuracy(
                 _cat(self._zone_pred), _cat(self._zone_true),
             ),
-            mean_deviance=mean_deviance(
-                _cat(self._count_pred), _cat(self._count_true),
-                _cat(self._count_dispersion),
-            ),
+            mean_deviance=self._deviance(cells, self._log_dispersion),
+            own_dispersion_deviance=self._deviance(cells, self._own_log_dispersion),
         )
+
+    def _deviance(self, cells: Mapping[str, FieldCells], read) -> float:
+        return per_field_deviance(
+            cells, self._log_dispersion, deviance_floor=self._deviance_floor, read=read,
+        )
+
+
+def _host(log_dispersion: torch.Tensor | None) -> np.ndarray | None:
+    return None if log_dispersion is None else log_dispersion.detach().double().cpu().numpy()
 
 
 def _cat(chunks: list[np.ndarray]) -> np.ndarray:

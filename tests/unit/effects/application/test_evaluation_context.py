@@ -7,11 +7,14 @@ trained on, or against a baseline that never ran.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from effects.application.evaluation_context import parse_baseline_checkpoint
+from effects.domain.baselines import Baseline
 from effects.domain.split_provenance import SplitProvenance
 
 
@@ -120,3 +123,50 @@ class TestVariantCheckpointFlag:
     def test_the_shipping_model_is_not_a_baseline(self):
         with pytest.raises(ValueError, match="unknown baseline 'full'"):
             parse_baseline_checkpoint("full=models/x/latest.pt")
+
+
+class TestVariantCheckpointRefusals:
+    """``--variant-checkpoint NAME=PATH`` names a checkpoint trained as NAME on
+    the corpus the main one read (finding 11.8): ``identity=<a full model>``
+    would run as a full model, and gate 1 would print that the encoder beats
+    the identity baseline."""
+
+    _MAIN = SplitProvenance(corpus_digest="digest-a", withheld_keyword="flying")
+
+    def _load(self, monkeypatch, *, variant=Baseline.IDENTITY, **provenance):
+        from effects.application.evaluation_context import (
+            EvaluateEffectModelConfig,
+            load_baselines,
+        )
+        from effects.infrastructure import effect_model_store
+
+        loaded = SimpleNamespace(variant=variant, provenance=replace(self._MAIN, **provenance))
+        monkeypatch.setattr(effect_model_store, "load_effect_checkpoint", lambda path: loaded)
+        config = EvaluateEffectModelConfig(
+            checkpoint=Path("main.pt"), abilities_root=Path("abilities"),
+            win_rates=Path("rates"), reports_dir=Path("reports"),
+            baseline_checkpoints={Baseline.IDENTITY: Path("identity.pt")},
+        )
+        main = SimpleNamespace(variant=Baseline.FULL, provenance=self._MAIN)
+        return load_baselines(config, main), loaded
+
+    def test_a_checkpoint_of_the_named_variant_on_the_same_corpus_is_kept(self, monkeypatch):
+        variants, loaded = self._load(monkeypatch)
+        assert variants == {Baseline.IDENTITY: loaded}
+
+    def test_identity_naming_a_full_checkpoint_is_refused(self, monkeypatch):
+        with pytest.raises(RuntimeError, match="identity.pt") as excinfo:
+            self._load(monkeypatch, variant=Baseline.FULL)
+        assert "'full'" in str(excinfo.value)
+        assert "'identity'" in str(excinfo.value)
+
+    def test_a_checkpoint_trained_on_another_corpus_is_refused(self, monkeypatch):
+        with pytest.raises(RuntimeError, match="corpus digest") as excinfo:
+            self._load(monkeypatch, corpus_digest="digest-b")
+        assert "digest-a" in str(excinfo.value)
+        assert "digest-b" in str(excinfo.value)
+
+    def test_a_checkpoint_withholding_another_keyword_is_refused(self, monkeypatch):
+        with pytest.raises(RuntimeError, match="withheld keyword") as excinfo:
+            self._load(monkeypatch, withheld_keyword=None)
+        assert "flying" in str(excinfo.value)

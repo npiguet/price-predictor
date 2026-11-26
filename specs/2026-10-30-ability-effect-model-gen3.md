@@ -1388,7 +1388,21 @@ Precision target, in each half of each stratum:
 
 ## 14.3 Gate 1
 
-Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unchanged.
+Gate 1 keeps the base spec's three margins and thresholds, read as follows.
+
+- Deviance: the mean over the magnitude fields of each field's mean negative binomial
+  deviance (§ 13.3), each field weighing the same. A field whose constant-prediction
+  deviance in the stratum (every cell predicted at the field's mean target) is at or below
+  the main checkpoint's `--deviance-floor` is left out.
+- Both models' deviances are read under the main model's dispersions. Each model's deviance
+  under its own dispersions is printed beside them and compared with nothing.
+- Zone-outcome accuracy: balanced over the zone outcomes observed in at least 10 cells of
+  the stratum.
+- A margin with nothing to read is unmeasured, and an unmeasured margin fails gate 1: the
+  zone accuracy with fewer than two such outcomes, the deviance with no field above the
+  floor. The failure line names the reason.
+- The identity baseline is the `--variant-checkpoint identity=PATH` checkpoint, trained as
+  the `identity` variant on the main checkpoint's corpus (§ 15).
 
 ## 14.4 Rule tests
 
@@ -1557,6 +1571,9 @@ Startup validation
 - `train-effect-model` refuses a corpus whose manifest `subtypes` or `keywords` hold a name
   the head's closed output lists lack, naming the missing names and the script that
   regenerates the lists.
+- `evaluate-effect-model` refuses a `--variant-checkpoint NAME=PATH` whose checkpoint was
+  trained as another variant than NAME, or records another corpus digest or withheld
+  keyword than `--checkpoint`, naming both values.
 
 Exit codes
 

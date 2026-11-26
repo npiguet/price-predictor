@@ -77,7 +77,7 @@ class TestReport:
     def test_a_report_ships_when_both_blocking_gates_passed(self):
         report = EvaluationReport()
         report.add(evaluate_gate_one(
-            GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
+            GateOneMetrics(0.70, 0.60, 0.90, 0.90), GateOneMetrics(0.60, 0.50, 1.00, 0.80),
         ))
         report.add(_gate("gate-3", CheckStatus.PASS))
         report.add(not_implemented(CheckName.ROLE_POLARITY))
@@ -110,12 +110,13 @@ class TestReport:
         """The design record needs all three gate-1 margins, pass or fail."""
         report = EvaluationReport()
         report.add(evaluate_gate_one(
-            GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
+            GateOneMetrics(0.70, 0.60, 0.90, 0.90), GateOneMetrics(0.60, 0.50, 1.00, 0.80),
         ))
         rendered = report.render()
         assert "affected_gate_f1_gain=+0.1000" in rendered
         assert "zone_outcome_accuracy_gain=+0.1000" in rendered
         assert "deviance_reduction=+0.1000" in rendered
+        assert "identity_own_dispersion_deviance=+0.8000" in rendered
 
     def test_a_failing_gate_prints_the_figure_that_held_too(self):
         report = EvaluationReport()

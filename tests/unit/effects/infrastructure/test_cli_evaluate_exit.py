@@ -152,3 +152,16 @@ def test_both_blocking_gates_skipped_prints_gates_not_measured_and_exits_zero(
 
     assert args.func(args) == 0
     assert capsys.readouterr().out.splitlines()[-1] == "GATES NOT MEASURED: gate-1, gate-3"
+
+
+def test_a_variant_checkpoint_of_another_variant_exits_one(monkeypatch, caplog) -> None:
+    """``identity=<a full model>`` would score gate 1 against the full model."""
+    from effects.application.evaluation_context import BaselineVariantError
+
+    def refuse(config, report):
+        raise BaselineVariantError("identity.pt is a 'full' checkpoint")
+
+    monkeypatch.setattr(evaluate_effect_model, "run", refuse)
+    args = parse_cli(["evaluate-effect-model"])
+    assert args.func(args) == 1
+    assert "is a 'full' checkpoint" in caplog.text

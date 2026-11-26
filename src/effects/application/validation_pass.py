@@ -149,8 +149,11 @@ class ProgressMargins:
 
     wants_parts = False
 
-    def __init__(self, fields: tuple[FieldSpec, ...], log_dispersion: torch.Tensor) -> None:
-        self.margins = MarginAccumulator(fields, log_dispersion)
+    def __init__(
+        self, fields: tuple[FieldSpec, ...], log_dispersion: torch.Tensor,
+        *, deviance_floor: float,
+    ) -> None:
+        self.margins = MarginAccumulator(fields, log_dispersion, deviance_floor=deviance_floor)
         self._pending: _HostCopy | None = None
 
     def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
@@ -277,7 +280,10 @@ class Validator:
         progress margins, and the floor recomputed when the field set moved;
         then the control score."""
         parts = FieldParts()
-        margins = ProgressMargins(fields, run.model.per_entity_dispersion().detach())
+        margins = ProgressMargins(
+            fields, run.model.per_entity_dispersion().detach(),
+            deviance_floor=self.config.deviance_floor,
+        )
         kept = KeptTargets() if self.floor.stale(fields) else None
         collectors = (parts, margins) if kept is None else (parts, margins, kept)
         card = ValidationPass(

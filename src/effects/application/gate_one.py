@@ -9,6 +9,10 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
+from dataclasses import replace
+from functools import partial
+
+import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
@@ -26,6 +30,7 @@ from effects.domain.gate_metrics import (
     GATE1_MIN_DEVIANCE_REDUCTION,
     GATE1_MIN_GATE_F1_GAIN,
     GATE1_MIN_ZONE_ACCURACY_GAIN,
+    GATE1_MIN_ZONE_CLASS_CELLS,
     GateOneMetrics,
     MarginAccumulator,
 )
@@ -90,15 +95,25 @@ def unique_text_stratum(shards, card_disjoint_games, text_of: TextOf) -> list:
     )
 
 
-def measure(records, runnable: Runnable) -> GateOneMetrics:
-    """Run the model over ``records`` and score the three margins."""
+def measure(
+    records, runnable: Runnable, *, log_dispersion: torch.Tensor, deviance_floor: float,
+) -> GateOneMetrics:
+    """Run the model over ``records`` and score the three margins, the
+    deviance read under ``log_dispersion`` (the main model's, so a wider
+    dispersion alone wins nothing) and, for the figure beside it, under the
+    model's own; a field at or below ``deviance_floor`` is left out."""
     margins = MarginAccumulator(
-        runnable.fields, runnable.model.per_entity_dispersion().detach(),
+        runnable.fields, log_dispersion, deviance_floor=deviance_floor,
+        own_log_dispersion=_dispersion(runnable),
     )
     for _chunk, gathered, targets in entity_chunks(
             records, runnable.forward(), runnable.batcher, runnable.fields):
         margins.add(gathered, targets)
     return margins.metrics()
+
+
+def _dispersion(runnable: Runnable) -> torch.Tensor:
+    return runnable.model.per_entity_dispersion().detach()
 
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
@@ -124,9 +139,14 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
         )
     logger.info("gate 1: %d records in the unique-text stratum", len(stratum))
 
-    model = measure(stratum, context.main_runnable(stratum))
-    baseline = measure(stratum, context.runnable_of(identity, stratum))
-    return evaluate_gate_one(model, baseline)
+    # Both models read under the main model's dispersions, the fields kept by
+    # the floor the main checkpoint was scored under (finding 13.5).
+    main = context.main_runnable(stratum)
+    read = partial(
+        measure, stratum, log_dispersion=_dispersion(main),
+        deviance_floor=context.main.scored_under().deviance_floor,
+    )
+    return evaluate_gate_one(read(main), read(context.runnable_of(identity, stratum)))
 
 
 def _relative_reduction(baseline: float, value: float) -> float:
@@ -145,28 +165,50 @@ def evaluate_gate_one(
     They fail differently: the gate F1 says whether the model knows *that*
     something happens, the zone accuracy *what*, the deviance *how much*. A
     model can beat the baseline on one and tie on the others by learning the
-    corpus's priors.
+    corpus's priors. Each model's deviance is printed beside the margins,
+    under the main model's dispersions and under its own.
     """
-    return gate_verdict(
+    result = gate_verdict(
         CheckName.GATE_1,
         (
             Margin(
                 "affected_gate_f1_gain", "affected-gate F1 gain",
                 model.affected_gate_f1 - identity.affected_gate_f1,
                 GATE1_MIN_GATE_F1_GAIN, Bound.FLOOR, value_format="+.3f",
+                unmeasured="no entity of the stratum trains the gate",
             ),
             Margin(
                 "zone_outcome_accuracy_gain", "zone-outcome accuracy gain",
                 model.zone_outcome_accuracy - identity.zone_outcome_accuracy,
                 GATE1_MIN_ZONE_ACCURACY_GAIN, Bound.FLOOR, value_format="+.3f",
+                unmeasured=(
+                    f"fewer than two zone outcomes of {GATE1_MIN_ZONE_CLASS_CELLS} "
+                    "cells or more in the stratum"
+                ),
             ),
             Margin(
                 "deviance_reduction", "negative binomial deviance reduction",
                 _relative_reduction(identity.mean_deviance, model.mean_deviance),
                 GATE1_MIN_DEVIANCE_REDUCTION, Bound.FLOOR,
                 value_format="+.1%", limit_format=".0%",
+                unmeasured=(
+                    "no magnitude field's constant-prediction deviance in the "
+                    "stratum is above the checkpoint's --deviance-floor"
+                ),
             ),
         ),
         fail_prefix="the encoder is not reading text",
         pass_detail="beats the identity baseline on all three margins",
     )
+    return replace(result, values={**result.values, **_deviances(model, identity)})
+
+
+def _deviances(model: GateOneMetrics, identity: GateOneMetrics) -> dict[str, float]:
+    """Each model's deviance, under the main model's dispersions (what the
+    margin compares) and under its own."""
+    return {
+        "model_deviance": model.mean_deviance,
+        "model_own_dispersion_deviance": model.own_dispersion_deviance,
+        "identity_deviance": identity.mean_deviance,
+        "identity_own_dispersion_deviance": identity.own_dispersion_deviance,
+    }

@@ -15,10 +15,10 @@ from effects.domain.effect_head_layout import (
     FIELDS_BY_NAME,
     GATE_INDEX,
     PER_ENTITY_WIDTH,
-    ZONE_OUTCOMES,
 )
 from effects.domain.field_kinds import LOG_DISPERSION_MAX
 from effects.domain.gate_metrics import (
+    GATE1_MIN_ZONE_CLASS_CELLS,
     MarginAccumulator,
     balanced_accuracy,
     cosine_distance,
@@ -97,7 +97,7 @@ class TestGateOneMetrics:
 
     def test_a_wider_dispersion_forgives_a_large_miss(self):
         """A run that learned its counts spread wide pays less for one far
-        from its mean: each run is read under its own dispersion."""
+        from its mean, which is why gate 1 reads both models under one."""
         predicted, observed = np.array([2.0]), np.array([12.0])
         assert deviance(predicted, observed, np.array(0.0)) < deviance(
             predicted, observed, POISSON,
@@ -114,12 +114,30 @@ class TestGateOneMetrics:
     def test_zone_accuracy_weighs_every_observed_outcome_the_same(self):
         """Answering the dominant class every time scores one over the number
         of classes observed, not that class's share (FR-109)."""
-        observed = np.array([0] * 9 + [1])
-        always_stayed = np.zeros(10, dtype=int)
+        observed = np.array([0] * 90 + [1] * 10)
+        always_stayed = np.zeros(100, dtype=int)
         assert balanced_accuracy(always_stayed, observed) == pytest.approx(0.5)
 
     def test_zone_accuracy_of_nothing_is_nan(self):
         assert math.isnan(balanced_accuracy(np.array([]), np.array([])))
+
+    def test_a_class_of_three_cells_does_not_move_the_zone_accuracy(self):
+        """Balanced over a 3-cell class, one of its cells would move the
+        accuracy by a twelfth of a class's weight, near the gate's 0.05 margin."""
+        observed = np.array([0] * 20 + [1] * 12 + [2] * 3)
+        wrong = np.where(observed == 2, 0, observed)
+        assert balanced_accuracy(wrong, observed) == balanced_accuracy(observed, observed)
+        assert balanced_accuracy(wrong, observed) == pytest.approx(1.0)
+
+    def test_a_class_of_ten_cells_counts(self):
+        observed = np.array([0] * 20 + [1] * GATE1_MIN_ZONE_CLASS_CELLS)
+        always_stayed = np.zeros(observed.size, dtype=int)
+        assert balanced_accuracy(always_stayed, observed) == pytest.approx(0.5)
+
+    def test_fewer_than_two_classes_of_ten_cells_is_unmeasured(self):
+        """One class's accuracy is one a constant answer scores perfectly."""
+        observed = np.array([0] * 20 + [1] * (GATE1_MIN_ZONE_CLASS_CELLS - 1))
+        assert math.isnan(balanced_accuracy(observed, observed))
 
 
 class TestGeometryMetrics:
@@ -165,61 +183,105 @@ class TestCosineDistance:
         assert math.isnan(cosine_distance(np.zeros(3), np.ones(3)))
 
 
+
+#: The checkpoints' default --deviance-floor: no field of these chunks is at
+#: or below it unless it never moves.
+FLOOR = 0.04
+
+
+def _cells(field: str, means, observed):
+    """``gathered`` and targets for one magnitude field, every entity affected:
+    ``means`` the predicted magnitudes, ``observed`` the targets."""
+    count = len(means)
+    gathered = torch.zeros(1, count, PER_ENTITY_WIDTH)
+    gathered[0, :, GATE_INDEX] = 3.0
+    start, _ = FIELD_SLICES[field]
+    column = start + FIELDS_BY_NAME[field].type.magnitude_column
+    gathered[0, :, column] = torch.log(torch.tensor(means, dtype=torch.float32))
+    targets = fields_everywhere({field: torch.tensor([observed], dtype=torch.float32)})
+    return gathered, make_entity_targets(torch.ones(1, count), targets)
+
+
+def _accumulator(fields, dispersion=None, *, deviance_floor=FLOOR, own=None):
+    return MarginAccumulator(
+        tuple(FIELDS_BY_NAME[name] for name in fields),
+        model_dispersion() if dispersion is None else dispersion,
+        deviance_floor=deviance_floor, own_log_dispersion=own,
+    )
+
+
+def _deviance(fields, *chunks, **kwargs):
+    margins = _accumulator(fields, **kwargs)
+    for chunk in chunks:
+        margins.add(*chunk)
+    return margins.metrics()
+
+
 class TestMarginAccumulator:
     """The three margins pool every chunk's entities, then reduce once."""
 
-    def _chunk(self, affected_damage: float, observed_damage: float = 2.0):
-        gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
-        gathered[0, 0, GATE_INDEX] = 3.0   # predicted affected
-        gathered[0, 1, GATE_INDEX] = -3.0  # predicted unaffected
-        start, _ = FIELD_SLICES["zone_outcome"]
-        gathered[0, 0, start + ZONE_OUTCOMES.index("died")] = 5.0
-        damage, _ = FIELD_SLICES["damage_taken"]
-        gathered[0, 0, damage] = torch.log(torch.tensor(affected_damage))
-        targets = fields_everywhere({
-            "zone_outcome": torch.tensor(
-                [[float(ZONE_OUTCOMES.index("died")), 0.0]],
-            ),
-            "damage_taken": torch.tensor([[observed_damage, 0.0]]),
-        })
-        return gathered, make_entity_targets(torch.tensor([[1.0, 0.0]]), targets)
-
     def test_a_perfect_chunk_scores_perfectly(self):
-        margins = MarginAccumulator(
-            (FIELDS_BY_NAME["zone_outcome"], FIELDS_BY_NAME["damage_taken"]),
-            model_dispersion(),
-        )
-        margins.add(*self._chunk(2.0))
-        metrics = margins.metrics()
+        metrics = _deviance(("damage_taken",), _cells("damage_taken", [2.0, 5.0], [2.0, 5.0]))
         assert metrics.affected_gate_f1 == pytest.approx(1.0)
-        assert metrics.zone_outcome_accuracy == pytest.approx(1.0)
         assert metrics.mean_deviance == pytest.approx(0.0, abs=1e-6)
 
-    def test_the_deviance_reads_the_model_s_own_dispersion(self):
+    def test_the_deviance_reads_the_dispersion_it_is_given(self):
         def scored(log_dispersion: float) -> float:
             dispersion = model_dispersion(LOG_DISPERSION_MAX)
             dispersion[DISPERSION_INDEX["damage_taken"]] = log_dispersion
-            margins = MarginAccumulator((FIELDS_BY_NAME["damage_taken"],), dispersion)
-            margins.add(*self._chunk(1.0, observed_damage=8.0))
-            return margins.metrics().mean_deviance
+            chunk = _cells("damage_taken", [1.0, 1.0], [8.0, 0.0])
+            return _deviance(("damage_taken",), chunk, dispersion=dispersion).mean_deviance
 
         assert scored(0.0) < scored(LOG_DISPERSION_MAX)
         assert scored(LOG_DISPERSION_MAX) == pytest.approx(
-            poisson_deviance(np.array([1.0]), np.array([8.0])), rel=1e-3,
+            poisson_deviance(np.array([1.0, 1.0]), np.array([8.0, 0.0])), rel=1e-3,
         )
+
+    def test_two_models_differing_only_in_dispersion_score_the_same_deviance(self):
+        """Each read under its own, a wider dispersion alone would win the
+        margin (finding 13.5); under the main model's the same predictions
+        score the same, and each own-dispersion figure is kept beside it."""
+        chunk = _cells("damage_taken", [0.5, 0.5, 0.5], [0.0, 3.0, 1.0])
+        main = model_dispersion(4.6)
+        narrow, wide = (_deviance(("damage_taken",), chunk, dispersion=main, own=own)
+                        for own in (main, model_dispersion(-2.3)))
+        assert narrow.mean_deviance == wide.mean_deviance
+        assert narrow.own_dispersion_deviance == narrow.mean_deviance
+        assert wide.own_dispersion_deviance < narrow.own_dispersion_deviance
+
+    def test_each_field_weighs_the_same_whatever_its_cells(self):
+        """Pooled per cell, the field with the most cells would set the margin."""
+        many = _cells("damage_taken", [1.0] * 30, [3.0] * 15 + [0.0] * 15)
+        few = _cells("power_delta", [1.0, 1.0], [4.0, 0.0])
+        both = _deviance(("damage_taken", "power_delta"), many, few)
+        each = [_deviance((field,), chunk).mean_deviance
+                for field, chunk in (("damage_taken", many), ("power_delta", few))]
+        assert both.mean_deviance == pytest.approx(np.mean(each))
+
+    def test_a_field_at_or_under_the_deviance_floor_is_left_out(self):
+        """A field that never moves in the stratum has a constant-prediction
+        deviance of zero: its residual rate would weigh as much as a field
+        that carries the signal."""
+        moving = _cells("damage_taken", [1.0, 1.0], [3.0, 0.0])
+        still = _cells("power_delta", [2.0] * 5, [0.0] * 5)
+        assert _deviance(("damage_taken", "power_delta"), moving, still).mean_deviance == (
+            _deviance(("damage_taken",), moving).mean_deviance)
+
+    def test_no_field_over_the_floor_is_unmeasured_rather_than_zero(self):
+        chunk = _cells("damage_taken", [1.0, 1.0], [3.0, 0.0])
+        assert math.isnan(_deviance(("damage_taken",), chunk, deviance_floor=10.0).mean_deviance)
 
     def test_a_count_field_without_the_model_s_dispersion_is_refused(self):
         with pytest.raises(ValueError, match="log-dispersions"):
-            MarginAccumulator((FIELDS_BY_NAME["damage_taken"],))
+            MarginAccumulator((FIELDS_BY_NAME["damage_taken"],), deviance_floor=FLOOR)
 
     def test_a_count_netted_negative_scores_as_none_as_it_trains(self):
         """A heal netted into ``damage_taken`` trains as zero damage, not as
         the heal's size."""
-        margins = MarginAccumulator((FIELDS_BY_NAME["damage_taken"],), model_dispersion())
-        margins.add(*self._chunk(1e-6, observed_damage=-2.0))
-        assert margins.metrics().mean_deviance == pytest.approx(0.0, abs=1e-4)
+        chunk = _cells("damage_taken", [1e-6, 2.0], [-2.0, 2.0])
+        assert _deviance(("damage_taken",), chunk).mean_deviance == pytest.approx(0.0, abs=1e-4)
 
     def test_nothing_added_is_unmeasured_rather_than_perfect(self):
-        metrics = MarginAccumulator(()).metrics()
+        metrics = MarginAccumulator((), deviance_floor=FLOOR).metrics()
         assert math.isnan(metrics.affected_gate_f1)
         assert math.isnan(metrics.mean_deviance)
