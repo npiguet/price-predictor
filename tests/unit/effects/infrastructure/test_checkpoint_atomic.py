@@ -16,10 +16,7 @@ from price_predictor.infrastructure.torch_checkpoint import (
     copy_atomically,
     write_atomically,
 )
-from tests.unit.effects.infrastructure.test_effect_model_store import (
-    _checkpoint,
-    files,  # noqa: F401  (fixture)
-)
+from tests.unit.effects.infrastructure.test_effect_model_store import _checkpoint
 
 _real_replace = os.replace
 

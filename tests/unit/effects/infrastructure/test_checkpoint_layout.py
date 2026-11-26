@@ -6,10 +6,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 
-def _checkpoint(drop=()):
+def _checkpoint(drop=(), *, encoder_state=None):
     import torch
 
-    from effects.domain.ability_encoder import AbilityEncoderConfig
+    from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
     from effects.domain.effect_model import EffectModel, EffectModelConfig
     from effects.infrastructure.effect_model_store import filter_training_only
 
@@ -22,9 +22,12 @@ def _checkpoint(drop=()):
     state = filter_training_only(EffectModel(config).state_dict())
     for key in drop:
         del state[key]
+    encoder_config = AbilityEncoderConfig(vocab_size=10, e_dim=4, d_model=8, n_layers=1)
+    if encoder_state is None:
+        encoder_state = AbilityEncoder(encoder_config).state_dict()
     return SimpleNamespace(
-        encoder_config=AbilityEncoderConfig(vocab_size=10, e_dim=4, d_model=8, n_layers=1),
-        encoder_state={}, model_config=config, model_state=state,
+        encoder_config=encoder_config,
+        encoder_state=encoder_state, model_config=config, model_state=state,
     )
 
 
@@ -125,3 +128,14 @@ def test_a_fresh_run_records_the_gen3_layout():
     )
     assert settings[INPUT_LAYOUT_KEY] == "gen-3"
     require_input_layout(settings)
+
+
+def test_a_checkpoint_with_an_empty_encoder_state_is_refused():
+    """An encoder loaded from nothing would run at random initial weights."""
+    import pytest
+    import torch
+
+    from effects.infrastructure.effect_model_store import load_weights
+
+    with pytest.raises(RuntimeError, match="encoder"):
+        load_weights(_checkpoint(encoder_state={}), torch.device("cpu"))

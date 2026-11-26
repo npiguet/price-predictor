@@ -121,7 +121,7 @@ def _checkpoint(root: Path, corpus: Path) -> tuple[Path, Path, Path]:
     """A saved checkpoint recording a vocabulary, a keyword table and ``corpus``."""
     import torch
 
-    from effects.domain.ability_encoder import AbilityEncoderConfig
+    from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
     from effects.domain.checkpoint_layout import layout_settings
     from effects.domain.effect_model import EffectModel, EffectModelConfig
     from effects.domain.split_provenance import SplitProvenance
@@ -139,10 +139,11 @@ def _checkpoint(root: Path, corpus: Path) -> tuple[Path, Path, Path]:
         e_dim=4, d_model=8, n_layers=1, n_heads=2, ff_dim=16,
     )
     torch.manual_seed(0)
+    encoder = AbilityEncoderConfig(vocab_size=10, e_dim=4, d_model=8, n_layers=1)
     store = EffectModelStore(root / "models")
     store.save(EffectCheckpoint(
-        encoder_config=AbilityEncoderConfig(vocab_size=10, e_dim=4, d_model=8, n_layers=1),
-        model_config=model, encoder_state={},
+        encoder_config=encoder,
+        model_config=model, encoder_state=AbilityEncoder(encoder).state_dict(),
         model_state=EffectModel(model).state_dict(),
         provenance=SplitProvenance(
             vocab_path=str(vocab), keyword_definitions_path=str(keywords),

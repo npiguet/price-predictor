@@ -47,15 +47,6 @@ _ENCODER_CONFIG = AbilityEncoderConfig(
 )
 
 
-@pytest.fixture
-def files(tmp_path):
-    vocab = tmp_path / "vocab.txt"
-    vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
-    keywords = tmp_path / "keyword-definitions.json"
-    keywords.write_text("{}", encoding="utf-8")
-    return vocab, keywords
-
-
 def _provenance(files, **overrides) -> SplitProvenance:
     vocab, keywords = files
     defaults = {
@@ -468,7 +459,6 @@ class TestSweepSettings:
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(
             files, encoder_config=encoder,
-            encoder_state={},
             provenance=_provenance(files),
             cards_folders=("output/old-cardsfolder", "output/old-tokenscripts"),
             training_settings=settings,
@@ -480,12 +470,6 @@ class TestSweepSettings:
         assert loaded.cards_folders == (
             "output/old-cardsfolder", "output/old-tokenscripts",
         )
-
-    def test_a_config_recording_no_size_builds_at_four_layers_and_256(self):
-        from effects.infrastructure.effect_model_store import encoder_config_from
-
-        config = encoder_config_from({"vocab_size": 32, "e_dim": 64})
-        assert (config.n_layers, config.d_model, config.ff_dim) == (4, 256, 1024)
 
 
 class TestGen3Checkpoint:

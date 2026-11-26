@@ -173,17 +173,13 @@ def _identity_table(checkpoint, device) -> IdentityTable | None:
     """The identity baseline's learned ``e`` table; None for any other variant."""
     if not baseline_masks(checkpoint.variant).identity_embedding:
         return None
-    saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
-    if saved is not None:
-        return IdentityTable.from_state(saved).to(device)
-    logger.warning(
-        "The identity baseline at %s carries no embedding table, so "
-        "its e vectors are random rather than the ones it trained. "
-        "Gate 1's margin against it is not meaningful — retrain the "
-        "baseline with a build that saves the table.",
-        checkpoint.variant,
-    )
-    return IdentityTable((), checkpoint.encoder_config.e_dim).to(device)
+    if IDENTITY_TABLE_KEY not in checkpoint.extra:
+        raise ValueError(
+            f"The identity baseline checkpoint carries no {IDENTITY_TABLE_KEY!r} "
+            "(its embedding table): it would score on random e vectors and gate 1 "
+            "would get a margin nobody earned. Retrain the baseline."
+        )
+    return IdentityTable.from_state(checkpoint.extra[IDENTITY_TABLE_KEY]).to(device)
 
 
 def evaluation_fields(records) -> tuple[FieldSpec, ...]:

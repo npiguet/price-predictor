@@ -19,7 +19,7 @@ from effects.application.encode_abilities import (
     run,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
-from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import TOKENIZER_RULES, TOKENIZER_RULES_KEY
 from effects.domain.baselines import Baseline
 from effects.domain.checkpoint_layout import layout_settings
@@ -44,6 +44,9 @@ def _vocabulary(path, words: list[str]):
     return path
 
 E_DIM = 8
+_SAVED_ENCODER = AbilityEncoderConfig(
+    vocab_size=32, e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2, ff_dim=32,
+)
 
 _MODEL_CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
@@ -91,12 +94,9 @@ def corpus(tmp_path):
     torch.manual_seed(0)
     store = EffectModelStore(tmp_path / "models" / "effect-model")
     store.save(EffectCheckpoint(
-        encoder_config=AbilityEncoderConfig(
-            vocab_size=32, e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2,
-            ff_dim=32,
-        ),
+        encoder_config=_SAVED_ENCODER,
         model_config=_MODEL_CONFIG,
-        encoder_state={},
+        encoder_state=AbilityEncoder(_SAVED_ENCODER).state_dict(),
         model_state=EffectModel(_MODEL_CONFIG).state_dict(),
         provenance=SplitProvenance(
             vocab_path=str(vocab), keyword_definitions_path=str(keywords),

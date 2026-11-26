@@ -100,18 +100,17 @@ class TestTheReportingHalf:
         assert control.values == {"control": 0.5, "selection_control": 0.4}
         assert all(check.status is CheckStatus.REPORTED for check in checks)
 
-    def test_unrecorded_flags_take_the_training_defaults(self, tmp_path, monkeypatch):
-        from effects.application import control_score, evaluate_effect_model
-        from tests.unit.effects.builders import control_score_of
+    def test_a_checkpoint_recording_no_flag_is_refused_not_scored_under_a_default(
+        self, tmp_path,
+    ):
+        import pytest
+
+        from effects.application import evaluate_effect_model
 
         _freeze(tmp_path)
-        asked = {}
-        monkeypatch.setattr(control_score, "score_half", lambda selection, readers, **kw: (
-            asked.update(kw) or control_score_of(0.5)))
-        evaluate_effect_model.run_reporting_half(_context(
-            tmp_path, rule_mask="", stratum_weight=None, deviance_floor=None, best=None))
-        assert (asked["mask"], asked["stratum_weight"], asked["deviance_floor"]) == (
-            None, 0.5, 0.04)
+        with pytest.raises(ValueError, match="stratum_weight"):
+            evaluate_effect_model.run_reporting_half(_context(
+                tmp_path, rule_mask="", stratum_weight=None, deviance_floor=None, best=None))
 
     def test_without_a_selection_set_it_is_skipped_naming_why(self, tmp_path):
         from effects.application import evaluate_effect_model
@@ -151,3 +150,13 @@ def test_the_breakdowns_read_each_distinct_record_once(tmp_path):
     assert [r.record_id for r in read[Stratum.CARD_DISJOINT]] == [
         r.record_id for r in records]
     assert read[Stratum.GAME_DISJOINT] == []
+
+
+def test_a_checkpoint_recording_no_training_flag_is_refused_by_its_name():
+    import pytest
+
+    from effects.application.evaluate_effect_model import _recorded
+
+    assert _recorded(0.3, "stratum_weight") == 0.3
+    with pytest.raises(ValueError, match="stratum_weight"):
+        _recorded(None, "stratum_weight")

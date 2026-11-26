@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import asdict, dataclass, field
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -123,13 +124,6 @@ class EffectCheckpoint:
     selection_set_digest: str | None = None
 
 
-#: The gen-3 fields a checkpoint's payload carries under their own names.
-_GEN3_FIELDS: tuple[str, ...] = (
-    "best_control_score", "control_score", "averaged", "rule_mask", "deviance_floor", "ema_epochs",
-    "stratum_weight", "relation_values", "rule_map_digest", "selection_set_digest",
-)
-
-
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
     """Drop the training-only heads from a model state dict (FR-076)."""
     return {
@@ -147,8 +141,7 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
     """The checkpoint's encoder and model on ``device``, in evaluation mode,
     at the size the checkpoint recorded (FR-061)."""
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
-    if checkpoint.encoder_state:
-        encoder.load_state_dict(checkpoint.encoder_state)
+    encoder.load_state_dict(checkpoint.encoder_state)
     model = EffectModel(checkpoint.model_config).to(device)
     missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
     absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
@@ -160,17 +153,65 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
     return encoder.eval(), model.eval()
 
 
-#: Payload keys the checkpoint's own fields carry; anything else is ``extra``.
-_RESERVED_PAYLOAD_KEYS = frozenset({
-    "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
-    "provenance", "variant", "epoch", "config",
-    "cards_folders", "training_settings", "loss_denominators", *_GEN3_FIELDS,
-})
-
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
-    """An encoder config from a checkpoint's dict; a size it leaves out builds
-    at the config's default."""
-    return AbilityEncoderConfig(**data)
+    """An encoder config from a checkpoint's dict: every size is read, and one
+    the dict leaves out raises ``KeyError`` naming it."""
+    return AbilityEncoderConfig(
+        **{spec.name: data[spec.name] for spec in fields(AbilityEncoderConfig)},
+    )
+
+
+def _nonempty_encoder_state(state: dict[str, Any]) -> dict[str, Any]:
+    if not state:
+        raise ValueError(
+            "the checkpoint's encoder_state_dict is empty: the encoder would run at "
+            "random initial weights, so a checkpoint saved without its encoder is refused"
+        )
+    return state
+
+
+def _same(value: Any) -> Any:
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class PayloadMember:
+    """One member of a checkpoint's payload: the ``EffectCheckpoint`` attribute
+    it holds, the key it is saved under, and how it is written and read.
+    Every member is required on load."""
+
+    attribute: str
+    key: str
+    write: Callable[[Any], Any] = _same
+    read: Callable[[Any], Any] = _same
+
+
+def _member(name: str, write=_same, read=_same, *, key: str | None = None) -> PayloadMember:
+    return PayloadMember(name, key or name, write, read)
+
+
+#: The checkpoint's payload, declared once: ``save`` writes these members and
+#: ``load`` reads them, each required. The model config rides beside them under
+#: ``config`` (``torch_checkpoint.save_checkpoint``).
+PAYLOAD_MEMBERS: tuple[PayloadMember, ...] = (
+    _member("encoder_state", read=_nonempty_encoder_state, key="encoder_state_dict"),
+    _member("model_state", filter_training_only, key="model_state_dict"),
+    _member("encoder_config", asdict, encoder_config_from),
+    _member("provenance", SplitProvenance.as_dict, SplitProvenance.from_dict),
+    _member("variant", lambda variant: Baseline(variant).value, Baseline),
+    _member("epoch"),
+    _member("cards_folders", list, tuple),
+    _member("training_settings", dict, dict),
+    _member("loss_denominators", dict, dict),
+    _member("best_control_score"), _member("control_score"), _member("averaged"),
+    _member("rule_mask"), _member("deviance_floor"), _member("ema_epochs"),
+    _member("stratum_weight"), _member("relation_values"),
+    _member("rule_map_digest"), _member("selection_set_digest"),
+    #: What a variant carries beyond the model (the identity baseline's
+    #: embedding table, ``surface_batching.IDENTITY_TABLE_KEY``), nested here so
+    #: no name in it can collide with a member.
+    _member("extra", dict, dict),
+)
 
 
 class EffectModelStore:
@@ -198,17 +239,8 @@ class EffectModelStore:
 
     def _write(self, path: Path, checkpoint: EffectCheckpoint) -> None:
         payload = {
-            "encoder_state_dict": checkpoint.encoder_state,
-            "model_state_dict": filter_training_only(checkpoint.model_state),
-            "encoder_config": asdict(checkpoint.encoder_config),
-            "provenance": checkpoint.provenance.as_dict(),
-            "variant": Baseline(checkpoint.variant).value,
-            "epoch": checkpoint.epoch,
-            "cards_folders": list(checkpoint.cards_folders),
-            "training_settings": dict(checkpoint.training_settings),
-            "loss_denominators": dict(checkpoint.loss_denominators),
-            **{name: getattr(checkpoint, name) for name in _GEN3_FIELDS},
-            **checkpoint.extra,
+            member.key: member.write(getattr(checkpoint, member.attribute))
+            for member in PAYLOAD_MEMBERS
         }
         save_checkpoint(path, payload, checkpoint.model_config)
         logger.info("Saved %s checkpoint to %s", checkpoint.variant, path)
@@ -236,25 +268,10 @@ class EffectModelStore:
         # Before anything is read from it (FR-045): a checkpoint trained on
         # another input layout would read inputs this code no longer builds,
         # and an older one is told apart by its recorded layout alone.
-        require_input_layout(payload.get("training_settings"))
+        require_input_layout(payload["training_settings"])
         return EffectCheckpoint(
-            encoder_config=encoder_config_from(payload["encoder_config"]),
             model_config=model_config,
-            encoder_state=payload["encoder_state_dict"],
-            model_state=payload["model_state_dict"],
-            provenance=SplitProvenance.from_dict(payload["provenance"]),
-            variant=Baseline(payload["variant"]),
-            epoch=payload["epoch"],
-            # Round-tripped: the identity baseline reloaded without its table
-            # would score on random vectors.
-            extra={
-                key: value for key, value in payload.items()
-                if key not in _RESERVED_PAYLOAD_KEYS
-            },
-            cards_folders=tuple(payload["cards_folders"]),
-            training_settings=dict(payload["training_settings"]),
-            loss_denominators=dict(payload["loss_denominators"]),
-            **{name: payload[name] for name in _GEN3_FIELDS},
+            **{member.attribute: member.read(payload[member.key]) for member in PAYLOAD_MEMBERS},
         )
 
 

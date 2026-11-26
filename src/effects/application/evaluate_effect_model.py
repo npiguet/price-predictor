@@ -185,11 +185,14 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
 
 
 def _recorded(value: float | None, name: str) -> float:
-    """A flag the checkpoint recorded, else the training default."""
-    from effects.application.train_effect_model import TrainEffectModelConfig
-
-    return float(value) if value is not None else float(
-        getattr(TrainEffectModelConfig, name))
+    """A flag the checkpoint recorded: every gen-3 checkpoint holds it, and one
+    recording none is refused rather than scored under a default."""
+    if value is None:
+        raise ValueError(
+            f"the checkpoint records no {name}: a gen-3 checkpoint always does, "
+            "so its reporting half cannot be scored under a guessed one"
+        )
+    return float(value)
 
 
 def _sidecar_index(context: EvaluationContext):
