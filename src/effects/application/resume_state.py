@@ -127,22 +127,37 @@ def require_optimizer_groups(saved: dict, optimizer: torch.optim.Optimizer) -> N
         )
 
 
-def restore_resume(run: RunContext) -> int | None:
-    """The first epoch to train, with ``run`` where it left off; None when
-    nothing is left. Raises ``ResumeMismatchError`` for a resume file written
-    under other settings."""
-    state = load_resume_state(run.spec.config.resolved_model_output())
-    _require_same_settings(state["settings"], run)
+def _restore_modules(state: dict, run: RunContext) -> None:
+    """Weights and optimizer, after the optimizer's groups are checked."""
     run.encoder.load_state_dict(state["encoder"])
     run.model.load_state_dict(state["model"])
     if run.identity_table is not None and state["identity_table"] is not None:
         run.identity_table.load_state_dict(state["identity_table"])
     require_optimizer_groups(state["optimizer"], run.optimizer)
     run.optimizer.load_state_dict(state["optimizer"])
+
+
+def _restore_stopper(state: dict, run: RunContext) -> None:
     try:
         run.stopper.load_state_dict(state["stopper"])
     except StopperStateError as error:
         raise ResumeMismatchError(f"The resume file cannot continue: {error}") from error
+
+
+def _restore_rng(rng: dict) -> None:
+    torch.set_rng_state(rng["cpu"])
+    if rng["cuda"] is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(rng["cuda"])
+
+
+def restore_resume(run: RunContext) -> int | None:
+    """The first epoch to train, with ``run`` where it left off; None when
+    nothing is left. Raises ``ResumeMismatchError`` for a resume file written
+    under other settings."""
+    state = load_resume_state(run.spec.config.resolved_model_output())
+    _require_same_settings(state["settings"], run)
+    _restore_modules(state, run)
+    _restore_stopper(state, run)
     run.noise.load_state_dict(state["noise"], run.device)
     # Reused, never recomputed: the run divides by one set of numbers (FR-062).
     denominators = state.get("loss_denominators")
@@ -150,9 +165,7 @@ def restore_resume(run: RunContext) -> int | None:
         None if denominators is None else LossDenominators.from_dict(denominators)
     )
     run.average.load_state_dict(state.get("weight_average"))
-    torch.set_rng_state(state["rng"]["cpu"])
-    if state["rng"]["cuda"] is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["rng"]["cuda"])
+    _restore_rng(state["rng"])
     epoch, run.step = state["epoch"], state["step"]
     # The run that started fixed its warmup from its own --epochs, which a
     # resume may change; the average's start follows from it and flags a
