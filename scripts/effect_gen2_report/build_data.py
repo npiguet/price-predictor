@@ -24,6 +24,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from itertools import dropwhile, takewhile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -222,27 +223,37 @@ def _number(cell: str) -> float | None:
         return None  # "n/a", or the unreadable dash an early run printed
 
 
+def _is_table_line(line: str) -> bool:
+    return line.startswith("|")
+
+
+def _is_not_table_line(line: str) -> bool:
+    return not line.startswith("|")
+
+
+def _is_separator(line: str) -> bool:
+    return set(line) <= set("|-: ")
+
+
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
 def _table(text: str, after: str) -> list[list[str]]:
-    """The data rows of the first markdown table following the line ``after``."""
+    """The data rows of the first markdown table following the line ``after``.
+
+    The table is the first run of lines starting with ``|``: its first line is the
+    header, and its separator lines are dropped from the rows below it.
+    """
     lines = text.splitlines()
     start = next((i for i, line in enumerate(lines) if line.startswith(after)), None)
     if start is None:
         return []
-    rows, seen_header = [], False
-    for line in lines[start + 1:]:
-        if not line.startswith("|"):
-            if seen_header:
-                break
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if not seen_header:
-            seen_header = True
-            header = cells
-            continue
-        if set(line) <= set("|-: "):
-            continue
-        rows.append(cells)
-    return [header, *rows] if seen_header else []
+    block = list(takewhile(_is_table_line, dropwhile(_is_not_table_line, lines[start + 1:])))
+    if not block:
+        return []
+    header, *body = block
+    return [_cells(header), *(_cells(line) for line in body if not _is_separator(line))]
 
 
 def damage_amount_alone(ck: Checkpoint) -> dict[str, float]:
@@ -391,94 +402,179 @@ def hand_entered_rows(name: str, produced: list[list]) -> list[list[str]]:
     return [row for row in committed if tuple(row[:key_cells]) not in seen]
 
 
+def _concat(items: list, rows_of) -> list[list]:
+    """``rows_of(item)``'s rows for each item in turn, as one list."""
+    return [row for item in items for row in rows_of(item)]
+
+
+def _run_row(run: Run, eps: list[EpochSummary]) -> list:
+    return [run.name, run.directory, run.width, run.copies, run.lr_scale, run.parent or "",
+            min(e.epoch for e in eps), max(e.epoch for e in eps)]
+
+
+def _run_rows(epochs: dict[str, list[EpochSummary]]) -> list[list]:
+    """A row per run that has epochs, gen-1 first."""
+    return [_run_row(r, epochs[r.name]) for r in [GEN1, *RUN_LIST] if epochs[r.name]]
+
+
+def _epoch_rows(name: str, eps: list[EpochSummary]) -> list[list]:
+    return [[name, e.epoch, e.train, e.card_disjoint, e.game_disjoint, e.gate_f1,
+             e.zone_accuracy, e.deviance] for e in eps]
+
+
+def _field_rows(name: str, eps: list[EpochSummary]) -> list[list]:
+    return [[name, e.epoch, f, loss, pct] for e in eps for f, (loss, pct) in e.fields.items()]
+
+
+def _per_run(epochs: dict[str, list[EpochSummary]], rows_of) -> list[list]:
+    """``rows_of(name, epochs)``'s rows for each run in turn, as one list."""
+    return [row for name, eps in epochs.items() for row in rows_of(name, eps)]
+
+
+def _checkpoint_row(probed: tuple[Checkpoint, EpochSummary]) -> list:
+    ck, e = probed
+    return [ck.id, ck.run.name, ck.role, e.epoch, ck.run.width, ck.run.copies,
+            ck.run.lr_scale, e.card_disjoint, e.game_disjoint, e.gate_f1,
+            e.zone_accuracy, e.deviance, ck.directory]
+
+
 def log_tables(epochs: dict[str, list[EpochSummary]],
                cks: list[tuple[Checkpoint, EpochSummary]]) -> dict[str, list[list]]:
     """The tables read from training and evaluation logs and boundary files."""
+    probes = [ck for ck, _ in cks]
     return {
-        "runs.csv": [[r.name, r.directory, r.width, r.copies, r.lr_scale, r.parent or "",
-                      min(e.epoch for e in epochs[r.name]), max(e.epoch for e in epochs[r.name])]
-                     for r in [GEN1, *RUN_LIST] if epochs[r.name]],
-        "epochs.csv": [[name, e.epoch, e.train, e.card_disjoint, e.game_disjoint, e.gate_f1,
-                        e.zone_accuracy, e.deviance] for name, eps in epochs.items()
-                       for e in eps],
-        "fields_by_epoch.csv": [[name, e.epoch, f, loss, pct] for name, eps in epochs.items()
-                                for e in eps for f, (loss, pct) in e.fields.items()],
-        "checkpoints.csv": [[ck.id, ck.run.name, ck.role, e.epoch, ck.run.width, ck.run.copies,
-                             ck.run.lr_scale, e.card_disjoint, e.game_disjoint, e.gate_f1,
-                             e.zone_accuracy, e.deviance, ck.directory] for ck, e in cks],
-        "gate2.csv": [r for ck, _ in cks for r in gate2(ck)],
-        "gate3.csv": [r for ck, _ in cks if (r := gate3(ck))],
-        "boundary_by_epoch.csv": [r for run in RUN_LIST for r in boundary(run)],
+        "runs.csv": _run_rows(epochs),
+        "epochs.csv": _per_run(epochs, _epoch_rows),
+        "fields_by_epoch.csv": _per_run(epochs, _field_rows),
+        "checkpoints.csv": [_checkpoint_row(probed) for probed in cks],
+        "gate2.csv": _concat(probes, gate2),
+        "gate3.csv": [r for ck in probes if (r := gate3(ck))],
+        "boundary_by_epoch.csv": _concat(RUN_LIST, boundary),
     }
+
+
+#: gen-1's knowledge-probe scorecard, under ``OUTPUT``.
+GEN1_SCORECARD = Path("effects", "reports",
+                      "knowledge-probes-2026-09-17-full-textless-corpus-20261009", "scorecard.json")
+ABLATION_REPLACEMENTS = ("noise", "api-mean", "nearest")
+ABLATION_SCOPES = ("all", "act", "cards")
+
+
+@dataclass(frozen=True)
+class Probed:
+    """A scorecard to tabulate: gen-1's (no checkpoint) or a gen-2 checkpoint's (or none)."""
+
+    id: str
+    checkpoint: Checkpoint | None
+    card: dict | None
+
+    def amount_alone(self) -> dict[str, float]:
+        return damage_amount_alone(self.checkpoint) if self.checkpoint else {}
+
+    def board(self) -> dict | None:
+        return board_scorecard(self.checkpoint, self.card) if self.checkpoint else None
+
+
+def probed_scorecards(cks: list[tuple[Checkpoint, EpochSummary]]) -> list[Probed]:
+    """Each checkpoint's latest scorecard, after gen-1's when it exists."""
+    probed = [Probed(ck.id, ck, scorecard(ck)) for ck, _ in cks]
+    gen1_card = OUTPUT / GEN1_SCORECARD
+    if gen1_card.exists():
+        probed.insert(0, Probed("gen-1", None, json.loads(read(gen1_card))))
+    return probed
+
+
+def _stratum_rows(target: str, entry: dict, overrides: dict) -> list[list]:
+    """``[stratum, n, rung, probe, score]`` for each score of one ladder target."""
+    return [[stratum, r.get("n"), rung, probe, overrides.get((target, rung, stratum), v)]
+            for stratum, r in entry.get("strata", {}).items()
+            for rung, scores in r.get("rungs", {}).items()
+            for probe, v in scores.items()]
+
+
+def ladder_rows(p: Probed) -> list[list]:
+    """The probe ladder's scores; rung 3 of damage_taken as the amount alone where rescored."""
+    overrides = {("damage_taken", "3", stratum): v for stratum, v in p.amount_alone().items()}
+    return [[p.id, family, target, entry.get("kind"), *row]
+            for family, body in p.card["families"].items()
+            for target, entry in body.get("targets", {}).items()
+            for row in _stratum_rows(target, entry, overrides)]
+
+
+def sweep_rows(p: Probed) -> list[list]:
+    return [[p.id, sweep, point["value"], point["prediction"], point["n"]]
+            for sweep, body in p.card.get("sweeps", {}).items()
+            for point in body.get("mean", [])]
+
+
+def sweep_record_rows(p: Probed) -> list[list]:
+    return [[p.id, sweep, i, point["value"], point["prediction"]]
+            for sweep, body in p.card.get("sweeps", {}).items()
+            for i, curve in enumerate(body.get("records", []))
+            for point in curve]
+
+
+def ablation_rows(p: Probed) -> list[list]:
+    return [[p.id, field, entry.get("base_loss"), replacement, scope,
+             entry.get(replacement, {}).get(scope)]
+            for field, entry in p.card.get("ablation", {}).items()
+            for replacement in ABLATION_REPLACEMENTS
+            for scope in ABLATION_SCOPES]
+
+
+def board_rows(p: Probed) -> list[list]:
+    return [[p.id, subset, body.get("n"), field, entry.get("base_loss"),
+             entry.get("noise", {}).get("cards")]
+            for subset, body in (p.board() or {}).items()
+            for field, entry in body.get("ablation", {}).items()]
 
 
 def scorecard_tables(cks: list[tuple[Checkpoint, EpochSummary]]) -> dict[str, list[list]]:
     """The tables read from each checkpoint's knowledge-probe scorecard."""
-    ladder, sweeps, sweep_records, board, ablation = [], [], [], [], []
-    gen1_card = (OUTPUT / "effects" / "reports"
-                 / "knowledge-probes-2026-09-17-full-textless-corpus-20261009/scorecard.json")
-    probed = [(ck.id, ck, scorecard(ck)) for ck, _ in cks]
-    if gen1_card.exists():
-        probed.insert(0, ("gen-1", None, json.loads(read(gen1_card))))
-    for cid, ck, card in probed:
-        if card:
-            amount_alone = damage_amount_alone(ck) if ck else {}
-            for family, body in card["families"].items():
-                for target, entry in body.get("targets", {}).items():
-                    for stratum, r in entry.get("strata", {}).items():
-                        for rung, scores in r.get("rungs", {}).items():
-                            for probe, v in scores.items():
-                                if (target == "damage_taken" and rung == "3"
-                                        and stratum in amount_alone):
-                                    v = amount_alone[stratum]
-                                ladder.append([cid, family, target, entry.get("kind"),
-                                               stratum, r.get("n"), rung, probe, v])
-            for sweep, body in card.get("sweeps", {}).items():
-                for point in body.get("mean", []):
-                    sweeps.append([cid, sweep, point["value"], point["prediction"],
-                                   point["n"]])
-                for i, curve in enumerate(body.get("records", [])):
-                    for point in curve:
-                        sweep_records.append([cid, sweep, i, point["value"],
-                                              point["prediction"]])
-            for field, entry in card.get("ablation", {}).items():
-                for replacement in ("noise", "api-mean", "nearest"):
-                    for scope in ("all", "act", "cards"):
-                        ablation.append([cid, field, entry.get("base_loss"), replacement,
-                                         scope, entry.get(replacement, {}).get(scope)])
-        for subset, body in ((board_scorecard(ck, card) if ck else None) or {}).items():
-            for field, entry in body.get("ablation", {}).items():
-                board.append([cid, subset, body.get("n"), field, entry.get("base_loss"),
-                              entry.get("noise", {}).get("cards")])
-    return {"probe_ladder.csv": ladder, "sweeps.csv": sweeps, "sweep_records.csv": sweep_records,
-            "ablation.csv": ablation, "board_abilities.csv": board}
+    probed = probed_scorecards(cks)
+    carded = [p for p in probed if p.card]
+    return {"probe_ladder.csv": _concat(carded, ladder_rows),
+            "sweeps.csv": _concat(carded, sweep_rows),
+            "sweep_records.csv": _concat(carded, sweep_record_rows),
+            "ablation.csv": _concat(carded, ablation_rows),
+            "board_abilities.csv": _concat(probed, board_rows)}
+
+
+def damage_grid_rows(ck: Checkpoint) -> list[list]:
+    """A checkpoint's damage-grid cells, for each of its grid files on disk."""
+    return [row for record_set, f in damage_grid_files(ck) if f.exists()
+            for row in cell_rows([ck.id, record_set], grid_cells(read(f)))]
+
+
+def _part(parsed: list, part: int | str) -> list[list]:
+    """Part ``part`` of each checkpoint's parsed report, one table's rows in checkpoint order."""
+    return [row for tables in parsed for row in tables[part]]
 
 
 def report_tables(cks: list[tuple[Checkpoint, EpochSummary]]) -> dict[str, list[list]]:
     """The tables read from each checkpoint's probe stdout and report files."""
-    ev = [evasion(ck) for ck, _ in cks]
-    tg = [targeting(ck) for ck, _ in cks]
-    cp = [colour_pips(ck) for ck, _ in cks]
-    ze = [zone_effects(ck) for ck, _ in cks]
+    probes = [ck for ck, _ in cks]
+    ev = list(map(evasion, probes))
+    tg = list(map(targeting, probes))
+    cp = list(map(colour_pips, probes))
+    ze = list(map(zone_effects, probes))
     return {
-        "embedding_probes.csv": [r for ck, _ in cks for r in embedding_probes(ck)],
-        "damage_grids.csv": [row for ck, _ in cks
-                             for record_set, f in damage_grid_files(ck) if f.exists()
-                             for row in cell_rows([ck.id, record_set], grid_cells(read(f)))],
-        "combat_grids.csv": [r for ck, _ in cks for r in combat(ck)],
-        "evasion_grid.csv": [r for cells, _ in ev for r in cells],
-        "evasion_ranking.csv": [r for _, ranking in ev for r in ranking],
-        "target_families.csv": [r for families, _, _ in tg for r in families],
-        "target_restrictions.csv": [r for _, restrictions, _ in tg for r in restrictions],
-        "target_flips.csv": [r for _, _, flips in tg for r in flips],
-        "colour_pips.csv": [r for rows, _, _ in cp for r in rows],
-        "colour_pips_ranking.csv": [r for _, rows, _ in cp for r in rows],
-        "colour_pips_by_cost.csv": [r for _, _, rows in cp for r in rows],
-        "zone_counts.csv": [r for z in ze for r in z["counts"]],
-        "zone_moves.csv": [r for z in ze for r in z["moves"]],
-        "zone_outcomes.csv": [r for z in ze for r in z["outcomes"]],
-        "zone_amounts.csv": [r for z in ze for r in z["amounts"]],
-        "zone_who.csv": [r for z in ze for r in z["who"]],
+        "embedding_probes.csv": _concat(probes, embedding_probes),
+        "damage_grids.csv": _concat(probes, damage_grid_rows),
+        "combat_grids.csv": _concat(probes, combat),
+        "evasion_grid.csv": _part(ev, 0),
+        "evasion_ranking.csv": _part(ev, 1),
+        "target_families.csv": _part(tg, 0),
+        "target_restrictions.csv": _part(tg, 1),
+        "target_flips.csv": _part(tg, 2),
+        "colour_pips.csv": _part(cp, 0),
+        "colour_pips_ranking.csv": _part(cp, 1),
+        "colour_pips_by_cost.csv": _part(cp, 2),
+        "zone_counts.csv": _part(ze, "counts"),
+        "zone_moves.csv": _part(ze, "moves"),
+        "zone_outcomes.csv": _part(ze, "outcomes"),
+        "zone_amounts.csv": _part(ze, "amounts"),
+        "zone_who.csv": _part(ze, "who"),
     }
 
 
