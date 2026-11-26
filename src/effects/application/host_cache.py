@@ -367,28 +367,46 @@ def map_tensors(value, fn):
     if isinstance(value, (torch.Tensor, *PACKED)):
         return fn(value)
     if is_dataclass(value) and not isinstance(value, type):
-        changed = {}
-        for spec in dataclass_fields(value):
-            if not spec.init:
-                continue
-            held = getattr(value, spec.name)
-            mapped = map_tensors(held, fn)
-            if mapped is not held:
-                changed[spec.name] = mapped
-        return replace(value, **changed) if changed else value
+        return _map_dataclass(value, fn)
     if isinstance(value, dict):
-        mapped = {key: map_tensors(item, fn) for key, item in value.items()}
-        if all(mapped[key] is item for key, item in value.items()):
-            return value
-        return type(value)(mapped)
+        return _map_dict(value, fn)
     if isinstance(value, (list, tuple)):
-        items = [map_tensors(item, fn) for item in value]
-        if all(new is old for new, old in zip(items, value)):
-            return value
-        if isinstance(value, tuple) and hasattr(value, "_fields"):
-            return type(value)(*items)
-        return type(value)(items)
+        return _map_sequence(value, fn)
     return value
+
+
+def _map_dataclass(value, fn):
+    """A dataclass instance with its init fields mapped in field order:
+    itself where none changed."""
+    changed = {}
+    for spec in dataclass_fields(value):
+        if not spec.init:
+            continue
+        held = getattr(value, spec.name)
+        mapped = map_tensors(held, fn)
+        if mapped is not held:
+            changed[spec.name] = mapped
+    return replace(value, **changed) if changed else value
+
+
+def _map_dict(value: dict, fn):
+    """A mapping with its items mapped in key order: itself where none
+    changed, else a new one of its type."""
+    mapped = {key: map_tensors(item, fn) for key, item in value.items()}
+    if all(mapped[key] is item for key, item in value.items()):
+        return value
+    return type(value)(mapped)
+
+
+def _map_sequence(value: list | tuple, fn):
+    """A list or tuple with its items mapped in order: itself where none
+    changed, else a new one of its type (a named tuple by its fields)."""
+    items = [map_tensors(item, fn) for item in value]
+    if all(new is old for new, old in zip(items, value)):
+        return value
+    if isinstance(value, tuple) and hasattr(value, "_fields"):
+        return type(value)(*items)
+    return type(value)(items)
 
 
 def pack(value, *, rows: int | None = None):
