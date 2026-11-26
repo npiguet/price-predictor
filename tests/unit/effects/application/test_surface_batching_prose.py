@@ -67,18 +67,18 @@ class TestRelationsUnderTheMasks:
                                                  SlotKind.PLAYER: 1})
 
     def test_no_state_drops_every_relation(self):
+        from effects.application.input_masking import apply_masks
         from effects.domain.baselines import Baseline, baseline_masks
-        from tests.unit.effects.builders import make_batcher
 
-        batcher = make_batcher(masks=baseline_masks(Baseline.NO_STATE))
-        assert batcher._masked(self._inputs()).relations.shape == (0, 4)
+        masked = apply_masks(self._inputs(), baseline_masks(Baseline.NO_STATE))
+        assert masked.relations.shape == (0, 4)
 
     def test_the_full_model_keeps_them(self):
+        from effects.application.input_masking import apply_masks
         from effects.domain.baselines import Baseline, baseline_masks
-        from tests.unit.effects.builders import make_batcher
 
-        batcher = make_batcher(masks=baseline_masks(Baseline.FULL))
-        assert batcher._masked(self._inputs()).relations.tolist() == [[0, 0, 1, 2]]
+        masked = apply_masks(self._inputs(), baseline_masks(Baseline.FULL))
+        assert masked.relations.tolist() == [[0, 0, 1, 2]]
 
 
 def _flying_batcher(**settings):
