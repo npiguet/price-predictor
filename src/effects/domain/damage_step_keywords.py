@@ -526,7 +526,8 @@ def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
                 keyword, CombatParticipant.marks_damage_on_its_lone_opponent),
         ),
         KeywordEffect(
-            HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1, category=ZoneOutcome.DIED,
+            HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1,
+            category=ZoneOutcome.TO_GRAVEYARD,
             applies=_strikes_first_and(keyword, CombatParticipant.kills_outright),
         ),
         KeywordEffect(
@@ -557,7 +558,8 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     DamageStepKeyword("double_strike", _first_strike_step_effects("double_strike")),
     DamageStepKeyword("deathtouch", (
         KeywordEffect(
-            HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1, category=ZoneOutcome.DIED,
+            HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1,
+            category=ZoneOutcome.TO_GRAVEYARD,
             applies=CombatParticipant.lone_opponent_survives_a_normal_hit,
         ),
     )),
@@ -575,7 +577,8 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
     )),
     DamageStepKeyword("indestructible", (
         KeywordEffect(
-            HeadField.ZONE_OUTCOME, Subject.CARRIER, direction=-1, category=ZoneOutcome.DIED,
+            HeadField.ZONE_OUTCOME, Subject.CARRIER, direction=-1,
+            category=ZoneOutcome.TO_GRAVEYARD,
             applies=CombatParticipant.would_be_destroyed,
         ),
     )),

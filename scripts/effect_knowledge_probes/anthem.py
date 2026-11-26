@@ -159,7 +159,7 @@ def _already_died(targets, anthem: Anthem) -> bool:
     """Whether the record already has one of the anthem's creatures dying."""
     from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 
-    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    died = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
     return any(targets.get(e) is not None
                and targets[e].fields.get(HeadField.ZONE_OUTCOME) == died
                for e in anthem.affected)

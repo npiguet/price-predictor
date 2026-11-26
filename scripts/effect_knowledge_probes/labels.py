@@ -415,7 +415,7 @@ def effect_profile(record) -> np.ndarray | None:
     targets = derive_targets(record)
     affected = [t for t in targets.values() if t.affected]
     n = len(affected)
-    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    died = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
     stayed = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
 
     def share(test) -> float:
@@ -792,7 +792,7 @@ def _damage_items(rid: str, entity, entry) -> list[RecordItem]:
     damage = entry.fields.get(HeadField.DAMAGE_TAKEN) or 0
     if not ("creature" in entity.types and damage > 0):
         return []
-    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    died = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
     group = card_of(entity)
     return [
         RecordItem(rid, "dies", float(entry.fields.get(HeadField.ZONE_OUTCOME) == died),

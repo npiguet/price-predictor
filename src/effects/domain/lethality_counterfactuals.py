@@ -82,7 +82,7 @@ SOURCE_EXCLUSIONS = frozenset({"deathtouch", "wither", "infect", "lifelink"})
 SHIELD_COUNTER = "SHIELD"
 
 _INT = re.compile(r"^-?\d+$")
-_DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+_TO_GRAVEYARD = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
 _STAYED = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
 
 
@@ -318,7 +318,8 @@ def _creature_hit(entity: EntityState | None, entry: EntityTargets, found: State
             or SHIELD_COUNTER in entity.counters):
         return _Hit.REFUSED
     zone = fields.get(HeadField.ZONE_OUTCOME, _STAYED)
-    if zone not in (_STAYED, _DIED) or (zone == _DIED) != lethal(found.kind, found.amount, entity):
+    died = zone == _TO_GRAVEYARD
+    if zone not in (_STAYED, _TO_GRAVEYARD) or died != lethal(found.kind, found.amount, entity):
         return _Hit.REFUSED
     return _Hit.HIT
 
@@ -471,7 +472,7 @@ def _relabel(entry: EntityTargets, effect: StatedEffect, amount: int, dies: bool
     if effect.symmetric:
         fields[HeadField.POWER_DELTA] = float(-amount)
     if dies:
-        fields[HeadField.ZONE_OUTCOME] = _DIED
+        fields[HeadField.ZONE_OUTCOME] = _TO_GRAVEYARD
     else:
         fields.pop(HeadField.ZONE_OUTCOME, None)
     return replace(entry, affected=True, fields=fields)

@@ -49,7 +49,7 @@ from tests.unit.effects.domain.test_cost_half_targets import (
 RULE = "701.21a"
 #: The map outputs a sacrifice rule might name: the gate and the zone outcome.
 MAP_OUTPUTS = (GATE_OUTPUT, HeadField.ZONE_OUTCOME)
-_DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+_DIED = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
 
 
 class _EveryResolution:

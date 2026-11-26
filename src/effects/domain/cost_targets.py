@@ -35,8 +35,8 @@ from effects.domain.state_snapshot import EntityState, Zone
 
 #: ``costs`` channel -> the zone outcome of each card it names.
 _MOVES: tuple[tuple[str, ZoneOutcome], ...] = (
-    ("sacrificed", ZoneOutcome.DIED),
-    ("discarded", ZoneOutcome.DIED),
+    ("sacrificed", ZoneOutcome.TO_GRAVEYARD),
+    ("discarded", ZoneOutcome.TO_GRAVEYARD),
     ("exiled", ZoneOutcome.EXILED),
     ("returned", ZoneOutcome.TO_HAND),
 )

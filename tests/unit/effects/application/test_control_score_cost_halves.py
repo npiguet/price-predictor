@@ -43,7 +43,7 @@ from tests.unit.effects.domain.test_cost_half_targets import (
     _record,
 )
 
-_DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+_DIED = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
 _ZONE = HeadField.ZONE_OUTCOME
 RULE = "r.paid"
 

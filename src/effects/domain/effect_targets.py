@@ -72,8 +72,8 @@ from effects.domain.surface_builder import has_card_slot
 #: The zone outcome each moving event implies; the record keeps destroy and
 #: sacrifice apart, the target collapses them.
 _ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
-    EventType.DESTROYED: ZoneOutcome.DIED,
-    EventType.SACRIFICED: ZoneOutcome.DIED,
+    EventType.DESTROYED: ZoneOutcome.TO_GRAVEYARD,
+    EventType.SACRIFICED: ZoneOutcome.TO_GRAVEYARD,
     EventType.FACE_CHANGE: ZoneOutcome.FACE_CHANGED,
     EventType.SPELL_COUNTERED: ZoneOutcome.COUNTERED,
 }
@@ -85,7 +85,7 @@ _ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
 #: (the stack, the sideboard, a mutated permanent's ``merged`` cards) leaves
 #: the outcome unknown: the card moved, so "stayed" would be wrong.
 _ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
-    Zone.GRAVEYARD: ZoneOutcome.DIED,
+    Zone.GRAVEYARD: ZoneOutcome.TO_GRAVEYARD,
     Zone.EXILE: ZoneOutcome.EXILED,
     Zone.HAND: ZoneOutcome.TO_HAND,
     Zone.LIBRARY: ZoneOutcome.LIBRARY_TOP,

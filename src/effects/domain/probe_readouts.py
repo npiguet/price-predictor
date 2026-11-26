@@ -48,7 +48,7 @@ def _affected(outputs, verdict, row: int, slot: int):
 def _dies(outputs, verdict, row: int, slot: int):
     from effects.domain.effect_head_layout import ZoneOutcome
 
-    return _reading(outputs, row, slot).p_zone(ZoneOutcome.DIED)
+    return _reading(outputs, row, slot).p_zone(ZoneOutcome.TO_GRAVEYARD)
 
 
 def _damage_taken(outputs, verdict, row: int, slot: int):

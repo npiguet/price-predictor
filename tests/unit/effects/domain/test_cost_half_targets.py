@@ -71,7 +71,7 @@ _SOUL_SPIKE = f"{_PILOT_5_RUN}.3-mwr4qdjt90ol.9717"
 _BORDERPOST = f"{_PILOT_5_RUN}.3-mwr4qdjt90ol.3471"
 _SILKBIND = f"{_FIXTURE_RUN}.1-mwqw0ogy54jx.8677"
 
-_DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+_DIED = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
 _EXILED = ZONE_OUTCOMES.index(ZoneOutcome.EXILED)
 _TO_HAND = ZONE_OUTCOMES.index(ZoneOutcome.TO_HAND)
 _LOYALTY = "counters_delta_loyalty"

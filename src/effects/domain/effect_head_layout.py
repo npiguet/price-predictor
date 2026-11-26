@@ -54,7 +54,7 @@ class ZoneOutcome(StrEnum):
     """Where an entity ends up, a closed vocabulary (FR-077)."""
 
     STAYED = "stayed"
-    DIED = "died"
+    TO_GRAVEYARD = "died"
     EXILED = "exiled"
     TO_HAND = "to_hand"
     LIBRARY_TOP = "library_top"

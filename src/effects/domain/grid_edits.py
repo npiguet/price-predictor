@@ -296,7 +296,7 @@ def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: Keywords
     # The real outcome must obey the rule on the board before the step, so
     # prevention, regeneration or a replacement the board does not show cannot
     # be what the grid reads.
-    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    died = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
     before = BoardEdit(record).clear_damage(attacker_id, blocker_id).record
     expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
     for entity_id, should_die in zip((attacker_id, blocker_id), expected):

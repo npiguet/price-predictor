@@ -125,23 +125,23 @@ class TestLeftOut:
 class TestRuleReadout:
     def test_the_category_the_fires_records_show_more_is_read(self):
         reading = OutputReading(decoder_of("zone_outcome"))
-        died = [1.0 if c == ZoneOutcome.DIED else 0.0 for c in ZONE_OUTCOMES]
+        died = [1.0 if c == ZoneOutcome.TO_GRAVEYARD else 0.0 for c in ZONE_OUTCOMES]
         stayed = [0.0] * len(ZONE_OUTCOMES)
         for _ in range(3):
             reading.observe("fires", died)
             reading.observe("does_not_fire", stayed)
         assert reading.settle()
-        assert ZONE_OUTCOMES[reading.candidate] == ZoneOutcome.DIED
+        assert ZONE_OUTCOMES[reading.candidate] == ZoneOutcome.TO_GRAVEYARD
         assert reading.sign == 1.0
 
     def test_an_absent_outcome_reads_the_complement(self):
         """Indestructible: the creature that fires the rule does not die."""
         reading = OutputReading(decoder_of("zone_outcome"))
-        died = [1.0 if c == ZoneOutcome.DIED else 0.0 for c in ZONE_OUTCOMES]
+        died = [1.0 if c == ZoneOutcome.TO_GRAVEYARD else 0.0 for c in ZONE_OUTCOMES]
         reading.observe("fires", [0.0] * len(ZONE_OUTCOMES))
         reading.observe("does_not_fire", died)
         assert reading.settle()
-        assert ZONE_OUTCOMES[reading.candidate] == ZoneOutcome.DIED
+        assert ZONE_OUTCOMES[reading.candidate] == ZoneOutcome.TO_GRAVEYARD
         assert reading.sign == -1.0
 
     def test_an_output_no_fires_record_observes_is_not_read(self):

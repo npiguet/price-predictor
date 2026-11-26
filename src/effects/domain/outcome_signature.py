@@ -22,7 +22,9 @@ SIGNATURE_CLASSES: frozenset[SamplingClass] = frozenset({
 #: The signature's zone part where a record's targets leave the zone outcome unknown.
 UNKNOWN_ZONE_OUTCOME = "unknown"
 #: A spell card's own move off the stack, as its zone outcome.
-_OFF_THE_STACK = frozenset(ZONE_OUTCOMES.index(o) for o in (ZoneOutcome.DIED, ZoneOutcome.EXILED))
+_OFF_THE_STACK = frozenset(
+    ZONE_OUTCOMES.index(o) for o in (ZoneOutcome.TO_GRAVEYARD, ZoneOutcome.EXILED)
+)
 
 
 def _spell_on_the_stack(record) -> str | None:
