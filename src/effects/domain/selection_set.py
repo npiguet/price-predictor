@@ -330,6 +330,45 @@ def _write_by_half(data: Mapping, write: Callable[[T], Any]) -> dict:
             for stratum, halves in sorted(data.items())}
 
 
+def _rows_json(rows: Sequence[Any]) -> list[dict]:
+    return [r.to_json() for r in rows]
+
+
+def _sides_json(sides: Mapping[str, Sequence[TaggedRecord]]) -> dict[str, list[dict]]:
+    return {polarity: _rows_json(rows) for polarity, rows in sorted(sides.items())}
+
+
+def _halves_json(halves: Mapping[str, Mapping[str, Sequence[str]]]) -> dict:
+    return {s: {h: list(g) for h, g in sorted(by.items())} for s, by in sorted(halves.items())}
+
+
+def _samples_json(samples: Mapping[str, Mapping[str, Sequence[SampleRecord]]]) -> dict:
+    return {s: {h: _rows_json(rows) for h, rows in sorted(by.items())}
+            for s, by in sorted(samples.items())}
+
+
+def _halves_read(data: Mapping) -> dict[str, dict[str, tuple[str, ...]]]:
+    return {s: {h: tuple(g) for h, g in by.items()} for s, by in data.items()}
+
+
+def _probe_rows(rows: Sequence[Mapping]) -> tuple[ProbeRecord, ...]:
+    return tuple(ProbeRecord.from_json(r) for r in rows)
+
+
+def _tagged_sides(sides: Mapping[str, Sequence[Mapping]]) -> dict[str, tuple[TaggedRecord, ...]]:
+    return {polarity: tuple(TaggedRecord.from_json(r) for r in rows)
+            for polarity, rows in sides.items()}
+
+
+def _samples_read(data: Mapping) -> dict[str, dict[str, tuple[SampleRecord, ...]]]:
+    return {s: {h: tuple(SampleRecord.from_json(r) for r in rows) for h, rows in by.items()}
+            for s, by in data.items()}
+
+
+def _left_out_rows(rows: Sequence[Mapping]) -> tuple[LeftOut, ...]:
+    return tuple(LeftOut.from_json(r) for r in rows)
+
+
 @dataclass(frozen=True)
 class SelectionSet:
     """Everything checkpoint selection and reporting read, frozen with its digest.
@@ -361,19 +400,14 @@ class SelectionSet:
         out = {
             "corpus_digest": self.corpus_digest,
             "r": self.r,
-            "halves": {s: {h: list(g) for h, g in sorted(by.items())}
-                       for s, by in sorted(self.halves.items())},
-            "probes": _write_by_half(self.probes, lambda rows: [r.to_json() for r in rows]),
+            "halves": _halves_json(self.halves),
+            "probes": _write_by_half(self.probes, _rows_json),
             "probe_kinds": dict(sorted(self.probe_kinds.items())),
             "grids": _write_by_half(self.grids, FrozenGrid.to_json),
-            "rule_tests": _write_by_half(self.rule_tests, lambda sides: {
-                polarity: [r.to_json() for r in rows] for polarity, rows in sorted(sides.items())
-            }),
-            "deviance_samples": {s: {h: [r.to_json() for r in rows]
-                                     for h, rows in sorted(by.items())}
-                                 for s, by in sorted(self.deviance_samples.items())},
+            "rule_tests": _write_by_half(self.rule_tests, _sides_json),
+            "deviance_samples": _samples_json(self.deviance_samples),
             "standard_errors": dict(sorted(self.standard_errors.items())),
-            "left_out": _write_by_half(self.left_out, lambda rows: [r.to_json() for r in rows]),
+            "left_out": _write_by_half(self.left_out, _rows_json),
             "settings": dict(sorted(self.settings.items())),
         }
         if self.digest:
@@ -385,21 +419,14 @@ class SelectionSet:
         return cls(
             corpus_digest=data["corpus_digest"],
             r=int(data["r"]),
-            halves={s: {h: tuple(g) for h, g in by.items()} for s, by in data["halves"].items()},
-            probes=_by_half(data["probes"],
-                            lambda rows: tuple(ProbeRecord.from_json(r) for r in rows)),
+            halves=_halves_read(data["halves"]),
+            probes=_by_half(data["probes"], _probe_rows),
             probe_kinds=dict(data["probe_kinds"]),
             grids=_by_half(data["grids"], FrozenGrid.from_json),
-            rule_tests=_by_half(data["rule_tests"], lambda sides: {
-                polarity: tuple(TaggedRecord.from_json(r) for r in rows)
-                for polarity, rows in sides.items()
-            }),
-            deviance_samples={s: {h: tuple(SampleRecord.from_json(r) for r in rows)
-                                  for h, rows in by.items()}
-                              for s, by in data["deviance_samples"].items()},
+            rule_tests=_by_half(data["rule_tests"], _tagged_sides),
+            deviance_samples=_samples_read(data["deviance_samples"]),
             standard_errors=dict(data["standard_errors"]),
-            left_out=_by_half(data["left_out"],
-                              lambda rows: tuple(LeftOut.from_json(r) for r in rows)),
+            left_out=_by_half(data["left_out"], _left_out_rows),
             settings=dict(data.get("settings", {})),
             digest=data.get("digest", ""),
         )
@@ -506,9 +533,18 @@ def _read_set(path: Path, data: Mapping) -> SelectionSet:
 # ── the seeded balance ───────────────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class BalanceDraw:
+    """The seeded draw a balance keeps its items by: ``seed`` and ``salt`` key
+    the hash of ``key(item)``."""
+
+    seed: int
+    salt: str
+    key: Callable[[Any], str]
+
+
 def balanced(
-    groups: Mapping[Hashable, Sequence[T]], r: int, *, seed: int, salt: str,
-    key: Callable[[T], str],
+    groups: Mapping[Hashable, Sequence[T]], r: int, *, draw: BalanceDraw,
 ) -> dict[Hashable, list[T]]:
     """Each group cut to at most ``r`` times the smallest non-empty group, by a
     seeded draw: the items of smallest ``keyed_hash(salt|key(item), seed)``
@@ -524,6 +560,6 @@ def balanced(
             out[name] = items
             continue
         kept = set(sorted(range(len(items)), key=lambda i: (
-            keyed_hash(f"{salt}|{key(items[i])}", seed), i))[:limit])
+            keyed_hash(f"{draw.salt}|{draw.key(items[i])}", draw.seed), i))[:limit])
         out[name] = [item for i, item in enumerate(items) if i in kept]
     return out

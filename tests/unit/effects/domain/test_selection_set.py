@@ -9,6 +9,7 @@ import pytest
 
 from effects.domain.selection_set import (
     BALANCE_RATIO,
+    BalanceDraw,
     FrozenGrid,
     GridCell,
     LeftOut,
@@ -176,18 +177,18 @@ def test_balance_keeps_r_times_the_smaller_side_by_a_seeded_draw() -> None:
     """Story 8 acceptance 9: 400 ``fires`` against 100 at r = 2 keep 200."""
     groups = {"fires": [f"f{i}" for i in range(400)],
               "does_not_fire": [f"n{i}" for i in range(100)]}
-    out = balanced(groups, 2, seed=7, salt="704.5f", key=str)
+    out = balanced(groups, 2, draw=BalanceDraw(7, "704.5f", str))
     assert len(out["fires"]) == 200
     assert out["does_not_fire"] == groups["does_not_fire"]
     assert set(out["fires"]) <= set(groups["fires"])
     # Kept in their original order, and the same under the same seed.
     assert out["fires"] == sorted(out["fires"], key=groups["fires"].index)
-    assert balanced(groups, 2, seed=7, salt="704.5f", key=str) == out
-    assert balanced(groups, 2, seed=8, salt="704.5f", key=str)["fires"] != out["fires"]
+    assert balanced(groups, 2, draw=BalanceDraw(7, "704.5f", str)) == out
+    assert balanced(groups, 2, draw=BalanceDraw(8, "704.5f", str))["fires"] != out["fires"]
 
 
 def test_balance_ignores_an_empty_group() -> None:
-    out = balanced({"a": [1, 2, 3], "b": []}, 1, seed=0, salt="", key=str)
+    out = balanced({"a": [1, 2, 3], "b": []}, 1, draw=BalanceDraw(0, "", str))
     assert out == {"a": [1, 2, 3], "b": []}
 
 

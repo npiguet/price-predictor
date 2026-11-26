@@ -110,6 +110,7 @@ from effects.domain.selection_set import (
     RULE_TESTS,
     UNTESTED,
     UNTESTED_REASONS,
+    BalanceDraw,
     FrozenGrid,
     GridCell,
     LeftOut,
@@ -582,9 +583,8 @@ class _Assembly:
             return None
         rows, reason = self._test_rows(rule, sides)
         if reason is None:
-            drawn = balanced(rows, self.limits.r,
-                             seed=self.seed, salt=f"rule-test|{stratum}|{half}|{rule}",
-                             key=lambda row: row.record_id)
+            drawn = balanced(rows, self.limits.r, draw=BalanceDraw(
+                self.seed, f"rule-test|{stratum}|{half}|{rule}", lambda row: row.record_id))
             read, left = informative_rows(rule, drawn, found.rule_targets)
             self._leave_out_all(stratum, half, RULE_TESTS, left)
             if read is not None:
@@ -637,9 +637,8 @@ class _Assembly:
                 candidates[probe_type] = rows
             else:
                 self._enters(stratum, half, PROBES, probe_type, error)
-        drawn = balanced(candidates, self.limits.r, seed=self.seed,
-                         salt=f"probe|{stratum}|{half}",
-                         key=lambda row: f"{row.record_id}|{row.entity}")
+        drawn = balanced(candidates, self.limits.r, draw=BalanceDraw(
+            self.seed, f"probe|{stratum}|{half}", lambda row: f"{row.record_id}|{row.entity}"))
         errors, kept = [], {}
         for probe_type, rows in sorted(drawn.items()):
             error = self._probe_error(probe_type, rows)
