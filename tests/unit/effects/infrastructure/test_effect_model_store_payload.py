@@ -83,3 +83,13 @@ def test_every_member_survives_a_round_trip(tmp_path, files):
     for member in PAYLOAD_MEMBERS:
         if member.attribute not in ("encoder_state", "model_state"):
             assert getattr(loaded, member.attribute) == getattr(checkpoint, member.attribute)
+
+
+def test_a_model_config_lacking_a_size_is_refused_by_its_name(tmp_path, files):
+    path = _saved_path(tmp_path, files)
+    payload = torch.load(path, map_location="cpu", weights_only=False)
+    del payload["config"]["d_model"]
+    torch.save(payload, path)
+    with pytest.raises(KeyError) as raised:
+        EffectModelStore(tmp_path).load(path)
+    assert raised.value.args == ("d_model",)

@@ -22,7 +22,6 @@ from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
 from price_predictor.infrastructure.torch_checkpoint import (
     copy_atomically,
-    load_checkpoint,
     save_checkpoint,
     write_atomically,
 )
@@ -153,12 +152,20 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
     return encoder.eval(), model.eval()
 
 
+def _config_from(config_cls: type, data: dict[str, Any]) -> Any:
+    """A config dataclass from a checkpoint's dict: every field is read, and one
+    the dict leaves out raises ``KeyError`` naming it, never built at a default."""
+    return config_cls(**{spec.name: data[spec.name] for spec in fields(config_cls)})
+
+
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
-    """An encoder config from a checkpoint's dict: every size is read, and one
-    the dict leaves out raises ``KeyError`` naming it."""
-    return AbilityEncoderConfig(
-        **{spec.name: data[spec.name] for spec in fields(AbilityEncoderConfig)},
-    )
+    """An encoder config from a checkpoint's dict (``_config_from``)."""
+    return _config_from(AbilityEncoderConfig, data)
+
+
+def model_config_from(data: dict[str, Any]) -> EffectModelConfig:
+    """A model config from a checkpoint's ``config`` dict (``_config_from``)."""
+    return _config_from(EffectModelConfig, data)
 
 
 def _nonempty_encoder_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -262,9 +269,8 @@ class EffectModelStore:
                 f"No effect-model checkpoint at {path}. Run "
                 "'python -m effects train-effect-model' first."
             )
-        payload, model_config = load_checkpoint(
-            path, EffectModelConfig, weights_only=False,
-        )
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        model_config = model_config_from(payload.pop("config"))
         # Before anything is read from it (FR-045): a checkpoint trained on
         # another input layout would read inputs this code no longer builds,
         # and an older one is told apart by its recorded layout alone.
