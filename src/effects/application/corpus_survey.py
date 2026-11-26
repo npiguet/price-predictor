@@ -603,16 +603,21 @@ class _ShardSurveyor:
         game, games = record.game_id, self.out.games
         if record.random_seat:
             games.random_seat.add(game)
-        if (
-            self.keyword_rows and record.kind is RecordKind.COMBAT
-            and game not in games.keyword_combat
-            and qualifying_observations(record, self.keyword_rows, self.context.resolver)
-        ):
+        if self._qualifies_for_keyword_combat(record):
             games.keyword_combat.add(game)
         if record_names_held_out_card(
             record, self.config.read.held_out, self.context.variant_prints_held_out,
         ):
             games.held_out.add(game)
+
+    def _qualifies_for_keyword_combat(self, record: EffectRecord) -> bool:
+        """A combat record of a game not yet marked, qualifying for one of the
+        ``--game-disjoint-keywords`` rows."""
+        if not self.keyword_rows or record.kind is not RecordKind.COMBAT:
+            return False
+        if record.game_id in self.out.games.keyword_combat:
+            return False
+        return bool(qualifying_observations(record, self.keyword_rows, self.context.resolver))
 
     def _count_tags(self, record: EffectRecord, *, held: bool) -> TagResult:
         """Tag ``record`` and count its tags; ``held`` is False for a record
@@ -716,24 +721,35 @@ class _ShardSurveyor:
         self.out.rule_counts.records = self.out.records - self.out.cut.records
         candidates = self._candidate_games()
         inventories: dict[str, Counter[RuleCell]] = defaultdict(Counter)
-        held_out = self.out.games.held_out
         for pending in self.pending:
-            fate = self._fate(pending.game, candidates)
-            surveyed = self._surveyed(pending, seat_games)
-            if pending.acts_through_held_out_text and pending.game not in held_out:
-                self.out.held_out_text_dropped[pending.klass] += 1
-            if fate is _Fate.CANDIDATE:
-                self.out.candidates.append(surveyed)
-                inventories[pending.game].update(pending.eligible)
-            elif not pending.acts_through_held_out_text:
-                self.out.supply.add(pending.cell, pending.keys, pending.value)
-                if surveyed.tags or surveyed.protection:
-                    self.out.tagged.append(surveyed)
+            self._place(pending, candidates, seat_games, inventories)
         self.out.inventories = [
             (game, dict(inventory)) for game, inventory in sorted(inventories.items())
             if inventory
         ]
         return self.out
+
+    def _place(
+        self, pending: _PendingRecord, candidates: frozenset[str],
+        seat_games: set[str], inventories: dict[str, Counter[RuleCell]],
+    ) -> None:
+        """Send one pending record where its game's fate puts it: a candidate
+        game's records and inventory wait for placement, a training game's
+        fold into the supply unless they act through a held-out text."""
+        fate = self._fate(pending.game, candidates)
+        surveyed = self._surveyed(pending, seat_games)
+        if pending.acts_through_held_out_text and pending.game not in self.out.games.held_out:
+            self.out.held_out_text_dropped[pending.klass] += 1
+        if fate is _Fate.CANDIDATE:
+            self.out.candidates.append(surveyed)
+            inventories[pending.game].update(pending.eligible)
+        elif not pending.acts_through_held_out_text:
+            self._train(pending, surveyed)
+
+    def _train(self, pending: _PendingRecord, surveyed: SurveyedRecord) -> None:
+        self.out.supply.add(pending.cell, pending.keys, pending.value)
+        if surveyed.tags or surveyed.protection:
+            self.out.tagged.append(surveyed)
 
     def _count_sources(self, seat_games: set[str]) -> None:
         """Every tag read, under the source its record came from."""
