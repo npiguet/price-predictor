@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
+from itertools import product
 
 import pytest
 
@@ -82,15 +83,25 @@ def _reader(records):
     return lambda: [list(rows) for rows in by_game.values()]
 
 
-def _rules(tags: dict[str, list[RuleTag]], *, trained=None, declared=None, blocked=(),
-           unreadable=()):
+@dataclass(frozen=True)
+class _RuleSets:
+    """The rule sets a test overrides; ``None`` for ``trained``/``declared``
+    means every rule the tags name."""
+
+    trained: set | None = None
+    declared: set | None = None
+    blocked: frozenset | set = frozenset()
+    unreadable: frozenset | set = frozenset()
+
+
+def _rules(tags: dict[str, list[RuleTag]], sets: _RuleSets = _RuleSets()):
     every = {tag.rule for found in tags.values() for tag in found}
     return RuleTestRules(
         tag=lambda record: tags.get(record.record_id, []),
-        declared=frozenset(declared if declared is not None else every),
-        trained=frozenset(trained if trained is not None else every),
-        blocked=frozenset(blocked),
-        unreadable=frozenset(unreadable),
+        declared=frozenset(sets.declared if sets.declared is not None else every),
+        trained=frozenset(sets.trained if sets.trained is not None else every),
+        blocked=frozenset(sets.blocked),
+        unreadable=frozenset(sets.unreadable),
     )
 
 
@@ -142,16 +153,19 @@ def _halves_of_games(n: int) -> dict:
                  "reporting": [f"r{i}" for i in range(n)]}}
 
 
+def _every_game(halves: dict) -> list[str]:
+    """Every game of every half of every stratum, in manifest order."""
+    return [game for by_half in halves.values() for games in by_half.values() for game in games]
+
+
 def _balanced_records(halves: dict, per_game: int = 4) -> tuple[list, dict]:
     """Records of every game, each half carrying both polarities of rule ``R``."""
     records, tags = [], {}
-    for by_half in halves.values():
-        for games in by_half.values():
-            for game in games:
-                for k in range(per_game):
-                    record = _Record(f"{game}.{k}", game)
-                    records.append(record)
-                    tags[record.record_id] = [_tag("R", FIRES if k % 2 else NOT, "E1")]
+    for game in _every_game(halves):
+        for k in range(per_game):
+            record = _Record(f"{game}.{k}", game)
+            records.append(record)
+            tags[record.record_id] = [_tag("R", FIRES if k % 2 else NOT, "E1")]
     return records, tags
 
 
@@ -220,19 +234,23 @@ def test_no_two_polarity_rule_in_a_half_refuses_naming_it() -> None:
     assert any("R (one polarity only" in line for line in left_out_lines(refused.value.selection))
 
 
+def _records_of_rule_sizes(sizes: dict[str, int]) -> tuple[list, dict]:
+    """Per half, ``n`` records of each polarity of each rule, one game a record:
+    the error counts games."""
+    records, tags = [], {}
+    for prefix, (rule, n), polarity in product(("s", "r"), sizes.items(), (FIRES, NOT)):
+        for i in range(n):
+            record = _Record(f"{prefix}.{rule}.{polarity}.{i}", f"{prefix}{i}")
+            records.append(record)
+            tags[record.record_id] = [_tag(rule, polarity)]
+    return records, tags
+
+
 def test_three_rules_at_68_each_miss_the_component_target() -> None:
     """Story 8 acceptance 8: the smaller rules left out and named; three items
     at 0.0994 give the component 0.0574, above 0.05."""
     halves = _halves_of_games(68)
-    records, tags = [], {}
-    sizes = {"A": 68, "B": 68, "C": 68, "small1": 20, "small2": 5}
-    for half, prefix in (("selection", "s"), ("reporting", "r")):
-        for rule, n in sizes.items():
-            for polarity in (FIRES, NOT):
-                for i in range(n):  # one game a record: the error counts games
-                    record = _Record(f"{prefix}.{rule}.{polarity}.{i}", f"{prefix}{i}")
-                    records.append(record)
-                    tags[record.record_id] = [_tag(rule, polarity)]
+    records, tags = _records_of_rule_sizes({"A": 68, "B": 68, "C": 68, "small1": 20, "small2": 5})
     with pytest.raises(SelectionSetRefused) as refused:
         _freeze(halves, records, tags,
                 thresholds=replace(LENIENT, max_item_error=0.1, max_component_error=0.05))
@@ -306,14 +324,13 @@ def test_a_confirmed_unpatched_departure_keeps_its_rule_out_and_an_accepted_one_
     assert blocked_rules(catalogue) == {"U"}
     halves = _two_halves(2)
     records, tags = [], {}
-    for by_half in halves.values():
-        for games in by_half.values():
-            for game in games:
-                for k, rule in enumerate(("U", "U", "A", "A")):
-                    record = _Record(f"{game}.{k}", game)
-                    records.append(record)
-                    tags[record.record_id] = [_tag(rule, FIRES if k % 2 else NOT)]
-    frozen = _freeze(halves, records, tags, rules=_rules(tags, blocked=blocked_rules(catalogue)))
+    for game in _every_game(halves):
+        for k, rule in enumerate(("U", "U", "A", "A")):
+            record = _Record(f"{game}.{k}", game)
+            records.append(record)
+            tags[record.record_id] = [_tag(rule, FIRES if k % 2 else NOT)]
+    blocked = _RuleSets(blocked=blocked_rules(catalogue))
+    frozen = _freeze(halves, records, tags, rules=_rules(tags, blocked))
     for half in ("selection", "reporting"):
         assert sorted(frozen.rule_tests[GD][half]) == ["A"]
         assert frozen.rule_tests[GD][half]["A"]["fires"]
@@ -324,8 +341,8 @@ def test_untrained_rules_have_no_tests_and_undetected_rules_are_named_untested()
     records, tags = _balanced_records(halves)
     for record_id in list(tags):
         tags[record_id] = [*tags[record_id], _tag("recorded-only", FIRES)]
-    rules = _rules(tags, trained={"R", "never-seen"}, declared={"R", "never-seen",
-                                                                "recorded-only"})
+    rules = _rules(tags, _RuleSets(trained={"R", "never-seen"},
+                                   declared={"R", "never-seen", "recorded-only"}))
     frozen = _freeze(halves, records, tags, rules=rules)
     for half in ("selection", "reporting"):
         assert sorted(frozen.rule_tests[GD][half]) == ["R"]
@@ -348,7 +365,7 @@ def test_a_rule_with_no_effective_output_is_named_untested_in_every_half() -> No
     halves = _two_halves(2)
     records, tags = _balanced_records(halves)
     with pytest.raises(SelectionSetRefused) as refused:
-        _freeze(halves, records, tags, rules=_rules(tags, unreadable={"R"}))
+        _freeze(halves, records, tags, rules=_rules(tags, _RuleSets(unreadable={"R"})))
     frozen = refused.value.selection
     for half in ("selection", "reporting"):
         assert frozen.rule_tests[GD].get(half, {}) == {}
@@ -359,6 +376,16 @@ def test_a_rule_with_no_effective_output_is_named_untested_in_every_half() -> No
 # ── copies ──────────────────────────────────────────────────────────────
 
 
+def _rule_test_ids(frozen, half: str) -> list[str]:
+    return [r.record_id for sides in frozen.rule_tests[GD][half].values()
+            for rows in sides.values() for r in rows]
+
+
+def _assert_copies_sampled_twice(samples, copied) -> None:
+    sample = [(r.record_id, r.copy) for r in samples]
+    assert (copied.record_id, 0) in sample and (copied.record_id, 1) in sample
+
+
 def test_copies_are_read_once_by_tests_and_probes_and_every_time_by_the_deviance() -> None:
     halves = _two_halves(2)
     records, tags = _balanced_records(halves)
@@ -367,13 +394,10 @@ def test_copies_are_read_once_by_tests_and_probes_and_every_time_by_the_deviance
     losses = _Losses()
     frozen = _freeze(halves, records, tags, deviance=losses)
     half = next(h for h, games in halves[GD].items() if copied.game_id in games)
-    tests = [r.record_id for sides in frozen.rule_tests[GD][half].values()
-             for rows in sides.values() for r in rows]
-    assert tests.count(copied.record_id) == 1
+    assert _rule_test_ids(frozen, half).count(copied.record_id) == 1
     probed = [r.record_id for rows in frozen.probes[GD][half].values() for r in rows]
     assert probed.count(copied.record_id) == 1
-    sample = [(r.record_id, r.copy) for r in frozen.deviance_samples[GD][half]]
-    assert (copied.record_id, 0) in sample and (copied.record_id, 1) in sample
+    _assert_copies_sampled_twice(frozen.deviance_samples[GD][half], copied)
     assert sum(len(seen) for seen in losses.seen) == len(records)
 
 
@@ -532,6 +556,22 @@ def test_run_exits_one_naming_each_small_half(tmp_path) -> None:
     assert not (tmp_path / "reports").exists()
 
 
+def _assert_components_within_target(frozen, half: str, limits: dict) -> None:
+    for component in ("rule_tests", "probes", "grids"):
+        items = [error_of(value) for key, value in frozen.standard_errors.items()
+                 if key.startswith(f"{GD}/{half}/{component}/")
+                 and error_of(value) <= limits["max_item_error"]]
+        assert component_standard_error(items) <= limits["max_component_error"]
+
+
+def _assert_polarities_and_probes_within_r(frozen, half: str, r: int) -> None:
+    for sides in frozen.rule_tests[GD][half].values():
+        sizes = [len(rows) for rows in sides.values()]
+        assert max(sizes) <= r * min(sizes)
+    sizes = [len(rows) for rows in frozen.probes[GD][half].values()]
+    assert max(sizes) <= r * min(sizes)
+
+
 def test_sc010_on_the_fixture_every_component_and_balance_holds(tmp_path) -> None:
     """SC-010 over the gen-3 fixture, tagged by the real catalogue: every
     component within its target, every polarity, probe type and grid within r."""
@@ -553,16 +593,8 @@ def test_sc010_on_the_fixture_every_component_and_balance_holds(tmp_path) -> Non
         thresholds=FreezeThresholds(**limits))
     assert any(frozen.rule_tests[GD][half] for half in ("selection", "reporting"))
     for half in ("selection", "reporting"):
-        for component in ("rule_tests", "probes", "grids"):
-            items = [error_of(value) for key, value in frozen.standard_errors.items()
-                     if key.startswith(f"{GD}/{half}/{component}/")
-                     and error_of(value) <= limits["max_item_error"]]
-            assert component_standard_error(items) <= limits["max_component_error"]
-        for sides in frozen.rule_tests[GD][half].values():
-            sizes = [len(rows) for rows in sides.values()]
-            assert max(sizes) <= limits["r"] * min(sizes)
-        sizes = [len(rows) for rows in frozen.probes[GD][half].values()]
-        assert max(sizes) <= limits["r"] * min(sizes)
+        _assert_components_within_target(frozen, half, limits)
+        _assert_polarities_and_probes_within_r(frozen, half, limits["r"])
     path = selection_set_path(tmp_path, manifest.digest())
     from effects.domain.selection_set import write_selection_set
 

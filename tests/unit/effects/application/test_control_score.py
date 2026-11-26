@@ -160,40 +160,63 @@ class TestRuleReadout:
 # ── the scorer on the fixture ───────────────────────────────────────────
 
 
+def _half_probes(held, with_entities) -> dict:
+    return {
+        "dies": tuple(ProbeRecord(r.record_id, r.game_id, r.state.entities[0].id,
+                                  float(i % 2)) for i, r in enumerate(with_entities[:12])),
+        "affordable": tuple(ProbeRecord(r.record_id, r.game_id, None, float(i % 2))
+                            for i, r in enumerate(held[:10])),
+    }
+
+
+def _tagged(records) -> list[TaggedRecord]:
+    return [TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,)) for r in records]
+
+
+def _half_rules(with_entities) -> dict:
+    tagged = _tagged(with_entities[:16])
+    return {
+        "r.board": {"fires": tuple(tagged[:8]), "does_not_fire": tuple(tagged[8:])},
+        "r.unread": {"fires": tuple(tagged[:2]), "does_not_fire": tuple(tagged[2:4])},
+    }
+
+
+def _half_errors(stratum: str, half: str) -> dict:
+    errors = {item_key(stratum, half, DEVIANCE, name): {"hard": 0.05, "soft": 0.05}
+              for name in KEPT_ITEMS}
+    for name in ("affected_unkept", "verdict.affordable"):
+        errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.5, "soft": 0.5}
+    return errors
+
+
+def _half_items(held) -> tuple[dict, dict, dict, tuple]:
+    """One half's probes, grids, rule tests and deviance sample over its records."""
+    with_entities = [r for r in held if r.state.entities]
+    grid = {"grid": FrozenGrid(
+        (GridCell("low", (0.0,) * 4), GridCell("high", (1.0,) * 4)),
+        tuple(_tagged(with_entities[:4])))}
+    samples = tuple(SampleRecord(r.record_id, r.game_id, 0) for r in held[:70])
+    return _half_probes(held, with_entities), grid, _half_rules(with_entities), samples
+
+
+def _held_by_half(records, halves) -> dict:
+    return {half: [r for r in records if r.game_id in set(held)] for half, held in halves.items()}
+
+
 def _selection(records) -> SelectionSet:
     """Both strata hold every fixture game, split in two by game; each half
     holds items over its own games' records."""
     games = sorted({r.game_id for r in records})
     halves = {"selection": games[::2], "reporting": games[1::2]}
-    by_half = {half: [r for r in records if r.game_id in set(held)]
-               for half, held in halves.items()}
+    by_half = _held_by_half(records, halves)
     probes, grids, rules, samples, errors = {}, {}, {}, {}, {}
     for stratum in STRATA:
         probes[stratum], grids[stratum], rules[stratum], samples[stratum] = {}, {}, {}, {}
         for half, held in by_half.items():
-            with_entities = [r for r in held if r.state.entities]
-            probes[stratum][half] = {
-                "dies": tuple(ProbeRecord(r.record_id, r.game_id, r.state.entities[0].id,
-                                          float(i % 2)) for i, r in enumerate(with_entities[:12])),
-                "affordable": tuple(ProbeRecord(r.record_id, r.game_id, None, float(i % 2))
-                                    for i, r in enumerate(held[:10])),
-            }
-            grids[stratum][half] = {"grid": FrozenGrid(
-                (GridCell("low", (0.0,) * 4), GridCell("high", (1.0,) * 4)),
-                tuple(TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
-                      for r in with_entities[:4]))}
-            tagged = [TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
-                      for r in with_entities[:16]]
-            rules[stratum][half] = {
-                "r.board": {"fires": tuple(tagged[:8]), "does_not_fire": tuple(tagged[8:])},
-                "r.unread": {"fires": tuple(tagged[:2]), "does_not_fire": tuple(tagged[2:4])},
-            }
-            samples[stratum][half] = tuple(SampleRecord(r.record_id, r.game_id, 0)
-                                           for r in held[:70])
-            for name in KEPT_ITEMS:
-                errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.05, "soft": 0.05}
-            for name in ("affected_unkept", "verdict.affordable"):
-                errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.5, "soft": 0.5}
+            items = _half_items(held)
+            (probes[stratum][half], grids[stratum][half],
+             rules[stratum][half], samples[stratum][half]) = items
+            errors.update(_half_errors(stratum, half))
     return SelectionSet(
         corpus_digest="fixture", r=4,
         halves={s: {h: tuple(g) for h, g in halves.items()} for s in STRATA},
@@ -465,15 +488,24 @@ class _TextEditor(_Editor):
                               (TextOverride(key, "edited text", original),))]
 
 
+def _selection_edited_grids(selection: SelectionSet, with_ability) -> SelectionSet:
+    """The selection half's grid over ``with_ability`` in every stratum."""
+    cells = (GridCell("low", (0.0,) * len(with_ability)),
+             GridCell("high", (1.0,) * len(with_ability)))
+    grid = {"grid": FrozenGrid(cells, tuple(_tagged(with_ability)))}
+    grids = {stratum: {**by_half, "selection": grid}
+             for stratum, by_half in selection.grids.items()}
+    return replace(selection, grids=grids)
+
+
+def _with_ability_in(records, games) -> list:
+    return [r for r in records if r.ability and r.state.entities and r.game_id in set(games)][:3]
+
+
 def test_a_grid_cell_can_read_an_edited_ability_text(run, records):
     selection = _selection(records)
-    with_ability = [r for r in records if r.ability and r.state.entities
-                    and r.game_id in set(selection.halves["card-disjoint"]["selection"])][:3]
-    grids = {stratum: {**by_half, "selection": {"grid": FrozenGrid(
-        (GridCell("low", (0.0,) * len(with_ability)), GridCell("high", (1.0,) * len(with_ability))),
-        tuple(TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
-              for r in with_ability))}} for stratum, by_half in selection.grids.items()}
-    selection = replace(selection, grids=grids)
+    with_ability = _with_ability_in(records, selection.halves["card-disjoint"]["selection"])
+    selection = _selection_edited_grids(selection, with_ability)
     spy = _Spy(run.preparer)
     scorer = ControlScorer.prepare(
         FrozenSelection(selection, dict.fromkeys(STRATA, lambda: [records])),
