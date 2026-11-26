@@ -363,6 +363,16 @@ class CardLine:
             return None
         return normalize_keyword(self.fragment)
 
+    def carries(self, keyword: str, fragment: str) -> bool:
+        """Whether this line, in force, already is the grant of ``keyword``
+        written ``fragment``: it has the fragment or, for a fragment carrying
+        no value after a colon, the keyword."""
+        if not self.in_force:
+            return False
+        if self.fragment == fragment:
+            return True
+        return ":" not in fragment and self.keyword == normalize_keyword(keyword)
+
 
 def printed_keys_of(lines: tuple[CardLine, ...]) -> tuple[ProvenanceKey, ...]:
     """A gen-3 entity's ``printed``: the keys of the lines printed on it.
@@ -644,10 +654,7 @@ class EntityState:
         if keyword not in granted.keywords:
             entity = replace(entity, granted_temporary=replace(
                 granted, keywords=(*granted.keywords, keyword)))
-        valued = ":" in fragment
-        if any(line.in_force and (line.fragment == fragment
-                                  or (not valued and line.keyword == normalize_keyword(keyword)))
-               for line in entity.lines):
+        if any(line.carries(keyword, fragment) for line in entity.lines):
             return entity
         line = CardLine(keys=(), kind=LineKind.KEYWORD.value, granted=True,
                         grant=LineGrant.EFFECT.value, fragment=fragment)
