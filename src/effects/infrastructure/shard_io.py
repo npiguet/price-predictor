@@ -101,7 +101,7 @@ class DecodeTally:
     each shard whose last gzip member was damaged, which ends its read.
 
     One per read the caller wants reported: pass it as ``tally=`` to the
-    readers that take one (``read_shard``, ``read_window``), which fill it as
+    readers that take one (``iter_shard_lines``, ``read_shard``, ``read_window``), which fill it as
     they go. A caller whose workers read shards sums what each hands back
     (:meth:`merge`); a worker that reads shard after shard empties its own
     between them (:meth:`take`).
@@ -235,7 +235,7 @@ def _numbered_lines(
             yield number, line
 
 
-def iter_shard_lines(path: Path) -> Iterator[str]:
+def iter_shard_lines(path: Path, *, tally: DecodeTally | None = None) -> Iterator[str]:
     """Every complete, non-blank line of a shard, its terminator stripped.
 
     One shape for both spellings, so a caller that writes lines back adds the
@@ -243,9 +243,10 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     reader ignores them, and a copy that kept them would be the one place
     they survived. A truncated final gzip member, a damaged one with no
     member after it, or a trailing partial line, ends the stream; a damaged
-    member before the last raises :class:`CorruptShardError`.
+    member before the last raises :class:`CorruptShardError`. A damaged last
+    member is noted in ``tally``.
     """
-    for _number, line in _numbered_lines(path):
+    for _number, line in _numbered_lines(path, tally):
         yield line
 
 
