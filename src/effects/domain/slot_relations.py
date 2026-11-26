@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from effects.domain.card_features import (
-    face_state_of,
-)
 from effects.domain.input_layout import (
     ACT_SLOT,
     Slot,
@@ -119,7 +116,7 @@ class SlotRelations:
         """What :meth:`_name_relations` reads of the card at slot ``start``:
         its name, the names it chose, and whether it is a last-known copy."""
         # A face-down card's name would be its real face's: it has none here.
-        if entity.name and face_state_of(entity) != FaceState.FACE_DOWN:
+        if entity.name and entity.face_state != FaceState.FACE_DOWN:
             self._named.setdefault(name_key(entity.name), []).append(start)
         if entity.chosen is not None and entity.chosen.names:
             self._chosen_names.append((start, entity.chosen.names))

@@ -37,7 +37,8 @@ def test_off_builds_a_model_without_value_parameters():
     from effects.domain.effect_model import EffectModel, EffectModelConfig
 
     config = EffectModelConfig(global_features=2, act_features=2, player_features=2,
-                               card_features=2, d_model=8, n_heads=2, n_layers=1, ff_dim=16,
+                               card_features=2, ability_features=2, d_model=8, n_heads=2,
+                               n_layers=1, ff_dim=16,
                                relation_values=False)
     names = dict(EffectModel(config).named_parameters())
     assert "trunk.layers.0.rel_k" in names and "trunk.layers.0.rel_v" not in names

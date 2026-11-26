@@ -15,7 +15,7 @@ def _checkpoint(drop=(), *, encoder_state=None):
 
     config = EffectModelConfig(
         global_features=3, act_features=3, player_features=3, card_features=3,
-        e_dim=4, vocab_size=10, n_api_types=2, n_param_keys=2,
+        ability_features=3, e_dim=4, vocab_size=10, n_api_types=2, n_param_keys=2,
         encoder_d_model=8, d_model=8, n_layers=1, n_heads=2, ff_dim=16,
     )
     torch.manual_seed(0)

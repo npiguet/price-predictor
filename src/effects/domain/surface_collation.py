@@ -26,8 +26,8 @@ class TrunkInputs:
     Each slot kind's features sit in a ``(batch, slots, width)`` tensor of
     their own, zero at the slots of other kinds. ``e_rows`` names the row of
     the batch's ``e`` matrix each slot reads (``-1`` where its ``e`` is in
-    ``e_vectors`` already); :meth:`with_e` resolves it on the device. Without
-    ``option_kinds`` every row reads as an ordinary one.
+    ``e_vectors`` already); :meth:`with_e` resolves it on the device.
+    ``option_kinds`` marks a charm mode's ``option`` rows.
     """
 
     slot_features: dict[SlotKind, torch.Tensor]
@@ -35,7 +35,7 @@ class TrunkInputs:
     positions: torch.Tensor
     e_vectors: torch.Tensor
     attention_mask: torch.Tensor
-    option_kinds: torch.Tensor | None = None
+    option_kinds: torch.Tensor
     e_rows: torch.Tensor | None = None
     #: ``(N, 4)`` long ``[batch row, from slot, to slot, relation type]``; None
     #: or empty where the batch holds no relation (root spec § 10.1).
@@ -62,7 +62,7 @@ class TrunkInputs:
             positions=move(self.positions),
             e_vectors=move(self.e_vectors),
             attention_mask=move(self.attention_mask),
-            option_kinds=moved(self.option_kinds),
+            option_kinds=move(self.option_kinds),
             e_rows=moved(self.e_rows),
             relations=moved(self.relations),
             subtype_ids=moved(self.subtype_ids),
@@ -131,7 +131,7 @@ def collate_surfaces(
     option_kinds = np.zeros((batch, width), dtype=np.int64)
     relations = np.array(
         [(row, i, j, r) for row, surface in enumerate(surfaces)
-         for i, j, r in getattr(surface, "relations", ())],
+         for i, j, r in surface.relations],
         dtype=np.int64).reshape(-1, 4)
 
     id_lists = _id_lists(surfaces, width)

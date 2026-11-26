@@ -51,6 +51,7 @@ from effects.domain.state_snapshot import (
     CommandZoneObject,
     EntityRole,
     EntityState,
+    FaceState,
     LineGrant,
     LineRef,
     StateSnapshot,
@@ -92,10 +93,11 @@ def _makers(state: StateSnapshot) -> dict[str, str]:
 
 
 def _command_zone_card(found: CommandZoneObject, controller: str) -> EntityState:
-    """A command-zone object as a card: its lines its source lines, each
-    granted by an effect."""
+    """A command-zone object as a face-up card: its lines its source lines,
+    each granted by an effect."""
     return EntityState(
         id=found.id, name="", zone=Zone.COMMAND.value, controller=controller,
+        face_state=FaceState.FRONT.value,
         lines=tuple(
             CardLine(keys=(key,), kind=key.trait_kind, granted=True,
                      grant=LineGrant.EFFECT.value)

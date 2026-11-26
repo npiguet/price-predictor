@@ -40,7 +40,7 @@ from effects.infrastructure.effect_model_store import (
 
 _MODEL_CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
-    e_dim=4, vocab_size=32, n_api_types=5, n_param_keys=7,
+    ability_features=7, e_dim=4, vocab_size=32, n_api_types=5, n_param_keys=7,
     d_model=16, n_layers=1, n_heads=2, ff_dim=32,
 )
 _ENCODER_CONFIG = AbilityEncoderConfig(

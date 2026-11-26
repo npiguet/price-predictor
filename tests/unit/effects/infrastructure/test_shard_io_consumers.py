@@ -60,7 +60,7 @@ def _evaluate(root: Path, corpus: Path) -> None:
     keywords.write_text("{}", encoding="utf-8")
     model = EffectModelConfig(
         global_features=3, act_features=3, player_features=3, card_features=3,
-        e_dim=4, d_model=8, n_layers=1, n_heads=2, ff_dim=16,
+        ability_features=3, e_dim=4, d_model=8, n_layers=1, n_heads=2, ff_dim=16,
     )
     torch.manual_seed(0)
     encoder = AbilityEncoderConfig(vocab_size=10, e_dim=4, d_model=8, n_layers=1)

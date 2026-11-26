@@ -56,8 +56,8 @@ class EffectModelConfig:
     act_features: int
     player_features: int
     card_features: int
-    #: The ``[ABILITY]`` slot's line flags; 0 builds no projection for them.
-    ability_features: int = 0
+    #: The ``[ABILITY]`` slot's line flags.
+    ability_features: int
     e_dim: int = 256
     vocab_size: int = 0
     n_api_types: int = 0
@@ -139,9 +139,7 @@ class EffectModel(nn.Module):
         self.act_proj = nn.Linear(config.act_features, d)
         self.player_proj = nn.Linear(config.player_features, d)
         self.card_proj = nn.Linear(config.card_features, d)
-        self.ability_proj = (
-            nn.Linear(config.ability_features, d) if config.ability_features else None
-        )
+        self.ability_proj = nn.Linear(config.ability_features, d)
         self.e_proj = nn.Linear(config.e_dim, d)
         # One row per subtype, summed into a card slot; a chosen creature type
         # reads the same rows through its own map (root spec § 9.4).
@@ -217,10 +215,9 @@ class EffectModel(nn.Module):
             + self.e_proj(inputs.e_vectors)
             + self.slot_kind_embedding(inputs.slot_kinds)
             + self.position_embedding(inputs.positions)
+            + self.option_kind_embedding(inputs.option_kinds)
         )
-        if inputs.option_kinds is not None:
-            hidden = hidden + self.option_kind_embedding(inputs.option_kinds)
-        if self.ability_proj is not None and SlotKind.ABILITY in features:
+        if SlotKind.ABILITY in features:
             hidden = hidden + self.ability_proj(features[SlotKind.ABILITY])
         hidden = hidden + self._card_ids(inputs)
         hidden = self.dropout(hidden)

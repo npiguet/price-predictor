@@ -237,7 +237,7 @@ def build_run(spec: RunSpec, preparer: StepPreparer, *, device: torch.device) ->
         act_features=widths[SlotKind.ACT],
         player_features=widths[SlotKind.PLAYER],
         card_features=widths[SlotKind.CARD],
-        ability_features=widths.get(SlotKind.ABILITY, 0),
+        ability_features=widths[SlotKind.ABILITY],
         e_dim=config.e_dim,
         vocab_size=vocab_size,
         n_api_types=len(preparer.api_types),

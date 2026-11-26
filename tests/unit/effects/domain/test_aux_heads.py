@@ -122,7 +122,8 @@ class TestTheGlobalHead:
         from effects.domain.effect_model import EffectModel, EffectModelConfig
 
         model = EffectModel(EffectModelConfig(
-            global_features=4, act_features=4, player_features=4, card_features=4, e_dim=8,
+            global_features=4, act_features=4, player_features=4, card_features=4,
+            ability_features=4, e_dim=8,
             d_model=16, n_layers=1, n_heads=2, ff_dim=32,
         ))
         hidden = torch.randn(3, 5, 16)

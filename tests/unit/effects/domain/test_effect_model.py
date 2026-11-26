@@ -14,7 +14,7 @@ from effects.domain.surface_collation import TrunkInputs
 
 _CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
-    e_dim=4, vocab_size=32, n_api_types=5, n_param_keys=7,
+    ability_features=7, e_dim=4, vocab_size=32, n_api_types=5, n_param_keys=7,
     d_model=16, n_layers=1, n_heads=2, ff_dim=32,
 )
 
@@ -46,6 +46,7 @@ def _surface(batch: int = 2, slots: int = 6):
         positions=torch.tensor([[0, 1, 2, 3, 0, 1]] * batch),
         e_vectors=torch.zeros(batch, slots, _CONFIG.e_dim),
         attention_mask=torch.ones(batch, slots, dtype=torch.long),
+        option_kinds=torch.zeros(batch, slots, dtype=torch.long),
     )
 
 
@@ -63,8 +64,8 @@ class TestTrainingOnlyHeads:
     def test_the_auxiliaries_are_absent_when_unconfigured(self):
         bare = EffectModel(EffectModelConfig(
             global_features=8, act_features=6, player_features=10,
-            card_features=12, e_dim=4, d_model=16, n_layers=1, n_heads=2,
-            ff_dim=32,
+            card_features=12, ability_features=7, e_dim=4, d_model=16, n_layers=1,
+            n_heads=2, ff_dim=32,
         ))
         assert bare.mlm_head is None
         assert bare.api_type_head is None
@@ -75,7 +76,7 @@ class TestConfig:
         with pytest.raises(ValueError, match="divisible"):
             EffectModelConfig(
                 global_features=8, act_features=6, player_features=10,
-                card_features=12, d_model=10, n_heads=4,
+                card_features=12, ability_features=7, d_model=10, n_heads=4,
             )
 
 
@@ -118,7 +119,7 @@ class TestGen2Heads:
     def test_the_mlm_head_is_sized_from_the_encoders_width(self):
         model = EffectModel(EffectModelConfig(
             global_features=8, act_features=6, player_features=10, card_features=12,
-            e_dim=4, vocab_size=32, encoder_d_model=48,
+            ability_features=7, e_dim=4, vocab_size=32, encoder_d_model=48,
             d_model=16, n_layers=1, n_heads=2, ff_dim=32,
         ))
         assert model.mlm_head.in_features == 48
@@ -177,16 +178,15 @@ class TestRelationTrunk:
 class TestGen3Inputs:
     """T111-T112: the line-flag projection and the card slot's id tables."""
 
-    def _model(self, ability_features: int = 0) -> EffectModel:
+    def _model(self) -> EffectModel:
         torch.manual_seed(0)
-        return EffectModel(replace(_CONFIG, ability_features=ability_features)).eval()
+        return EffectModel(_CONFIG).eval()
 
-    def test_a_model_without_line_flags_builds_no_projection(self):
-        assert self._model().ability_proj is None
-        assert self._model(7).ability_proj.in_features == 7
+    def test_the_line_flags_have_a_projection(self):
+        assert self._model().ability_proj.in_features == 7
 
     def test_the_line_flags_reach_the_trunk(self):
-        model = self._model(7)
+        model = self._model()
         batch = _surface()
         features = dict(batch.slot_features)
         features[SlotKind.ABILITY] = torch.zeros(2, 6, 7)

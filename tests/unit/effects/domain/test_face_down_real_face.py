@@ -14,7 +14,7 @@ from dataclasses import replace
 
 import pytest
 
-from effects.domain.card_features import card_features, card_segments, face_state_of
+from effects.domain.card_features import card_features, card_segments
 from effects.domain.input_layout import SlotKind
 from effects.domain.slot_lines import slot_lines
 from effects.domain.state_snapshot import FaceState
@@ -49,7 +49,7 @@ def _surface(record):
 
 def test_the_real_faces_lines_are_written_inactive(record):
     card = record.state.entity("E22")
-    assert face_state_of(card) == FaceState.FACE_DOWN
+    assert card.face_state == FaceState.FACE_DOWN
     assert card.real_face.name == "Antagonize"
     assert card.lines and all(line.active is False for line in card.lines)
     assert [line.active for line in slot_lines(card)] == [False] * len(card.lines)

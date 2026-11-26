@@ -52,7 +52,6 @@ from effects.domain.state_snapshot import (
     CommandZoneObject,
     CostsPaid,
     EntityState,
-    FaceState,
     StateSnapshot,
 )
 
@@ -145,16 +144,10 @@ def _push_characteristics(out: list[float], card: CardContext) -> None:
     out.append(1.0 if entity.token_script_id is not None else 0.0)
 
 
-def face_state_of(entity: EntityState) -> str:
-    """Which face is up: the record's ``face_state``."""
-    return entity.face_state if entity.face_state is not None else FaceState.FRONT.value
-
-
 def _push_face_state(out: list[float], card: CardContext) -> None:
     """Face state one-hot (``in.face_state``). A face-down card's real face
     is the next part's; its lines enter as inactive ability slots."""
-    entity = card.entity
-    out += one_hot(face_state_of(entity), FACE_STATES)
+    out += one_hot(card.entity.face_state, FACE_STATES)
 
 
 #: What :func:`_push_real_face` writes for a card with no real face.

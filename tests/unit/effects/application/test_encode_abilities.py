@@ -51,7 +51,7 @@ _SAVED_ENCODER = AbilityEncoderConfig(
 
 _MODEL_CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
-    e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2, ff_dim=32,
+    ability_features=7, e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2, ff_dim=32,
 )
 
 

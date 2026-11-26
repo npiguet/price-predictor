@@ -17,7 +17,7 @@ def _modules():
         vocab_size=16, d_model=8, n_layers=1, n_heads=2))
     model = EffectModel(EffectModelConfig(
         global_features=4, act_features=4, player_features=4, card_features=4,
-        e_dim=4, vocab_size=16, n_api_types=3, n_param_keys=5,
+        ability_features=4, e_dim=4, vocab_size=16, n_api_types=3, n_param_keys=5,
         encoder_d_model=8, d_model=8, n_layers=1, n_heads=2, ff_dim=16))
     return encoder, model, IdentityTable(["a", "b"], 4)
 

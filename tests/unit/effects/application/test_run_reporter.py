@@ -9,7 +9,8 @@ def test_the_relation_tables_norms_are_reported_beside_the_groups():
     from effects.domain.effect_model import EffectModel, EffectModelConfig
 
     model = EffectModel(EffectModelConfig(global_features=2, act_features=2, player_features=2,
-                                          card_features=2, d_model=8, n_heads=2, n_layers=2,
+                                          card_features=2, ability_features=2, d_model=8,
+                                          n_heads=2, n_layers=2,
                                           ff_dim=16))
     tables = relation_tables(model)
     assert {name: len(params) for name, params in tables.items()} == {

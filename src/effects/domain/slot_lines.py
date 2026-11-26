@@ -106,9 +106,7 @@ def slot_lines(
 
     Gen-3: every line, in force or not (a face not up, an unmet static, the
     real face of a face-down card are slots flagged inactive), with the
-    line's own ``grant``; a granted line of a record written before
-    ``grant`` existed reads none, as nothing else says why it is granted. A
-    line with no key is read through :func:`keyword_line_key` where it is a
+    line's own ``grant``. A line with no key is read through :func:`keyword_line_key` where it is a
     keyword line, and has no slot otherwise. A keyword counter whose keyword
     no line carries adds a keyword line granted by the counter.
     """
