@@ -13,6 +13,7 @@ from effects.application.host_cache import (
     _Coo,
     _Narrow,
     _RowDiff,
+    _Rows,
     host_bytes,
     map_tensors,
     pack,
@@ -69,6 +70,36 @@ class TestEachForm:
     def test_a_tensor_of_one_dimension_is_left_as_it_is(self):
         tensor = torch.arange(5)
         assert pack(tensor) is tensor
+
+
+class TestNegativeZero:
+    """The cache keeps a -0.0 as -0.0: a zero is the bit pattern of zero."""
+
+    def _round_trip(self, packed, original):
+        out = unpack(packed)
+        assert torch.equal(out, original)
+        assert torch.equal(torch.signbit(out), torch.signbit(original))
+
+    def test_a_sparse_tensor_keeps_its_negative_zeros(self):
+        cards = _sparse_cards()
+        cards[0, 0, :4] = -0.0
+        packed = pack(cards)
+        assert isinstance(packed, _Coo)
+        self._round_trip(packed, cards)
+
+    def test_rows_keep_a_row_whose_only_non_zero_is_negative_zero(self):
+        cards = torch.zeros((4, 6, 9))
+        cards[1, 2, 5] = -0.0
+        self._round_trip(_Rows.of(cards), cards)
+        self._round_trip(pack(cards), cards)
+
+    def test_a_row_diff_keeps_a_cell_that_differs_by_its_sign_bit_alone(self):
+        cells = _sparse_cards(rows=1).repeat(16, 1, 1)
+        cells[3, 0, 0] = 0.0
+        cells[5, 0, 0] = -0.0
+        packed = _RowDiff.of(cells)
+        self._round_trip(packed, cells)
+        self._round_trip(pack(cells, rows=16), cells)
 
 
 class TestRowsOfOneRecord:

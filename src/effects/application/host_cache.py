@@ -61,6 +61,22 @@ def _narrowest(tensor: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
+def _present(tensor: torch.Tensor) -> torch.Tensor:
+    """Which elements are not the bit pattern of zero: a float's negative zero
+    counts as present, so the cache returns it with its sign bit."""
+    present = tensor != 0
+    return present | torch.signbit(tensor) if tensor.is_floating_point() else present
+
+
+def _differs(tensor: torch.Tensor, first: torch.Tensor) -> torch.Tensor:
+    """Which elements differ from ``first``'s (broadcast), a float's sign bit
+    included."""
+    differs = tensor != first
+    if tensor.is_floating_point():
+        differs = differs | (torch.signbit(tensor) != torch.signbit(first))
+    return differs
+
+
 def _positions(count: int, positions: torch.Tensor) -> torch.Tensor:
     """Flat positions as int32 where every position fits it."""
     return positions.to(torch.int32) if count <= torch.iinfo(torch.int32).max else positions
@@ -78,7 +94,7 @@ class _Coo:
     @classmethod
     def of(cls, tensor: torch.Tensor) -> _Coo:
         flat = tensor.reshape(-1)
-        index = flat.nonzero().squeeze(1)
+        index = _present(flat).nonzero().squeeze(1)
         return cls(tuple(tensor.shape), tensor.dtype, _positions(flat.numel(), index),
                    _narrowest(flat[index]))
 
@@ -107,7 +123,7 @@ class _Rows:
     def of(cls, tensor: torch.Tensor) -> _Rows:
         width = tensor.shape[-1] if tensor.dim() >= 3 else 1
         flat = tensor.reshape(-1, width)
-        rows = (flat != 0).any(-1).nonzero().squeeze(1)
+        rows = _present(flat).any(-1).nonzero().squeeze(1)
         return cls(tuple(tensor.shape), tensor.dtype, rows.to(torch.int32), flat[rows])
 
     def dense(self) -> torch.Tensor:
@@ -176,7 +192,7 @@ class _RowDiff:
     def of(cls, tensor: torch.Tensor) -> _RowDiff:
         first = tensor[:1]
         flat = tensor.reshape(-1)
-        index = (tensor != first).reshape(-1).nonzero().squeeze(1)
+        index = _differs(tensor, first).reshape(-1).nonzero().squeeze(1)
         values = flat[index]
         if tensor.dtype != torch.bool:
             values = _narrowest(values)
@@ -273,7 +289,7 @@ def _single(tensor: torch.Tensor):
     if tensor.dtype == torch.bool:
         options.append(_Bits.of(tensor))
     elif tensor.is_floating_point():
-        nonzero = int(torch.count_nonzero(tensor))
+        nonzero = int(_present(tensor).sum())
         if nonzero * 8 < _bytes(tensor):
             options.append(_Coo.of(tensor))
         if tensor.dim() >= 2:

@@ -41,6 +41,7 @@ from typing import Any, TypeVar
 
 from effects.domain.canonical_digest import canonical_sha256
 from effects.domain.seeded_draw import keyed_hash
+from price_predictor.infrastructure.atomic_write import write_atomically
 
 #: The balance ratio r (research E3): in a half, one polarity of a rule, one
 #: probe type or one record-drawn grid cell holds at most r times the records
@@ -432,7 +433,10 @@ def write_selection_set(path: Path, selection: SelectionSet) -> Path:
 
     A set already at ``path`` is never replaced by another: checkpoints were
     selected against it, so a different one is refused
-    (:class:`SelectionSetError`) and the same one leaves the file as it is.
+    (:class:`SelectionSetError`) and the same one leaves the file as it is. The
+    file is written beside ``path`` and moved onto it, so a kill or a replace
+    refused (a file another process holds, on Windows) leaves no truncated set,
+    and the refusal names ``path``.
     """
     sealed = selection if selection.digest else selection.sealed()
     path = Path(path)
@@ -449,11 +453,14 @@ def write_selection_set(path: Path, selection: SelectionSet) -> Path:
             "corpus were selected against the one on disk; delete it first to "
             "replace it."
         )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump(sealed.to_json(), handle, indent=1, sort_keys=True)
-        handle.write("\n")
+    write_atomically(path, lambda temporary: _write_json(temporary, sealed))
     return path
+
+
+def _write_json(path: Path, selection: SelectionSet) -> None:
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        json.dump(selection.to_json(), handle, indent=1, sort_keys=True)
+        handle.write("\n")
 
 
 def load_selection_set(path: Path, corpus_digest: str) -> SelectionSet:

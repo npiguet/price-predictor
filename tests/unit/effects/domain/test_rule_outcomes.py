@@ -71,6 +71,23 @@ class TestStepDeaths:
         assert step_deaths(
             attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1]), step) == expected
 
+    @pytest.mark.parametrize("attacker, blocker, keywords, step, expected", [
+        # 704.5f: toughness 0 or less is put into the graveyard, indestructible or not.
+        ((1, 1, 0), (0, 0, 0), ({}, {"indestructible"}), "regular", (False, True)),
+        ((1, -1, 0), (1, 2, 0), ({"indestructible"}, {}), "first_strike", (True, False)),
+        # 702.2b: deathtouch needs damage dealt, and a 0-power source deals none.
+        ((0, 3, 0), (3, 3, 0), ({"deathtouch"}, {}), "regular", (True, False)),
+        ((0, 4, 0), (3, 3, 0), ({"deathtouch"}, {}), "regular", (False, False)),
+        # 704.5g: indestructible stops lethal damage, deathtouch's included.
+        ((1, 5, 0), (1, 5, 0), ({"deathtouch"}, {"indestructible"}), "regular", (False, False)),
+        # 510.4: two first strikers deal damage together in the first-strike step.
+        ((3, 3, 0), (3, 3, 0), ({"first_strike"}, {"first_strike"}), "first_strike", (True, True)),
+        ((3, 3, 0), (3, 3, 0), ({"first_strike"}, {"first_strike"}), "regular", (False, False)),
+    ])
+    def test_the_hard_cases(self, attacker, blocker, keywords, step, expected):
+        assert step_deaths(
+            attacker, blocker, frozenset(keywords[0]), frozenset(keywords[1]), step) == expected
+
     @pytest.mark.parametrize("keywords, step, strikes", [
         (set(), "regular", True),
         (set(), "first_strike", False),
@@ -131,6 +148,25 @@ class TestMayBlock:
     def test_the_keyword_list_states_everything_and_each_colour(self, keyword, expected):
         assert may_block(Combatant.made((keyword,), ("R",)),
                          Combatant.made((), ("G",), ("creature",))) is expected
+
+
+    def test_a_colourless_artifact_attacker_with_intimidate_is_blocked_by_artifacts_only(self):
+        """702.13a: only by artifact creatures and creatures sharing a colour with it,
+        and a colourless attacker shares none."""
+        attacker = Combatant.made(("intimidate",), (), ("artifact", "creature"))
+        assert may_block(attacker, Combatant.made((), (), ("artifact", "creature")))
+        assert may_block(attacker, Combatant.made((), ("G",), ("artifact", "creature")))
+        assert not may_block(attacker, Combatant.made((), ("G",), ("creature",)))
+        assert not may_block(attacker, Combatant.made((), (), ("creature",)))
+
+    def test_a_changeling_blocker_is_every_creature_type(self):
+        """702.73a: it has the creature type a protection names."""
+        goblins = (ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"),)
+        attacker = Combatant.made((), ("R",))
+        changeling = Combatant.made(("changeling",), ("G",), ("creature",))
+        assert not may_block(attacker, changeling, attacker_protections=goblins)
+        assert may_block(attacker, Combatant.made((), ("G",), ("creature",), ("elf",)),
+                         attacker_protections=goblins)
 
 
 class TestProtectionQuality:

@@ -93,7 +93,7 @@ def step_deaths(
     first-strike step, a creature without first strike or with double strike in the
     regular step, both creatures striking in a step at once. Lethal damage is marked
     damage at least the toughness, or any damage from a deathtouch source;
-    indestructible survives both.
+    indestructible survives both, but not toughness 0 or less (704.5f).
     """
     power = {"a": attacker[0], "b": blocker[0]}
     toughness = {"a": attacker[1], "b": blocker[1]}
@@ -106,10 +106,16 @@ def step_deaths(
         marked[other[side]] += power[side]
         if "deathtouch" in keywords[side]:
             deathtouched[other[side]] = True
-    dead = {side: "indestructible" not in keywords[side]
-            and (marked[side] >= toughness[side] or deathtouched[side])
+    dead = {side: _dies(toughness[side], marked[side], deathtouched[side],
+                        "indestructible" in keywords[side])
             for side in ("a", "b")}
     return dead["a"], dead["b"]
+
+
+def _dies(toughness: int, marked: int, deathtouched: bool, indestructible: bool) -> bool:
+    """704.5f: toughness 0 or less dies whatever it has; 704.5g and 702.2b:
+    lethal or deathtouch damage kills what is not indestructible."""
+    return toughness <= 0 or (not indestructible and (marked >= toughness or deathtouched))
 
 
 # ── protection (702.16) ──────────────────────────────────────────────────

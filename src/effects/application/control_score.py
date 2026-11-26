@@ -989,8 +989,8 @@ class ControlScorer:
 
         ``fields`` are every field set the run's epochs score (the curriculum's
         before and after its switch): the deviance steps are prepared over
-        their union. ``mask`` is the run's ``--rule-mask`` (None reads every
-        copy at full weight). ``half`` is the selection half for a training
+        their union. ``mask`` is the run's ``--rule-mask`` (None reads it as
+        ``hard``, the default). ``half`` is the selection half for a training
         run, which never reads the reporting half; ``components`` narrows what
         is prepared and scored. Raises :class:`ControlScoreError` on a
         component with no item to read, unless not ``strict``.
@@ -1076,13 +1076,14 @@ class ControlScorer:
             return values
         batches = (unpack(chunk.batch) for chunk in cache.chunks)
         positions, reads = [], []
-        for chunk, outputs in zip(cache.chunks, forward.prepared(batches)):
-            if not chunk.groups:
-                continue
-            heads = _Heads(outputs, chunk.index)
-            reads.append(torch.cat([group.read(heads, group.rows, group.columns).float()
-                                    .reshape(-1) for group in chunk.groups]))
-            positions.append(chunk.positions)
+        with forward.running():  # evaluation mode until every read is taken, however it ends
+            for chunk, outputs in zip(cache.chunks, forward.prepared(batches)):
+                if not chunk.groups:
+                    continue
+                heads = _Heads(outputs, chunk.index)
+                reads.append(torch.cat([group.read(heads, group.rows, group.columns).float()
+                                        .reshape(-1) for group in chunk.groups]))
+                positions.append(chunk.positions)
         if reads:  # one copy to the host per stratum, so no chunk waits on the device
             values[np.concatenate(positions)] = torch.cat(reads).cpu().numpy()
         return values

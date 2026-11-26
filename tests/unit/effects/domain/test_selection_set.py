@@ -145,6 +145,27 @@ def test_a_set_already_frozen_for_the_corpus_is_never_replaced_by_another(tmp_pa
     assert path.read_bytes() == before
 
 
+def test_a_replace_that_fails_names_the_path_and_leaves_no_half_written_file(
+        tmp_path, monkeypatch) -> None:
+    """The write goes through a temporary name and a replace: a replace refused
+    (a file another process holds, on Windows) raises naming the set's path and
+    leaves nothing at it, nor a temporary file beside it."""
+    import os
+
+    def locked(source, target):
+        raise PermissionError("locked")
+
+    path = selection_set_path(tmp_path, "abc123")
+    monkeypatch.setattr(os, "replace", locked)
+    with pytest.raises(OSError, match=r"selection-set-abc123\.json"):
+        write_selection_set(path, _selection())
+    assert list(tmp_path.iterdir()) == []
+    monkeypatch.undo()
+    write_selection_set(path, _selection())
+    assert load_selection_set(path, "abc123") == _selection().sealed()
+    assert [p.name for p in tmp_path.iterdir()] == [path.name]
+
+
 def test_infinite_standard_errors_are_written_as_null() -> None:
     assert error_value(math.inf) is None
     assert error_of(None) == math.inf

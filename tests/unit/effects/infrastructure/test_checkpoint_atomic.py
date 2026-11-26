@@ -11,7 +11,6 @@ import pytest
 import torch
 
 from effects.infrastructure.effect_model_store import EffectModelStore
-from price_predictor.infrastructure import torch_checkpoint
 from price_predictor.infrastructure.torch_checkpoint import (
     copy_atomically,
     write_atomically,
@@ -41,7 +40,7 @@ def test_an_interrupted_save_leaves_the_previous_latest_loadable(
         seen["temporary_written"] = os.path.exists(source)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(torch_checkpoint.os, "replace", interrupted)
+    monkeypatch.setattr(os, "replace", interrupted)
     with pytest.raises(KeyboardInterrupt):
         store.save(replace(_checkpoint(files), epoch=2))
     monkeypatch.undo()
@@ -57,7 +56,7 @@ def test_a_replace_onto_a_locked_file_raises_naming_the_path(tmp_path, monkeypat
     target = tmp_path / "latest.pt"
     target.write_bytes(b"old")
     monkeypatch.setattr(
-        torch_checkpoint.os, "replace", _failing_replace(PermissionError("locked")),
+        os, "replace", _failing_replace(PermissionError("locked")),
     )
     with pytest.raises(OSError, match=r"latest\.pt"):
         write_atomically(target, lambda temporary: temporary.write_bytes(b"new"))
@@ -71,7 +70,7 @@ def test_a_copy_goes_through_a_temporary_name_too(tmp_path, monkeypatch):
     target = tmp_path / "resume-best.pt"
     target.write_bytes(b"old")
     monkeypatch.setattr(
-        torch_checkpoint.os, "replace", _failing_replace(PermissionError("locked")),
+        os, "replace", _failing_replace(PermissionError("locked")),
     )
     with pytest.raises(OSError, match=r"resume-best\.pt"):
         copy_atomically(source, target)

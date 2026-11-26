@@ -43,6 +43,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.worker_log_mark": None,
     "price_predictor.infrastructure.forge_worker_pool": None,
     "price_predictor.infrastructure.torch_checkpoint": None,
+    "price_predictor.infrastructure.atomic_write": {"write_atomically"},
     "price_predictor.infrastructure.torch_training": {"clip_per_group"},
     "price_predictor.infrastructure.append_only": None,
     "price_predictor.infrastructure.card_filenames": {"sanitize_card_name"},
