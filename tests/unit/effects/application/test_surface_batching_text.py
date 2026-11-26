@@ -7,6 +7,7 @@ import torch
 from effects.application.mlm_masking import MlmMasker
 from effects.application.surface_batching import SurfaceBatcher
 from effects.domain.baselines import BaselineMasks
+from effects.domain.grid_edits import TextOverride
 from effects.domain.provenance import ProvenanceKey
 from tests.unit.effects.application.surface_batching_support import (
     _ACT,
@@ -95,7 +96,7 @@ def test_an_overridden_key_reads_its_text_with_the_real_line():
     """A counterfactual copy's acting key names no sidecar (FR-063e)."""
     batcher = _batcher()
     copy = ProvenanceKey("counterfactual/5/cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
-    batcher.override_text(copy, "deals 5 damage to any target", _ACT)
+    batcher.override_text(TextOverride(copy, "deals 5 damage to any target", _ACT))
     assert batcher.text_of(copy) == "deals 5 damage to any target"
     assert batcher.line_of(copy) is _LINES[_ACT]
     assert batcher.options_for(copy) == ()

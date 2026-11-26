@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import dataclasses
 import random
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import NamedTuple
 
 import torch
@@ -23,6 +23,7 @@ from effects.application.identity_table import (
 from effects.application.identity_table import IdentityTable
 from effects.application.mlm_masking import MaskedTokens, MlmMasker
 from effects.application.noise_state import NoiseState
+from effects.application.text_resolution import StagedLines, TextResolution
 from effects.application.text_staging import (
     StagedTexts,
     StageInputs,
@@ -32,11 +33,11 @@ from effects.application.text_staging import (
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
+from effects.domain.grid_edits import TextOverride
 from effects.domain.input_layout import ACT_SLOT, KIND_FLAG_WIDTH, SlotKind
-from effects.domain.keyword_names import normalize_keyword
-from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
+from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
-from effects.domain.slot_lines import keyword_line_fragment, slot_lines
+from effects.domain.slot_lines import slot_lines
 from effects.domain.slot_widths import layout_widths
 from effects.domain.surface_builder import NO_STRIP, SurfaceBuilder, board_entities
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
@@ -188,6 +189,17 @@ class SurfaceSpec:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class StepDraws:
+    """What a batcher draws with: its generator and the context-dropout
+    probability, the two that move with the step."""
+
+    context_dropout: float = 0.0
+    #: The step's generator: keyword expansion, context dropout and the MLM
+    #: mask draw from it, in that order. None is a generator seeded 0.
+    rng: random.Random | None = None
+
+
 class SurfaceBatcher:
     """Turns a list of records into the trunk's inputs.
 
@@ -198,25 +210,25 @@ class SurfaceBatcher:
     def __init__(
         self,
         *,
-        stager: TextStager,
-        resolver: KeyResolver,
+        text: TextResolution,
         spec: SurfaceSpec,
         materializer: Materializer | None = None,
-        context_dropout: float = 0.0,
-        rng: random.Random | None = None,
+        draws: StepDraws = StepDraws(),
     ) -> None:
-        self.stager = stager
-        #: The memoised key-to-text join; a step's batcher borrows the run's.
-        self.resolver = resolver
+        #: How a key becomes its text; a step's batcher borrows the run's join.
+        self.text = text
         self.spec = spec
         self.materializer = materializer
-        self.context_dropout = context_dropout
-        #: The step's generator: keyword expansion, context dropout and the MLM
-        #: mask draw from it, in that order.
-        self.rng = rng or random.Random(0)
-        #: ``key -> (text, line)`` for :meth:`override_text` keys, apart from
-        #: the resolver's memo because a copy's text belongs to its step alone.
-        self._overrides: dict[ProvenanceKey, tuple[str, SidecarLine | None]] = {}
+        self.context_dropout = draws.context_dropout
+        self.rng = draws.rng or random.Random(0)
+
+    @property
+    def stager(self) -> TextStager:
+        return self.text.stager
+
+    @property
+    def resolver(self) -> KeyResolver:
+        return self.text.resolver
 
     @property
     def sidecars(self) -> SidecarLookup:
@@ -226,63 +238,22 @@ class SurfaceBatcher:
     def surface(self) -> Surface:
         return self.stager.surface
 
-    def _resolve(self, key) -> tuple[str | None, SidecarLine | None]:
-        """``(text, line)`` for one key: its override, a keyword line's
-        reminder text, else the join."""
-        override = self._overrides.get(key)
-        if override is not None:
-            return override
-        fragment = keyword_line_fragment(key)
-        if fragment is not None:
-            return self._keyword_line_text(fragment), None
-        return self.resolver.resolve(key)
-
-    def _keyword_line_text(self, fragment: str) -> str:
-        """The text a keyword line with no script of its own is encoded from:
-        its keyword's reminder text, its values filled in (root spec § 9.2);
-        the fragment itself for a keyword the definitions do not expand."""
-        keywords = self.stager.tokenizer.keywords
-        line = keywords.line_of(fragment)
-        if line is None or not keywords.expands(line.name):
-            return fragment
-        return keywords.line_text(line.name, line.details) or fragment
-
     def text_of(self, key) -> str | None:
         """The text one ability key is encoded from, on this run's surface:
         its single definition. A key the sidecar does not describe raises."""
-        return self._resolve(key)[0]
+        return self.text.text_of(key)
 
     def line_of(self, key):
-        return self._resolve(key)[1]
+        return self.text.line_of(key)
 
-    def override_text(
-        self, key, text: str, like, *, script: str | None = None,
-        role_spans: tuple | None = None,
-    ) -> None:
-        """Make ``key`` read ``text`` for this batcher's life, with ``like``'s
-        line, its ``script`` and ``role_spans`` replaced where given (FR-063e)."""
-        line = self.line_of(like)
-        if line is not None and (script is not None or role_spans is not None):
-            line = replace(
-                line,
-                script_text=line.script_text if script is None else script,
-                role_spans=line.role_spans if role_spans is None else role_spans,
-            )
-        self._overrides[key] = (text, line)
+    def override_text(self, edit: TextOverride) -> None:
+        """Make ``edit.key`` read ``edit.text`` for this batcher's life
+        (``TextResolution.override``)."""
+        self.text.override(edit)
 
-    @contextmanager
-    def reading_as(self, key, text: str) -> Iterator[None]:
-        """Inside the block ``key`` reads ``text``, keeping its own line: how a
-        probe has the encoder read one edited script."""
-        previous = self._overrides.get(key)
-        self.override_text(key, text, like=key)
-        try:
-            yield
-        finally:
-            if previous is None:
-                del self._overrides[key]
-            else:
-                self._overrides[key] = previous
+    def reading_as(self, key, text: str) -> AbstractContextManager[None]:
+        """Inside the block ``key`` reads ``text``, keeping its own line."""
+        return self.text.reading_as(key, text)
 
     def batch_texts(self, records) -> dict[str, SidecarLine | None]:
         """Every ability text this batch's surfaces reference, to its line."""
@@ -312,41 +283,26 @@ class SurfaceBatcher:
     def _note(self, found: BatchLines, key) -> str | None:
         """``key``'s text into ``found``, with its line; None for a key that
         reads no text."""
-        text, line = self._resolve(key)
+        text, line = self.text.resolve(key)
         if text is not None:
             found.note(text, line)
         return text
 
     def options_for(self, key) -> tuple:
-        """The keys of the charm-mode lines that follow ``key``'s line
-        (FR-063a); none for an overridden key or a keyword line."""
-        if key in self._overrides or keyword_line_fragment(key) is not None:
-            return ()
-        return self.resolver.options_for(key)
+        return self.text.options_for(key)
 
     def board_keys(self, key) -> tuple:
-        """The keys a board line of ``key`` reads as slots: a saga's bare
-        keyword key is its chapter lines (``KeyResolver.board_keys``); an
-        overridden key or a keyword line is itself."""
-        if key in self._overrides or keyword_line_fragment(key) is not None:
-            return (key,)
-        return self.resolver.board_keys(key)
+        return self.text.board_keys(key)
 
     def room_of(self, key) -> str | None:
-        """The dungeon room ``key``'s line is (``KeyResolver.room_of``); none
-        for an overridden key or a keyword line."""
-        if key in self._overrides or keyword_line_fragment(key) is not None:
-            return None
-        return self.resolver.room_of(key)
+        return self.text.room_of(key)
 
-    def _keys_of(self, text: str) -> list:
-        """The keys resolved to ``text`` so far: how a truncation is named."""
-        overridden = [key for key, (known, _) in self._overrides.items() if known == text]
-        return self.resolver.keys_of(text) + overridden
+    def keyword_of_key(self, key) -> str | None:
+        return self.text.keyword_of_key(key)
 
     def stage(self, texts: Mapping[str, SidecarLine | None]) -> StagedTexts:
         return self.stager.stage(texts, draw=StageInputs(
-            self.spec.masks, self.spec.e_dim, self.rng, self._keys_of,
+            self.spec.masks, self.spec.e_dim, self.rng, self.text.keys_of,
         ))
 
     def encode_texts(
@@ -367,19 +323,11 @@ class SurfaceBatcher:
             inputs, mask_prob, self.rng,
         )
 
-    def keyword_of_key(self, key) -> str | None:
-        """Which keyword one ability key's line *is*, if any."""
-        fragment = keyword_line_fragment(key)
-        if fragment is not None:
-            return normalize_keyword(fragment)
-        line = self._resolve(key)[1]
-        return line.bare_keyword if line is not None else None
-
     def surface_builder(self, rows: dict[str, int]) -> SurfaceBuilder:
         """The builder of one batch's surfaces, each ``e`` a row of ``rows``;
         it draws context dropout from the batcher's generator."""
         return SurfaceBuilder(
-            _StagedLines(self, rows), e_dim=self.spec.e_dim, rng=self.rng,
+            StagedLines(self.text, rows), e_dim=self.spec.e_dim, rng=self.rng,
             context_dropout=self.context_dropout,
         )
 
@@ -440,33 +388,3 @@ class SurfaceBatcher:
             inputs.e_rows[:, zeroed] = -1
             inputs.e_vectors[:, zeroed] = 0.0
         return inputs
-
-
-@dataclass(frozen=True, slots=True)
-class _StagedLines:
-    """A batch's lines as the surface reads them: ``e`` as a row of the
-    staged encodings, keyed by each key's text on the batcher's surface."""
-
-    batcher: SurfaceBatcher
-    rows: dict[str, int]
-
-    def e_for(self, key) -> int | None:
-        text = self.batcher.text_of(key)
-        return None if text is None else self.rows.get(text)
-
-    def has_line(self, key) -> bool:
-        # A dropped key gets no token; a line a variant masks keeps its
-        # token, zeroed in ``prepare``, so the geometry is the model's.
-        return self.batcher.text_of(key) is not None
-
-    def keyword_of(self, key) -> str | None:
-        return self.batcher.keyword_of_key(key)
-
-    def options_for(self, key) -> tuple:
-        return self.batcher.options_for(key)
-
-    def board_keys(self, key) -> tuple:
-        return self.batcher.board_keys(key)
-
-    def room_of(self, key) -> str | None:
-        return self.batcher.room_of(key)

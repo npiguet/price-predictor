@@ -100,8 +100,7 @@ class ChunkBuilder:
     def add(self, record: EffectRecord, requests: list[Request],
             texts: Sequence[TextOverride] = ()) -> None:
         for edit in texts:
-            self.batcher.override_text(edit.key, edit.text, edit.like, script=edit.script,
-                                       role_spans=edit.role_spans)
+            self.batcher.override_text(edit)
         if requests:
             self.pending.append((record, requests))
         if len(self.pending) >= self.size:

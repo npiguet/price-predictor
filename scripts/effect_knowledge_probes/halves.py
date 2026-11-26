@@ -297,8 +297,7 @@ def grid_predictions(probe_model, name: str, record, entities: Sequence[str]) ->
     cells = GridEdits(batcher).cells(name, record, entities)
     for cell in cells:
         for edit in cell.texts:
-            batcher.override_text(edit.key, edit.text, edit.like, script=edit.script,
-                                  role_spans=edit.role_spans)
+            batcher.override_text(edit)
     (entity, name_read), = {(cell.entity, cell.readout) for cell in cells}
     return common.predict_all(probe_model, [cell.record for cell in cells],
                               readout.at_card(name_read, entity))

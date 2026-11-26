@@ -20,9 +20,11 @@ from effects.application.ability_text import KeyResolver
 from effects.application.mlm_masking import MaskedTokens
 from effects.application.surface_batching import (
     PreparedBatch,
+    StepDraws,
     SurfaceBatcher,
     SurfaceSpec,
 )
+from effects.application.text_resolution import TextResolution
 from effects.application.text_staging import TextStager
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
@@ -47,6 +49,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.grid_edits import TextOverride
 from effects.domain.head_targets import HeadTargetParts
 from effects.domain.lethality_counterfactuals import (
     BoardReading,
@@ -263,33 +266,32 @@ class StepPreparer:
     def training_batcher(self, rng: random.Random) -> SurfaceBatcher:
         """One training step's records-to-inputs pipeline, drawing keyword
         expansion and context dropout from the step's ``rng``."""
+        stager = TextStager(
+            tokenizer=self.tokenizer,
+            surface=self.surface,
+            withhold_keyword=self.config.withhold_keyword,
+            keyword_expand_p=self.config.keyword_expand_p,
+            truncations=self.truncations,
+        )
         return SurfaceBatcher(
-            stager=TextStager(
-                tokenizer=self.tokenizer,
-                surface=self.surface,
-                withhold_keyword=self.config.withhold_keyword,
-                keyword_expand_p=self.config.keyword_expand_p,
-                truncations=self.truncations,
-            ),
-            resolver=self.resolver,
+            text=TextResolution(self.resolver, stager),
             spec=self.surface_spec,
-            context_dropout=self.config.context_dropout,
-            rng=rng,
+            draws=StepDraws(context_dropout=self.config.context_dropout, rng=rng),
         )
 
     def scoring_batcher(self) -> SurfaceBatcher:
         """Validation's pipeline: no expansion beyond inference's and no
         context dropout, drawing from a stream of its own rather than any
         training step's, so how many batches it scores moves no step."""
+        stager = TextStager.for_inference(
+            self.tokenizer, self.surface,
+            withhold_keyword=self.config.withhold_keyword,
+            truncations=self.truncations,
+        )
         return SurfaceBatcher(
-            stager=TextStager.for_inference(
-                self.tokenizer, self.surface,
-                withhold_keyword=self.config.withhold_keyword,
-                truncations=self.truncations,
-            ),
-            resolver=self.resolver,
+            text=TextResolution(self.resolver, stager),
             spec=self.surface_spec,
-            rng=random.Random(f"{self.seed}:validation"),
+            draws=StepDraws(rng=random.Random(f"{self.seed}:validation")),
         )
 
     def prepare_training_step(
@@ -377,10 +379,10 @@ class StepPreparer:
                 copy = counterfactual(material, batcher.rng, number)
                 edit = copy.edit
                 if edit.key is not None:
-                    batcher.override_text(
+                    batcher.override_text(TextOverride(
                         edit.key, edit.text, key,
                         script=edit.script, role_spans=edit.role_spans,
-                    )
+                    ))
                 copies.append(copy)
         return copies
 

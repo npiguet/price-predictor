@@ -140,7 +140,7 @@ from effects.application.host_cache import host_bytes, unpack
 from effects.application.record_forward import RecordForward
 from effects.application.step_preparation import DeviceStep, scoring_step
 from effects.application.stratum_records import StratumReader
-from effects.application.surface_batching import SurfaceBatcher
+from effects.application.surface_batching import StepDraws, SurfaceBatcher
 from effects.application.validation_pass import (
     FieldParts,
     KeptTargets,
@@ -186,9 +186,11 @@ class CheckpointPreparer:
 
     def scoring_batcher(self) -> SurfaceBatcher:
         template = self.template
-        return SurfaceBatcher(stager=template.stager, resolver=template.resolver,
-                              spec=template.spec, materializer=template.materializer,
-                              rng=random.Random(f"{self.seed}:control"))
+        return SurfaceBatcher(
+            text=template.text.fresh(), spec=template.spec,
+            materializer=template.materializer,
+            draws=StepDraws(rng=random.Random(f"{self.seed}:control")),
+        )
 
     def prepare_scoring_step(self, records: Sequence[EffectRecord],
                              fields: tuple[FieldSpec, ...], *,

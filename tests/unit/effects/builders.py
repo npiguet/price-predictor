@@ -460,24 +460,26 @@ def make_batcher(
     from effects.application.ability_text import KeyResolver
     from effects.application.surface_batching import (
         Materializer,
+        StepDraws,
         SurfaceBatcher,
         SurfaceSpec,
     )
+    from effects.application.text_resolution import TextResolution
     from effects.application.text_staging import TextStager
     from effects.domain.baselines import BaselineMasks
 
     masks = masks or BaselineMasks()
+    stager = TextStager(
+        tokenizer=tokenizer, surface=surface, withhold_keyword=withhold_keyword,
+        keyword_expand_p=keyword_expand_p, truncations=truncations,
+    )
     return SurfaceBatcher(
-        stager=TextStager(
-            tokenizer=tokenizer, surface=surface, withhold_keyword=withhold_keyword,
-            keyword_expand_p=keyword_expand_p, truncations=truncations,
-        ),
-        resolver=resolver or KeyResolver(sidecars, surface),
+        text=TextResolution(resolver or KeyResolver(sidecars, surface), stager),
         spec=SurfaceSpec(e_dim, widths or {}, masks),
         materializer=Materializer(
             device or torch.device("cpu"), masks, identity_table, noise,
         ),
-        context_dropout=context_dropout, rng=rng,
+        draws=StepDraws(context_dropout, rng),
     )
 
 

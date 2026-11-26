@@ -513,7 +513,7 @@ def test_a_grid_cell_can_read_an_edited_ability_text(run, records):
                       chunk_records=8),
         ControlFlags("hard", 0.5, 0.0))
     overrides = {key: text for batcher in spy.batchers
-                 for key, (text, _line) in batcher._overrides.items()}
+                 for key, (text, _line) in batcher.text.overrides.items()}
     assert {key.script_file for key in overrides} == {
         f"t158-grid/{r.record_id}" for r in with_ability}
     assert set(overrides.values()) == {"edited text"}
@@ -608,8 +608,8 @@ def _checkpoint_batcher(run):
     from effects.application.surface_batching import SurfaceBatcher
 
     template = run.preparer.scoring_batcher()
-    return SurfaceBatcher(stager=template.stager, resolver=template.resolver,
-                          spec=template.spec, materializer=run.scoring)
+    return SurfaceBatcher(text=template.text.fresh(), spec=template.spec,
+                          materializer=run.scoring)
 
 
 class TestASavedCheckpoint:

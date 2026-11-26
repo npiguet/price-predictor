@@ -211,8 +211,8 @@ def _training_deviance(run, selection, stratum) -> dict:
 
 def _checkpoint_deviance(run, selection, stratum) -> dict:
     template = run.preparer.scoring_batcher()
-    batcher = SurfaceBatcher(stager=template.stager, resolver=template.resolver,
-                             spec=template.spec, materializer=run.scoring)
+    batcher = SurfaceBatcher(text=template.text.fresh(), spec=template.spec,
+                             materializer=run.scoring)
     score = score_half(
         FrozenSelection(selection, dict.fromkeys(FIXTURE_STRATA, lambda: [stratum])),
         ScoredCheckpoint(run.encoder, run.model, batcher, FIXTURE_RULE_OUTPUTS,

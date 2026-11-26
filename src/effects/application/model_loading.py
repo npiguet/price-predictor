@@ -23,9 +23,11 @@ from effects.application.surface_batching import (
     IDENTITY_TABLE_KEY,
     IdentityTable,
     Materializer,
+    StepDraws,
     SurfaceBatcher,
     SurfaceSpec,
 )
+from effects.application.text_resolution import TextResolution
 from effects.application.text_staging import TextStager
 from effects.domain.ability_encoder import (
     AbilityEncoder,
@@ -98,17 +100,16 @@ class LoadedModel:
         loaded checkpoint's trunk was built with."""
         checkpoint = self.checkpoint
         spec = SurfaceSpec.for_saved_model(checkpoint)
+        stager = TextStager.for_inference(
+            self.tokenizer, self.surface,
+            withhold_keyword=checkpoint.provenance.withheld_keyword,
+            truncations=TruncationLog(log_truncation(logger, "evaluation")),
+        )
         return SurfaceBatcher(
-            stager=TextStager.for_inference(
-                self.tokenizer, self.surface,
-                withhold_keyword=checkpoint.provenance.withheld_keyword,
-                truncations=TruncationLog(log_truncation(logger, "evaluation")),
-            ),
-            resolver=KeyResolver(self.sidecars, self.surface),
+            text=TextResolution(KeyResolver(self.sidecars, self.surface), stager),
             spec=spec,
             materializer=Materializer(self.device, spec.masks, self.identity_table),
-            context_dropout=0.0,
-            rng=random.Random(EVALUATION_SEED),
+            draws=StepDraws(rng=random.Random(EVALUATION_SEED)),
         )
 
 

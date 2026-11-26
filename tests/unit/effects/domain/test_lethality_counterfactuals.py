@@ -579,8 +579,8 @@ class TestStepWiring:
         def text_of(self, key):
             return BOLT
 
-        def override_text(self, key, text, like, *, script=None, role_spans=None):
-            self.overrides[key] = (text, like)
+        def override_text(self, edit):
+            self.overrides[edit.key] = (edit.text, edit.like)
 
     def test_each_qualifying_record_gets_its_copies_and_their_texts(self):
         from effects.application.step_preparation import StepPreparer
