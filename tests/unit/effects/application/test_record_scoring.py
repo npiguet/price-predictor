@@ -68,6 +68,31 @@ class TestPerRecordLosses:
         )
         assert set(losses) == {"gate", TOTAL}
 
+    def test_a_record_that_trains_no_gate_has_no_gate_key(self):
+        """A playability record scores no gate: its result names none, so no
+        breakdown's gate mean counts a zero it never trained (finding 13.6)."""
+        import torch
+
+        from effects.application.breakdowns import TOTAL
+        from effects.application.record_scoring import _record_losses
+        from effects.domain.effect_head_layout import (
+            DISPERSED_FIELDS,
+            PER_ENTITY_FIELDS,
+            PER_ENTITY_WIDTH,
+        )
+        from effects.domain.entity_field_targets import EntityTargetBatch
+
+        plain = make_entity_targets(torch.zeros(2, 2))
+        targets = EntityTargetBatch(
+            plain.gate, plain.fields, plain.mask, plain.index, torch.tensor([0.0, 1.0]),
+        )
+        outputs = torch.randn(2, 2, PER_ENTITY_WIDTH)
+        dispersion = torch.zeros(len(DISPERSED_FIELDS))
+        playability = _record_losses(0, outputs, targets, PER_ENTITY_FIELDS, dispersion)
+        trained = _record_losses(1, outputs, targets, PER_ENTITY_FIELDS, dispersion)
+        assert "gate" not in playability and playability[TOTAL] == 0.0
+        assert "gate" in trained
+
     def test_every_term_equals_the_masked_sum_over_that_record(self):
         """Each reported term, not only the total, is the gate BCE over the real
         entities plus each field's loss over the target-affected ones (a

@@ -15,7 +15,7 @@ from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.record_forward import entity_chunks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
-from effects.domain.effect_losses import per_entity_loss
+from effects.domain.effect_losses import GATE_TERM, per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import first_text
@@ -55,13 +55,18 @@ def _record_losses(
 ) -> dict[str, float]:
     """One record's per-entity loss by field: ``per_entity_loss`` on it alone,
     so the breakdowns cannot drift from what training minimized. A field with
-    no supervised entity is left out rather than reported as zero."""
+    no supervised entity is left out rather than reported as zero, the gate
+    included: a record that scores no gate entity (a playability record) has no
+    ``gate`` key."""
     rows = slice(row, row + 1)
+    alone = targets.select(rows)
     _total, parts = per_entity_loss(
-        gathered[rows], targets.select(rows), fields=fields,
+        gathered[rows], alone, fields=fields,
         log_dispersion=log_dispersion, report_parts=True,
     )
     losses = parts.as_dict()
+    if not bool(alone.gate_scored.any()):
+        del losses[GATE_TERM]
     losses[TOTAL] = sum(losses.values())
     return losses
 

@@ -16,6 +16,7 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 - Every geometry check keys the cache on the checkpoint's encoding surface, so on a script checkpoint two lines sharing prose but not script stay two points.
 - A line query that resolves to nothing is named in the report as unresolved, never dropped.
 - Every breakdown and both gates read each record once, at no class weight. A validation stratum holds a record's row once plus once for every added copy, so a reader of distinct records dedupes by `record_id`.
+- A record that scores no gate entity (`EntityTargetBatch.gate_scored` empty: a playability record, a cost half) has no `gate` key in its breakdown result (`record_scoring._record_losses`), so every breakdown's gate mean counts only records that train the gate. The drop is in the report path alone; training's loss reads `per_entity_loss` without `report_parts` and is unchanged.
 - The selection set's reporting half is scored once, through the control score's own scorer. The selection halves belong to the trainer.
 
 ## The gates
