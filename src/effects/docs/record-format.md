@@ -4,7 +4,7 @@ What a reader or writer of effect records has to know that no single source file
 
 - `specs/023-ability-effect-model/contracts/record-schema.md` (base schema).
 - `specs/024-ability-effect-model-gen2/contracts/record-schema-delta.md` and `specs/025-ability-effect-model-gen3/contracts/record-schema-delta.md` (each generation's changes).
-- Python side: `domain/records.py`, `infrastructure/record_codec.py`, and `domain/shard_generation.py` for the generation check.
+- Python side: `domain/records.py`, `infrastructure/record_codec.py` (the envelope and the record; each block's converters are in the `record_codec_*.py` modules beside it, and every reader goes through `record_codec`), and `domain/shard_generation.py` for the generation check.
 
 ## Shards
 
