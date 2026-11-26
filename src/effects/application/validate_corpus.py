@@ -26,7 +26,7 @@ from effects.application.corpus_validation.envelope_checks import (
     ActingLines,
     Duplicates,
     GameBoundaries,
-    GameEnds,
+    GameEndMarkers,
     KindPresence,
     Links,
     LossyForks,
@@ -218,7 +218,7 @@ def _checks(sidecars: SidecarLookup | None, playability_rate: float | None = Non
     return (
         record_ids,
         GameBoundaries(),
-        GameEnds(),
+        GameEndMarkers(),
         KindPresence(playability_rate),
         Links(),
         ActingLines(),

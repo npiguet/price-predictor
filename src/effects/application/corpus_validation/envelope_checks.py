@@ -243,7 +243,7 @@ class KindPresence:
                     or (self.playability_rate is not None and self.playability_rate > 0)]
         missing = [label for label in expected if not self.labels[label]]
         judged = self.records >= limits.min_presence_records
-        # The game-end marker has a check of its own (GameEnds).
+        # The game-end marker has a check of its own (GameEndMarkers).
         others = sorted(set(_all_labels()) - set(expected) - set(self.labels) - {_GAME_END})
         if not missing:
             measured = f"every kind a game writes is present over {self.records} records"
@@ -262,7 +262,7 @@ class KindPresence:
 _GAME_END = f"{RecordKind.TURN_ACTION.value}/{TurnActionSubkind.GAME_END.value}"
 
 
-class GameEnds:
+class GameEndMarkers:
     """WP7: which games ended with their ``turn_action`` / ``game_end``
     marker, and what the per-game cap withheld from them.
 
