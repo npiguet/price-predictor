@@ -16,8 +16,9 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from effects.application.control_items import component_score
-from effects.application.control_score import ControlScorer
+from effects.application.control_items import StratumComponent, component_score
+from effects.application.control_score import ControlFlags, ControlScorer, FrozenSelection
+from effects.application.control_stratum import HalfScope, ScoringSource
 from effects.domain.selection_set import GRIDS, FrozenGrid, GridCell, TaggedRecord
 from tests.unit.effects.application.test_control_score import (
     RULE_OUTPUTS,
@@ -29,6 +30,9 @@ from tests.unit.effects.builders import fixture_run
 
 #: The second cell's answers, in the grid's record order: they differ by record.
 HIGH = (1.0, 0.0, 1.0, 0.0)
+
+#: The grid component the scale arithmetic is checked on.
+GRID_COMPONENT = StratumComponent("s", GRIDS)
 
 
 @pytest.fixture(scope="module")
@@ -49,10 +53,10 @@ def prepared(run, records):
     selection = replace(selection, grids={s: {"selection": {"damage": grid}} for s in STRATA})
     editor = _Editor()
     scorer = ControlScorer.prepare(
-        selection, dict.fromkeys(STRATA, lambda: [records]), preparer=run.preparer,
-        fields=list(run.fields.values()), rule_outputs=RULE_OUTPUTS, mask="hard",
-        stratum_weight=0.5, deviance_floor=0.0, editor=editor, chunk_records=8,
-        components=(GRIDS,))
+        FrozenSelection(selection, dict.fromkeys(STRATA, lambda: [records])),
+        ScoringSource(run.preparer, list(run.fields.values()), RULE_OUTPUTS, editor=editor,
+                      chunk_records=8),
+        ControlFlags("hard", 0.5, 0.0), HalfScope(components=(GRIDS,)))
     return scorer, grid, editor.asked[:len(chosen)]
 
 
@@ -84,16 +88,16 @@ GRID_ITEMS = {"damage": 1.0, "combat/none/blocker": 0.0,
 def test_the_three_grids_weigh_equally_whatever_their_variants():
     """Finding 12.5: two combat variants and one damage grid, beside the
     evasion grid; the damage grid weighs one third of the component."""
-    assert component_score(GRID_ITEMS, stratum="s", component=GRIDS) == pytest.approx(1 / 3)
+    assert component_score(GRID_ITEMS, GRID_COMPONENT) == pytest.approx(1 / 3)
 
 
 def test_a_grid_with_no_scored_variant_is_left_out_not_counted_as_zero():
     without_evasion = {k: v for k, v in GRID_ITEMS.items() if k != "evasion"}
-    assert component_score(without_evasion, stratum="s", component=GRIDS) == pytest.approx(0.5)
+    assert component_score(without_evasion, GRID_COMPONENT) == pytest.approx(0.5)
     unscored = {**GRID_ITEMS, "evasion": math.nan}
-    assert component_score(unscored, stratum="s", component=GRIDS) == pytest.approx(0.5)
+    assert component_score(unscored, GRID_COMPONENT) == pytest.approx(0.5)
 
 
 def test_each_variant_is_clipped_before_its_grid_averages_them():
     items = {"combat/none/blocker": -3.0, "combat/none/attacker": 1.0, "damage": 0.5}
-    assert component_score(items, stratum="s", component=GRIDS) == pytest.approx(0.25)
+    assert component_score(items, GRID_COMPONENT) == pytest.approx(0.25)

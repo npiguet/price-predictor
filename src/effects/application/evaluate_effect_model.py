@@ -155,7 +155,13 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
     under ``reports_dir``; without one the half is reported as skipped,
     naming why, since a report reports.
     """
-    from effects.application.control_score import score_half
+    from effects.application.control_score import (
+        ControlFlags,
+        FrozenSelection,
+        ScoredCheckpoint,
+        score_half,
+    )
+    from effects.application.control_stratum import HalfScope
     from effects.application.freeze_selection_set import stratum_reader
     from effects.domain.selection_set import (
         SelectionSetError,
@@ -181,11 +187,11 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
     half = str(Half.REPORTING)
     flags = main.scored_under()
     score = score_half(
-        selection, readers, half=half, encoder=loaded.encoder, model=loaded.model,
-        batcher=loaded.batcher(),
-        rule_outputs=context.manifest.effective_rule_outputs,
-        mask=flags.mask, stratum_weight=flags.stratum_weight,
-        deviance_floor=flags.deviance_floor,
+        FrozenSelection(selection, readers),
+        ScoredCheckpoint(loaded.encoder, loaded.model, loaded.batcher(),
+                         context.manifest.effective_rule_outputs),
+        ControlFlags(flags.mask, flags.stratum_weight, flags.deviance_floor),
+        HalfScope(half),
     )
     games = {stratum: len(selection.halves[stratum].get(half, ())) for stratum in readers}
     return half_score_checks(score, half=half, games=games,

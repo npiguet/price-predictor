@@ -16,7 +16,14 @@ from dataclasses import replace
 
 import pytest
 
-from effects.application.control_score import ControlScorer, score_half
+from effects.application.control_score import (
+    ControlFlags,
+    ControlScorer,
+    FrozenSelection,
+    ScoredCheckpoint,
+    score_half,
+)
+from effects.application.control_stratum import HalfScope, ScoringSource
 from effects.application.freeze_selection_set import (
     RuleTestRules,
     SelectionSetRefused,
@@ -190,10 +197,10 @@ def _repeated_samples(selection, records):
 
 def _training_deviance(run, selection, stratum) -> dict:
     scorer = ControlScorer.prepare(
-        selection, dict.fromkeys(FIXTURE_STRATA, lambda: [stratum]), preparer=run.preparer,
-        fields=list(run.fields.values()), rule_outputs=FIXTURE_RULE_OUTPUTS, mask="hard",
-        stratum_weight=0.3, deviance_floor=0.0, chunk_records=8, batch_size=8,
-        components=(DEVIANCE,))
+        FrozenSelection(selection, dict.fromkeys(FIXTURE_STRATA, lambda: [stratum])),
+        ScoringSource(run.preparer, list(run.fields.values()), FIXTURE_RULE_OUTPUTS,
+                      chunk_records=8, batch_size=8),
+        ControlFlags("hard", 0.3, 0.0), HalfScope(components=(DEVIANCE,)))
     score = scorer.epoch(RecordForward(run.encoder, run.model, run.scoring),
                          StepLossComputer(run.spec.config, run.device), run.fields[max(run.fields)])
     return {name: score.strata[name].items[DEVIANCE] for name in FIXTURE_STRATA}
@@ -204,10 +211,10 @@ def _checkpoint_deviance(run, selection, stratum) -> dict:
     batcher = SurfaceBatcher(stager=template.stager, resolver=template.resolver,
                              spec=template.spec, materializer=run.scoring)
     score = score_half(
-        selection, dict.fromkeys(FIXTURE_STRATA, lambda: [stratum]), half="reporting",
-        encoder=run.encoder, model=run.model, batcher=batcher,
-        rule_outputs=FIXTURE_RULE_OUTPUTS, mask="soft", stratum_weight=0.3,
-        deviance_floor=0.0, components=(DEVIANCE,), config=run.spec.config)
+        FrozenSelection(selection, dict.fromkeys(FIXTURE_STRATA, lambda: [stratum])),
+        ScoredCheckpoint(run.encoder, run.model, batcher, FIXTURE_RULE_OUTPUTS,
+                         config=run.spec.config),
+        ControlFlags("soft", 0.3, 0.0), HalfScope("reporting", (DEVIANCE,)))
     return {name: score.strata[name].items[DEVIANCE] for name in FIXTURE_STRATA}
 
 

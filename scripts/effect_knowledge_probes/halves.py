@@ -350,18 +350,23 @@ def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, di
     of constant outputs of rules that keep others; ``component`` their mean,
     NaN with none. Each distinct record is read once, so no rule mask
     weighs anything here."""
-    from effects.application.control_score import score_half
+    from effects.application.control_score import (
+        ControlFlags,
+        FrozenSelection,
+        ScoredCheckpoint,
+        score_half,
+    )
+    from effects.application.control_stratum import HalfScope
     from effects.application.freeze_selection_set import stratum_reader
     from effects.domain.selection_set import RULE_TESTS
 
     readers = {stratum: stratum_reader(context.stratum_shards(stratum))
                for stratum in selection.halves}
     scored = score_half(
-        selection, readers, half=half, encoder=probe_model.encoder, model=probe_model.model,
-        batcher=probe_model.batcher,
-        rule_outputs=context.manifest.effective_rule_outputs,
-        mask=None,
-        stratum_weight=0.5, deviance_floor=0.0, components=(RULE_TESTS,))
+        FrozenSelection(selection, readers),
+        ScoredCheckpoint(probe_model.encoder, probe_model.model, probe_model.batcher,
+                         context.manifest.effective_rule_outputs),
+        ControlFlags(None, 0.5, 0.0), HalfScope(half, (RULE_TESTS,)))
     return {stratum: {"rules": dict(score.items.get(RULE_TESTS, {})),
                       "left_out": [name for name in score.left_out.get(RULE_TESTS, ())
                                    if "/" not in name],

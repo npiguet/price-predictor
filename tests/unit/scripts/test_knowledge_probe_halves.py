@@ -190,18 +190,23 @@ class TestRuleTests:
                 assert np.isnan(tests["component"])
 
     def test_the_scores_are_the_scorers_own(self, scored, frozen_corpus, probe_model):
-        from effects.application.control_score import score_half
+        from effects.application.control_score import (
+            ControlFlags,
+            FrozenSelection,
+            ScoredCheckpoint,
+            score_half,
+        )
+        from effects.application.control_stratum import HalfScope
         from effects.application.freeze_selection_set import stratum_reader
         from effects.domain.selection_set import RULE_TESTS
         from effects.infrastructure.rules_catalogue_io import load_heads
 
         direct = score_half(
-            frozen_corpus.selection,
-            {GD: stratum_reader((frozen_corpus.stratum / "shard-00000.jsonl.gz",))},
-            half="reporting", encoder=probe_model.encoder, model=probe_model.model,
-            batcher=probe_model.batcher,
-            rule_outputs={rule: tuple(entry.outputs) for rule, entry in load_heads().items()},
-            mask=None, stratum_weight=0.5, deviance_floor=0.0, components=(RULE_TESTS,))
+            FrozenSelection(frozen_corpus.selection, {
+                GD: stratum_reader((frozen_corpus.stratum / "shard-00000.jsonl.gz",))}),
+            ScoredCheckpoint(probe_model.encoder, probe_model.model, probe_model.batcher,
+                             {rule: tuple(entry.outputs) for rule, entry in load_heads().items()}),
+            ControlFlags(None, 0.5, 0.0), HalfScope("reporting", (RULE_TESTS,)))
         assert dict(direct.strata[GD].items[RULE_TESTS]) == pytest.approx(
             scored["reporting"][GD]["rules"])
 

@@ -78,22 +78,23 @@ class TestTheReportingHalf:
         selection = _freeze(tmp_path)
         asked = {}
 
-        def score_half(selection, readers, **kwargs):
-            asked.update(kwargs, readers=readers, selection=selection)
-            return control_score_of(0.5, kwargs["stratum_weight"])
+        def score_half(frozen, checkpoint, flags, scope):
+            asked.update(frozen=frozen, checkpoint=checkpoint, flags=flags, scope=scope)
+            return control_score_of(0.5, flags.stratum_weight)
 
         monkeypatch.setattr(control_score, "score_half", score_half)
         checks = evaluate_effect_model.run_reporting_half(
             _context(tmp_path, selection_digest=selection.digest))
 
-        assert asked["half"] == "reporting"
-        assert (asked["mask"], asked["stratum_weight"], asked["deviance_floor"]) == (
-            "soft", 0.25, 0.1)
-        assert (asked["encoder"], asked["model"], asked["batcher"]) == (
+        assert asked["scope"].half == "reporting"
+        flags = asked["flags"]
+        assert (flags.mask, flags.stratum_weight, flags.deviance_floor) == ("soft", 0.25, 0.1)
+        checkpoint = asked["checkpoint"]
+        assert (checkpoint.encoder, checkpoint.model, checkpoint.batcher) == (
             "encoder", "model", "batcher")
         # The effective outputs, never the map's own list (FR-060a).
-        assert asked["rule_outputs"] == {"r.board": ("zone_outcome",)}
-        assert set(asked["readers"]) == set(selection.halves)
+        assert checkpoint.rule_outputs == {"r.board": ("zone_outcome",)}
+        assert set(asked["frozen"].strata) == set(selection.halves)
         names = [check.name for check in checks]
         assert "reporting-half card-disjoint" in names
         assert "rule-tests game-disjoint reporting" in names
@@ -116,7 +117,7 @@ class TestTheReportingHalf:
 
         _freeze(tmp_path)
         monkeypatch.setattr(control_score, "score_half",
-                            lambda selection, readers, **kw: control_score_of(0.5))
+                            lambda frozen, checkpoint, flags, scope: control_score_of(0.5))
         checks = evaluate_effect_model.run_reporting_half(
             _context(tmp_path, selection_digest="0" * 64))
         control = next(check for check in checks if check.name == "reporting-half control")

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -46,18 +47,31 @@ def mixed(card_disjoint: float, game_disjoint: float, weight: float) -> float:
 ITEM_GROUPS: dict[str, Callable[[str], str]] = {GRIDS: grid_of}
 
 
-def component_score(items: Mapping[str, float], *, stratum: str, component: str,
-                    half: str = SELECTION, strict: bool = True) -> float:
+@dataclass(frozen=True)
+class StratumComponent:
+    """One component of one stratum's half: what a :class:`ControlScoreError`
+    names."""
+
+    stratum: str
+    component: str
+    half: str = SELECTION
+
+    def error(self, detail: str) -> ControlScoreError:
+        return ControlScoreError(self.stratum, self.half, self.component, detail)
+
+
+def component_score(items: Mapping[str, float], of: StratumComponent, *,
+                    strict: bool = True) -> float:
     """The mean of a component's items, each clipped below at −1, grouped
     first by :data:`ITEM_GROUPS` (a group with no scored item left out);
-    raises :class:`ControlScoreError` when no item has a score, or is NaN
-    then when not ``strict``."""
+    raises :class:`ControlScoreError` naming ``of`` when no item has a
+    score, or is NaN then when not ``strict``."""
     scores = {name: clipped(value) for name, value in items.items() if not math.isnan(value)}
     if not scores:
         if not strict:
             return math.nan
-        raise ControlScoreError(stratum, half, component, "nothing to score this epoch")
-    return grouped_mean(scores, ITEM_GROUPS.get(component, str))
+        raise of.error("nothing to score this epoch")
+    return grouped_mean(scores, ITEM_GROUPS.get(of.component, str))
 
 
 def probe_item(kind: str, labels: Sequence[float], predictions: Sequence[float]) -> float:
@@ -96,7 +110,13 @@ def explained_deviance(parts: Mapping[str, float], floor: Mapping[str, float], *
     out = {}
     for name in kept:
         loss, constant = parts.get(name), floor.get(name)
-        if loss is None or constant is None or constant <= deviance_floor:
+        if _unscored(loss, constant, deviance_floor):
             continue
         out[name] = 1.0 - loss / constant if math.isfinite(loss) else SCORE_FLOOR
     return out
+
+
+def _unscored(loss: float | None, constant: float | None, deviance_floor: float) -> bool:
+    """Whether a term is left out: the pass scored no loss or no constant
+    loss for it, or its constant loss is at or below the floor."""
+    return loss is None or constant is None or constant <= deviance_floor

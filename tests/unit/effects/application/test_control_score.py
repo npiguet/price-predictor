@@ -9,6 +9,7 @@ stratum score, the mix and what the scorer read can be checked.
 from __future__ import annotations
 
 import math
+from dataclasses import fields as fields_of
 from dataclasses import replace
 
 import numpy as np
@@ -16,6 +17,7 @@ import pytest
 
 from effects.application.control_items import (
     ControlScoreError,
+    StratumComponent,
     component_score,
     explained_deviance,
     mixed,
@@ -23,7 +25,15 @@ from effects.application.control_items import (
     rule_item,
 )
 from effects.application.control_reads import OutputReading
-from effects.application.control_score import ControlScore, ControlScorer, StratumScore
+from effects.application.control_score import (
+    ControlFlags,
+    ControlScore,
+    ControlScorer,
+    FrozenSelection,
+    ScoredCheckpoint,
+    StratumScore,
+)
+from effects.application.control_stratum import HalfScope, ScoringSource
 from effects.application.record_forward import RecordForward
 from effects.application.stratum_records import selection_records
 from effects.domain.effect_head_layout import GATE_TERM, ZONE_OUTCOMES, ZoneOutcome
@@ -66,7 +76,7 @@ class TestTheScale:
         assert rule_item([perfect, backwards]) == pytest.approx(0.0)
 
     def test_items_are_clipped_below_at_minus_one_and_averaged(self):
-        assert component_score({"a": -3.0, "b": 0.5}, stratum="s", component=GRIDS) == (
+        assert component_score({"a": -3.0, "b": 0.5}, StratumComponent("s", GRIDS)) == (
             pytest.approx(-0.25))
 
     def test_the_stratum_score_is_the_mean_of_its_four_components(self):
@@ -99,12 +109,12 @@ class TestLeftOut:
         all_fires = rule_item([([0.9, 0.8, 0.7], [])])
         assert math.isnan(all_fires)
         scored = component_score({"all-fires": all_fires, "two-sided": 0.5},
-                                 stratum="s", component=RULE_TESTS)
+                                 StratumComponent("s", RULE_TESTS))
         assert scored == pytest.approx(0.5)
 
     def test_a_component_with_nothing_to_score_names_stratum_half_and_component(self):
         with pytest.raises(ControlScoreError) as raised:
-            component_score({"only": math.nan}, stratum="game-disjoint", component=PROBES)
+            component_score({"only": math.nan}, StratumComponent("game-disjoint", PROBES))
         assert (raised.value.stratum, raised.value.half, raised.value.component) == (
             "game-disjoint", "selection", PROBES)
 
@@ -252,15 +262,20 @@ def run(corpus, records, tmp_path_factory):
 def _prepare(run, records, selection, **overrides):
     spy = _Spy(run.preparer)
     editor = _Editor()
-    settings = dict(
-        preparer=spy, fields=list(run.fields.values()), rule_outputs=RULE_OUTPUTS,
-        mask="hard", stratum_weight=0.3, deviance_floor=0.0, editor=editor,
-        chunk_records=8, batch_size=8,
-    )
-    settings.update(overrides)
+    source = ScoringSource(spy, list(run.fields.values()), RULE_OUTPUTS, editor=editor,
+                           chunk_records=8, batch_size=8)
+    settings = (source, ControlFlags("hard", 0.3, 0.0), HalfScope())
     scorer = ControlScorer.prepare(
-        selection, dict.fromkeys(STRATA, lambda: [records]), **settings)
+        FrozenSelection(selection, dict.fromkeys(STRATA, lambda: [records])),
+        *(_overridden(part, overrides) for part in settings))
     return scorer, spy, editor
+
+
+def _overridden(settings, overrides: dict):
+    """``settings`` with each of ``overrides`` that names one of its fields."""
+    names = {field.name for field in fields_of(settings)}
+    return replace(settings, **{name: value for name, value in overrides.items()
+                                if name in names})
 
 
 def _epoch(run, scorer):
@@ -461,9 +476,10 @@ def test_a_grid_cell_can_read_an_edited_ability_text(run, records):
     selection = replace(selection, grids=grids)
     spy = _Spy(run.preparer)
     scorer = ControlScorer.prepare(
-        selection, dict.fromkeys(STRATA, lambda: [records]), preparer=spy,
-        fields=list(run.fields.values()), rule_outputs=RULE_OUTPUTS, mask="hard",
-        stratum_weight=0.5, deviance_floor=0.0, editor=_TextEditor(), chunk_records=8)
+        FrozenSelection(selection, dict.fromkeys(STRATA, lambda: [records])),
+        ScoringSource(spy, list(run.fields.values()), RULE_OUTPUTS, editor=_TextEditor(),
+                      chunk_records=8),
+        ControlFlags("hard", 0.5, 0.0))
     overrides = {key: text for batcher in spy.batchers
                  for key, (text, _line) in batcher._overrides.items()}
     assert {key.script_file for key in overrides} == {
@@ -522,8 +538,11 @@ class TestTheReportingHalf:
 
         from effects.application.validation_pass import Validator
 
-        assert inspect.signature(ControlScorer.prepare).parameters["half"].default == "selection"
-        assert "half=" not in inspect.getsource(Validator.prepare)
+        assert inspect.signature(ControlScorer.prepare).parameters["scope"].default.half == (
+            "selection")
+        source = inspect.getsource(Validator.prepare)
+        assert "half=" not in source
+        assert "HalfScope" not in source
 
 
 class TestALenientScore:
@@ -584,10 +603,10 @@ class TestASavedCheckpoint:
 
         selection = fixture_selection_set(records)
         score = score_half(
-            selection, dict.fromkeys(STRATA, lambda: [records]), half="reporting",
-            encoder=run.encoder, model=run.model, batcher=_checkpoint_batcher(run),
-            rule_outputs=FIXTURE_RULE_OUTPUTS, mask="hard", stratum_weight=0.3,
-            deviance_floor=0.0, config=run.spec.config)
+            FrozenSelection(selection, dict.fromkeys(STRATA, lambda: [records])),
+            ScoredCheckpoint(run.encoder, run.model, _checkpoint_batcher(run),
+                             FIXTURE_RULE_OUTPUTS, config=run.spec.config),
+            ControlFlags("hard", 0.3, 0.0), HalfScope("reporting"))
         assert set(score.strata) == set(STRATA)
         for stratum in STRATA:
             assert set(score.strata[stratum].items[RULE_TESTS]) == {"r.board"}

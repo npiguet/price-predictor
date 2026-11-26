@@ -248,7 +248,8 @@ class Validator:
         set, once, before the first epoch (research E2): every field set the
         run's epochs score, the run's rule mask, the grids edited on the run's
         surface. Raises ``ControlScoreError`` on a component with no item."""
-        from effects.application.control_score import ControlScorer
+        from effects.application.control_score import ControlFlags, ControlScorer
+        from effects.application.control_stratum import ScoringSource
         from effects.domain.grid_edits import GridEdits
 
         if selection is None:
@@ -256,12 +257,11 @@ class Validator:
                 "No selection set: train-effect-model selects its checkpoint by "
                 "the control score of the corpus's frozen selection set (FR-069).")
         self.scorer = ControlScorer.prepare(
-            selection.selection, selection.strata, preparer=run.preparer,
-            fields=list(run.fields.values()),
-            rule_outputs=rule_outputs, mask=self.config.rule_mask,
-            stratum_weight=self.config.stratum_weight,
-            deviance_floor=self.config.deviance_floor,
-            editor=GridEdits(run.preparer.scoring_batcher()),
+            selection,
+            ScoringSource(run.preparer, list(run.fields.values()), rule_outputs,
+                          editor=GridEdits(run.preparer.scoring_batcher())),
+            ControlFlags(self.config.rule_mask, self.config.stratum_weight,
+                         self.config.deviance_floor),
         )
 
     def control(self, run: RunContext, fields: tuple[FieldSpec, ...]) -> ControlScore:
