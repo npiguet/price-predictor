@@ -294,7 +294,7 @@ def _read_cost(cost: str | None, spell: bool, amounts: _Amounts) -> None:
     amounts.values["cost_taps"] = 1.0 if "T" in shards else 0.0
     amounts.values["cost_sacrifices"] = 1.0 if "Sac<" in cost else 0.0
     mana = ManaCost.parse(" ".join(shards))
-    if spell or mana is None or mana.has_x or _holds_hybrid(shards):
+    if _mana_unstated(spell, mana, shards):
         amounts.mask(_MANA_TARGETS)
         return
     for target, amount in zip(_MANA_TARGETS, (
@@ -302,6 +302,12 @@ def _read_cost(cost: str | None, spell: bool, amounts: _Amounts) -> None:
         mana.generic_mana,
     )):
         amounts.values[target] = float(amount)
+
+
+def _mana_unstated(spell: bool, mana: ManaCost | None, shards: list[str]) -> bool:
+    """Whether the cost's mana targets state nothing: a spell line's, an
+    unparsed cost's, an X cost's or a hybrid cost's."""
+    return spell or mana is None or mana.has_x or _holds_hybrid(shards)
 
 
 def _holds_hybrid(shards: list[str]) -> bool:
