@@ -227,7 +227,7 @@ PAYLOAD_MEMBERS: tuple[PayloadMember, ...] = (
     _member("best_control_score"), _member("control_score"), _member("averaged"),
     _member("rule_map_digest"), _member("selection_set_digest"),
     #: What a variant carries beyond the model (the identity baseline's
-    #: embedding table, ``surface_batching.IDENTITY_TABLE_KEY``), nested here so
+    #: embedding table, ``identity_table.IDENTITY_TABLE_KEY``), nested here so
     #: no name in it can collide with a member.
     _member("extra", dict, dict),
 )
