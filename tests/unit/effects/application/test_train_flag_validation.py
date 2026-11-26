@@ -25,3 +25,13 @@ def test_a_curriculum_epoch_inside_the_run_is_accepted():
 def test_the_re_warm_defaults_to_500_steps_and_0_turns_it_off():
     assert TrainEffectModelConfig.unpathed().curriculum_rewarm_steps == 500
     TrainEffectModelConfig.unpathed(curriculum_rewarm_steps=0)
+
+
+def test_a_step_count_the_accumulation_does_not_divide_is_refused_naming_both_flags():
+    with pytest.raises(ValueError, match=r"--steps-per-epoch 7.*--grad-accum 2"):
+        TrainEffectModelConfig.unpathed(grad_accum=2, steps_per_epoch=7, epochs=3)
+
+
+def test_a_step_count_the_accumulation_divides_is_accepted():
+    TrainEffectModelConfig.unpathed(grad_accum=2, steps_per_epoch=8)
+    TrainEffectModelConfig.unpathed(grad_accum=1, steps_per_epoch=7)

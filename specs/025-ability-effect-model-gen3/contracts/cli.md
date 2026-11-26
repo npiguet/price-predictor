@@ -634,6 +634,7 @@ Startup, exit 1 when:
 - the manifest has no per-rule counts;
 - no selection set exists for the corpus digest under `--reports-dir`, or the one there was frozen for another corpus or edited;
 - `--curriculum-rewarm-steps` is negative;
+- `--steps-per-epoch` is not a multiple of `--grad-accum` (refused naming both flags);
 - resuming with a changed `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`,
   `--relation-values` or `--curriculum-rewarm-steps`, or from a `resume.pt` that records no
   `--curriculum-rewarm-steps` (refused by that name).

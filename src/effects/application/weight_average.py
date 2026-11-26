@@ -8,7 +8,8 @@ starts from the weights at the end of warmup, since the warmup's weights are
 the least trained of the run and the average would carry them for epochs, or
 one epoch after the curriculum switch when that is later
 (``Curriculum.average_start``): the weights from before the switch never
-trained the sparse columns.
+trained the sparse columns. An epoch ending at or past the start with no
+average yet starts it there (:meth:`WeightAverage.at_epoch_end`).
 
 One copy of every parameter, on the parameters' device. Validation swaps the
 copy into the modules and back by exchanging the tensors' storage, so it adds
@@ -65,6 +66,14 @@ class WeightAverage:
         if averaged:  # the foreach kernels refuse an empty list
             with torch.no_grad():
                 torch._foreach_lerp_(averaged, current, self.rate)
+
+    def at_epoch_end(self, steps_taken: int) -> None:
+        """Start the average from the weights an epoch ends on when it ends at
+        or past ``start`` with none yet: under ``--grad-accum`` an epoch's last
+        step can be no optimizer step, and the epoch that should start the
+        average would end without one. A started average is left alone."""
+        if self._average is None and steps_taken >= self.start:
+            self._start(steps_taken)
 
     def _start(self, steps_taken: int) -> None:
         with torch.no_grad():

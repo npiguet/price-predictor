@@ -9,6 +9,7 @@ first update would carry fewer micro-steps than the rest.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import torch
 
@@ -19,7 +20,7 @@ from tests.unit.effects.builders import StubLosses, make_cpu_training_loop
 
 
 def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkeypatch):
-    loop = make_cpu_training_loop(monkeypatch, grad_accum=2, steps_per_epoch=3)
+    loop = make_cpu_training_loop(monkeypatch, grad_accum=2, steps_per_epoch=4)
     weight = torch.nn.Parameter(torch.ones(()))
     loop.losses = StubLosses(lambda prepared: weight * 2.0)
     updates: list[tuple[int, int]] = []
@@ -34,7 +35,7 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
     )
     for epoch in (1, 2):
         tally = EpochTally(running=torch.zeros(()))
-        for _ in range(3):
+        for _ in range(3):  # an epoch shortened to an odd count
             loop._train_step(
                 object(), run, tally, ShardStats(loss=torch.zeros(())), False,
             )
@@ -45,7 +46,7 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
 def test_a_shard_ending_between_boundaries_still_reports_its_last_norms(monkeypatch):
     """The shard's last step reads back the norms of the last optimizer step,
     whether or not that step was itself an accumulation boundary."""
-    loop = make_cpu_training_loop(monkeypatch, grad_accum=2, steps_per_epoch=3)
+    loop = make_cpu_training_loop(monkeypatch, grad_accum=2, steps_per_epoch=4)
     weight = torch.nn.Parameter(torch.ones(()))
     loop.losses = StubLosses(lambda prepared: weight * 2.0)
     run = SimpleNamespace(
@@ -56,6 +57,36 @@ def test_a_shard_ending_between_boundaries_still_reports_its_last_norms(monkeypa
     )
     tally = EpochTally(running=torch.zeros(()))
     stats = ShardStats(loss=torch.zeros(()))
-    for index in range(3):
+    for index in range(3):  # shortened to an odd count
         loop._train_step(object(), run, tally, stats, index == 2)
     assert set(stats.norms) == {"head"}
+
+
+def test_an_odd_epoch_whose_last_step_is_no_optimizer_step_still_starts_the_average(
+    monkeypatch,
+):
+    """Epoch 2 ends at step 6 = the start, on a dropped micro-step: the average
+    starts from the weights at the epoch's end, before validation reads them."""
+    loop = make_cpu_training_loop(monkeypatch, grad_accum=2, steps_per_epoch=4)
+    weight = torch.nn.Parameter(torch.ones(()))
+    loop.losses = StubLosses(lambda prepared: weight * 2.0)
+    monkeypatch.setattr(loop_module, "_optimizer_step", lambda optimizer, tables=None: {})
+    module = torch.nn.Module()
+    module.weight = weight
+    run = MagicMock(step=0, model=module, encoder=None)
+    run.average = WeightAverage({"model": module}, rate=0.5, start=6)
+    seen: list[bool] = []
+    loop.validator = MagicMock()
+    loop.validator.epoch.side_effect = lambda *args: (
+        seen.append(run.average.started), MagicMock())[1]
+    loop._save_epoch = MagicMock(return_value=False)
+    monkeypatch.setattr(loop_module, "save_resume", lambda *args, **kwargs: None)
+    loop.reporter = MagicMock()
+    for epoch in (1, 2):
+        loop._train_epoch = lambda epoch, run, tally: [
+            loop._train_step(object(), run, tally, ShardStats(loss=torch.zeros(())), False)
+            for _ in range(3)
+        ]
+        loop._run_epoch(epoch, run, None)
+    assert seen == [False, True]
+    assert run.average.start_step == 6

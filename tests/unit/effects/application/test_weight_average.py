@@ -143,3 +143,27 @@ def test_the_average_starts_one_epoch_after_the_curriculum_switch():
     assert Curriculum(2).average_start(warmup=100, steps_per_epoch=5000) == 10_000
     for epoch in (0, 1):
         assert Curriculum(epoch).average_start(warmup=10_000, steps_per_epoch=5000) == 10_000
+
+
+def test_an_epoch_ending_at_or_past_the_start_starts_the_average_from_its_weights():
+    """An epoch's last step can be no optimizer step (an odd count under
+    ``--grad-accum 2``): its end starts the average, one copy, as a step would."""
+    modules = _modules()
+    average = WeightAverage(modules, rate=0.5, start=6)
+    average.at_epoch_end(5)
+    assert not average.started
+    _step(modules, 1.0)
+    average.at_epoch_end(7)
+    assert average.started and average.start_step == 7
+    trained = _weights(modules)
+    with average.applied():
+        assert all(torch.equal(v, _weights(modules)[k]) for k, v in trained.items())
+
+
+def test_an_epoch_end_leaves_a_started_average_alone():
+    modules = _modules()
+    average = WeightAverage(modules, rate=0.5, start=1)
+    average.after_optimizer_step(1)
+    _step(modules, 1.0)
+    average.at_epoch_end(2)
+    assert average.start_step == 1

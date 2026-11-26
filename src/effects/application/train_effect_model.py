@@ -114,7 +114,17 @@ def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
             f"--lr-scale must not be negative, got {config.lr_scale}: a negative "
             "factor makes the optimizer ascend."
         )
+    _require_whole_accumulations(config)
     _require_runnable_curriculum(config)
+
+
+def _require_whole_accumulations(config: TrainEffectModelConfig) -> None:
+    if config.steps_per_epoch % config.grad_accum:
+        raise ValueError(
+            f"--steps-per-epoch {config.steps_per_epoch} is not a multiple of "
+            f"--grad-accum {config.grad_accum}: each epoch would drop its last "
+            "partial accumulation."
+        )
 
 
 def _require_runnable_curriculum(config: TrainEffectModelConfig) -> None:

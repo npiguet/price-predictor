@@ -301,6 +301,7 @@ class TrainingLoop:
         started = time.perf_counter()
         self._train_epoch(epoch, run, tally)
         trained = time.perf_counter() - started
+        run.average.at_epoch_end(run.step)
         # An epoch ending before the average starts (warmup's end, or one
         # epoch past the curriculum switch) is validated on the current
         # weights and is no best candidate.
