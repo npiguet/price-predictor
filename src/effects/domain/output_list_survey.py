@@ -15,11 +15,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from effects.domain.effect_head_layout import OVERLAY_KEYWORDS
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import Event, EventType
 from effects.domain.forge_vocabularies import SUBTYPES
 from effects.domain.input_vocabularies import CARD_TYPES, SUPERTYPES
 from effects.domain.keyword_names import changed_keyword, normalize_keyword
-from effects.domain.records import ContinuousPayload, EffectRecord, events_of
+from effects.domain.records import ContinuousPayload, Contribution, EffectRecord, events_of
 
 _SUBTYPE_ORDER: dict[str, int] = {name: index for index, name in enumerate(SUBTYPES)}
 _NOT_SUBTYPES = frozenset(CARD_TYPES) | frozenset(SUPERTYPES)
@@ -51,16 +51,10 @@ def subtypes_named(record: EffectRecord) -> set[str]:
     created-objects groups' subtypes can set."""
     names: set[str] = set()
     for event in events_of(record):
-        if event.type is EventType.TYPE_CHANGE:
-            for key in ("types_added", "types_removed"):
-                names.update(subtypes_of(event.params.get(key) or ()))
-        elif event.type is EventType.TOKEN_CREATED:
-            traits = event.params.get("characteristics") or {}
-            names.update(subtypes_of(type_tokens(str(traits.get("types", "")))))
-    if isinstance(record.payload, ContinuousPayload):
-        for contribution in record.payload.contributions:
-            change = contribution.type_changes
-            names.update(subtypes_of((*change.gained, *change.lost)))
+        names.update(_event_subtypes(event))
+    for contribution in _contributions(record):
+        change = contribution.type_changes
+        names.update(subtypes_of((*change.gained, *change.lost)))
     return names
 
 
@@ -73,22 +67,50 @@ def keywords_named(record: EffectRecord, known: frozenset[str]) -> set[str]:
     """
     raw: list[str] = []
     for event in events_of(record):
-        if event.type is EventType.KEYWORD_CHANGE:
-            raw.extend(str(keyword) for keyword in event.params.get("keywords") or ())
-        elif event.type is EventType.TOKEN_CREATED:
-            traits = event.params.get("characteristics") or {}
-            keywords = traits.get("keywords") or ()
-            raw.extend([keywords] if isinstance(keywords, str) else map(str, keywords))
-    if isinstance(record.payload, ContinuousPayload):
-        for contribution in record.payload.contributions:
-            change = contribution.keyword_changes
-            raw.extend((*change.gained, *change.lost))
+        raw.extend(_event_keywords(event))
+    for contribution in _contributions(record):
+        change = contribution.keyword_changes
+        raw.extend((*change.gained, *change.lost))
     names = set()
     for keyword in raw:
         name = changed_keyword(keyword)
         if name in OVERLAY_KEYWORDS or normalize_keyword(keyword) in known:
             names.add(name)
     return names
+
+
+def _contributions(record: EffectRecord) -> tuple[Contribution, ...]:
+    """A continuous record's per-entity contributions; none for any other."""
+    if isinstance(record.payload, ContinuousPayload):
+        return record.payload.contributions
+    return ()
+
+
+def _token_traits(event: Event) -> dict:
+    """The characteristics a created token carries."""
+    return event.params.get("characteristics") or {}
+
+
+def _event_subtypes(event: Event) -> list[str]:
+    """The subtypes one event grants, removes or gives a created token."""
+    if event.type is EventType.TYPE_CHANGE:
+        return [
+            name for key in ("types_added", "types_removed")
+            for name in subtypes_of(event.params.get(key) or ())
+        ]
+    if event.type is EventType.TOKEN_CREATED:
+        return list(subtypes_of(type_tokens(str(_token_traits(event).get("types", "")))))
+    return []
+
+
+def _event_keywords(event: Event) -> list[str]:
+    """The raw keywords one event grants, removes or gives a created token."""
+    if event.type is EventType.KEYWORD_CHANGE:
+        return [str(keyword) for keyword in event.params.get("keywords") or ()]
+    if event.type is EventType.TOKEN_CREATED:
+        keywords = _token_traits(event).get("keywords") or ()
+        return [keywords] if isinstance(keywords, str) else list(map(str, keywords))
+    return []
 
 
 def ordered_subtypes(names: Iterable[str]) -> tuple[str, ...]:

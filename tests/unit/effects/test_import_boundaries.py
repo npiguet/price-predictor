@@ -332,7 +332,7 @@ _TORCH_FREE = (
     "effects.domain.protection_opportunities",
     "effects.domain.protection_playability",
     "effects.domain.relation_types",
-    "effects.domain.closed_lists",
+    "effects.domain.output_list_survey",
     "effects.domain.output_vocabularies",
     "effects.domain.input_vocabularies",
     "effects.domain.input_layout",

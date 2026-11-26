@@ -543,8 +543,8 @@ def test_training_records_kept_for_the_budgets_are_tagged(gen3_survey):
 
 
 def test_the_closed_lists_are_what_effects_grant_or_remove(gen3_survey):
-    """FR-052, FR-053: ``closed_lists``' names, unioned over the corpus."""
-    from effects.domain.closed_lists import subtypes_named
+    """FR-052, FR-053: ``output_list_survey``' names, unioned over the corpus."""
+    from effects.domain.output_list_survey import subtypes_named
     from effects.domain.records import RecordKind
     from effects.infrastructure.shard_io import read_shard
     from tests.unit.effects.builders import GEN3_RECORDS

@@ -1,4 +1,4 @@
-"""``scan_output_vocabularies.py``, ``closed_lists`` and the module the scan writes
+"""``scan_output_vocabularies.py``, ``output_list_survey`` and the module the scan writes
 (T119, T121; root spec section 11.2, section 11.3)."""
 
 from __future__ import annotations
@@ -7,16 +7,16 @@ import json
 
 import scan_output_vocabularies as sov
 
-from effects.domain.closed_lists import (
+from effects.domain.effect_head_layout import OVERLAY_KEYWORDS
+from effects.domain.event_schema import Event, EventType
+from effects.domain.forge_vocabularies import SUBTYPES
+from effects.domain.output_list_survey import (
     keywords_named,
     ordered_keywords,
     subtypes_named,
     subtypes_of,
     type_tokens,
 )
-from effects.domain.effect_head_layout import OVERLAY_KEYWORDS
-from effects.domain.event_schema import Event, EventType
-from effects.domain.forge_vocabularies import SUBTYPES
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import ContinuousPayload, Contribution, RecordKind, ResolutionPayload
 from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_record

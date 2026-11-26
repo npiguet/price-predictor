@@ -5,7 +5,7 @@ the created-objects groups' subtypes and ``keywords_gained``/``keywords_lost`` o
 the subtypes and keywords the corpus's effects grant or remove, a closed list the
 corpus build records (FR-052, FR-053). Until ``build-corpus`` writes those lists to
 its manifest, this survey of record directories writes them: every subtype and
-keyword ``effects.domain.closed_lists`` reads off a record, keywords limited to
+keyword ``effects.domain.output_list_survey`` reads off a record, keywords limited to
 Forge's own (the keyword-definitions file) plus the overlay keywords, which always
 lead the keyword list. ``--manifest`` instead copies the lists a gen-3 ``build-corpus``
 recorded in its manifest (``subtypes``, ``keywords``), already in the head's column order.
@@ -27,13 +27,13 @@ from pathlib import Path
 
 from _lib.paths import REPO
 
-from effects.domain.closed_lists import (
+from effects.domain.keyword_names import normalize_keyword
+from effects.domain.output_list_survey import (
     keywords_named,
     ordered_keywords,
     ordered_subtypes,
     subtypes_named,
 )
-from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import EffectRecord
 from effects.infrastructure.shard_io import read_records, read_shard
 

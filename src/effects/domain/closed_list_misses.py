@@ -11,11 +11,11 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
-from effects.domain.closed_lists import subtypes_of, type_tokens
 from effects.domain.continuous_lines import line_changes
 from effects.domain.event_schema import EventType
 from effects.domain.input_vocabularies import vocabulary_slot
 from effects.domain.keyword_names import changed_keyword
+from effects.domain.output_list_survey import subtypes_of, type_tokens
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import ContinuousPayload, EffectRecord, Event, events_of
 

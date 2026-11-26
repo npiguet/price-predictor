@@ -258,8 +258,8 @@ def test_the_gen3_fields_round_trip_through_json():
 
 
 def test_the_gen3_fields_hold_what_the_build_decided():
-    from effects.domain.closed_lists import ordered_keywords
     from effects.domain.forge_vocabularies import SUBTYPES
+    from effects.domain.output_list_survey import ordered_keywords
 
     gen3 = manifest(**_gen3_fields())
     data = json.loads(json.dumps(gen3.as_dict()))

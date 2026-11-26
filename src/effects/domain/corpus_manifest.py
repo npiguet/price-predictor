@@ -422,7 +422,7 @@ class CorpusManifest:
         default_factory=dict, metadata=_reads(_int_map),
     )
     #: The closed subtype and keyword lists (FR-052, FR-053), in the head's
-    #: column order: ``closed_lists.ordered_subtypes`` and ``ordered_keywords``,
+    #: column order: ``output_list_survey.ordered_subtypes`` and ``ordered_keywords``,
     #: which is what ``output_vocabularies`` holds, so
     #: ``scripts/scan_output_vocabularies.py --manifest`` copies them verbatim.
     subtypes: tuple[str, ...] = field(default=(), metadata=_reads(tuple))
@@ -653,7 +653,7 @@ class RuleCuration:
 def rule_curation_fields(curation: RuleCuration) -> dict[str, Any]:
     """The gen-3 fields of :class:`CorpusManifest`, as keyword arguments, the
     subtype and keyword names put in the head's column order here."""
-    from effects.domain.closed_lists import ordered_keywords, ordered_subtypes
+    from effects.domain.output_list_survey import ordered_keywords, ordered_subtypes
 
     budgets, strata, rule_map = curation.budgets, curation.strata, curation.rule_map
     carried, one_sided_conditions = curation.carried, curation.one_sided_conditions

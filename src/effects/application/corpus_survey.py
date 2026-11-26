@@ -50,7 +50,6 @@ from typing import TYPE_CHECKING
 from effects.application.parallel_map import run_parallel
 from effects.application.rule_counts import RuleCounts
 from effects.domain.closed_list_misses import closed_list_misses
-from effects.domain.closed_lists import keywords_named, subtypes_named
 from effects.domain.condition_balance import CONDITION_CLASSES, condition_key, turn_step_condition
 from effects.domain.corpus_curation import game_hash, record_hash
 from effects.domain.corpus_manifest import SourceShard
@@ -63,6 +62,7 @@ from effects.domain.corpus_plan import (
 from effects.domain.corpus_types import RecordHash, RuleCell
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
 from effects.domain.effect_targets import derive_targets, unsupervised_kind
+from effects.domain.output_list_survey import keywords_named, subtypes_named
 from effects.domain.protection_copies import CopyDraw, protection_copy
 from effects.domain.protection_model import PROTECTION_RULES, rules_offered
 from effects.domain.protection_opportunities import qualify
@@ -459,7 +459,7 @@ class SurveyConfig:
     #: which protection copies can be planned (FR-054, FR-058).
     budgeted: frozenset[str] = frozenset()
     #: Forge's keywords in ``normalize_keyword``'s spelling, for the closed
-    #: keyword list (``closed_lists.keywords_named``).
+    #: keyword list (``output_list_survey.keywords_named``).
     known_keywords: frozenset[str] = frozenset()
 
 

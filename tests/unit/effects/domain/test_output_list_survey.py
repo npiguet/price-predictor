@@ -1,9 +1,9 @@
-"""The closed keyword list curation records (``closed_lists.keywords_named``)."""
+"""The closed keyword list curation records (``output_list_survey.keywords_named``)."""
 
 from __future__ import annotations
 
-from effects.domain.closed_lists import keywords_named
 from effects.domain.event_schema import Event, EventType
+from effects.domain.output_list_survey import keywords_named
 from effects.domain.records import RecordKind, ResolutionPayload
 from tests.unit.effects.builders import make_record
 
