@@ -49,10 +49,15 @@ def _bytes(tensor: torch.Tensor) -> int:
 _INT_RANGES = tuple((dtype, torch.iinfo(dtype)) for dtype in (torch.int16, torch.int32))
 
 
+def _integral(tensor: torch.Tensor) -> bool:
+    """Whether ``tensor`` holds integers: neither floats nor booleans."""
+    return not (tensor.is_floating_point() or tensor.dtype == torch.bool)
+
+
 def _narrowest(tensor: torch.Tensor) -> torch.Tensor:
     """An integer tensor in the narrowest of int16 and int32 holding its
     values, else itself."""
-    if tensor.is_floating_point() or tensor.dtype == torch.bool or tensor.numel() == 0:
+    if not _integral(tensor) or tensor.numel() == 0:
         return tensor
     low, high = int(tensor.min()), int(tensor.max())
     for dtype, limits in _INT_RANGES:
@@ -226,27 +231,13 @@ class _Blocks:
 
     @classmethod
     def of(cls, tensor: torch.Tensor, rows: int) -> _Blocks | None:
-        if (tensor.dim() != 2 or tensor.shape[1] < 2 or tensor.is_floating_point()
-                or tensor.dtype == torch.bool):
+        if not _is_list(tensor):
             return None
         batch = tensor[:, 0]
-        if tensor.shape[0] and (int(batch.min()) < 0 or int(batch.max()) >= rows
-                                or bool((batch[1:] < batch[:-1]).any())):
+        if tensor.shape[0] and not _grouped(batch, rows):
             return None
-        counts = torch.bincount(batch, minlength=rows).tolist() if tensor.shape[0] else (
-            [0] * rows)
         rest = tensor[:, 1:]
-        same, kept, sizes = [], [], []
-        start, previous = 0, None
-        for count in counts:
-            block = rest[start:start + count]
-            start += count
-            repeat = previous is not None and torch.equal(block, previous)
-            same.append(repeat)
-            if not repeat:
-                kept.append(block)
-                sizes.append(count)
-            previous = block
+        same, kept, sizes = _row_blocks(rest, _row_counts(batch, rows))
         blocks = torch.cat(kept) if kept else rest[:0]
         return cls(tensor.dtype, int(tensor.shape[1]), torch.tensor(same, dtype=torch.bool),
                    _narrowest(torch.tensor(sizes, dtype=torch.long)), _narrowest(blocks))
@@ -268,6 +259,39 @@ class _Blocks:
     @property
     def nbytes(self) -> int:
         return _bytes(self.same) + _bytes(self.sizes) + _bytes(self.blocks)
+
+
+def _is_list(tensor: torch.Tensor) -> bool:
+    """Whether ``tensor`` is an ``(n, k)`` integer list with ``k`` at least 2."""
+    return tensor.dim() == 2 and tensor.shape[1] >= 2 and _integral(tensor)
+
+
+def _grouped(batch: torch.Tensor, rows: int) -> bool:
+    """Whether a non-empty batch-row column is non-decreasing in ``[0, rows)``."""
+    return (int(batch.min()) >= 0 and int(batch.max()) < rows
+            and not bool((batch[1:] < batch[:-1]).any()))
+
+
+def _row_counts(batch: torch.Tensor, rows: int) -> list[int]:
+    """How many list rows each of the batch's ``rows`` holds."""
+    return torch.bincount(batch, minlength=rows).tolist() if batch.shape[0] else [0] * rows
+
+
+def _row_blocks(rest: torch.Tensor, counts: list[int]):
+    """Each row's block of ``rest``, in row order: whether it repeats the
+    block of the row before, and the blocks that do not, with their sizes."""
+    same, kept, sizes = [], [], []
+    start, previous = 0, None
+    for count in counts:
+        block = rest[start:start + count]
+        start += count
+        repeat = previous is not None and torch.equal(block, previous)
+        same.append(repeat)
+        if not repeat:
+            kept.append(block)
+            sizes.append(count)
+        previous = block
+    return same, kept, sizes
 
 
 PACKED = (_Coo, _Rows, _Bits, _Narrow, _RowDiff, _Blocks)
