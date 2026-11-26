@@ -184,10 +184,10 @@ class TestScanSources:
         import argparse
         from unittest import mock
 
-        from effects.infrastructure import cli
+        from effects.infrastructure import cli, cli_build_vocab
 
         config = _config(corpus, tmp_path, keyword_definitions=tmp_path / "absent.json")
-        with mock.patch.object(cli, "config_from_args", lambda cls, args: config):
+        with mock.patch.object(cli_build_vocab, "config_from_args", lambda cls, args: config):
             assert cli.run_build_vocab(argparse.Namespace()) == 1
 
     def test_an_empty_corpus_fails_with_the_command_to_run(self, tmp_path):

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.infrastructure import cli
+from effects.infrastructure import cli, cli_build_corpus, cli_holdout_cards
 from effects.infrastructure.shard_io import iter_shards
 from price_predictor.infrastructure import run_manifest
 from price_predictor.infrastructure.cli_run_manifest import subcommand_names
@@ -43,7 +43,7 @@ def test_holdout_cards_writes_its_manifest(tmp_path: Path, monkeypatch):
         args.out.write_text("Lightning Bolt\n", encoding="utf-8")
         return 0
 
-    monkeypatch.setattr(cli, "run_holdout_cards", holdout_cards)
+    monkeypatch.setattr(cli_holdout_cards, "run_holdout_cards", holdout_cards)
     argv = ["holdout-cards", "--out", str(out), "--cards-folder", str(cards),
             "--printings-path", str(tmp_path / "AllPrintings.json")]
 
@@ -65,7 +65,7 @@ def test_an_exception_is_recorded_and_still_raised(tmp_path: Path, monkeypatch):
         (Path(args.output) / "manifest.previous.json").write_text("{}", encoding="utf-8")
         raise RuntimeError("a shard holds a mixed generation")
 
-    monkeypatch.setattr(cli, "run_build_corpus", build_corpus)
+    monkeypatch.setattr(cli_build_corpus, "run_build_corpus", build_corpus)
     monkeypatch.setattr(sys, "argv", ["effects", *cli_args(["build-corpus", "--output", str(out)])])
 
     with pytest.raises(RuntimeError):
@@ -78,7 +78,7 @@ def test_an_exception_is_recorded_and_still_raised(tmp_path: Path, monkeypatch):
 
 def test_verify_writes_none(tmp_path: Path, monkeypatch):
     out = tmp_path / "corpus-run"
-    monkeypatch.setattr(cli, "run_build_corpus", lambda _args: 0)
+    monkeypatch.setattr(cli_build_corpus, "run_build_corpus", lambda _args: 0)
     assert run_main(monkeypatch, cli_args(["build-corpus", "--output", str(out), "--verify"])) == 0
     assert not out.exists()
 

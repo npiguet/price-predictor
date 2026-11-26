@@ -226,13 +226,18 @@ def test_effects_imports_only_the_declared_surface() -> None:
     )
 
 
-#: The composition root: it wires each command's application service to the
-#: adapters it runs on, so it is the one infrastructure module that names both.
+#: The composition root, ``cli.py`` and the ``cli_<command>.py`` modules it
+#: composes: they wire each command's application service to the adapters it
+#: runs on, so they are the infrastructure modules that name both.
 _COMPOSITION_ROOT = "cli.py"
+_COMPOSITION_ROOT_PARTS = "cli_"
 
 
 def _is_infrastructure_adapter(path: Path) -> bool:
-    return path.parent.name == "infrastructure" and path.name != _COMPOSITION_ROOT
+    composition_root = path.name == _COMPOSITION_ROOT or path.name.startswith(
+        _COMPOSITION_ROOT_PARTS,
+    )
+    return path.parent.name == "infrastructure" and not composition_root
 
 
 def test_infrastructure_never_imports_application() -> None:

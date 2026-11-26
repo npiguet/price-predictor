@@ -21,7 +21,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
         import logging
 
         from effects.application import train_effect_model
-        from effects.infrastructure import cli
+        from effects.infrastructure import cli, cli_train_effect_model
 
         def refuse(config):
             raise train_effect_model.EmptyHoldoutError(
@@ -29,7 +29,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
             )
 
         monkeypatch.setattr(train_effect_model, "run", refuse)
-        monkeypatch.setattr(cli, "config_from_args", lambda cls, args: None)
+        monkeypatch.setattr(cli_train_effect_model, "config_from_args", lambda cls, args: None)
         args = argparse.Namespace(
             variant=Baseline.FULL, corpus="x",
             encoder_d_model=256, encoder_layers=4,
