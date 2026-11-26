@@ -28,7 +28,57 @@ from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
 
-def main() -> int:
+class Audit:
+    """The running counts of one pass over the sampled records."""
+
+    def __init__(self, sidecars: SidecarCache) -> None:
+        self.sidecars = sidecars
+        self.slots = 0
+        self.zero_by = collections.Counter()
+        self.records = 0
+        self.acting = collections.Counter()
+        self.textless_scripts = collections.Counter()
+
+    def add(self, record) -> None:
+        self.records += 1
+        self._count_slots(record)
+        self._count_acting(record)
+
+    def _count_slots(self, record) -> None:
+        for entity in record.state.entities:
+            for key in entity.ability_keys:
+                self.slots += 1
+                outcome = self.sidecars.resolution_of(key)
+                if outcome is not KeyResolution.LINE:
+                    self.zero_by[(key.trait_kind, outcome.value)] += 1
+
+    def _count_acting(self, record) -> None:
+        if record.kind is not RecordKind.RESOLUTION or not record.ability:
+            return
+        outcomes = {self.sidecars.resolution_of(key) for key in record.ability}
+        if KeyResolution.LINE in outcomes:
+            self.acting["has text"] += 1
+        elif KeyResolution.RUNTIME_ONLY in outcomes:
+            self.acting["runtime-only key (kept)"] += 1
+        else:
+            self.acting["no text"] += 1
+            self.textless_scripts[record.ability[0].script_file] += 1
+
+    def print_report(self) -> None:
+        zero = sum(self.zero_by.values())
+        print(f"{self.records} records, {self.slots} ability slots, {zero} zero-vector "
+              f"({100.0 * zero / self.slots if self.slots else 0.0:.1f}%)")
+        for (kind, why), count in self.zero_by.most_common(10):
+            print(f"  {count:9d}  {kind:<12} {why}")
+        print("resolution records by acting text:")
+        for label, count in self.acting.most_common():
+            print(f"  {count:9d}  {label}")
+        print("no-text acting scripts, most first:")
+        for script, count in self.textless_scripts.most_common(10):
+            print(f"  {count:9d}  {script}")
+
+
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--cards-folder", action="append", type=Path, required=True)
@@ -36,12 +86,19 @@ def main() -> int:
     parser.add_argument("--shards", type=int, default=10)
     parser.add_argument("--records-per-shard", type=int, default=1500)
     parser.add_argument("--seed", type=int, default=7)
-    args = parser.parse_args()
+    return parser.parse_args()
 
+
+def _sidecars(args: argparse.Namespace) -> SidecarCache:
     roots = {folder.name: folder for folder in args.cards_folder}
     if args.variant_scripts:
         roots["variant-scripts"] = args.variant_scripts
-    sidecars = SidecarCache(roots)
+    return SidecarCache(roots)
+
+
+def main() -> int:
+    args = _parse_args()
+    sidecars = _sidecars(args)
 
     store = CorpusStore(args.corpus)
     files = list(require_listed_shards(store, store.load())["training"])
@@ -54,41 +111,11 @@ def main() -> int:
     random.seed(args.seed)
     files = random.sample(files, min(args.shards, len(files)))
 
-    slots = 0
-    zero_by = collections.Counter()
-    records = 0
-    acting = collections.Counter()
-    textless_scripts = collections.Counter()
+    audit = Audit(sidecars)
     for path in files:
         for record in itertools.islice(read_shard(Path(path)), args.records_per_shard):
-            records += 1
-            for entity in record.state.entities:
-                for key in entity.ability_keys:
-                    slots += 1
-                    outcome = sidecars.resolution_of(key)
-                    if outcome is not KeyResolution.LINE:
-                        zero_by[(key.trait_kind, outcome.value)] += 1
-            if record.kind is RecordKind.RESOLUTION and record.ability:
-                outcomes = {sidecars.resolution_of(key) for key in record.ability}
-                if KeyResolution.LINE in outcomes:
-                    acting["has text"] += 1
-                elif KeyResolution.RUNTIME_ONLY in outcomes:
-                    acting["runtime-only key (kept)"] += 1
-                else:
-                    acting["no text"] += 1
-                    textless_scripts[record.ability[0].script_file] += 1
-
-    zero = sum(zero_by.values())
-    print(f"{records} records, {slots} ability slots, {zero} zero-vector "
-          f"({100.0 * zero / slots if slots else 0.0:.1f}%)")
-    for (kind, why), count in zero_by.most_common(10):
-        print(f"  {count:9d}  {kind:<12} {why}")
-    print("resolution records by acting text:")
-    for label, count in acting.most_common():
-        print(f"  {count:9d}  {label}")
-    print("no-text acting scripts, most first:")
-    for script, count in textless_scripts.most_common(10):
-        print(f"  {count:9d}  {script}")
+            audit.add(record)
+    audit.print_report()
     return 0
 
 
