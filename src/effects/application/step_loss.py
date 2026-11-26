@@ -15,7 +15,8 @@ from typing import Protocol
 import torch
 
 from effects.application.mlm_masking import MaskedTokens, MlmMasker
-from effects.application.step_preparation import DeviceStep, HeadTargets
+from effects.application.record_head_targets import HeadTargets
+from effects.application.step_preparation import DeviceStep
 from effects.application.surface_batching import EncodedBatch, Materializer
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.ability_encoder import AbilityEncoder

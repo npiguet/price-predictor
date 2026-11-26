@@ -10,7 +10,7 @@ computed at all.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
@@ -140,12 +140,12 @@ def _terms(rig: _Rig, step: _StepInputs, *, training):
     """
     preparer, losses, monkeypatch = rig.preparer, rig.losses, rig.monkeypatch
     records, batcher, model, hidden = step.records, step.batcher, step.model, step.hidden
-    targets = preparer._head_targets(
+    builder = replace(preparer.head_builder, heads=(
+        training_heads(preparer.config, api_types=preparer.api_types)
+        if training else frozenset()
+    ))
+    targets = builder.build(
         records, preparer.rule_mask(records), batcher, batcher.prepared(),
-        heads=(
-            training_heads(preparer.config, api_types=preparer.api_types)
-            if training else frozenset()
-        ),
     )
     terms = losses.head_terms(targets, batcher.encoded, model, hidden)
     rows = len(batcher.encoded.texts)
@@ -302,16 +302,16 @@ class TestTheApiTargets:
         for name in ("a", "b"):
             (tmp_path / name).mkdir()
         first = make_preparer(tmp_path / "a", api_types=["Keyword"])
-        first._api_batch([self._TEXT], lined)
-        after = first._api_batch([self._TEXT], {}).types
-        fresh = make_preparer(tmp_path / "b", api_types=["Keyword"])._api_batch(
+        first.head_builder.api.batch([self._TEXT], lined)
+        after = first.head_builder.api.batch([self._TEXT], {}).types
+        fresh = make_preparer(tmp_path / "b", api_types=["Keyword"]).head_builder.api.batch(
             [self._TEXT], {}).types
         assert after.tolist() == fresh.tolist() == [-1]
 
     def test_a_lineless_batch_first_leaves_the_line_s_target_whole(self, tmp_path):
         preparer = make_preparer(tmp_path, api_types=["Keyword"])
-        preparer._api_batch([self._TEXT], {})
-        types = preparer._api_batch([self._TEXT], {self._TEXT: self._line()}).types
+        preparer.head_builder.api.batch([self._TEXT], {})
+        types = preparer.head_builder.api.batch([self._TEXT], {self._TEXT: self._line()}).types
         assert types.tolist() == [0]
 
 

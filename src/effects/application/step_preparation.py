@@ -13,12 +13,11 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-import torch
-
 from effects.application.ability_text import KeyResolver
+from effects.application.head_target_builders import ApiTargetBuilder, HeadTargetBuilder
 from effects.application.lethality_augmenter import LethalityAugmenter
 from effects.application.line_preparation import TruncationLog
-from effects.application.mlm_masking import MaskedTokens
+from effects.application.record_head_targets import HeadTargets, shipped_head_targets
 from effects.application.shard_plan import ShardPlan
 from effects.application.surface_batching import (
     PreparedBatch,
@@ -32,43 +31,27 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     ValidationGameInTrainingError,
 )
-from effects.domain.aux_head_targets import (
-    created_objects_targets,
-    global_targets,
-    supervises_created_objects,
-    verdict_targets,
-)
 from effects.domain.aux_heads import TRAINING_HEADS, Head
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
 from effects.domain.effect_head_layout import (
-    CREATED_OBJECTS_WIDTH,
-    GLOBAL_LAYOUT,
-    VERDICT_LAYOUT,
     FieldSpec,
-    RecordHeadLayout,
 )
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.head_targets import HeadTargetParts
-from effects.domain.provenance import SidecarLine
+from effects.domain.lethality_counterfactuals import Counterfactual
 from effects.domain.rarity import RarityCoverage, TextGames
-from effects.domain.record_head_losses import CreatedTargets, RecordHeadTargets
 from effects.domain.records import EffectRecord
 from effects.domain.rule_mask import (
-    CREATED_OBJECTS_OUTPUT,
     FULL_WEIGHT,
     CopyWeights,
     copy_weights,
     weighed_by_class,
 )
-from effects.domain.script_text import params, segments
 from effects.domain.split import (
     CorpusSplit,
 )
 from effects.domain.surface_collation import entity_target_tensors
-from effects.domain.text_head_losses import ApiTargets, ValueTargets
-from effects.domain.value_targets import ValueLine
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 
 #: The epoch line's family label for the step's counterfactual copies (FR-063e).
@@ -88,16 +71,26 @@ def step_rng(seed: int, epoch: int, position: int, index: int) -> random.Random:
     return random.Random(f"{seed}:{epoch}:{position}:{index}")
 
 
-class HeadTargets(dict[Head, HeadTargetParts | MaskedTokens]):
-    """The targets of every loss term beside the per-entity one, on the host,
-    for only the heads computed for this batch."""
+@dataclass(frozen=True)
+class StepRows:
+    """The records of one step, with the per-entity targets and rule-mask
+    weights derived for each."""
 
-    def pin(self) -> None:
-        for head, targets in self.items():
-            if isinstance(targets, MaskedTokens):
-                targets.pin()
-            else:
-                self[head] = targets.pinned()
+    records: list
+    targets: list
+    weights: list[CopyWeights]
+
+    def with_copies(self, copies: Sequence[Counterfactual]) -> StepRows:
+        """The rows with the lethality ``copies`` appended after them."""
+        if not copies:
+            return self
+        return StepRows(
+            [*self.records, *(copy.record for copy in copies)],
+            [*self.targets, *(copy.targets for copy in copies)],
+            # A lethality copy trains every output at full weight (FR-061),
+            # and is made for a record's first natural row alone (D15).
+            [*self.weights, *([FULL_WEIGHT] * len(copies))],
+        )
 
 
 @dataclass
@@ -163,24 +156,6 @@ class ShardClosed:
     truncated: tuple[tuple[str, tuple], ...] = ()
 
 
-def value_batch(
-    lines: Sequence[ValueLine], rows: Mapping[str, int],
-) -> ValueTargets:
-    """The value head's targets, one row per line (FR-058): ``matrix_rows[i]``
-    is the row of the batch's ``e`` matrix line ``i``'s text is encoded at, so two
-    lines sharing a text read one ``e`` each toward their own targets.
-
-    Read from each line's script whatever the surface, since prose holds no
-    ``$`` parameter; a line with no script, or a keyword line, masks them all.
-    """
-    targets = [line.targets for line in lines]
-    return ValueTargets(
-        torch.tensor([row.values for row in targets]),
-        torch.tensor([row.mask for row in targets]),
-        torch.tensor([rows[line.text] for line in lines], dtype=torch.long),
-    )
-
-
 @dataclass(frozen=True)
 class PreparerSettings:
     """What a preparer is built from: picklable, and sent once per worker
@@ -227,21 +202,22 @@ class StepPreparer:
         self.legality_mode_counts = settings.legality_mode_counts
         self.api_types = list(settings.api_types)
         self.param_keys = list(settings.param_keys)
-        self._api_type_index = {name: i for i, name in enumerate(self.api_types)}
-        self._api_key_index = {name: i for i, name in enumerate(self.param_keys)}
         self.heads = settings.heads
         self.rule_outputs = settings.rule_outputs
         self.truncated: list[tuple[str, tuple]] = []
         self.truncations = truncations or TruncationLog(
             lambda text, keys: self.truncated.append((text, keys)),
         )
-        self._api_targets: dict[str, tuple[int, tuple[int, ...]]] = {}
         self.tokenizer = load_tokenizer(self.config.tokenizer_files)
         self.surface = self.tokenizer.surface
         self.sidecars = self.config.source_trees.sidecar_cache()
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)
+        self.head_builder = HeadTargetBuilder(
+            self.heads, self.config.mlm_mask_prob,
+            ApiTargetBuilder(self.api_types, self.param_keys),
+        )
         self.lethality = LethalityAugmenter(
             self.config.lethality_copies, self._keywords.keywords_of, self.sidecars,
         )
@@ -289,17 +265,12 @@ class StepPreparer:
         """
         batcher = self.training_batcher(rng)
         records = list(records)
-        targets = [derive_targets(record) for record in records]
-        weights = self.rule_mask(records)
+        rows = StepRows(records, [derive_targets(record) for record in records],
+                        self.rule_mask(records))
         copies = []
         if self.config.lethality_copies > 0:
-            copies = self.lethality.copies_of(records, targets, batcher)
-            records = [*records, *(copy.record for copy in copies)]
-            targets = [*targets, *(copy.targets for copy in copies)]
-            # A lethality copy trains every output at full weight (FR-061),
-            # and is made for a record's first natural row alone (D15).
-            weights = [*weights, *([FULL_WEIGHT] * len(copies))]
-        step = self._build(records, targets, weights, fields, batcher, heads=self.heads)
+            copies = self.lethality.copies_of(rows.records, rows.targets, batcher)
+        step = self._build(rows.with_copies(copies), fields, batcher)
         if pin:
             step.pin()
         return step, len(copies)
@@ -328,79 +299,16 @@ class StepPreparer:
         ]
 
     def _build(
-        self, records, targets, weights: list[CopyWeights], fields: tuple[FieldSpec, ...],
-        batcher: SurfaceBatcher, *, heads: frozenset[Head],
+        self, rows: StepRows, fields: tuple[FieldSpec, ...], batcher: SurfaceBatcher,
     ) -> DeviceStep:
-        """The surfaces, the per-entity targets and ``heads``' targets, each
-        record's outputs weighed by ``weights``."""
-        batch = batcher.prepare(records)
+        """The surfaces, the per-entity targets and the heads' targets, each
+        record's outputs weighed by ``rows.weights``."""
+        batch = batcher.prepare(rows.records)
         return DeviceStep(
             batch=stripped(batch), fields=fields,
-            targets=entity_target_tensors(batch.surfaces, targets, fields, weights),
-            heads=self._head_targets(records, weights, batcher, batch, heads=heads),
+            targets=entity_target_tensors(batch.surfaces, rows.targets, fields, rows.weights),
+            heads=self.head_builder.build(rows.records, rows.weights, batcher, batch),
         )
-
-    def _head_targets(
-        self, records, weights: list[CopyWeights], batcher, batch: PreparedBatch,
-        *, heads: frozenset[Head],
-    ) -> HeadTargets:
-        """The shipped heads' targets (FR-060a), each record's fields weighed
-        by its rule mask (FR-061), then those of the training-only ``heads``
-        (FR-058, FR-060b), which read texts and no mask reaches. The MLM mask
-        is the step's last draw from the batcher's generator."""
-        targets = shipped_head_targets(records, weights)
-        # No text, no matrix for these heads to read.
-        if not heads or not batch.staged.rows:
-            return targets
-        texts = batch.staged.ordered
-        if Head.VALUE in heads:
-            targets[Head.VALUE] = value_batch(batch.value_lines, batch.staged.rows)
-        if Head.API in heads:
-            targets[Head.API] = self._api_batch(texts, batch.texts)
-        if Head.MLM in heads:
-            targets[Head.MLM] = batcher.draw_mlm_mask(
-                batch.staged.encoder_inputs, self.config.mlm_mask_prob,
-            )
-        return targets
-
-    def _api_batch(
-        self, texts: Sequence[str], lines: Mapping[str, SidecarLine],
-    ) -> ApiTargets:
-        """The script-API head's targets for the batch's texts, in row
-        order: the API type (``-1`` when none or unknown) and the multi-hot of
-        parameter keys over every chained segment."""
-        types: list[int] = []
-        rows: list[int] = []
-        columns: list[int] = []
-        for row, text in enumerate(texts):
-            line = lines.get(text)
-            # A text no line of this batch renders (a granted keyword's text,
-            # ``Protection from white``, which another batch may hold as a
-            # card's line) has no target in this batch. The memo holds lines'
-            # targets only: read for a lineless text, or filled from one, it
-            # would make a step's targets depend on which shards its preparer
-            # read before, and a run differ by its worker count.
-            cached = (-1, ()) if line is None else self._api_targets.get(text)
-            if cached is None:
-                api = line.script_api_type
-                found = set(line.script_param_keys)
-                for segment in segments(line.script_text or ""):
-                    found.update(params(segment))
-                cached = (
-                    self._api_type_index.get(api, -1),
-                    tuple(sorted(
-                        self._api_key_index[k] for k in found if k in self._api_key_index
-                    )),
-                )
-                self._api_targets[text] = cached
-            types.append(cached[0])
-            rows += [row] * len(cached[1])
-            columns += cached[1]
-        # One indexed write: torch dispatches every element assignment on the
-        # host half of the step.
-        keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
-        keys[torch.tensor(rows, dtype=torch.long), torch.tensor(columns, dtype=torch.long)] = 1.0
-        return ApiTargets(torch.tensor(types, dtype=torch.long), keys)
 
     def _texts(self, records: Sequence[EffectRecord]) -> dict[str, str | None]:
         """``record_id -> acting text`` on this run's surface, once per shard."""
@@ -488,23 +396,6 @@ def stripped(batch: PreparedBatch) -> PreparedBatch:
     )
 
 
-def shipped_head_targets(records, weights: list[CopyWeights]) -> HeadTargets:
-    """The shipped record heads' targets (FR-060a), each record's fields
-    weighed by its rule mask (FR-061)."""
-    targets = HeadTargets()
-    for head, layout, derive in (
-        (Head.VERDICT, VERDICT_LAYOUT, verdict_targets),
-        (Head.GLOBAL, GLOBAL_LAYOUT, global_targets),
-    ):
-        rows = _record_head_rows(records, weights, layout, derive)
-        if rows is not None:
-            targets[head] = rows
-    made = _created_objects_rows(records, weights)
-    if made is not None:
-        targets[Head.CREATED_OBJECTS] = made
-    return targets
-
-
 def scoring_step(
     records: Sequence[EffectRecord], weights: list[CopyWeights],
     fields: tuple[FieldSpec, ...], batcher: SurfaceBatcher,
@@ -520,54 +411,4 @@ def scoring_step(
         targets=entity_target_tensors(
             batch.surfaces, [derive_targets(record) for record in records], fields, weights),
         heads=shipped_head_targets(records, weights),
-    )
-
-
-def _record_head_rows(
-    records, weights: list[CopyWeights], layout: RecordHeadLayout, derive,
-) -> RecordHeadTargets | None:
-    """A per-record head's targets over ``records``, or None where
-    no record sets any of its fields. Under the rule mask (FR-061) a field a
-    copy weighs zero is unset, and the mask holds each field's weight where
-    any is fractional."""
-    rows = [derive(record) for record in records]
-    if all(row is None for row in rows):
-        return None
-    filled = [row if row is not None else layout.blank() for row in rows]
-    mask = torch.tensor([mask for _, mask in filled])
-    if not all(copy.unmasked for copy in weights):
-        weighed = torch.tensor([
-            [copy.weight(str(spec.name)) for spec in layout.fields] for copy in weights
-        ])
-        if mask.dim() == 1:
-            mask = mask.unsqueeze(-1).expand(-1, len(layout.fields))
-        mask = mask.float() * weighed
-        if bool(((mask == 0) | (mask == 1)).all()):
-            mask = mask.bool()
-    return RecordHeadTargets(torch.tensor([values for values, _ in filled]), mask)
-
-
-def _created_objects_rows(records, weights: list[CopyWeights]) -> CreatedTargets | None:
-    """The created-objects head's targets over ``records``, or None where none
-    supervises it. The rule mask (FR-061) weighs the head
-    whole: a copy weighing it zero does not supervise it, and any other
-    weight but one (a soft share, a class weight) scales every column the
-    record says."""
-    weight = [copy.weight(CREATED_OBJECTS_OUTPUT) for copy in weights]
-    created = [
-        supervises_created_objects(record) and share > 0
-        for record, share in zip(records, weight)
-    ]
-    if not any(created):
-        return None
-    blank = ([0.0] * CREATED_OBJECTS_WIDTH, [True] * CREATED_OBJECTS_WIDTH)
-    made = [
-        created_objects_targets(record) if wanted else blank
-        for record, wanted in zip(records, created)
-    ]
-    known = torch.tensor([said for _, said in made])
-    if any(share not in (0.0, 1.0) for share in weight):
-        known = known.float() * torch.tensor(weight).unsqueeze(-1)
-    return CreatedTargets(
-        torch.tensor([target for target, _ in made]), torch.tensor(created), known,
     )

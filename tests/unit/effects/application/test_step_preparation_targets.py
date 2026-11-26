@@ -7,7 +7,7 @@ reading the amounts from it would train every prose line on stated zeros
 
 from __future__ import annotations
 
-from effects.application.step_preparation import value_batch
+from effects.application.head_target_builders import value_batch
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.value_targets import VALUE_TARGET_NAMES, ValueLine
 

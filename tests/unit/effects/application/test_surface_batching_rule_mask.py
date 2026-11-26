@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import torch
 import torch.nn.functional as functional
 
-from effects.application import step_preparation
+from effects.application import record_head_targets
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     DISPERSED_FIELDS,
@@ -236,7 +236,7 @@ def test_the_verdict_head_takes_the_rule_mask():
                copy_weights(soft, RuleMask.SOFT, outputs)]
     every = [True] * len(names)
 
-    mask = step_preparation._record_head_rows(
+    mask = record_head_targets.record_head_rows(
         [hard, soft], weights, VERDICT_LAYOUT,
         lambda record: (VERDICT_LAYOUT.blank()[0], every),
     ).mask
@@ -246,9 +246,9 @@ def test_the_verdict_head_takes_the_rule_mask():
 
 
 def test_the_created_objects_head_is_masked_whole(monkeypatch):
-    monkeypatch.setattr(step_preparation, "supervises_created_objects", lambda record: True)
+    monkeypatch.setattr(record_head_targets, "supervises_created_objects", lambda record: True)
     monkeypatch.setattr(
-        step_preparation, "created_objects_targets",
+        record_head_targets, "created_objects_targets",
         lambda record: ([1.0] * CREATED_OBJECTS_WIDTH, [True] * CREATED_OBJECTS_WIDTH),
     )
     outputs = {"111.5": ("created_objects",), "702.2": ("zone_outcome",)}
@@ -258,7 +258,7 @@ def test_the_created_objects_head_is_masked_whole(monkeypatch):
     weights = [copy_weights(named, RuleMask.HARD, outputs),
                copy_weights(other, RuleMask.HARD, outputs),
                copy_weights(soft, RuleMask.SOFT, outputs)]
-    made = step_preparation._created_objects_rows([named, other, soft], weights)
+    made = record_head_targets.created_objects_rows([named, other, soft], weights)
     mask, known = made.mask, made.known
     assert mask.tolist() == [True, False, True]
     assert known[0].unique().tolist() == [1.0]

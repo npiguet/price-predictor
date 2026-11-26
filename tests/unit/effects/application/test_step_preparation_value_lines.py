@@ -12,7 +12,7 @@ from pathlib import Path
 
 import torch
 
-from effects.application.step_preparation import value_batch
+from effects.application.head_target_builders import value_batch
 from effects.application.surface_batching import BatchLines
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.value_targets import VALUE_TARGET_NAMES, ValueLine
