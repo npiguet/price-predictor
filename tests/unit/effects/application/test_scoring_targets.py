@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import fields, is_dataclass
+
 import torch
 
 from effects.application.selection_deviance import scoring_targets
@@ -31,9 +33,16 @@ def _targets(corpus, records):
 
 
 def _same(left, right) -> bool:
-    """Equal tensors, or equal tuples of them."""
+    """Equal tensors, or equal targets dataclasses or tuples of them."""
+    if left is None or right is None:
+        return left is right
     if isinstance(left, torch.Tensor):
         return torch.equal(left, right)
+    if is_dataclass(left):
+        return type(left) is type(right) and all(
+            _same(getattr(left, part.name), getattr(right, part.name))
+            for part in fields(left)
+        )
     return len(left) == len(right) and all(_same(a, b) for a, b in zip(left, right))
 
 
