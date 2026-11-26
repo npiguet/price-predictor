@@ -32,9 +32,9 @@ from effects.domain.input_vocabularies import (
     THIS_TURN_COUNTERS,
     TURN_COUNTS,
     ZONES,
-    _one_hot,
-    _one_hot_width,
-    _phase_in,
+    one_hot,
+    one_hot_width,
+    phase_in,
 )
 from effects.domain.records import (
     EffectRecord,
@@ -68,14 +68,14 @@ def thermometer(value: float) -> list[float]:
     return [1.0 if value >= k else 0.0 for k in range(1, THERMOMETER_STEPS + 1)]
 
 
-_NO_THERMOMETER: tuple[float, ...] = (0.0,) * THERMOMETER_STEPS
+NO_THERMOMETER: tuple[float, ...] = (0.0,) * THERMOMETER_STEPS
 
 
-#: What :func:`_push_scalar` appends per scalar.
-_SCALAR_WIDTH = 2
+#: What :func:`push_scalar` appends per scalar.
+SCALAR_WIDTH = 2
 
 
-def _push_scalar(out: list[float], value: float) -> None:
+def push_scalar(out: list[float], value: float) -> None:
     """A scalar as raw plus signed ``log1p``, onto the caller's list; nothing
     is binned (FR-074). Appended rather than returned: a list per scalar made
     the allocation the cost."""
@@ -84,10 +84,10 @@ def _push_scalar(out: list[float], value: float) -> None:
     out.append(math.copysign(math.log1p(abs(raw)), raw))
 
 
-def _push_optional(out: list[float], value: float | None) -> None:
+def push_optional(out: list[float], value: float | None) -> None:
     """A present flag, then the scalar (0 when absent)."""
     out.append(0.0 if value is None else 1.0)
-    _push_scalar(out, 0 if value is None else value)
+    push_scalar(out, 0 if value is None else value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,10 +97,13 @@ class Slot:
     kind: SlotKind
     position: int
     features: tuple[float, ...] = ()
-    #: An ``ACT`` or ``ABILITY`` slot's ability vector: the values (from the
-    #: cache) or, in training, an ``int`` row of the batch's live encoder
-    #: output. Told apart by type, never by length.
-    e: tuple[float, ...] | int | None = None
+    #: An ``ACT`` or ``ABILITY`` slot's ability vector as a row of the batch's
+    #: live encoder output, in training; None where ``e_vector`` holds it.
+    e_row: int | None = None
+    #: An ``ACT`` or ``ABILITY`` slot's ability vector as values (from the
+    #: cache, or the zero vector); None where ``e_row`` names it. At most one of
+    #: the two is set.
+    e_vector: tuple[float, ...] | None = None
     entity_id: str | None = None
     player_id: str | None = None
     #: A charm mode's ``option`` line (FR-063a); the flag plus following its
@@ -159,18 +162,18 @@ def _push_pending_event_globals(out: list[float], pending: Event | None) -> None
     if pending is None:
         out += _NO_PENDING_EVENT
         return
-    out += _one_hot(pending.type.value, EVENT_TYPES)
-    _push_scalar(out, _event_amount(pending))
-    out += _one_hot(pending.params.get("mode"), PENDING_EVENT_MODES)
+    out += one_hot(pending.type.value, EVENT_TYPES)
+    push_scalar(out, _event_amount(pending))
+    out += one_hot(pending.params.get("mode"), PENDING_EVENT_MODES)
     out.append(1.0 if pending.params.get("combat") is True else 0.0)
-    out += _one_hot(pending.params.get("from_zone"), ZONES)
-    out += _one_hot(pending.params.get("to_zone"), ZONES)
+    out += one_hot(pending.params.get("from_zone"), ZONES)
+    out += one_hot(pending.params.get("to_zone"), ZONES)
 
 
 #: The pending-event block of a record without one.
 _NO_PENDING_EVENT: tuple[float, ...] = (0.0,) * (
-    _one_hot_width(EVENT_TYPES) + _SCALAR_WIDTH + _one_hot_width(PENDING_EVENT_MODES) + 1
-    + 2 * _one_hot_width(ZONES)
+    one_hot_width(EVENT_TYPES) + SCALAR_WIDTH + one_hot_width(PENDING_EVENT_MODES) + 1
+    + 2 * one_hot_width(ZONES)
 )
 
 
@@ -180,20 +183,20 @@ def global_features(record: EffectRecord) -> tuple[float, ...]:
     state = record.state
     g = state.global_
     out: list[float] = []
-    _push_scalar(out, g.turn)
-    _push_scalar(out, g.stack_size)
-    out += _one_hot(_phase_in(g.phase), PHASES)
-    out += _one_hot(g.combat_substep, COMBAT_SUBSTEPS)
+    push_scalar(out, g.turn)
+    push_scalar(out, g.stack_size)
+    out += one_hot(phase_in(g.phase), PHASES)
+    out += one_hot(g.combat_substep, COMBAT_SUBSTEPS)
     out.append(1.0 if g.active == record.actor_player else 0.0)
     out.append(1.0 if g.priority == record.actor_player else 0.0)
-    _push_scalar(out, len(g.emblems))
-    out += _one_hot(g.day_night or "neither", DAY_NIGHT)
+    push_scalar(out, len(g.emblems))
+    out += one_hot(g.day_night or "neither", DAY_NIGHT)
     _push_pending_event_globals(out, state.pending_event)
-    out += _one_hot(record.kind.value, RECORD_KINDS)
-    out += _one_hot(
+    out += one_hot(record.kind.value, RECORD_KINDS)
+    out += one_hot(
         record.moment.value if record.moment else None, MOMENTS,
     )
-    out += _one_hot(
+    out += one_hot(
         record.subkind.value if record.subkind else None,
         PLAYABILITY_SUBKINDS,
     )
@@ -202,7 +205,7 @@ def global_features(record: EffectRecord) -> tuple[float, ...]:
 
 #: Width of the kind, moment and subkind one-hots that end every ``[GLOBAL]``
 #: slot; the ``no-state`` baseline keeps exactly these (FR-094).
-KIND_FLAG_WIDTH = sum(map(_one_hot_width, (RECORD_KINDS, MOMENTS, PLAYABILITY_SUBKINDS)))
+KIND_FLAG_WIDTH = sum(map(one_hot_width, (RECORD_KINDS, MOMENTS, PLAYABILITY_SUBKINDS)))
 
 ACT_SLOT = 1
 
@@ -217,11 +220,11 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
         return tuple([0.0] * _ACT_FEATURE_WIDTH)
     refs = record.state.refs
     out: list[float] = [1.0]  # slot is populated
-    _push_scalar(out, refs.x if refs.x is not None else 0)
+    push_scalar(out, refs.x if refs.x is not None else 0)
     out.append(1.0 if refs.x is not None else 0.0)
-    _push_scalar(out, len(refs.modes))
-    _push_scalar(out, len(refs.as_cast))
-    _push_scalar(out, len(refs.choices))
+    push_scalar(out, len(refs.modes))
+    push_scalar(out, len(refs.as_cast))
+    push_scalar(out, len(refs.choices))
     _push_random_results(out, refs.random)
     return tuple(out)
 
@@ -230,16 +233,16 @@ def _push_random_results(out: list[float], random_results) -> None:
     """The dice rolled (how many, their sum, the highest) and the coin flips
     won and lost; zeros where the record carries none."""
     dice = random_results.dice if random_results is not None else ()
-    _push_scalar(out, len(dice))
-    _push_scalar(out, sum(dice))
-    _push_scalar(out, max(dice, default=0))
-    _push_scalar(out, random_results.coin_flips_won if random_results is not None else 0)
-    _push_scalar(out, random_results.coin_flips_lost if random_results is not None else 0)
+    push_scalar(out, len(dice))
+    push_scalar(out, sum(dice))
+    push_scalar(out, max(dice, default=0))
+    push_scalar(out, random_results.coin_flips_won if random_results is not None else 0)
+    push_scalar(out, random_results.coin_flips_lost if random_results is not None else 0)
 
 
 #: The populated and X-present flags, the X, mode, target and choice scalars,
 #: and the five random-result scalars.
-_ACT_FEATURE_WIDTH = 2 + 9 * _SCALAR_WIDTH
+_ACT_FEATURE_WIDTH = 2 + 9 * SCALAR_WIDTH
 
 
 def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, ...]:
@@ -249,28 +252,28 @@ def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, .
     out: list[float] = []
     for value in (player.life, player.hand, player.library, player.graveyard,
                   player.poison, player.energy):
-        _push_scalar(out, value)
+        push_scalar(out, value)
     for key in THIS_TURN_COUNTERS:
-        _push_scalar(out, player.this_turn.get(key, 0))
+        push_scalar(out, player.this_turn.get(key, 0))
     # The land plays the turn allows, beside the lands played (FR-044); 0 and
     # the flag where a static lifts the limit.
-    _push_scalar(out, player.max_land_plays or 0)
+    push_scalar(out, player.max_land_plays or 0)
     out.append(1.0 if player.land_plays_unlimited else 0.0)
     for color in COLORS:
-        _push_scalar(out, player.floating_mana.get(color, 0))
+        push_scalar(out, player.floating_mana.get(color, 0))
     for color in COLORS:
-        _push_scalar(out, player.untapped_production.get(color, 0))
-    _push_scalar(out, player.speed)
-    _push_scalar(out, player.rad)
+        push_scalar(out, player.untapped_production.get(color, 0))
+    push_scalar(out, player.speed)
+    push_scalar(out, player.rad)
     out.append(1.0 if player.city_blessing else 0.0)
     out.append(1.0 if player.monarch else 0.0)
     out.append(1.0 if player.initiative else 0.0)
     counts = player.turn_counts
     for name in TURN_COUNTS:
-        _push_scalar(out, getattr(counts, name) if counts is not None else 0)
+        push_scalar(out, getattr(counts, name) if counts is not None else 0)
     out.append(1.0 if record.state.names_as_pending_subject(player.id) else 0.0)
     pending = record.state.pending_event
-    out += _pending_param_bits(pending, player.id, ("defender", "cause")) if pending else (0.0, 0.0)
+    out += pending_param_bits(pending, player.id, ("defender", "cause")) if pending else (0.0, 0.0)
     g = record.state.global_
     out.append(1.0 if player.id == record.actor_player else 0.0)
     out.append(0.0 if player.id == record.actor_player else 1.0)
@@ -281,7 +284,7 @@ def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, .
     return tuple(out)
 
 
-def _pending_param_bits(pending: Event, ref: str, names: tuple[str, ...]) -> list[float]:
+def pending_param_bits(pending: Event, ref: str, names: tuple[str, ...]) -> list[float]:
     """Whether the pending event's params ``names`` (each a ref or a list of
     refs) name ``ref``."""
     params = pending.params

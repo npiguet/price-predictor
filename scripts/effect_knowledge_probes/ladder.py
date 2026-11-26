@@ -550,8 +550,8 @@ def _slot_index(surface) -> tuple[dict[str, int], dict[str, list[int]]]:
     for index, slot in enumerate(surface.slots):
         if slot.kind is SlotKind.PLAYER:
             player_slot[slot.player_id] = index
-        elif slot.kind is SlotKind.ABILITY and isinstance(slot.e, int):
-            rows_of[slot.entity_id].append(slot.e)
+        elif slot.kind is SlotKind.ABILITY and slot.e_row is not None:
+            rows_of[slot.entity_id].append(slot.e_row)
     return player_slot, rows_of
 
 
@@ -574,8 +574,8 @@ class ItemFeatureBuilder:
         self.zero_e = np.zeros(self.e_dim, dtype=np.float32)
         self.card_slot = readout.card_slots(surface)
         self.player_slot, self.rows_of = _slot_index(surface)
-        self.act = surface.slots[1].e
-        self.act_text = self.outputs.texts[self.act] if isinstance(self.act, int) else None
+        self.act = surface.slots[1].e_row
+        self.act_text = self.outputs.texts[self.act] if self.act is not None else None
         self._base = self._board()
 
     # ── what every item shares ──────────────────────────────────────────
@@ -641,7 +641,7 @@ class ItemFeatureBuilder:
         return self.zero_e
 
     def rung1(self, item) -> np.ndarray:
-        acting = self._e(self.act) if isinstance(self.act, int) else self.zero_e
+        acting = self._e(self.act) if self.act is not None else self.zero_e
         own = self._pooled(item.entity) if item.entity else self.zero_e
         return np.concatenate([self.rung0(item), acting, own,
                                self._partner(item, width=False)])

@@ -13,12 +13,10 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
 
 from effects.domain.input_layout import (
-    _SCALAR_WIDTH,
-    _push_scalar,
+    SCALAR_WIDTH,
+    push_scalar,
 )
-from effects.domain.input_vocabularies import (
-    _KEYWORD_COUNTERS,
-)
+from effects.domain.input_vocabularies import is_keyword_counter
 from effects.domain.keyword_names import normalize_keyword, overlay_keyword_set
 from effects.domain.provenance import ProvenanceKey, TraitKind
 from effects.domain.state_snapshot import (
@@ -164,10 +162,16 @@ def _keyword_counter_lines(entity: EntityState,
     carried = set().union(*(line.keywords for line in merged.values()))
     for name, count in entity.counters.items():
         keyword = normalize_keyword(name)
-        if count > 0 and keyword in _KEYWORD_COUNTERS - carried:
+        if count > 0 and _uncarried_keyword_counter(name, keyword, carried):
             carried.add(keyword)
             yield SlotLine(keyword_line_key(name), keywords=overlay_keyword_set(keyword),
                            granted=True, grant=LineGrant.COUNTER.value)
+
+
+def _uncarried_keyword_counter(name: str, keyword: str, carried: set[str]) -> bool:
+    """Whether counter ``name``, read as ``keyword``, is a keyword counter
+    whose keyword no line carries yet."""
+    return keyword not in carried and is_keyword_counter(name)
 
 
 def ability_features(line: SlotLine, *, chosen: bool = False) -> tuple[float, ...]:
@@ -180,9 +184,9 @@ def ability_features(line: SlotLine, *, chosen: bool = False) -> tuple[float, ..
         1.0 if line.by_effect else 0.0,
         0.0 if line.cast_with is None else 1.0,
     ]
-    _push_scalar(out, line.cast_with or 0)
+    push_scalar(out, line.cast_with or 0)
     out.append(1.0 if chosen else 0.0)
     return tuple(out)
 
 
-ABILITY_FEATURE_WIDTH = 4 + _SCALAR_WIDTH + 1
+ABILITY_FEATURE_WIDTH = 4 + SCALAR_WIDTH + 1

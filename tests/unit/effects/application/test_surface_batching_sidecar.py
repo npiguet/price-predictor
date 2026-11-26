@@ -24,7 +24,7 @@ from tests.unit.effects.builders import (
 def test_a_dropped_key_gets_no_ability_token():
     rows = {"creatures you control get +1/+1": 0, "deals 3 damage to any target": 1}
     surface = _batcher().surface_builder(rows).build(_record())
-    assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [0]
+    assert [slot.e_row for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [0]
 
 
 def _prepared(variant: str):

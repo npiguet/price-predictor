@@ -127,22 +127,22 @@ PHASE_ALIASES: dict[str, str] = {
 }
 
 
-def _phase_in(phase: str | None) -> str | None:
+def phase_in(phase: str | None) -> str | None:
     if phase is None:
         return phase
     return PHASE_ALIASES.get(phase.strip().lower(), phase)
 
 
 @lru_cache(maxsize=None)
-def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
+def positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
     """``normalized member -> its slot``, built once per vocabulary."""
-    positions: dict[str, int] = {}
+    found: dict[str, int] = {}
     for index, member in enumerate(vocabulary):
-        positions.setdefault(_spelling(member), index)
-    return positions
+        found.setdefault(spelling(member), index)
+    return found
 
 
-def _spelling(value: str) -> str:
+def spelling(value: str) -> str:
     """A value in its vocabulary's spelling: lower case, underscores."""
     return value.strip().lower().replace(" ", "_")
 
@@ -151,10 +151,10 @@ def vocabulary_slot(value: str, vocabulary: tuple[str, ...]) -> int | None:
     """``value``'s slot in ``vocabulary``, matched in the vocabulary's
     spelling; None for a value it does not list. The input surface and the
     head's targets both look a member up here, so they cannot normalize apart."""
-    return _positions(vocabulary).get(_spelling(value))
+    return positions(vocabulary).get(spelling(value))
 
 
-def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
+def one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     """One-hot over ``vocabulary`` plus a trailing "other/absent" slot."""
     out = [0.0] * (len(vocabulary) + 1)
     if value is None:
@@ -164,23 +164,23 @@ def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     return out
 
 
-def _one_hot_width(vocabulary: tuple[str, ...]) -> int:
-    """What :func:`_one_hot` returns over ``vocabulary``."""
+def one_hot_width(vocabulary: tuple[str, ...]) -> int:
+    """What :func:`one_hot` returns over ``vocabulary``."""
     return len(vocabulary) + 1
 
 
-def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
+def multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
     """Multi-hot over ``vocabulary`` plus a count of everything else."""
-    positions = _positions(vocabulary)
+    slots = positions(vocabulary)
     out = [0.0] * (len(vocabulary) + 1)
     seen: set[str] = set()
     other = 0
     for value in present:
-        normalized = _spelling(value)
+        normalized = spelling(value)
         if normalized in seen:
             continue
         seen.add(normalized)
-        index = positions.get(normalized)
+        index = slots.get(normalized)
         if index is None:
             other += 1
         else:

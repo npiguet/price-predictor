@@ -69,7 +69,7 @@ def test_a_decision_records_act_slot_reads_its_candidates_e():
     surface = batcher.surface_builder(rows).build(record)
     act = surface.slots[ACT_SLOT]
     candidate_text = batcher.text_of(record.payload.candidates[0].ability[0])
-    assert act.e == rows[candidate_text]
+    assert act.e_row == rows[candidate_text]
 
 
 def test_every_option_row_on_a_real_surface_follows_its_root():
@@ -106,6 +106,6 @@ def test_a_real_charm_gets_its_three_mode_rows_after_its_root():
     rows = {text: row for row, text in enumerate(sorted(texts))}
     abilities = slots_of_kind(batcher.surface_builder(rows).build(record), SlotKind.ABILITY)
     assert [slot.option for slot in abilities] == [False, True, True, True]
-    assert [slot.e for slot in abilities[1:]] == [
+    assert [slot.e_row for slot in abilities[1:]] == [
         rows[batcher.text_of(mode)] for mode in modes
     ]

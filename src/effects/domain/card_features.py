@@ -7,11 +7,11 @@ checkpoint records that order.
 from __future__ import annotations
 
 from effects.domain.input_layout import (
-    _NO_THERMOMETER,
-    _SCALAR_WIDTH,
-    _pending_param_bits,
-    _push_optional,
-    _push_scalar,
+    NO_THERMOMETER,
+    SCALAR_WIDTH,
+    pending_param_bits,
+    push_optional,
+    push_scalar,
     thermometer,
 )
 from effects.domain.input_vocabularies import (
@@ -27,13 +27,13 @@ from effects.domain.input_vocabularies import (
     SUPERTYPES,
     TIER_ROLE,
     ZONES,
-    _multi_hot,
-    _one_hot,
-    _one_hot_width,
-    _positions,
-    _spelling,
     counter_id,
     is_keyword_counter,
+    multi_hot,
+    one_hot,
+    one_hot_width,
+    positions,
+    spelling,
     subtype_id,
     vocabulary_slot,
 )
@@ -52,9 +52,9 @@ from effects.domain.state_snapshot import (
 )
 
 #: Power and toughness of the base, boosts and counters, then the present flag.
-_NO_PT: tuple[float, ...] = (0.0,) * (3 * 2 * _SCALAR_WIDTH + 1)
+_NO_PT: tuple[float, ...] = (0.0,) * (3 * 2 * SCALAR_WIDTH + 1)
 #: Targets, per-target amounts and up-to counts.
-_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * (3 * _SCALAR_WIDTH)
+_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * (3 * SCALAR_WIDTH)
 
 
 # ── the card slot ─────────────────────────────────────────────────────────
@@ -92,23 +92,23 @@ def card_segments(
 def _push_colors_and_mana_value(out, colors, mana_value) -> None:
     """The colours' multi-hot and the mana value, as a card's characteristics
     and a face-down card's real face read them."""
-    out += _multi_hot(colors, COLORS)
-    _push_scalar(out, mana_value)
+    out += multi_hot(colors, COLORS)
+    push_scalar(out, mana_value)
 
 
 def _push_characteristics(out, entity: EntityState, record, masked) -> None:
     """Types, supertypes, colours, mana value and the P/T breakdown; whether
     it is a copy and whether a token (subtypes are the slot's ids)."""
-    out += _multi_hot(entity.types, CARD_TYPES)
-    out += _multi_hot(entity.supertypes, SUPERTYPES)
+    out += multi_hot(entity.types, CARD_TYPES)
+    out += multi_hot(entity.supertypes, SUPERTYPES)
     _push_colors_and_mana_value(out, entity.colors, entity.mana_value)
     pt = entity.pt
     if pt is None:
         out += _NO_PT
     else:
         for pair in (pt.base, pt.boosts, pt.counters):
-            _push_scalar(out, pair[0])
-            _push_scalar(out, pair[1])
+            push_scalar(out, pair[0])
+            push_scalar(out, pair[1])
         out.append(1.0)
     out.append(1.0 if entity.copy_source is not None else 0.0)
     out.append(1.0 if entity.token_script_id is not None else 0.0)
@@ -122,12 +122,12 @@ def face_state_of(entity: EntityState) -> str:
 def _push_face_state(out, entity: EntityState, record, masked) -> None:
     """Face state one-hot (``in.face_state``). A face-down card's real face
     is the next part's; its lines enter as inactive ability slots."""
-    out += _one_hot(face_state_of(entity), FACE_STATES)
+    out += one_hot(face_state_of(entity), FACE_STATES)
 
 
 #: What :func:`_push_real_face` writes for a card with no real face.
 _NO_REAL_FACE: tuple[float, ...] = (0.0,) * (
-    _one_hot_width(CARD_TYPES) + _one_hot_width(COLORS) + 4 * _SCALAR_WIDTH + 1
+    one_hot_width(CARD_TYPES) + one_hot_width(COLORS) + 4 * SCALAR_WIDTH + 1
 )
 
 
@@ -144,13 +144,13 @@ def _push_real_face(out, entity: EntityState, record, masked) -> None:
     if face is None:
         out += _NO_REAL_FACE
         return
-    out += _multi_hot(face.types, CARD_TYPES)
+    out += multi_hot(face.types, CARD_TYPES)
     _push_colors_and_mana_value(out, face.colors, face.mana_value)
     power, toughness = face.base_pt if face.base_pt is not None else (0, 0)
     out.append(0.0 if face.base_pt is None else 1.0)
-    _push_scalar(out, power)
-    _push_scalar(out, toughness)
-    _push_scalar(out, len(face.subtypes))
+    push_scalar(out, power)
+    push_scalar(out, toughness)
+    push_scalar(out, len(face.subtypes))
 
 
 def _push_mana_cost(out, entity: EntityState, record, masked) -> None:
@@ -160,8 +160,8 @@ def _push_mana_cost(out, entity: EntityState, record, masked) -> None:
     out.append(0.0 if cost is None else 1.0)
     cost = cost or {}
     for symbol in MANA_SYMBOLS:
-        _push_scalar(out, cost.get(symbol, 0))
-    _push_scalar(out, sum(n for symbol, n in cost.items() if symbol not in _MANA_SYMBOL_SET))
+        push_scalar(out, cost.get(symbol, 0))
+    push_scalar(out, sum(n for symbol, n in cost.items() if symbol not in _MANA_SYMBOL_SET))
 
 
 _MANA_SYMBOL_SET = frozenset(MANA_SYMBOLS)
@@ -171,30 +171,30 @@ def _push_printed_loyalty_defense(out, entity: EntityState, record, masked) -> N
     """Printed loyalty and defense, each a scalar with a thermometer, as
     toughness has (``in.printed_loyalty_defense``)."""
     for value in (entity.printed_loyalty, entity.printed_defense):
-        _push_optional(out, value)
-        out += _NO_THERMOMETER if value is None else thermometer(value)
+        push_optional(out, value)
+        out += NO_THERMOMETER if value is None else thermometer(value)
 
 
 def _push_status(out, entity: EntityState, record, masked) -> None:
     """Zone, tapped, summoning sick, marked damage, combat. Summoning sickness
     reads on a permanent only (:attr:`EntityState.on_battlefield`): Forge
     writes it in every zone, where it would say "is a creature card"."""
-    out += _one_hot(entity.zone, ZONES)
+    out += one_hot(entity.zone, ZONES)
     out.append(1.0 if entity.tapped else 0.0)
     out.append(1.0 if entity.sick and entity.on_battlefield else 0.0)
-    _push_scalar(out, entity.damage)
+    push_scalar(out, entity.damage)
     combat = entity.combat
     out.append(1.0 if combat and combat.attacking else 0.0)
     out.append(1.0 if combat and combat.blocking else 0.0)
     out.append(1.0 if combat and combat.became_blocked else 0.0)
-    _push_scalar(out, len(combat.blocked_by) if combat else 0)
+    push_scalar(out, len(combat.blocked_by) if combat else 0)
 
 
 def _push_role(out, entity: EntityState, record, masked) -> None:
     """Why the entity is in the snapshot, over :data:`ENTITY_ROLES`
     (``in.role``). A last-known copy keeps the zone it last had, so without
     its role one with zone ``battlefield`` reads as a permanent."""
-    out += _one_hot(entity.role or TIER_ROLE, ENTITY_ROLES)
+    out += one_hot(entity.role or TIER_ROLE, ENTITY_ROLES)
 
 
 def keywords_of(entity: EntityState) -> set[str]:
@@ -214,10 +214,10 @@ def _push_keyword_flags(out, entity: EntityState, record, masked) -> None:
     """One flag per kept keyword (root spec § 9.6), and nothing for any other:
     a keyword without a flag is read through its line."""
     flags = [0.0] * len(KEPT_KEYWORD_FLAGS)
-    positions = _positions(KEPT_KEYWORD_FLAGS)
+    slots = positions(KEPT_KEYWORD_FLAGS)
     hidden = {overlay_keyword(keyword) for keyword in masked}
     for keyword in keywords_of(entity) - hidden:
-        index = positions.get(_spelling(keyword))
+        index = slots.get(spelling(keyword))
         if index is not None:
             flags[index] = 1.0
     out += flags
@@ -254,11 +254,11 @@ def _push_relation_to_act(out, entity: EntityState, record: EffectRecord, masked
 
 
 def _push_designations(out, entity: EntityState, record, masked) -> None:
-    out += _multi_hot(entity.designations, DESIGNATIONS)
+    out += multi_hot(entity.designations, DESIGNATIONS)
 
 
 def _push_x_paid(out, entity: EntityState, record, masked) -> None:
-    _push_optional(out, entity.x_paid)
+    push_optional(out, entity.x_paid)
 
 
 def _push_chosen(out, entity: EntityState, record, masked) -> None:
@@ -270,29 +270,29 @@ def _push_chosen(out, entity: EntityState, record, masked) -> None:
     if chosen is None:
         out += _NO_CHOSEN
         return
-    colors = [COLOR_NAMES.get(_spelling(color), color) for color in chosen.colors or ()]
-    out += _multi_hot(colors, COLORS)
+    colors = [COLOR_NAMES.get(spelling(color), color) for color in chosen.colors or ()]
+    out += multi_hot(colors, COLORS)
     card_types = [t for t in (chosen.type, chosen.type2)
                   if t is not None and vocabulary_slot(t, CARD_TYPES) is not None]
-    out += _multi_hot(card_types, CARD_TYPES)
-    _push_optional(out, chosen.number)
+    out += multi_hot(card_types, CARD_TYPES)
+    push_optional(out, chosen.number)
     out.append(1.0 if chosen.player is not None else 0.0)
-    _push_scalar(out, len(chosen.cards or ()))
-    _push_scalar(out, len(chosen.names or ()))
-    out += _one_hot(chosen.direction, CHOSEN_DIRECTIONS)
-    out += _one_hot(chosen.even_odd, CHOSEN_PARITIES)
+    push_scalar(out, len(chosen.cards or ()))
+    push_scalar(out, len(chosen.names or ()))
+    out += one_hot(chosen.direction, CHOSEN_DIRECTIONS)
+    out += one_hot(chosen.even_odd, CHOSEN_PARITIES)
     out.append(1.0 if chosen.sector else 0.0)
     out.append(1.0 if chosen.mode else 0.0)
     rolls = chosen.stored_rolls or ()
-    _push_scalar(out, len(rolls))
-    _push_scalar(out, sum(rolls))
+    push_scalar(out, len(rolls))
+    push_scalar(out, sum(rolls))
 
 
 #: The chosen block of a card that chose nothing.
 _NO_CHOSEN: tuple[float, ...] = (0.0,) * (
-    _one_hot_width(COLORS) + _one_hot_width(CARD_TYPES) + 1 + _SCALAR_WIDTH + 1
-    + 2 * _SCALAR_WIDTH + _one_hot_width(CHOSEN_DIRECTIONS)
-    + _one_hot_width(CHOSEN_PARITIES) + 2 + 2 * _SCALAR_WIDTH
+    one_hot_width(COLORS) + one_hot_width(CARD_TYPES) + 1 + SCALAR_WIDTH + 1
+    + 2 * SCALAR_WIDTH + one_hot_width(CHOSEN_DIRECTIONS)
+    + one_hot_width(CHOSEN_PARITIES) + 2 + 2 * SCALAR_WIDTH
 )
 
 
@@ -330,8 +330,8 @@ def _push_costs_paid(out, entity: EntityState, record, masked) -> None:
     out.append(0.0 if paid is None else 1.0)
     mana = paid.mana if paid is not None else {}
     for color in COLORS:
-        _push_scalar(out, mana.get(color, 0))
-    out += _one_hot(paid.cast_from if paid is not None else None, ZONES)
+        push_scalar(out, mana.get(color, 0))
+    out += one_hot(paid.cast_from if paid is not None else None, ZONES)
     out.append(1.0 if paid is not None and paid.mana_rider else 0.0)
 
 
@@ -348,7 +348,7 @@ def _push_history(out, entity: EntityState, record, masked) -> None:
 
 
 def _push_order_rank(out, entity: EntityState, record, masked) -> None:
-    _push_optional(out, entity.order_rank)
+    push_optional(out, entity.order_rank)
 
 
 def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
@@ -356,9 +356,9 @@ def _push_stack_extras(out, entity: EntityState, record, masked) -> None:
     if extras is None:
         out += _NO_STACK_EXTRAS
         return
-    _push_scalar(out, len(extras.targets))
-    _push_scalar(out, sum(extras.per_target_amounts.values()))
-    _push_scalar(out, sum(extras.up_to_counts.values()))
+    push_scalar(out, len(extras.targets))
+    push_scalar(out, sum(extras.per_target_amounts.values()))
+    push_scalar(out, sum(extras.up_to_counts.values()))
 
 
 def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) -> None:
@@ -374,7 +374,7 @@ def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) 
     out.append(1.0)
     out.append(1.0 if state.names_as_pending_subject(entity.id) else 0.0)
     out.append(1.0 if pending.params.get("source") == entity.id else 0.0)
-    out += _pending_param_bits(pending, entity.id, ("defender", "blockers", "cause"))
+    out += pending_param_bits(pending, entity.id, ("defender", "blockers", "cause"))
 
 
 def command_zone_object(record: EffectRecord, object_id: str) -> CommandZoneObject | None:
@@ -393,15 +393,15 @@ def _push_command_zone(out, entity: EntityState, record: EffectRecord, masked) -
     shield after a present flag; zeros on any other card. Its links are
     relations, and what it does is its source lines' ``e``."""
     found = command_zone_object(record, entity.id)
-    out += _one_hot(found.duration if found is not None else None, EFFECT_DURATIONS)
-    _push_optional(out, found.shield_left if found is not None else None)
+    out += one_hot(found.duration if found is not None else None, EFFECT_DURATIONS)
+    push_optional(out, found.shield_left if found is not None else None)
 
 
 def _push_comparable_amounts(out, entity: EntityState, record, masked) -> None:
     """Thermometers of total power, total toughness, and the toughness left
     after marked damage, subtracted here so the trunk need not learn to."""
     if entity.pt is None:
-        out += _NO_THERMOMETER * 3
+        out += NO_THERMOMETER * 3
         return
     power, toughness = entity.pt.total
     out += thermometer(power)

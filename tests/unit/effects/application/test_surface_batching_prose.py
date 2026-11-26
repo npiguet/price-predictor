@@ -177,4 +177,4 @@ def test_a_floating_effects_card_reads_its_source_lines_text():
     surface = batcher.surface_builder(rows).build(record)
     at = next(index for index, slot in enumerate(surface.slots)
               if slot.kind is SlotKind.CARD and slot.entity_id == floating.id)
-    assert surface.slots[at + 1].e == rows[source]
+    assert surface.slots[at + 1].e_row == rows[source]

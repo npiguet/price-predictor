@@ -132,8 +132,8 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
                 rows = torch.full(batch.e_vectors.shape[:2], -1, dtype=torch.long)
                 for b, surface in enumerate(surfaces):
                     for s, slot in enumerate(surface.slots):
-                        if isinstance(slot.e, int):
-                            rows[b, s] = slot.e
+                        if slot.e_row is not None:
+                            rows[b, s] = slot.e_row
                 rows = rows.to(batch.e_vectors.device)
                 has_row = rows >= 0
                 for replacement in REPLACEMENTS:

@@ -260,7 +260,7 @@ class TestStrippingTheAbilityChannel:
             record, {"A": frozenset({"first_strike"})},
         )
         kept = [
-            slot.e for slot in slots_of_kind(stripped, SlotKind.ABILITY)
+            slot.e_row for slot in slots_of_kind(stripped, SlotKind.ABILITY)
             if slot.entity_id == "A"
         ]
         assert kept == [rows["W: this creature gets +1/+0"]]
@@ -293,7 +293,7 @@ class TestStrippingTheAbilityChannel:
             record, {"A": frozenset({"first_strike"})},
         )
         assert all(
-            slot.e != (0.0,) * 4
+            slot.e_vector != (0.0,) * 4
             for slot in slots_of_kind(stripped, SlotKind.ABILITY)
         )
 
@@ -354,7 +354,7 @@ class TestStrippingAGen3Carrier:
         batcher, (base, stripped) = self._twin(record)
         rows = _rows(batcher, [record])
         assert _ability_count(base, "A") == 3
-        kept = [slot.e for slot in slots_of_kind(stripped, SlotKind.ABILITY)
+        kept = [slot.e_row for slot in slots_of_kind(stripped, SlotKind.ABILITY)
                 if slot.entity_id == "A"]
         assert kept == [rows["W: this creature gets +1/+0"]]
 

@@ -22,10 +22,10 @@ from effects.domain.input_layout import (
     ACT_SLOT,
     THERMOMETER_STEPS,
     SlotKind,
-    _push_scalar,
     act_features,
     global_features,
     player_features,
+    push_scalar,
 )
 from effects.domain.input_vocabularies import PHASES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
@@ -221,11 +221,11 @@ class TestPositionReset:
 
 class TestActSlot:
     def test_a_resolution_carries_its_acting_lines_vector(self):
-        assert _build(_record()).slots[1].e == _VECTORS[_BOLT]
+        assert _build(_record()).slots[1].e_vector == _VECTORS[_BOLT]
 
     def test_act_is_empty_for_a_combat_record(self):
         surface = _build(_record(kind=RecordKind.COMBAT, ability=None))
-        assert surface.slots[1].e == _ZERO
+        assert surface.slots[1].e_vector == _ZERO
         assert set(surface.slots[1].features) == {0.0}
 
     def test_act_is_empty_for_the_attackers_subkind(self):
@@ -261,18 +261,18 @@ class TestActSlot:
                           has_legal_target=False),
             )),
         )
-        assert _build(record).slots[1].e == _VECTORS[_BOLT]
+        assert _build(record).slots[1].e_vector == _VECTORS[_BOLT]
 
     def test_an_unresolvable_key_contributes_zeros_rather_than_dropping(self):
         missing = ProvenanceKey("cardsfolder/x/absent.txt", 0, "spell", 0)
-        assert _build(_record(ability=(missing,))).slots[1].e == _ZERO
+        assert _build(_record(ability=(missing,))).slots[1].e_vector == _ZERO
 
 
 class TestAbilityTokens:
     def test_printed_and_attachment_granted_lines_become_tokens(self):
         entity = _entity("E1", lines=lines_of((_ANTHEM,), (_WARD,)))
         surface = _build(_record(state=_snapshot(entities=(entity,))))
-        vectors = [s.e for s in slots_of_kind(surface, SlotKind.ABILITY)]
+        vectors = [s.e_vector for s in slots_of_kind(surface, SlotKind.ABILITY)]
         assert vectors == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
 
     def test_an_unmet_static_is_one_more_token_flagged_inactive(self):
@@ -290,7 +290,7 @@ class TestAbilityTokens:
             _entity("E1", lines=lines_of((_ANTHEM,), (_WARD,))),))))
         assert unmet.slots[:-1] == met.slots
         inactive = unmet.slots[-1]
-        assert inactive.e == _VECTORS[_BOLT] and _flags(inactive)["active"] == 0.0
+        assert inactive.e_vector == _VECTORS[_BOLT] and _flags(inactive)["active"] == 0.0
 
     def test_context_dropout_can_drop_a_context_ability(self):
         record = _record()
@@ -350,7 +350,7 @@ class TestNumericEncoding:
     @staticmethod
     def _scalar(value: float) -> list[float]:
         out: list[float] = []
-        _push_scalar(out, value)
+        push_scalar(out, value)
         return out
 
     def test_a_scalar_enters_raw_plus_log1p(self):
@@ -454,7 +454,7 @@ class TestKeysWithNoLine:
         )))
         surface = _build(record, has_line=lambda key: key in _VECTORS)
         abilities = slots_of_kind(surface, SlotKind.ABILITY)
-        assert [slot.e for slot in abilities] == [_VECTORS[_ANTHEM]]
+        assert [slot.e_vector for slot in abilities] == [_VECTORS[_ANTHEM]]
 
     def test_positions_stay_contiguous_after_a_skip(self):
         record = _record(state=_snapshot(entities=(
@@ -472,13 +472,14 @@ class TestKeysWithNoLine:
         record = _record(state=_snapshot(entities=(
             _entity("E1", lines=lines_of(printed=(_ANTHEM,))),)))
         surface = _build(record, e_for=lambda key: None, has_line=lambda key: True)
-        assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [_ZERO]
+        assert [slot.e_vector for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [_ZERO]
 
     def test_without_the_predicate_every_key_keeps_its_token(self):
         record = _record(state=_snapshot(entities=(
             _entity("E1", lines=lines_of(printed=(self._PHANTOM,))),
         )))
-        assert [slot.e for slot in slots_of_kind(_build(record), SlotKind.ABILITY)] == [_ZERO]
+        abilities = slots_of_kind(_build(record), SlotKind.ABILITY)
+        assert [slot.e_vector for slot in abilities] == [_ZERO]
 
 
 class TestOptionRows:
@@ -510,7 +511,7 @@ class TestOptionRows:
         )
         abilities = slots_of_kind(surface, SlotKind.ABILITY)
         assert [slot.option for slot in abilities] == [False, True, True, True, False]
-        assert [slot.e[0] for slot in abilities[1:4]] == [0.0, 1.0, 2.0]
+        assert [slot.e_vector[0] for slot in abilities[1:4]] == [0.0, 1.0, 2.0]
         assert [slot.position for slot in abilities] == [1, 2, 3, 4, 5]
 
     def test_no_options_callback_adds_no_rows(self):
@@ -854,7 +855,7 @@ class TestCardSlotInputs:
         assert slots_of_kind(one, SlotKind.CARD) == slots_of_kind(two, SlotKind.CARD)
         one_line, = slots_of_kind(one, SlotKind.ABILITY)
         two_line, = slots_of_kind(two, SlotKind.ABILITY)
-        assert one_line.features == two_line.features and one_line.e != two_line.e
+        assert one_line.features == two_line.features and one_line.e_vector != two_line.e_vector
 
     def test_is_a_copy_and_is_a_token(self):
         record = _record()
@@ -1051,7 +1052,7 @@ class TestAKeywordOfSeveralLines:
         ).build(record)
         abilities = [slot for slot in slots_of_kind(surface, SlotKind.ABILITY)
                      if slot.entity_id == saga.id]
-        assert [slot.e[0] for slot in abilities] == [1.0, 2.0, 3.0, 0.0]
+        assert [slot.e_vector[0] for slot in abilities] == [1.0, 2.0, 3.0, 0.0]
 
     def test_the_batcher_stages_every_chapter_s_text(self, record, sidecars):
         import torch
@@ -1213,7 +1214,7 @@ class TestCommandZoneSlots:
         assert at not in surface.entity_slots
         line = surface.slots[at + 1]
         assert line.kind is SlotKind.ABILITY and line.entity_id == "F40"
-        assert line.e == falter_e and _flags(line)["granted"] == 1.0
+        assert line.e_vector == falter_e and _flags(line)["granted"] == 1.0
         # Its lines are an effect's, whose duration the card reads apart.
         assert _flags(line)["by_effect"] == 1.0
         for creature in ("E1", "E2"):
@@ -1260,7 +1261,7 @@ class TestCommandZoneSlots:
         vector = (0.0, 0.0, 0.0, 1.0)
         surface = _build(record, e_for=lambda key: vector if key == source else None)
         at = _subject_slot(surface, "F37")
-        assert surface.slots[at + 1].e == vector
+        assert surface.slots[at + 1].e_vector == vector
         assert floating.affected == ("E52", "E173", "E174")
         for creature in floating.affected:
             assert _linked(surface, at, _subject_slot(surface, creature), "affects")
@@ -1271,7 +1272,7 @@ class TestCommandZoneSlots:
         vector = (0.0, 1.0, 1.0, 0.0)
         surface = _build(record, e_for=lambda key: vector if key in trigger.source_lines else None)
         at = _subject_slot(surface, trigger.id)
-        assert surface.slots[at + 1].e == vector
+        assert surface.slots[at + 1].e_vector == vector
         # Pending on a card of the board: the record's own link relates them.
         assert trigger.remembered == ("E240",)
         assert _linked(surface, at, _subject_slot(surface, "E240"), "pending_on")

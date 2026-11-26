@@ -45,7 +45,7 @@ from effects.domain.slot_lines import (
     ability_features,
     slot_lines,
 )
-from effects.domain.slot_relations import _name_key, _SlotRelations
+from effects.domain.slot_relations import SlotRelations, name_key
 from effects.domain.state_snapshot import (
     CardLine,
     EntityRole,
@@ -126,7 +126,8 @@ class LineLookup(Protocol):
     """What the surface asks of each ability key's rendered line."""
 
     def e_for(self, key: ProvenanceKey) -> tuple[float, ...] | int | None:
-        """The line's ``e`` (see :attr:`Slot.e`). None gives a zero vector
+        """The line's ``e``: a row of the batch's encoder output or the
+        values (:attr:`Slot.e_row`, :attr:`Slot.e_vector`). None gives a zero vector
         rather than dropping the token, so a variant that masks ``e`` keeps
         the geometry."""
 
@@ -147,6 +148,13 @@ class LineLookup(Protocol):
     def room_of(self, key: ProvenanceKey) -> str | None:
         """The dungeon room the key's line is (its ``ValidRoom$``); None for
         any other line. Asked of a dungeon's lines only."""
+
+
+def _split_e(e: tuple[float, ...] | int) -> tuple[int | None, tuple[float, ...] | None]:
+    """A line's ``e`` as a :class:`Slot`'s ``(e_row, e_vector)``: an ``int``
+    row of the batch's encoder output, or values. Told apart by type, never
+    by length."""
+    return (e, None) if isinstance(e, int) else (None, e)
 
 
 #: The ``stripped`` map of a record built as collected: no entity loses a keyword.
@@ -186,19 +194,20 @@ class SurfaceBuilder:
         ``[CARD]`` slot after the board's (:func:`command_zone_entities`), but
         no per-entity target: nothing the head predicts happens to it.
         Relations are built last, over the slots as they stand after context
-        dropout and the strip (:class:`_SlotRelations`).
+        dropout and the strip (:class:`SlotRelations`).
         """
+        act_row, act_vector = _split_e(self._act_vector(record))
         slots = [
             Slot(
                 kind=SlotKind.GLOBAL, position=0,
                 features=global_features(record),
             ),
             Slot(
-                kind=SlotKind.ACT, position=ACT_SLOT,
-                features=act_features(record), e=self._act_vector(record),
+                kind=SlotKind.ACT, position=ACT_SLOT, features=act_features(record),
+                e_row=act_row, e_vector=act_vector,
             ),
         ]
-        relations = _SlotRelations()
+        relations = SlotRelations()
         entity_slots: list[int] = []
         unremovable: list[str] = []
         for player in record.state.players:
@@ -266,16 +275,19 @@ class SurfaceBuilder:
         modes = self.lines.options_for(line.key)
         options = ((line.key, False), *((mode, True) for mode in modes))
         for position, (mode_key, option) in enumerate(options, first):
-            resolved = self.lines.e_for(mode_key)
+            row, vector = _split_e(self._zero_if_none(self.lines.e_for(mode_key)))
             yield Slot(
                 kind=SlotKind.ABILITY, position=position,
                 features=ability_features(
                     line, chosen=option and mode_key.option in line.chosen),
-                # Explicitly against None: row 0 is a valid matrix row and
-                # ``or`` would read it as a miss.
-                e=self._zero if resolved is None else resolved,
+                e_row=row, e_vector=vector,
                 entity_id=entity_id, option=option,
             ), mode_key
+
+    def _zero_if_none(self, e: tuple[float, ...] | int | None) -> tuple[float, ...] | int:
+        # Explicitly against None: row 0 is a valid matrix row and ``or``
+        # would read it as a miss.
+        return self._zero if e is None else e
 
     def _slot_lines(self, entity: EntityState, record: EffectRecord) -> tuple[SlotLine, ...]:
         """:func:`slot_lines`, a dungeon's room lines active for the room its
@@ -287,11 +299,11 @@ class SurfaceBuilder:
         room = dungeon_room(record, entity.id)
         if room is None:
             return lines
-        return tuple(self._in_room(line, _name_key(room)) for line in lines)
+        return tuple(self._in_room(line, name_key(room)) for line in lines)
 
     def _in_room(self, line: SlotLine, room: str) -> SlotLine:
         named = self.lines.room_of(line.key)
-        return line if named is None else replace(line, active=_name_key(named) == room)
+        return line if named is None else replace(line, active=name_key(named) == room)
 
     def _keeps(self, line: SlotLine, *, gone: frozenset[str], dropout: float) -> bool:
         """Whether one of an entity's lines gets a slot."""

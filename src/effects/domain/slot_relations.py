@@ -36,11 +36,11 @@ def _relation_pair(family: str, target_index: int | None) -> tuple[int, int]:
             relation_type(family, Direction.REVERSE, target_index))
 
 
-def _name_key(name: str) -> str:
+def name_key(name: str) -> str:
     return name.strip().lower()
 
 
-class _SlotRelations:
+class SlotRelations:
     """One surface's relations (root spec § 10.3), gathered while its slots
     are laid out and built once they are fixed.
 
@@ -114,7 +114,7 @@ class _SlotRelations:
         its name, the names it chose, and whether it is a last-known copy."""
         # A face-down card's name would be its real face's: it has none here.
         if entity.name and face_state_of(entity) != FaceState.FACE_DOWN:
-            self._named.setdefault(_name_key(entity.name), []).append(start)
+            self._named.setdefault(name_key(entity.name), []).append(start)
         if entity.chosen is not None and entity.chosen.names:
             self._chosen_names.append((start, entity.chosen.names))
         if entity.is_last_known and entity.id.startswith("L"):
@@ -150,7 +150,7 @@ class _SlotRelations:
             self._pairs(rows, "has_the_same_name", apart)
         for chooser, names in self._chosen_names:
             for name in names:
-                for at in self._named.get(_name_key(name), ()):
+                for at in self._named.get(name_key(name), ()):
                     self.link(chooser, at, "has_the_same_name")
 
     def _act_relations(self, state) -> None:

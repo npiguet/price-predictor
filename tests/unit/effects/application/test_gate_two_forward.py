@@ -71,8 +71,8 @@ def _kept(whole, twin) -> list[int]:
     """The record's slot each twin slot is, in order; every other slot of the
     record is one the strip dropped."""
     def same(a, b):
-        return (a.kind, a.entity_id, a.player_id, a.e, a.option) == (
-            b.kind, b.entity_id, b.player_id, b.e, b.option)
+        return (a.kind, a.entity_id, a.player_id, a.e_row, a.e_vector, a.option) == (
+            b.kind, b.entity_id, b.player_id, b.e_row, b.e_vector, b.option)
 
     kept, at = [], 0
     for slot in twin.slots:

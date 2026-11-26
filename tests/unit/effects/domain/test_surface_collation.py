@@ -88,10 +88,10 @@ class TestCollateSurfaces:
                 if slot.features and slot.kind in features:
                     values = torch.tensor(slot.features, dtype=torch.float32)
                     features[slot.kind][row, column, : values.shape[0]] = values
-                if isinstance(slot.e, int):
-                    e_rows[row, column] = slot.e
-                elif slot.e is not None:
-                    vector = torch.tensor(slot.e, dtype=torch.float32)
+                if slot.e_row is not None:
+                    e_rows[row, column] = slot.e_row
+                elif slot.e_vector is not None:
+                    vector = torch.tensor(slot.e_vector, dtype=torch.float32)
                     e_vectors[row, column, : vector.shape[0]] = vector
 
         return {
@@ -168,8 +168,10 @@ class TestCollateSurfaces:
                     tuple(rng.uniform(-1.0, 1.0) for _ in range(e_dim)),
                     tuple(rng.uniform(-1.0, 1.0) for _ in range(e_dim - 2)),
                 ])
+                row = e if isinstance(e, int) else None
                 slots.append(Slot(
-                    kind=kind, position=position, features=features, e=e,
+                    kind=kind, position=position, features=features,
+                    e_row=row, e_vector=None if row is not None else e,
                 ))
             surfaces.append(EffectHeadInput(slots=tuple(slots)))
         self._assert_same(surfaces, e_dim=e_dim, widths=widths)

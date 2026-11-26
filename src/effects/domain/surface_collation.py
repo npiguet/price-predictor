@@ -113,8 +113,8 @@ def collate_surfaces(
     """Pad a batch of token surfaces, to its own longest, into the trunk's
     inputs, each slot kind's features in a tensor of its own.
 
-    A slot whose ``e`` is an ``int`` row lands in ``e_rows`` (``-1``
-    elsewhere), for the caller to resolve on the device with
+    A slot's ``e_row`` lands in ``e_rows`` (``-1`` elsewhere), for the
+    caller to resolve on the device with
     :meth:`TrunkInputs.with_e`.
     """
     batch = len(surfaces)
@@ -147,10 +147,10 @@ def collate_surfaces(
             if slot.features and slot.kind in features:
                 values = slot.features
                 features[slot.kind][row, column, : len(values)] = values
-            if isinstance(slot.e, int):
-                e_rows[row, column] = slot.e
-            elif slot.e is not None:
-                e_vectors[row, column, : len(slot.e)] = slot.e
+            if slot.e_row is not None:
+                e_rows[row, column] = slot.e_row
+            elif slot.e_vector is not None:
+                e_vectors[row, column, : len(slot.e_vector)] = slot.e_vector
 
     return TrunkInputs(
         slot_features={
