@@ -5,7 +5,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.List;
+
 import static com.pricepredictor.connector.AbilityRendering.lineOf;
+import static com.pricepredictor.connector.ConvertedTextAssertions.assertContainsAll;
 import static com.pricepredictor.connector.ConvertedTextAssertions.assertNoRawEtbReplacementKeyword;
 import static com.pricepredictor.connector.ConvertedTextAssertions.assertOccursOnce;
 import static com.pricepredictor.connector.FaceAbilities.abilitiesOfType;
@@ -22,22 +25,24 @@ class RulesParserTest {
     @Test
     void vanillaCreature() {
         CardFace card = cards.face("g/grizzly_bears.txt");
-        assertEquals("grizzly bears", card.name());
+        assertEquals(new FaceHeader("grizzly bears", "creature bear", "2/2", null), FaceHeader.of(card));
         assertTrue(card.manaCost().contains("{G}"));
-        assertEquals("creature bear", card.types());
-        assertEquals("2/2", card.powerToughness());
         assertTrue(card.abilities().isEmpty());
-        assertNull(card.loyalty());
+    }
+
+    /** A face's name, type line, power and toughness, and loyalty. */
+    private record FaceHeader(String name, String types, String powerToughness, String loyalty) {
+
+        static FaceHeader of(CardFace face) {
+            return new FaceHeader(face.name(), face.types(), face.powerToughness(), face.loyalty());
+        }
     }
 
     @Test
     void activatedAbility() {
         MultiCard elves = cards.convertFromFile("l/llanowar_elves.txt");
         CardFace card = elves.faces().get(0);
-        String output = rendered(card);
-        assertTrue(output.contains("activated[1]:"), output);
-        assertTrue(output.contains("{T}"), output);
-        assertTrue(output.contains("add {G}"), output);
+        assertContainsAll(rendered(card), "activated[1]:", "{T}", "add {G}");
         // The text is lowercased, the mana symbols kept as written.
         assertTrue(rendered(elves).contains("llanowar elves"), rendered(elves));
 
@@ -120,19 +125,21 @@ class RulesParserTest {
 
     @Test
     void applyCasingLowercasesTheTextButKeepsVariableXAndManaSymbols() {
-        // Standalone X preserved
-        assertEquals("-X: deal X damage", AbilityDescription.applyCasing("-X: Deal X damage"));
-        assertEquals("+X/+0 until end of turn", AbilityDescription.applyCasing("+X/+0 until end of turn"));
-        assertEquals("where X is the number", AbilityDescription.applyCasing("Where X is the number"));
-        // X inside words lowercased
-        assertEquals("exile target creature", AbilityDescription.applyCasing("Exile target creature"));
-        assertEquals("next end step", AbilityDescription.applyCasing("Next end step"));
-        assertEquals("tax each opponent", AbilityDescription.applyCasing("Tax each opponent"));
-        // Braces
-        assertEquals("{X}{R}", AbilityDescription.applyCasing("{X}{R}"));
-        // Mixed
-        assertEquals("pay {X}, where X is the number of counters",
-                AbilityDescription.applyCasing("Pay {X}, where X is the number of counters"));
+        List<String> texts = List.of(
+                // Standalone X preserved
+                "-X: Deal X damage", "+X/+0 until end of turn", "Where X is the number",
+                // X inside words lowercased
+                "Exile target creature", "Next end step", "Tax each opponent",
+                // Braces
+                "{X}{R}",
+                // Mixed
+                "Pay {X}, where X is the number of counters");
+        assertEquals(List.of(
+                        "-X: deal X damage", "+X/+0 until end of turn", "where X is the number",
+                        "exile target creature", "next end step", "tax each opponent",
+                        "{X}{R}",
+                        "pay {X}, where X is the number of counters"),
+                texts.stream().map(AbilityDescription::applyCasing).toList());
     }
 
     @Test
@@ -154,28 +161,20 @@ class RulesParserTest {
     void planeswalkerAbilities() {
         CardFace card = cards.face("j/jace_beleren.txt");
         assertEquals("3", card.loyalty());
-        var pw = abilitiesOfType(card, AbilityType.PLANESWALKER);
-        assertEquals(3, pw.size());
-        assertTrue(lineOf(pw.get(0)).contains("[+2]:"));
-        assertTrue(lineOf(pw.get(1)).contains("[-1]:"));
-        assertTrue(lineOf(pw.get(2)).contains("[-10]:"));
+        assertEachHolds(linesOf(abilitiesOfType(card, AbilityType.PLANESWALKER)),
+                List.of(List.of("[+2]:"), List.of("[-1]:"), List.of("[-10]:")));
         // Verify sequential action numbers in formatted output
-        String output = rendered(card);
-        assertTrue(output.contains("planeswalker[1]:"));
-        assertTrue(output.contains("planeswalker[2]:"));
-        assertTrue(output.contains("planeswalker[3]:"));
+        assertContainsAll(rendered(card), "planeswalker[1]:", "planeswalker[2]:", "planeswalker[3]:");
     }
 
     @Test
     void sagaChapterAbilities() {
-        var chapters = abilitiesOfType(cards.face("t/the_eldest_reborn.txt"), AbilityType.CHAPTER);
-        assertEquals(3, chapters.size());
-        assertTrue(lineOf(chapters.get(0)).startsWith("chapter:"));
-        assertTrue(lineOf(chapters.get(0)).contains("I \u2014"));
-        assertTrue(lineOf(chapters.get(1)).contains("II \u2014"));
-        assertTrue(lineOf(chapters.get(2)).contains("III \u2014"));
-        assertTrue(lineOf(chapters.get(0)).contains("sacrifices"));
-        assertFalse(lineOf(chapters.get(0)).contains("["), "Chapters should have no action number");
+        var chapters = linesOf(abilitiesOfType(cards.face("t/the_eldest_reborn.txt"), AbilityType.CHAPTER));
+        assertEachHolds(chapters, List.of(
+                List.of("I \u2014", "sacrifices"), List.of("II \u2014"), List.of("III \u2014")));
+        String first = chapters.get(0);
+        assertTrue(first.startsWith("chapter:"), first);
+        assertFalse(first.contains("["), "Chapters should have no action number");
     }
 
     @Test
@@ -194,23 +193,16 @@ class RulesParserTest {
     void classEnchantmentLevels() {
         CardFace card = cards.face("a/artificer_class.txt");
         assertEquals("enchantment class", card.types());
-
-        var levels = abilitiesOfType(card, AbilityType.LEVEL);
-        assertEquals(3, levels.size());
         // Class levels use ordinal() for fixed numbering in formatted output
-        String output = rendered(card);
-        assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
-        assertTrue(output.contains("level[2]:"), "Level 2 in output: " + output);
-        assertTrue(output.contains("level[3]:"), "Level 3 in output: " + output);
-        assertTrue(levels.get(0).descriptionText().contains("first artifact spell"));
-        assertFalse(levels.get(0).descriptionText().contains("{1}{U}:"));
-        assertTrue(levels.get(1).descriptionText().contains("{1}{U}:"));
-        assertTrue(levels.get(1).descriptionText().contains("reveal cards"));
-        assertTrue(levels.get(2).descriptionText().contains("{5}{U}:"));
-        assertTrue(levels.get(2).descriptionText().contains("create a token"));
+        assertContainsAll(rendered(card), "level[1]:", "level[2]:", "level[3]:");
 
-        assertEquals(0, countOfType(card, AbilityType.ACTIVATED));
-        assertEquals(0, countOfType(card, AbilityType.STATIC));
+        List<String> levels = abilitiesOfType(card, AbilityType.LEVEL).stream().map(Ability::descriptionText).toList();
+        assertEachHolds(levels, List.of(
+                List.of("first artifact spell"), List.of("{1}{U}:", "reveal cards"), List.of("{5}{U}:", "create a token")));
+        assertFalse(levels.get(0).contains("{1}{U}:"), levels.get(0));
+        assertEquals(List.of(0L, 0L),
+                List.of(countOfType(card, AbilityType.ACTIVATED), countOfType(card, AbilityType.STATIC)),
+                "activated and static lines: " + card.abilities());
     }
 
     @Test
@@ -309,5 +301,18 @@ class RulesParserTest {
         assertTrue(output.contains("level[3]: {3}{G}: you may look at the top card of your"
                 + " library any time. you may cast creature spells from the top of your"
                 + " library."), output);
+    }
+
+    /** The line the converter writes for each of {@code abilities}, in order. */
+    private static List<String> linesOf(List<Ability> abilities) {
+        return abilities.stream().map(AbilityRendering::lineOf).toList();
+    }
+
+    /** {@code texts} are one per entry of {@code expectedParts}, in order, each holding every part of its entry. */
+    private static void assertEachHolds(List<String> texts, List<List<String>> expectedParts) {
+        assertEquals(expectedParts.size(), texts.size(), texts.toString());
+        for (int i = 0; i < texts.size(); i++) {
+            assertContainsAll(texts.get(i), expectedParts.get(i).toArray(String[]::new));
+        }
     }
 }
