@@ -86,20 +86,36 @@ def tagged():
     matchers = {kind: [(scenario, family.compile(declaration.params))
                        for scenario, declaration, family in entries]
                 for kind, entries in index.by_kind.items()}
-    sides: dict[str, dict[Polarity, set[str]]] = defaultdict(lambda: defaultdict(set))
-    kinds: dict[str, set[str]] = defaultdict(set)
-    rules = {}
+    tags = _Tags(matchers)
     for number, (records, lines) in enumerate(sets):
+        tags.add_all(number, records, lines)
+    return tags.sides, tags.kinds, tags.rules
+
+
+class _Tags:
+    """The scenario sides, kind populations and rules a pass over records fills."""
+
+    def __init__(self, matchers):
+        self.matchers = matchers
+        self.sides: dict[str, dict[Polarity, set[str]]] = defaultdict(lambda: defaultdict(set))
+        self.kinds: dict[str, set[str]] = defaultdict(set)
+        self.rules = {}
+
+    def add_all(self, number, records, lines):
         for record in records:
-            rid = f"{number}:{record.record_id}"
-            kinds[_label(record)].add(rid)
-            for scenario, matcher in matchers.get(record.kind.value, ()):
-                found = matcher(record, lines)
-                if found is not None:
-                    sides[scenario.id][found.polarity].add(rid)
-                    sides[scenario.id]["label"] = _label(record)
-                    rules[scenario.id] = scenario.rules
-    return sides, kinds, rules
+            self._add(f"{number}:{record.record_id}", record, lines)
+
+    def _add(self, rid, record, lines):
+        self.kinds[_label(record)].add(rid)
+        for scenario, matcher in self.matchers.get(record.kind.value, ()):
+            found = matcher(record, lines)
+            if found is not None:
+                self._record(scenario, found.polarity, rid, record)
+
+    def _record(self, scenario, polarity, rid, record):
+        self.sides[scenario.id][polarity].add(rid)
+        self.sides[scenario.id]["label"] = _label(record)
+        self.rules[scenario.id] = scenario.rules
 
 
 def unscoped(tagged) -> list[tuple[str, str, float]]:
@@ -115,10 +131,9 @@ def unscoped(tagged) -> list[tuple[str, str, float]]:
     return sorted(found)
 
 
-def identical(tagged) -> list[tuple[str, str]]:
-    sides, _, rules = tagged
-    links = {s.id: set(getattr(s.detector, "scenarios", ()))
-             for s in load_scenarios(RULES).scenarios}
+def _side_sets(sides) -> dict:
+    """Scenario ids grouped by their (fires, near-miss) record sets, those whose
+    sample can tell rules apart only."""
     by_sets = defaultdict(list)
     for sid, polarity in sides.items():
         key = (frozenset(polarity[Polarity.FIRES]), frozenset(polarity[Polarity.DOES_NOT_FIRE]))
@@ -126,12 +141,26 @@ def identical(tagged) -> list[tuple[str, str]]:
         # on a single record, or no near miss, cannot tell two rules apart.
         if len(key[0]) >= 2 and key[1]:
             by_sets[key].append(sid)
+    return by_sets
+
+
+def _unlinked_pairs(group, rules, links) -> list[tuple[str, str]]:
+    """The pairs of a group of different rules that no ``same_as`` link joins."""
+    return [
+        (a, b)
+        for i, a in enumerate(sorted(group))
+        for b in sorted(group)[i + 1:]
+        if set(rules[a]) != set(rules[b]) and not (links[a] & {b} or links[b] & {a})
+    ]
+
+
+def identical(tagged) -> list[tuple[str, str]]:
+    sides, _, rules = tagged
+    links = {s.id: set(getattr(s.detector, "scenarios", ()))
+             for s in load_scenarios(RULES).scenarios}
     pairs = []
-    for group in by_sets.values():
-        for i, a in enumerate(sorted(group)):
-            for b in sorted(group)[i + 1:]:
-                if set(rules[a]) != set(rules[b]) and not (links[a] & {b} or links[b] & {a}):
-                    pairs.append((a, b))
+    for group in _side_sets(sides).values():
+        pairs.extend(_unlinked_pairs(group, rules, links))
     return pairs
 
 
