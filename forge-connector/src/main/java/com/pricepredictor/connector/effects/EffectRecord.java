@@ -10,11 +10,11 @@ import java.util.Objects;
 /**
  * One record line, assembled field by field.
  *
- * <p>The envelope is frozen before stage-one collection begins, so this builder
- * writes exactly the keys the schema names and nothing else. Later stages widen
- * the corpus — new kinds become reachable, new snapshot tiers appear — but never
- * redefine a field, which is what lets a stage-one corpus stay trainable
- * alongside stage-four records.
+ * <p>The envelope is frozen before collection begins, so this builder
+ * writes exactly the keys the schema names and nothing else. The corpus may
+ * widen — new kinds become reachable, new snapshot tiers appear — but a field
+ * is never redefined, which is what lets records collected at different times
+ * stay trainable together.
  *
  * <p>The envelope only: what goes under {@code payload} is built by
  * {@link RecordPayloads}, one factory per payload shape.
@@ -164,8 +164,8 @@ public final class EffectRecord {
     }
 
     /**
-     * Only the {@code blockers} subkind sets this: a gen-2 {@code attackers}
-     * record carried it too, and no what-if attackers record exists (FR-037).
+     * Only the {@code blockers} subkind sets this: no {@code attackers}
+     * record carries it, and no what-if attackers record exists (FR-037).
      */
     public EffectRecord whatIf(Boolean value) {
         this.whatIf = value;

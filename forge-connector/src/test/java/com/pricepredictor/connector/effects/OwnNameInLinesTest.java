@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A card's own name reads CARDNAME on every ability line, another card's name
- * stays, and no line keeps a run of blanks (finding 1.12).
+ * stays, and no line keeps a run of blanks.
  */
 @ExtendWith(ForgeExtension.class)
 class OwnNameInLinesTest {

@@ -30,8 +30,8 @@ import java.util.function.Function;
  * attacking player declares. Each answer is gathered here, and the records
  * are written per attacker instead: the anchor, the defenders it may attack
  * ({@code legal_defenders}), and whether a requirement makes it attack
- * ({@code must_attack}). The declaration-wide lists the gen-2 record carried,
- * {@code legal_attackers} and {@code forbidden}, are kept on each record, the
+ * ({@code must_attack}). The declaration-wide lists
+ * {@code legal_attackers} and {@code forbidden} are kept on each record, the
  * same on every one: a creature is legal when it may attack at least one
  * defender.
  *

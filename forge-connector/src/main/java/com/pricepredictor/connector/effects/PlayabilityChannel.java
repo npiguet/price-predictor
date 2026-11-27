@@ -217,9 +217,8 @@ public final class PlayabilityChannel {
      * What the engine asks about one attacker coming at the defending
      * player: who could block it, who may, and how many it takes.
      *
-     * @param decider the defending player the engine names (024 FR-030a) —
-     *                gen-1 wrote the attacking player here, and a gen-2 shard
-     *                is what tells a reader which meaning it holds
+     * @param decider the defending player the engine names (024 FR-030a),
+     *                never the attacking player
      */
     private record BlockersDeclarable(
             Player decider, Card attacker, List<Card> candidates, List<Card> legal,

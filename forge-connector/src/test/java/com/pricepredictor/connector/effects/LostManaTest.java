@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A {@code mana_lost}'s {@code mana_by_color} on boards the engine really
- * plays (task B51): a drain's effect half names the mana the pool lost, and
+ * plays: a drain's effect half names the mana the pool lost, and
  * a {@code LoseMana} replacement's rewrite record names the mana that would
  * have been lost, read off the pool before the replacement converts it.
  */

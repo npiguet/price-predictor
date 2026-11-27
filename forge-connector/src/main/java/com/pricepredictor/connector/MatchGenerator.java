@@ -307,8 +307,8 @@ public class MatchGenerator {
      *         all. Not reachable from CollectorSupervisor, which always points
      *         both sides at the same file: a decks-only side-B index with no
      *         deck of deck A's set is a configuration error, and silently
-     *         falling through to Forge here would reintroduce
-     *         {@link #pickDeckB}'s whole bug for a rarer trigger.
+     *         falling through to Forge here would draw deck B from the
+     *         whole pool, as {@link #pickDeckB} does without an index.
      */
     private GeneratedDeck mirrorFor(GeneratedDecksIndex index, String setCode) {
         return index.randomAnyDeckFromSet(setCode, random).orElseThrow(

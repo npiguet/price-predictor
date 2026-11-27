@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What {@code replace_card} refuses because it cannot carry it, and what it
- * carries, on permanents the engine itself made (finding 6.7): a merged
+ * carries, on permanents the engine itself made: a merged
  * (mutated) permanent, a melded one and a token are refused, since their
  * other cards would be left orphaned or the token would become a real card;
  * a hasty creature that entered this turn stays summoning sick as the card

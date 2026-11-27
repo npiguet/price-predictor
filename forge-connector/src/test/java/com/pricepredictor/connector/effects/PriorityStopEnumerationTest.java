@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * The collector's own enumeration at a priority stop is invisible to the
- * channels (finding 8.5): the rules queries {@link PriorityCandidates} makes
+ * channels: the rules queries {@link PriorityCandidates} makes
  * of both players' candidates run Forge's static check on the live game,
  * which evaluates every state trigger and runs the ones whose condition
  * holds, and none of that is the game's.

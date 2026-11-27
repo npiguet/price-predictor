@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-/** The random seat never draws a play that would pay it down to 0 life (decision D12, finding 8.6). */
+/** The random seat never draws a play that would pay it down to 0 life. */
 @ExtendWith(ForgeExtension.class)
 class RandomSeatLifeCostTest {
 

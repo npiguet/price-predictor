@@ -330,8 +330,8 @@ class RunParamNormalizerTest {
     /**
      * Deification keeps a Chandra at one loyalty: the removal it received
      * (all four) and the one it let through (three) are both negative, and
-     * the edit is visible — before, the map's remaining count was written as
-     * the amount and an edit of it was no rewrite at all.
+     * the edit is visible: the amount is the removal, not the map's remaining
+     * count, so an edit of it is a rewrite.
      */
     @Test
     void aCounterRemovingReplacementWritesNegativeDeltas() throws Throwable {

@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A trait a card grants itself keys to the line that granted it, not to its
- * place in the live list (finding 1.4).
+ * place in the live list.
  *
  * <p>Forge lists a state's traits printed first, then the ones a layer change
  * granted, then the keyword-built ones. A trait a card's own static or effect

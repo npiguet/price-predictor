@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * The random seat's draw gates read a candidate with its activating player
- * lent (finding 8.6, task ER3): an Equip nobody has activated has none, and
+ * lent: an Equip nobody has activated has none, and
  * the attach gate's target read needs one.
  */
 @ExtendWith(ForgeExtension.class)

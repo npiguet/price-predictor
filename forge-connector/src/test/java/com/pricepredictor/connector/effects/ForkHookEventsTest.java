@@ -72,8 +72,7 @@ class ForkHookEventsTest {
 
     /**
      * A forced token spell's record holds the {@code token_created} the
-     * outcome hook reports, as an observed one does: before the forks heard
-     * the hooks, its tokens' moves were all the record held.
+     * outcome hook reports, as an observed one does, not only its tokens' moves.
      */
     @Test
     void aForcedTokenSpellRecordsTheTokenTheOutcomeHookReports() throws Throwable {

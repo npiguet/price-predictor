@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One state is written as the same bytes whatever order Forge hands its
- * parts over in (finding 9.11). Forge keeps a card's counters in a hash
+ * parts over in. Forge keeps a card's counters in a hash
  * multiset over an enum hashed by identity, its keywords in the same kind of
  * order, and a creature's must-block attackers in a hash map: each differs
  * from one JVM to the next. Each writer is fed the same parts in two orders.

@@ -153,8 +153,7 @@ class LayerContributionsTest {
      * ({@code winningStatic}) is what {@code getName()} reports; asserting
      * that the earlier one ({@code supersededStatic}) still carries its own,
      * superseded name is what only a per-cell read can produce. This also
-     * covers two statics renaming the same card, which otherwise had no test
-     * at all.
+     * covers two statics renaming the same card.
      */
     @Test
     void aChangedNameContributesTheNewName() {

@@ -178,7 +178,7 @@ class DirectedForkSchedulerTest {
     /**
      * A rule whose board appears at every boundary, at probability 0, never
      * forks, and a rule whose board appears once, at probability 1, takes
-     * the game's one fork there (D8): the budget no longer goes to the
+     * the game's one fork there (D8): the budget does not go to the
      * first board that holds.
      */
     @Test
@@ -303,7 +303,7 @@ class DirectedForkSchedulerTest {
         assertEquals(List.of("A"), forked);
     }
 
-    // ── one registration of several rules (finding 6.4) ─────────────────
+    // ── one registration of several rules ─────────────────
 
     /**
      * A registration of two listed rules, one at 0 and one at 1, draws at

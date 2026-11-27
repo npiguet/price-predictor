@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 
 /**
  * Whether a line's resolution reads what its cost paid, which a forced line
- * never pays (finding 5.3): forced, it would resolve as no legal play does.
+ * never pays: forced, it would resolve as no legal play does.
  * Forced Burnt Offering adds no mana, where a cast one always sacrifices a
  * creature and adds its mana value.
  *

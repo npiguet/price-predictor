@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A meld half's melded face keys into its own sidecar's face 1 (finding 1.8).
+ * A meld half's melded face keys into its own sidecar's face 1.
  *
  * <p>Forge reads the Meld state of a half whose script does not hold the
  * melded face from its meld partner's script, and the collector keys that

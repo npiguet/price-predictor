@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The keyword keys of a Clone whose original changes after the Clone copied
- * it (finding 1.8). A Clone took the copiable values of what it copied when
+ * it. A Clone took the copiable values of what it copied when
  * it entered (707.2); a later copy effect on the original (Cytoshape) changes
  * the original, not the Clone. The Clone's keywords are printed by the card
  * whose printed values they were then, and key into that card's lines, on

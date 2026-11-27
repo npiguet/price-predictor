@@ -177,7 +177,7 @@ class RandomChoicesTest {
 
     /**
      * Targets the AI's evaluation left on a mode do not narrow the count of
-     * what the mode can reach (finding 8.3): "two target creatures controlled
+     * what the mode can reach: "two target creatures controlled
      * by different players" over two creatures of one player has two
      * candidates counted alone, but with one of them left chosen the other is
      * barred by the different-controllers rule. The mode is drawable, and its
@@ -211,7 +211,7 @@ class RandomChoicesTest {
 
     /**
      * A mode that counters a spell is drawn once the spell is on the stack
-     * (finding 3.1): Ojutai's Command over a creature spell draws its
+     *: Ojutai's Command over a creature spell draws its
      * "counter target creature spell" mode, which no card of the stack
      * zone could make choosable, and the targets draw then takes the spell.
      */
@@ -317,7 +317,7 @@ class RandomChoicesTest {
     /**
      * A clause that divides its amount gets it split over its targets, every
      * target a share and the shares summing to the amount: Arc
-     * Lightning's resolution reads a share per target and threw on a null.
+     * Lightning's resolution reads a share per target and throws on a null.
      */
     @Test
     void aDividedAmountIsSplitOverTheDrawnTargets() {
@@ -432,10 +432,10 @@ class RandomChoicesTest {
 
     /**
      * A clause that targets a spell draws the spell on the stack, never its
-     * card (findings 3.1, 3.2): the effect reads spell targets only, so a
-     * card drawn there resolved into nothing. Essence Scatter takes a
+     * card: the effect reads spell targets only, so a
+     * card drawn there would resolve into nothing. Essence Scatter takes a
      * creature spell, which no card candidate ever offered, and Negate an
-     * instant, whose card it used to take.
+     * instant, whose card a draw would otherwise take.
      */
     @Test
     void aClauseThatTargetsASpellDrawsTheSpellNeverItsCard() {

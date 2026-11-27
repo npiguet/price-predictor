@@ -179,7 +179,7 @@ class ContinuousChannelTest {
     /**
      * Humility's "loses all abilities" sets the keyword line outright and
      * takes Prodigal Sorcerer's ability away, named by its line;
-     * the contribution used to say nothing but the base it sets.
+     * the contribution says more than the base it sets.
      */
     @Test
     void losingAllAbilitiesIsSaid() throws Throwable {

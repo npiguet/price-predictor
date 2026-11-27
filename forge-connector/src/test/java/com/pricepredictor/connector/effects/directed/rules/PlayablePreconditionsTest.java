@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A directed rule's precondition binds only boards where the variant's
- * forced play, or the fact its edit takes away, works (finding 6.7): the
+ * forced play, or the fact its edit takes away, works: the
  * mana a cast needs is asked colours included, a target is one the spell can
  * take, a reanimation spell can return the creature card that is there, mana
  * is counted per source rather than per land, a meld trigger can still fire

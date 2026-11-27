@@ -29,8 +29,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
- * The score check a fork passes before anything is changed in it, on the
- * boards whose copies it used to refuse: a copy is only worth recording if it
+ * The score check a fork passes before anything is changed in it, on
+ * boards whose copies a blank rebuild would score wrong: a copy is only worth recording if it
  * scores as the live game does, so a check that throws loses every fork of
  * that board.
  */
@@ -40,9 +40,9 @@ class ForksScoreCheckTest {
     /**
      * As the declare-blockers step begins an attacker's band is neither
      * blocked nor unblocked yet. The evaluator simulates the combat to come
-     * by advancing a copy to combat damage without declaring blockers, so
-     * damage assignment read the unset flag and threw, and every fork taken
-     * at that boundary (702.98a's, 702.70b's) was discarded.
+     * by advancing a copy to combat damage without declaring blockers, and
+     * damage assignment must read the unset flag without throwing, or every
+     * fork taken at that boundary (702.98a's, 702.70b's) is discarded.
      */
     @Test
     void aCopyAtDeclareBlockersBeforeAnyBlockerScoresAsTheLiveGame() {
@@ -63,8 +63,8 @@ class ForksScoreCheckTest {
 
     /**
      * A melded permanent's other half sits in its battlefield's melded list,
-     * not among the zone's cards, so the copy's permanent named no half and
-     * its mana value, the sum of both halves', threw on the copy.
+     * not among the zone's cards, so the copy's permanent must still name its half
+     * for its mana value, the sum of both halves', to be read.
      */
     @Test
     void aCopyWithAMeldedPermanentKeepsItsOtherHalfAndScoresAsTheLiveGame() {
@@ -139,7 +139,7 @@ class ForksScoreCheckTest {
     /**
      * A disguised creature is a face-down 2/2 with ward {2}: casting it face
      * down writes the ward into the card's face-down state, which the copier
-     * rebuilt blank, so the copy's creature had no ward and scored lower.
+     * carries over, so the copy's creature keeps its ward and scores as the live game.
      */
     @Test
     void aCopyOfADisguisedCreatureKeepsItsWardAndScoresAsTheLiveGame() {
@@ -162,10 +162,9 @@ class ForksScoreCheckTest {
 
     /**
      * Darkblade Agent has deathtouch as long as its controller has surveilled
-     * this turn. The copier carried only some of a player's counts for the
-     * turn and started the surveils from zero, so the copy's Agent had no
-     * deathtouch and scored lower; every count the cleanup step resets is
-     * carried now.
+     * this turn. The copier carries every count of a player's turn that the cleanup
+     * step resets, the surveils included, so the copy's Agent has its
+     * deathtouch and scores as the live game.
      */
     @Test
     void aCopyKeepsThePlayersTurnCountsAndWhatReadsThem() {

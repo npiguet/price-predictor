@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A mandatory choice inside a forced resolution is made (finding 5.5).
+ * A mandatory choice inside a forced resolution is made.
  *
  * <p>Forge's {@code AttachAi} answers the choice of what an Aura or an
  * Equipment attaches to with nothing when it finds the attachment useless,

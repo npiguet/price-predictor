@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * An intervention never forces a line whose resolution reads a cost the fork
  * did not pay where Forge reads it unguarded: ninjutsu's resolution takes
  * the attacker returned to hand off its paid list, which a forced line
- * never filled, and threw a {@code NullPointerException} in
- * {@code ChangeZoneEffect.changeKnownOriginResolve}. It is refused, counted
+ * never fills, so {@code ChangeZoneEffect.changeKnownOriginResolve} would
+ * throw a {@code NullPointerException}. It is refused, counted
  * as {@code intervention reads a cost it never paid}, before it is forced.
  *
  * <p>Crewing and saddling read their paid lists too, but through a guard:

@@ -345,7 +345,7 @@ class DirectedRulesContractTest {
         assertThrows(IllegalArgumentException.class, () -> once.alsoFor("704.5f", "704.5f-2"));
     }
 
-    // ── one registration of several rules (finding 6.4) ─────────────────
+    // ── one registration of several rules ─────────────────
 
     /** Each rule of a registration is checked against its own scenario. */
     @Test

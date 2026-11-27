@@ -14,7 +14,7 @@ import java.util.Map;
  * <p>A mana ability never uses the stack, so the bracket collector sees no
  * cast and no resolution for it and the corpus has no effect half at all.
  * That is what leaves the role-polarity probe unrunnable: paying {@code R} is
- * observable from stage one, producing it is not.
+ * observable on the event bus, producing it is not.
  *
  * <p>The record describes the activation's moment (root § 8.14): its board is
  * read before the mana ability's costs are paid ({@link #paymentHandler}, the

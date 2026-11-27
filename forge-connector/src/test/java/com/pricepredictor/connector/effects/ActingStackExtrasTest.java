@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * divided amounts and chosen count as cast, over its whole chain, spell
  * targets included, never what Forge's check for illegal targets left on it
  * (608.2b). Read off the thinned item, a fizzled half's extras would show no
- * target and hand the model the fizzle it is to predict (finding 4.1).
+ * target and hand the model the fizzle it is to predict.
  */
 @ExtendWith(ForgeExtension.class)
 class ActingStackExtrasTest {
@@ -243,7 +243,7 @@ class ActingStackExtrasTest {
      * Arc Lightning split 1, 1 and 1 over three creatures, two of them
      * sacrificed in response: Forge drops each lost target's share with it,
      * and the extras keep all three shares as announced, which the lone-target
-     * arithmetic could not give back for two (finding 4.1).
+     * arithmetic could not give back for two.
      */
     @Test
     void aDividedSpellThatLostTwoTargetsKeepsAllThreeShares() throws Throwable {

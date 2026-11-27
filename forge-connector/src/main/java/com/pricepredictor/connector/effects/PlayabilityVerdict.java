@@ -149,7 +149,7 @@ public record PlayabilityVerdict(
 
     /**
      * The static forbidding the play, the candidate's own
-     * {@code responsible_static} (its gen-2 meaning), or null.
+     * {@code responsible_static}, or null.
      */
     public ProvenanceKey prohibitingStatic() {
         return failedChecks.stream()

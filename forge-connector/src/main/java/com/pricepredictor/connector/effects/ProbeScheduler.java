@@ -63,10 +63,10 @@ final class ProbeScheduler {
         if (firstStrike && !anyFirstStriker()) {
             // Forge always enters the first-strike step and skips it when no
             // combatant has first or double strike, so the phase event alone is
-            // no evidence that a step will happen. Probing anyway would spend
-            // budget on forks that assign no damage, and since the real game
-            // writes no combat record for a step that assigns nothing, those
-            // branches would be completed against the *regular* step's record.
+            // no evidence that a step will happen. A probe there would spend
+            // budget on a fork that assigns no damage, and since the real game
+            // writes no combat record for a step that assigns nothing, that
+            // branch would be completed against the *regular* step's record.
             return;
         }
         // One keyword per game rather than whichever the battlefield order

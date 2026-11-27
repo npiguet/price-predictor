@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The reductions a spell's keywords allow (convoke, improvise, waterbend,
  * delve, emerge) are the rules', not the AI's choice of what to tap or
- * sacrifice (root spec § 8.8, findings 8.1 and 8.2): {@code affordable} asks
+ * sacrifice (root spec § 8.8): {@code affordable} asks
  * whether the cost can be paid at all, choosing the payment freely, and
  * {@code cost_after_adjustment} reads the most the board lets the keywords
  * pay. Reading a candidate changes nothing on the game.

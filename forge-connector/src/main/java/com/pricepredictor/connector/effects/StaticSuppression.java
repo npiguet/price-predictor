@@ -381,7 +381,7 @@ final class StaticSuppression {
      */
     boolean grantedKeyword(KeywordInterface keyword) {
         // A long against Forge's int id: Long.equals(Integer) is always
-        // false, which once let the removed static's flying back in as the
+        // false, which would let the removed static's flying back in as the
         // CantBlockBy static it builds.
         return staticId != null && keyword != null && keyword.getStatic() != null
                 && staticId == keyword.getStatic().getId();

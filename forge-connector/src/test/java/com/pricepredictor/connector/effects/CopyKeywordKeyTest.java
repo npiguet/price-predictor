@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The keyword keys of token copies, mutated permanents and the traits a
- * copy builds fresh (finding 1.8).
+ * copy builds fresh.
  *
  * <p>A token copy's state holds the original's keywords plus the ones its
  * copy effect added, and numbering that state's keywords shifted each later

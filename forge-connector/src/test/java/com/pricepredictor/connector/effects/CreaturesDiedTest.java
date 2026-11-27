@@ -17,8 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * A player's {@code this_turn.creatures_died} counts the creatures that died
  * under that player's control this turn: put into a graveyard from the
- * battlefield (700.4, what morbid asks), and no other way of leaving it
- * (finding 9.11).
+ * battlefield (700.4, what morbid asks), and no other way of leaving it.
  */
 @ExtendWith(ForgeExtension.class)
 class CreaturesDiedTest {

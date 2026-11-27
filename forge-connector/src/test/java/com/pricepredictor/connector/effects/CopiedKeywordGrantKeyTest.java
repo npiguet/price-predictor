@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A keyword another permanent grants to a copy keys to the granting static
- * (finding 1.7), as it does on a creature that copies nothing: Blue Ward on
+ *, as it does on a creature that copies nothing: Blue Ward on
  * a Clone of Grizzly Bears gives the Clone protection from blue, and that
  * keyword is no line of the Clone's copy effect or of Grizzly Bears, which
  * the copied state does not hold it in. A keyword the copy effect itself

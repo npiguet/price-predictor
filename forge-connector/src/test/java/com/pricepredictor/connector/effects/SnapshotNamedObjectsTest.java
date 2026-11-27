@@ -28,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a snapshot writes for an object it names says what that object is:
- * a token that has ceased to exist is no graveyard card (finding 4.7), a
+ * a token that has ceased to exist is no graveyard card, a
  * library card the record's events name has its owner and controller like
- * every other card entity (finding 9.11), and an attacker's defender is a
+ * every other card entity, and an attacker's defender is a
  * ref, as every other object a record names.
  */
 @ExtendWith(ForgeExtension.class)

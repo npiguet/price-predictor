@@ -31,12 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The game's outcome in a real match, played through {@link
- * GamePlayer#playMatch} as a worker plays it (finding 9.5): a random seat
+ * GamePlayer#playMatch} as a worker plays it: a random seat
  * that never passes while a non-mana ability is playable pays Mischievous
  * Poltergeist's "Pay 1 life" until it reaches 0 life, with the ability still
- * on the stack, as the pilot's seat did until decision D12 stopped the seat
- * drawing a payment that leaves it at 0 life, so these games now end in
- * combat. Each game still writes its loss and its win once and its marker
+ * on the stack; the seat never draws a payment that leaves it at 0 life, so
+ * these games end in combat. Each game still writes its loss and its win once and its marker
  * last. The match draws from a seeded Forge random stream, restored after, so
  * both games are the same whatever ran before in the JVM and each ends by the
  * life payment.

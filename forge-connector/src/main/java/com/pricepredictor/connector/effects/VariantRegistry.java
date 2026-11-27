@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Populated by {@code ForgeEnvironmentInitializer} before
  * {@code FModel.initialize}, and empty in every run that stages no variants —
- * so a worker that never saw a variant behaves exactly as it did at stage one.
+ * so a worker that never saw a variant behaves exactly as it does with no registry.
  */
 public final class VariantRegistry {
 

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The game-rule preferences are pinned, not read from the machine's Forge profile (finding 11.2). */
+/** The game-rule preferences are pinned, not read from the machine's Forge profile. */
 @ExtendWith(ForgeExtension.class)
 class ForgeEnvironmentInitializerTest {
 

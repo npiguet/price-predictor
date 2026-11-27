@@ -79,7 +79,7 @@ class ResolvesAsACreatureTest {
     /**
      * A creature spell entering beside a Coat of Arms and a creature of its type: the +1/+1 the
      * static check after its resolution applies is its one clause's,
-     * {@code root} (finding 2.1).
+     * {@code root}.
      */
     @Test
     void aPlainCreatureSpellsPostCheckChangeIsItsRootClauses() throws Throwable {
@@ -104,7 +104,7 @@ class ResolvesAsACreatureTest {
      * Boon Satyr cast for bestow at a creature that is gone by resolution,
      * entering beside a Coat of Arms and a Boon Satyr: it resolves as its creature spell,
      * and the +1/+1 the static check after it applies to the other Satyr is the spell's,
-     * {@code root}, as a plain creature spell's is (finding 2.1).
+     * {@code root}, as a plain creature spell's is.
      */
     @Test
     void aBestowSpellsPostCheckChangeIsItsRootClauses() throws Throwable {

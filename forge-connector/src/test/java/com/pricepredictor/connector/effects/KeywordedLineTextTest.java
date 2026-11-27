@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The text defects of keyed lines (finding 1.12): a repeated sentence, an
+ * The text defects of keyed lines: a repeated sentence, an
  * unexpanded stack template, the literal card name in a haunt line, an
  * unbracketed loyalty cost of 0, a double space after an ability word, a raw
  * selector, an empty option and an ability word in an additional cost.

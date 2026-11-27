@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Free activations no printed line made, and the bookkeeping of those on the stack (finding 8.6). */
+/** Free activations no printed line made, and the bookkeeping of those on the stack. */
 @ExtendWith(ForgeExtension.class)
 class FruitlessUnkeyedActivationsTest {
 

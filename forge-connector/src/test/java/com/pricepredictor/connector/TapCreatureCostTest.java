@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A creature is counted once across a "tap an untapped creature you control"
- * part and the mana part (finding 8.6, task E04c): 601.2g makes the mana
+ * part and the mana part: 601.2g makes the mana
  * first, so a creature tapped for mana is no longer untapped to pay the tap
  * cost. Revelsong Horn is {1}, {T}, tap an untapped creature you control.
  */

@@ -18,7 +18,7 @@ import java.util.Comparator;
 /**
  * The mana a candidate costs now by the rules, and what its keywords let
  * pay of it, read without asking any player and without writing on the game
- * (root spec § 8.8; findings 8.1, 8.2).
+ * (root spec § 8.8).
  *
  * <p>The total cost (601.2f) is Forge's own: the {@code Cost} raised as its
  * payment raises it ({@code CostAdjustment.raise}: commander tax,

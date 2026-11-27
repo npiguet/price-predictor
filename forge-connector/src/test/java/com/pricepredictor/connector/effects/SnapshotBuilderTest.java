@@ -306,7 +306,7 @@ class SnapshotBuilderTest {
          * trigger, or with a replacement: each of its lines keys to the
          * original's script, or to no line, never to {@code clone.txt}'s own
          * trigger or replacement at the copied line's index (B8), and none is
-         * granted: a copy prints what it copies (finding 1.7).
+         * granted: a copy prints what it copies.
          */
         @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
         @org.junit.jupiter.params.provider.CsvSource({

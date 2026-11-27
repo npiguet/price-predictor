@@ -38,8 +38,8 @@ class AttachTargetsTest {
     private static final String WHY = "for the resolution hook";
 
     /**
-     * The events of Holy Strength's half on Grizzly Bears, as the collector
-     * wrote them before finding 2.1 was fixed: the Aura's ref, then the
+     * The events of Holy Strength's half on Grizzly Bears, in the order a
+     * resolution hook sees them: the Aura's ref, then the
      * bears'.
      */
     private static final String AURA_HALF = """
@@ -52,7 +52,7 @@ class AttachTargetsTest {
      * Bonesplitter moves from Grizzly Bears to Hill Giant: its equip half
      * holds the unattaching from the bears, then the attaching to the giant,
      * and the +2/+0 moving with it, which the static check after the equip's
-     * one clause applies and attributes to that clause (finding 2.1).
+     * one clause applies and attributes to that clause.
      */
     @Test
     void anEquipMoveLeavesOneHostAndJoinsTheOther() throws Throwable {
@@ -98,7 +98,7 @@ class AttachTargetsTest {
     /**
      * Swiftfoot Boots equipped to Grizzly Bears: the equip half holds the
      * bears gaining hexproof and haste, which the static check after the
-     * equip's last clause applies (finding 2.1), attributed to that clause,
+     * equip's last clause applies, attributed to that clause,
      * the equip's one.
      */
     @Test
@@ -133,8 +133,8 @@ class AttachTargetsTest {
     /**
      * Holy Strength cast on Grizzly Bears: an Aura spell's move onto the
      * battlefield runs a static check inside its resolution, so its half
-     * held the +1/+2 before finding 2.1 was fixed, and holds the same events,
-     * in the same order, after.
+     * holds the +1/+2 beside the attachment, in the same events and the same
+     * order with or without the resolution hook.
      */
     @Test
     void anAuraSpellsHalfIsUnchanged() throws Throwable {

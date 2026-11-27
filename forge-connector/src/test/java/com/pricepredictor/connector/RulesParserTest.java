@@ -324,7 +324,7 @@ class RulesParserTest {
     void spellWithAdditionalCost() {
         CardFace card = face("a/abandon_hope.txt");
 
-        // The cost is the first sentence of the spell's one line (finding 1.2).
+        // The cost is the first sentence of the spell's one line.
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), card.abilities().toString());
@@ -723,7 +723,7 @@ class RulesParserTest {
     @Test
     void spellWithMultipleSubAbilityDescriptions() {
         // Seed Spark has SpellDescription on both the main SP$ and on a SubAbility SVar.
-        // Both sentences are the spell's one line, in chain order (finding 1.3).
+        // Both sentences are the spell's one line, in chain order.
         CardFace card = face("s/seed_spark.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
@@ -1746,7 +1746,7 @@ class RulesParserTest {
     @Test
     void crashingWaveAdditionalCostPresentSpellEffectFromTheOracle() {
         // A:SP$ Tap has no SpellDescription: its effect is the oracle sentence the static's
-        // waterbend line does not state (task A19).
+        // waterbend line does not state.
         var card = face("c/crashing_wave.txt");
         assertEquals(1, countOfType(card, AbilityType.ADDITIONAL_COST));
         assertTrue(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0)

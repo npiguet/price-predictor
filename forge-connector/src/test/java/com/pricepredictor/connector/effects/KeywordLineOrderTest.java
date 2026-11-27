@@ -11,7 +11,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The order a face prints its keyword lines in (finding 1.15): the keywords'
+ * The order a face prints its keyword lines in: the keywords'
  * original text, sorted, which is the order {@link FaceOrder#keywordIndex}
  * numbers them in, so the n-th keyword line carries {@code keyword n}. The
  * script's own {@code K:} order, and the order of Forge's keyword collection,

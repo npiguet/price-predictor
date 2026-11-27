@@ -403,7 +403,7 @@ class PlayabilityVerdictTest {
     }
 
     /**
-     * Counterspell in hand with a creature spell on the stack (finding 3.2):
+     * Counterspell in hand with a creature spell on the stack:
      * it has a legal target, and the record lists that spell as its card,
      * where it read a target and listed none.
      */
@@ -420,7 +420,7 @@ class PlayabilityVerdictTest {
         assertEquals(List.of(Refs.of(bears.getHostCard())), read.legalTargets());
     }
 
-    // ── targets left chosen on the live ability (finding 8.3) ───────────
+    // ── targets left chosen on the live ability ───────────
 
     /**
      * Run Away Together, "two target creatures controlled by different

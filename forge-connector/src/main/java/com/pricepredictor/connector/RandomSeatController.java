@@ -35,7 +35,7 @@ import java.util.function.Supplier;
  * four decision points, draws uniformly from the legal options instead
  * (024 FR-022).
  *
- * <p>Every gen-1 outcome is one Forge chose, so the model never saw what
+ * <p>Every outcome of an ordinary game is one Forge chose, so the model never saw what
  * happens when an ability is aimed at a target Forge would not pick or a
  * creature attacks into a board Forge would hold it back from. This seat
  * supplies those outcomes, and it supplies them <em>off-policy</em> rather
@@ -49,7 +49,7 @@ import java.util.function.Supplier;
  * whose targeting the engine asks for on its own. Everything else — land drops, mana payment, mulligans, what a
  * resolving effect asks its controller — is the AI's (024 FR-023), but for a
  * mandatory single choice the AI declines, which the seat draws among the
- * options offered ({@link MandatoryChoiceAi}, finding 5.5). The nearest
+ * options offered ({@link MandatoryChoiceAi}). The nearest
  * relative is {@code InterventionFork}, which draws the same choices for an
  * ability it forces on a fork; it acts only <em>inside</em> a fork and this
  * acts only outside one, through the same test inverted: a controller is

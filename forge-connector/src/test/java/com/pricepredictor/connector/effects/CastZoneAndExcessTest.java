@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a spell cast from the hand, flashed back from the graveyard, evoked and
  * cascaded into; damage beyond lethal to a creature, from a deathtouch
  * source, to a planeswalker beyond its loyalty, and through a damage
- * replacement (task B50).
+ * replacement.
  */
 @ExtendWith(ForgeExtension.class)
 class CastZoneAndExcessTest {

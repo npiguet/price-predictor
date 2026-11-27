@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A replaced game loss is not the game's outcome (finding 19.3, task M12e):
+ * A replaced game loss is not the game's outcome:
  * Lich's Mirror's rewrite record carries {@code player_lost} as its
  * {@code incoming} and as its state's {@code pending_event}, yet the game
  * goes on, so the record is capped like any other and does not let the

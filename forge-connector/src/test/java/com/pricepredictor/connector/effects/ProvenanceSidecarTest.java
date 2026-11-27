@@ -157,9 +157,9 @@ class ProvenanceSidecarTest {
     @Test
     void aBasicLandsManaLineClaimsTheRuntimeManaAbility() {
         // Forge builds the mana ability from the land type at runtime; the
-        // converter renders it as one canonical line. Before this claim the
-        // line had no key and the runtime ability sat in dropped_keys, so
-        // every mana activation record joined to nothing.
+        // converter renders it as one canonical line. Without this claim the
+        // line has no key and the runtime ability sits in dropped_keys, so
+        // every mana activation record joins to nothing.
         Converted mountain = convert("m/mountain.txt");
         List<ProvenanceSidecar.Line> mana = mountain.sidecar().lines().stream()
                 .filter(line -> line.lineKind().equals("activated")).toList();
@@ -353,7 +353,7 @@ class ProvenanceSidecarTest {
                 spell.roleSpans().toString());
     }
 
-    /** Abeyance's two sentences are one line, in chain order (finding 1.3). */
+    /** Abeyance's two sentences are one line, in chain order. */
     @Test
     void aSpellWhoseChainHasSeveralSentencesIsOneLine() {
         Converted abeyance = convert("a/abeyance.txt");
@@ -420,7 +420,7 @@ class ProvenanceSidecarTest {
      * A description that runs onto several lines (Ninja Teen's level 3, a
      * saga's modes) is folded into one line, its prose after its prefix:
      * a continuation line would repeat its keys, and a join reads only the
-     * first line a key names (finding 1.3).
+     * first line a key names.
      */
     @Test
     void aMultiLineDescriptionIsFoldedIntoOneLine() {

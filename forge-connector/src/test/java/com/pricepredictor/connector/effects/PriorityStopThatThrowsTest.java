@@ -18,7 +18,7 @@ import static com.pricepredictor.connector.effects.TestCaps.caps;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** A priority stop whose enumeration throws leaves no stop for the seat to take (finding 8.6). */
+/** A priority stop whose enumeration throws leaves no stop for the seat to take. */
 @ExtendWith(ForgeExtension.class)
 class PriorityStopThatThrowsTest {
 

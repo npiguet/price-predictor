@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Colourless mana counted under {@code C} on boards the engine really plays
- * (task B52): Forge keys a colourless unit as {@code ManaAtom.COLORLESS}, not
+ *: Forge keys a colourless unit as {@code ManaAtom.COLORLESS}, not
  * {@code MagicColor.COLORLESS}, and a floating pool, a cost half's {@code
  * mana_by_color} and a cast entity's {@code costs_paid.mana} count it under
  * {@code C}, one per unit, as {@code mana_produced} and {@code mana_lost} do.

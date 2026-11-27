@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * A stack object's {@code targets} links as every record writes them, from
  * the one reading of its targets ({@code ChainTargets.Target}): each ref
  * once, indexed by its position among them, an ability by its line, on a
- * cost half and an effect half alike (findings 9.11, 19.1).
+ * cost half and an effect half alike.
  */
 @ExtendWith(ForgeExtension.class)
 class TargetLinksTest {
@@ -136,7 +136,7 @@ class TargetLinksTest {
      * A Lightning Bolt's targets chosen after the board was read: a Grizzly
      * Bears in exile (a card the board lacked) and a Hill Giant in a
      * graveyard (one it held). Both get their {@code targets} link, and each
-     * its owner's {@code owns} and {@code controls} link once (finding 9.11).
+     * its owner's {@code owns} and {@code controls} link once.
      */
     @Test
     void aTargetAddedAtTheCastEventGetsItsControlsAndOwnsLinks() {

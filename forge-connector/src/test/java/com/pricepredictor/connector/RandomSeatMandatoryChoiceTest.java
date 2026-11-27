@@ -19,8 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The random seat makes a mandatory choice a resolving effect asks of it
- * (finding 5.5).
+ * The random seat makes a mandatory choice a resolving effect asks of it.
  *
  * <p>Forge's {@code AttachAi} answers what an Equipment attaches to with
  * nothing when the creature is "useless" to it (detained, unable to attack or

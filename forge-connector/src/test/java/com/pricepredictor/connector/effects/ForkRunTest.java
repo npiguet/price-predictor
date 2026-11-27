@@ -180,7 +180,7 @@ class ForkRunTest {
     /**
      * A fork that changes the live game is counted under its kind: here a
      * body that takes a timestamp from the live game rather than its copy,
-     * the way Forge's evaluator once did.
+     * as Forge's evaluator can.
      */
     @Test
     void aForkThatMovesTheLiveGameIsCounted() {

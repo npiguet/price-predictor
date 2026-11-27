@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A keyword a keyword-built static grants its own card keys as the granting
- * keyword's line, bare (finding 1.1): Mardu Scout cast for its dash cost
+ * keyword's line, bare: Mardu Scout cast for its dash cost
  * gains haste from the static its Dash keyword builds, and the haste line
  * and the Dash line are one line of the sidecar, so they carry one key and
  * the board reads them as one slot. The haste line is printed, as any

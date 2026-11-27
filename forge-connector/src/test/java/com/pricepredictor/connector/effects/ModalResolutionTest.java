@@ -36,8 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code CharmEffect.chainAbilities} on a real charm's own {@code Choices$}
  * — and the clause hook is driven the way {@code AbilityUtils.resolveApiAbility}
  * drives it, with the clone that is about to resolve. What is not here is the
- * engine resolving the charm, which needs a running game and is the pilot's
- * job; what is here is everything the collectors decide about a clause once
+ * engine resolving the charm, which needs a running game and belongs to the
+ * integration runs; what is here is everything the collectors decide about a clause once
  * they are handed one, which is where a wrong option or a merged half would
  * come from.
  */

@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Where the game's outcome is written (findings 9.5, 9.6, 9.13): {@code
+ * Where the game's outcome is written: {@code
  * player_lost} and {@code player_won} never join an open cast's bracket; the
  * game-end record holds those two and nothing else, every other orphan alive
  * at the end counted as dropped; a spell that ends the game keeps its card's
@@ -45,8 +45,8 @@ class GameOutcomeFilingTest {
     Path tempDir;
 
     /**
-     * Mischievous Poltergeist's "Pay 1 life" activated at 1 life, as the
-     * pilot's random seat did: the state-based check after the activation
+     * Mischievous Poltergeist's "Pay 1 life" activated at 1 life, as a
+     * random seat that pays it: the state-based check after the activation
      * ends the game with the ability still on the stack. The loss and the win
      * are each written once, in the game-end record, and the marker follows.
      */

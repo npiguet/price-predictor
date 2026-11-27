@@ -89,12 +89,8 @@ class ForkEventSinkTest {
      * A fork describes an outcome the way an observed record does.
      *
      * <p>Asserted against the bracket collector rather than a fixed list, so the
-     * two cannot drift apart again: adding an outcome event to the observed side
-     * and forgetting the fork is exactly how the sink came to be missing
-     * card_drawn, card_discarded, card_milled, pt_change, keyword_change,
-     * type_change, color_change, attached, unattached, card_looked_at and
-     * library_reordered — eleven of the seventeen types real resolutions
-     * produce.
+     * two cannot drift apart: an outcome event added to the observed side and
+     * missing from the fork would go unrecorded in every fork.
      */
     @Test
     void aForkHearsEveryOutcomeAnObservedRecordHears() {

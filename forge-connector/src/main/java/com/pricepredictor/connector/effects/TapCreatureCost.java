@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 /**
  * A creature is counted once across a cost's "tap an untapped creature you
- * control" part and its mana part (finding 8.6, task E04c). 601.2g pays the
+ * control" part and its mana part. 601.2g pays the
  * mana before 601.2h pays the rest, so a creature tapped for mana is no longer
  * untapped to pay the tap cost: Revelsong Horn ({1}, {T}, tap an untapped
  * creature you control) with Llanowar Elves the only creature and the only

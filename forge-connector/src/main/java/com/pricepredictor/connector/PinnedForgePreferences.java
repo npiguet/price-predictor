@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * The Forge user preferences that change what a game or a conversion
  * produces, pinned to fixed values instead of read from the machine's Forge
- * profile (finding 11.2).
+ * profile.
  *
  * <p>The values are applied through {@code FModel.initialize}'s
  * preference-adjusting hook, which runs right after the preferences load and

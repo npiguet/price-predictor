@@ -147,8 +147,8 @@ class RandomSeatControllerTest {
 
     /**
      * What the seat drew resolves: Arc Lightning, its 3 damage divided
-     * among the targets drawn, deals all of it, where an undivided draw threw
-     * at resolution and lost the match.
+     * among the targets drawn, deals all of it, where an undivided draw would throw
+     * at resolution and lose the match.
      */
     @Test
     void aDividedSpellTheSeatDrewResolves() {

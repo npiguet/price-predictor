@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A resolution that makes two copies of itself as it finishes keeps its
- * deaths in its half (finding 9.13, task B15).
+ * deaths in its half.
  *
  * <p>The first copy pushed while the resolution finishes is not a player's
  * next action, and nor is the second: the state-based check still to come is

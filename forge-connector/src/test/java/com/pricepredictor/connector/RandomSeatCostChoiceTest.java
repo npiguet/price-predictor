@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A random cost choice never strands a play (finding 8.6, task E04b).
+ * A random cost choice never strands a play.
  *
  * <p>The sacrifice and tap choices are drawn as the cast pays, after the card
  * has moved to the stack. The engine draws every part's decision before it

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * A library search resolved by the real engine is one {@code card_looked_at}
  * named {@code SearchedLibrary}, whoever's library it looks into: Forge
  * counts only a search of the searcher's own library, and the rule reads the
- * rest from the clause (task B57). The clauses are scripted in the shape of
+ * rest from the clause. The clauses are scripted in the shape of
  * the cards they stand for (Thada Adel's needs a combat-damage trigger's
  * context for its {@code TriggeredTarget}, which a bare clause cannot have).
  */

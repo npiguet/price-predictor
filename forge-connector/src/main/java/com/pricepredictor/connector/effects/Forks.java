@@ -225,10 +225,10 @@ final class Forks {
      * by having the AI declare attackers and blockers in a copy, and those
      * choices draw from Forge's one random stream ({@code MyRandom}): scored
      * from it, the same board can simulate two different combats, so a live
-     * game and its exact copy disagreed by a creature's worth and the fork
-     * was discarded as a copier error. Both are scored from the same seeded
-     * stream instead, and the live game's stream is put back untouched, so
-     * the check no longer shifts what the live game draws next either.
+     * game and its exact copy would disagree by a creature's worth and the
+     * fork be discarded as a copier error. Both are scored from the same seeded
+     * stream, and the live game's stream is put back untouched, so
+     * the check does not shift what the live game draws next either.
      */
     static int score(Game game, Player perspective) {
         return seeded(() -> new GameStateEvaluator().getScoreForGameState(game, perspective).value);
@@ -407,7 +407,7 @@ final class Forks {
      * <p>The whole span draws from a random stream of its own ({@link
      * #isolated}), never from the live game's: a fork's AI, its stack and
      * its effects all draw from Forge's one global stream, and a draw a fork
-     * took there is one the live game no longer takes.
+     * took there is one the live game would never take.
      *
      * @param kind        the fork's kind, as the failure report names it:
      *                    {@code intervention}, {@code probe}, {@code

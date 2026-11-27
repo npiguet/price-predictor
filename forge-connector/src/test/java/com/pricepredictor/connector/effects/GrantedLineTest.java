@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A line printed on its card is not {@code granted}, and a granted line says
- * why in {@code grant} (finding 1.7): a copy prints what it copies, a card
+ * why in {@code grant}: a copy prints what it copies, a card
  * prints the lines its own statics grant it, and a keyword counter, a static
  * and a resolved effect (the card's own animation too) each grant theirs.
  */

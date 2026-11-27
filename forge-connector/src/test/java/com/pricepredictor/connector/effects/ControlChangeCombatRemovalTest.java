@@ -177,7 +177,7 @@ class ControlChangeCombatRemovalTest {
      * control of Tahngarth until end of combat. The clause sets the controller
      * and corrects the zone and publishes no stats change, so its {@code
      * control_change} is read where the zone is corrected: the resolution's
-     * half holds it, the clause's, {@code root} (finding 9.9, task B42).
+     * half holds it, the clause's, {@code root}.
      */
     @Test
     void aRealTriggersControlChangeIsInItsRecord() throws Throwable {

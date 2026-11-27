@@ -242,7 +242,7 @@ class ForcedAndLiveHalvesTest {
     /**
      * Bonesplitter equipped to the one creature out: the half holds the
      * attaching and the +2/+0 the static check after it applies, both the
-     * equip's one clause's, live and forced alike (finding 2.1).
+     * equip's one clause's, live and forced alike.
      */
     @Test
     void anEquip() throws Throwable {
@@ -265,8 +265,8 @@ class ForcedAndLiveHalvesTest {
      * a clause targeting the Equipment, then the Attach sub-ability. The
      * attaching, and the +2/+0 the static check after that last clause
      * applies, are the sub-ability's, {@code 0}, live and forced alike
-     * (finding 2.1), and so is the duration: the Attach's, permanent, not
-     * the Pump root's end of turn (finding 2.1, task BR4).
+     *, and so is the duration: the Attach's, permanent, not
+     * the Pump root's end of turn.
      */
     @Test
     void anEquipWithASubAbility() throws Throwable {
@@ -292,7 +292,7 @@ class ForcedAndLiveHalvesTest {
     /**
      * Act of Treason on the one creature out, the opponent's: its one clause
      * gains control of it, untaps it and gives it haste. The control change
-     * is the clause's, {@code root}, live and forced alike (finding 2.1).
+     * is the clause's, {@code root}, live and forced alike.
      */
     @Test
     void aControlChange() throws Throwable {
@@ -305,7 +305,7 @@ class ForcedAndLiveHalvesTest {
      * Switcheroo exchanging the first player's attacking Grizzly Bears for
      * the defender's Hill Giant, the two creatures out: the static check
      * after its one clause corrects both zones, and the bears leave combat,
-     * the clause's, {@code root}, live and forced alike (finding 9.9).
+     * the clause's, {@code root}, live and forced alike.
      */
     @Test
     void anExchangeOfAnAttacker() throws Throwable {
@@ -337,7 +337,7 @@ class ForcedAndLiveHalvesTest {
      * Flame Slash killing the one creature out, the opponent's Grizzly Bears
      * under the first player's Pacifism: the state-based check that kills
      * the bears takes the Aura off, and both halves hold its {@code
-     * unattached} (finding 5.1).
+     * unattached}.
      */
     @Test
     void anEnchantedCreatureKilledInTheStateBasedCheck() throws Throwable {
@@ -362,7 +362,7 @@ class ForcedAndLiveHalvesTest {
      * permanent out: its one legal pair of modes, return it and -3/-3, both
      * at the bear, which its own trigger sacrifices before the Command
      * resolves. The Command fizzles, and each chosen mode writes its own
-     * empty half, the card's move off the stack in the last (finding 5.6).
+     * empty half, the card's move off the stack in the last.
      */
     @Test
     void aFizzledCharm() throws Throwable {
@@ -385,7 +385,7 @@ class ForcedAndLiveHalvesTest {
     /**
      * Sundial of the Infinite ending the turn of a player holding eight
      * cards: the cleanup step it skips to discards one, which is the step's
-     * and not the half's (finding 5.6).
+     * and not the half's.
      */
     @Test
     void anEndTurn() throws Throwable {
@@ -406,7 +406,7 @@ class ForcedAndLiveHalvesTest {
      * Chain Lightning killing the opponent's Grizzly Bears, the one target
      * two Ivory Masks leave: the opponent pays {R}{R} and copies it as it
      * finishes, and the bears' death in the state-based check after is still
-     * the spell's (finding 5.6).
+     * the spell's.
      */
     @Test
     void aSelfCopyingSpell() throws Throwable {
@@ -435,8 +435,7 @@ class ForcedAndLiveHalvesTest {
     /**
      * Wild Might on the first player's Grizzly Bears, the one creature out:
      * the opponent taps a Forest and pays {2} to deny the +4/+4. The mana
-     * abilities it activated are its payment's, in no effect half
-     * (finding 5.6).
+     * abilities it activated are its payment's, in no effect half.
      */
     @Test
     void anUnlessCostPaidWithMana() throws Throwable {

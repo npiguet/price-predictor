@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * A Class level line and a Room door line always say whether they are in
- * force (finding 9.12, root spec § 9.2): every {@code Class:N} keyword line
+ * force (root spec § 9.2): every {@code Class:N} keyword line
  * carries {@code active}, true once the Class has reached level N; a Room
  * lists both doors' lines, each {@code active} while its door is unlocked
  * and {@code false} while it is locked.

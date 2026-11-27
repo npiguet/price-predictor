@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A line reads what its cost paid also where the read is not in its chain
- * (finding 5.3, task CR5): a permanent spell's {@code K:etbCounter} line
+ *: a permanent spell's {@code K:etbCounter} line
  * counting the colors spent to cast it (converge, adamant), and an ability
  * reading the counters its cost removed. A forced Tajuru Stalwart would enter
  * without its counter and a forced Essence Bottle would remove none.

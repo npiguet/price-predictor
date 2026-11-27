@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * A fork's premise: the state-based check its edit makes true, run as the
  * fork's first act and recorded as a {@code turn_action} record of subkind
- * {@code fork_edit} (finding 5.4).
+ * {@code fork_edit}.
  *
  * <p>A protection fork's grant or a directed fork's board edit is applied
  * before the fork's collectors listen, so the edit is no event of the fork.

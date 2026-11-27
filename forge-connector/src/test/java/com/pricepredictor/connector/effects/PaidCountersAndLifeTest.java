@@ -27,8 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A cost half's {@code costs} holds the counters and life its payment moved,
  * from a real payment on a real board: neither survives on the ability, so
- * the bus's events are what say it (finding 9.13, task B14), and an activation
- * that paid either, or any card, is not a free one (task B33).
+ * the bus's events are what say it, and an activation
+ * that paid either, or any card, is not a free one.
  */
 @ExtendWith(ForgeExtension.class)
 class PaidCountersAndLifeTest {

@@ -58,7 +58,7 @@ final class LiveGame {
 
     /**
      * Run {@code enumeration}, the collector's own rules queries of this
-     * game, as invisible to the channels (finding 8.5).
+     * game, as invisible to the channels.
      *
      * <p>A query reads a candidate on a stand-in card (a morph's face-down
      * cast, a face-down permanent turned up, a spell with an alternate

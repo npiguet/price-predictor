@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The rows of {@link RunParamRows} that read a batch, a table or nothing,
  * each driven through the run-parameter map the engine itself builds and
  * hands its trigger or replacement hook: the subjects and the parameters the
- * row declares, and no others (findings 9.1, 9.2).
+ * row declares, and no others.
  */
 @ExtendWith(ForgeExtension.class)
 class RunParamRowsTest {

@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * The Forge AI, except that a single choice a resolving effect may not
- * decline is made (finding 5.5).
+ * decline is made.
  *
  * <p>Forge's {@code AttachAi} answers the choice of what an Aura or an
  * Equipment attaches to with nothing when it finds the attachment useless

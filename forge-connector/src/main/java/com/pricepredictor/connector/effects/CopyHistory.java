@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 
 /**
- * What a copy copied, as it was when the copy was made (finding 1.8). A
+ * What a copy copied, as it was when the copy was made. A
  * Clone takes the copiable values of what it copies when it enters (707.2):
  * a later copy effect on the original (Cytoshape on Moldering Karok) adds a
  * clone state to the original, not to the Clone, so the original's latest

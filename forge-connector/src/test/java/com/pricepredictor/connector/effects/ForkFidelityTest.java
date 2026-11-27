@@ -46,9 +46,9 @@ class ForkFidelityTest {
 
     /**
      * After combat: a creature attacked, another blocked it, damage was
-     * dealt and a creature died. The copier copied none of the turn's combat
-     * or zone history, so the copy's creatures had not attacked or blocked,
-     * no damage linked them and no creature had died this turn.
+     * dealt and a creature died. The copy carries the turn's combat and zone
+     * history: its creatures have attacked or blocked, damage links them and
+     * a creature has died this turn.
      */
     @Test
     void aCopyTakenAfterCombatKeepsTheTurnsHistory() {

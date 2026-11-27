@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * A trait a keyword instance built keys to its keyword's line plus
  * {@code built}: the trait's kind and its position in that instance's list
- * of the kind (finding 1.1). Without it every chapter of a saga named its
+ * of the kind. Without it every chapter of a saga named its
  * keyword's one key and joined chapter I's text.
  *
  * <p>A keyword's own line, the one a board lists per keyword instance, stays

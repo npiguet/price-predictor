@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The worker's status line (findings 11.1, 16.4): one JSON object after
+ * The worker's status line: one JSON object after
  * {@link WorkerStatus#LINE}, printed at start-up and after a match whose
  * counts changed, however it ended, which reads back whole whatever a reason,
  * a gap or a rule id holds.
@@ -178,7 +178,7 @@ class WorkerStatusTest {
      * The status line names the commit the Forge engine this JVM loaded was
      * built at: the {@code Forge-Build-Commit} of the jar {@code forge.game.Game}
      * comes from, the installed {@code forge-game} jar on this classpath, read
-     * here from that jar's manifest (finding 11.1, task KR1).
+     * here from that jar's manifest.
      */
     @Test
     void theLineNamesTheCommitTheLoadedForgeGameJarWasBuiltAt() throws IOException {

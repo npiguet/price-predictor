@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The random seat aiming a play at a spell on the stack (findings 3.1, 3.2),
+ * The random seat aiming a play at a spell on the stack,
  * end to end on the real engine: the seat draws the counterspell, draws its
  * target, casts it, and the stack resolves.
  *

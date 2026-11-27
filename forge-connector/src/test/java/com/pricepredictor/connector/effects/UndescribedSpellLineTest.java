@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The line of an instant's or sorcery's spell whose script gives it no
- * {@code SpellDescription$} (finding 1.2, task A19): the trait's own
+ * {@code SpellDescription$}: the trait's own
  * {@code Description$}, else the face's oracle sentences no other line of the
  * face states, keyed with the spell's key. A spell with no such text anywhere
  * keeps its key in {@code dropped_keys}.
@@ -71,7 +71,7 @@ class UndescribedSpellLineTest {
                 lineOf(fire, spell("g/garbage_fire.txt", 0, 0)));
     }
 
-    /** The oracle no longer falls back to an unkeyed {@code text:} line. */
+    /** The oracle never falls back to an unkeyed {@code text:} line. */
     @Test
     void theSpellLineTakesThePlaceOfTheUnkeyedOracleLine() {
         ConvertedScript invasion = golden("t/tyranid_invasion.txt");

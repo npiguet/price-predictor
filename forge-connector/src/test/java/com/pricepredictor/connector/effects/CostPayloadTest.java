@@ -41,12 +41,12 @@ class CostPayloadTest {
     // ── the four card channels ──────────────────────────────────────────
 
     /**
-     * The bare {@code T} symbol taps the host, and nothing could ever say so.
+     * The bare {@code T} symbol taps the host, and the payload says so.
      *
      * <p>{@code CostTap} is a plain cost part with no card list at all — unlike
      * {@code CostTapType}, which is the "tap another untapped creature you
-     * control" form — so the commonest tap cost in the game had no path into
-     * {@code costs.tapped} however the lists were read.
+     * control" form — so the commonest tap cost in the game reaches
+     * {@code costs.tapped} by its own path, not through a list.
      */
     @Test
     void aTapCostNamesTheHostItTapped() {

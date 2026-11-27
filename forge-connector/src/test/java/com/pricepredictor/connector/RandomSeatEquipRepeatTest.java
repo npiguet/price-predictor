@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * The random seat does not equip a creature the Equipment is already on
- * (finding 8.6, met in C04): 701.3b makes it do nothing, and the seat never
+ *: 701.3b makes it do nothing, and the seat never
  * passes while a non-mana ability is playable, so it would repeat it.
  */
 @ExtendWith(ForgeExtension.class)

@@ -118,7 +118,7 @@ class EventAttributionTest {
     /**
      * An event published while no clause resolves, once a clause of the
      * resolution's line has run, is the last such clause's: the static check
-     * after the last clause (finding 2.1). Before any has run it is none's,
+     * after the last clause. Before any has run it is none's,
      * and its duration and cause are read off the line either way.
      */
     @Test
@@ -139,7 +139,7 @@ class EventAttributionTest {
     /**
      * The same event reads its duration off the last clause that ran, not the
      * line's root: a Pump root's end of turn gives way to an Attach
-     * sub-ability's permanent (finding 2.1, task BR4).
+     * sub-ability's permanent.
      */
     @Test
     void anEventAfterTheLastClauseReadsItsDuration() {

@@ -17,7 +17,7 @@ import java.util.Objects;
 
 /**
  * Where a keyword of a state that is not a card's own printed state is
- * printed (finding 1.8): a mutated permanent's, which holds the keywords of
+ * printed: a mutated permanent's, which holds the keywords of
  * every card merged into it, and a token or spell copy's, which holds the
  * original's keywords plus those its copy effect added. A token copy of a
  * copy (Kiki-Jiki's token of a Clone copying Moldering Karok) is built from
