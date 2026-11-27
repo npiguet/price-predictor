@@ -158,7 +158,7 @@ class TestForgesMove:
 class TestTheMeasure:
     def test_each_pair_scores_the_models_move_over_forges_clustered_by_game(self):
         """Forge moves +3 on each pair; the model 3, 1.5 (game g1) and 0 (g2):
-        shares 1, 0.5, 0, mean 0.5, residuals 0.5, 0 | -0.5: √0.5 / 3."""
+        shares 1, 0.5, 0, mean 0.5, residuals 0.5, 0 | -0.5: √0.5 / 3, times √2 for two games."""
         join = ProbeJoin()
         for index, (game, predicted) in enumerate([("g1", 3.0), ("g1", 1.5), ("g2", 0.0)]):
             real, participant = _lifelink_combat(game=game, record_id=f"{game}.{index}")
@@ -167,7 +167,7 @@ class TestTheMeasure:
         (effect,) = join.moves["lifelink"].summary(_LIFELINK).effects
         assert effect.combats == 3
         assert effect.mean_share == pytest.approx(0.5)
-        assert effect.standard_error == pytest.approx(math.sqrt(0.5) / 3)
+        assert effect.standard_error == pytest.approx(math.sqrt(0.5) * math.sqrt(2) / 3)
         assert effect.standard_error == pytest.approx(
             clustered_mean_standard_error([1.0, 0.5, 0.0], ["g1", "g1", "g2"]))
 
@@ -200,7 +200,7 @@ class TestTheReportLines:
         assert [line.split(":")[0] for line in lines[1:]] == [
             f"[----] probe-diff {row.keyword}" for row in DAMAGE_STEP_KEYWORDS[2:]]
         assert lines[2] == (
-            "[----] probe-diff lifelink: share 0.50; controller.life_delta 0.50 ± 0.00 "
+            "[----] probe-diff lifelink: share 0.50; controller.life_delta 0.50 ± n/a "
             "(q 0.50/0.50/0.50) over 1; paired 1, forks unpaired 0")
         # scripts/effect_gen2_report/build_data.gate2 reads only lines holding n=.
         assert not any("n=" in line for line in lines)

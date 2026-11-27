@@ -94,7 +94,8 @@ class EffectMoves:
 
     ``mean_share`` averages each combat's share, the predicted move over the
     right one (1 the full move, 0 the keyword ignored, negative the wrong
-    way), over ``combats``; ``standard_error`` is clustered by game and
+    way), over ``combats``; ``standard_error`` is clustered by game (NaN, printed
+    ``n/a``, when one game supplies every combat) and
     ``quartiles`` are the shares'. A combat whose right move is 0 has no
     share: ``zero_size`` counts those, and ``zero_size_move`` is the mean
     ``|m|`` the prediction moved on them anyway.
@@ -113,7 +114,8 @@ class EffectMoves:
         ``size`` names the move the share is taken over."""
         if self.combats:
             q1, q2, q3 = self.quartiles
-            text = (f"{self.label} {self.mean_share:.2f} ± {self.standard_error:.2f} "
+            error = "n/a" if math.isnan(self.standard_error) else f"{self.standard_error:.2f}"
+            text = (f"{self.label} {self.mean_share:.2f} ± {error} "
                     f"(q {q1:.2f}/{q2:.2f}/{q3:.2f}) over {self.combats}")
         else:
             text = f"{self.label} no share"

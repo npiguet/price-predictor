@@ -78,24 +78,40 @@ class TestTheShare:
         assert summary.combats == 4
         assert summary.mean_share == pytest.approx(0.5)
         assert summary.quartiles == pytest.approx((0.375, 0.5, 0.625))
-        assert summary.standard_error == pytest.approx(math.sqrt(0.5) / 4)
+        assert summary.standard_error == pytest.approx(math.sqrt(0.5 * 1.5) / 4)
 
 
 class TestTheClusteredStandardError:
     def test_it_sums_each_games_residuals_before_squaring(self):
         """Mean 0.5; residuals 0.5, 0 (g1), -0.5 (g2), 0 (g3); game sums
-        0.5, -0.5, 0: √(0.25 + 0.25) / 4."""
+        0.5, -0.5, 0: √(0.25 + 0.25) / 4, times √(3/2) for three games."""
         error = clustered_mean_standard_error([1.0, 0.5, 0.0, 0.5], ["g1", "g1", "g2", "g3"])
-        assert error == pytest.approx(math.sqrt(0.5) / 4)
+        assert error == pytest.approx(math.sqrt(0.5 * 1.5) / 4)
 
     def test_one_game_per_value_is_the_unclustered_error_of_a_mean(self):
         values = [1.0, 2.0, 4.0]
         mean = sum(values) / 3
-        expected = math.sqrt(sum((v - mean) ** 2 for v in values)) / 3
+        expected = math.sqrt(1.5) * math.sqrt(sum((v - mean) ** 2 for v in values)) / 3
         assert clustered_mean_standard_error(values, ["a", "b", "c"]) == pytest.approx(expected)
 
     def test_no_value_has_no_error(self):
         assert math.isnan(clustered_mean_standard_error([], []))
+
+    def test_one_game_has_no_error_whatever_the_spread(self):
+        assert math.isnan(clustered_mean_standard_error(
+            [0.1, 0.9, 0.2, 1.5], ["g1"] * 4))
+
+    def test_two_games_are_corrected_by_root_two(self):
+        """Mean 0.675; g1 residuals -0.575, 0.225 sum -0.35, g2's 0.35:
+        √(0.1225 + 0.1225) · √2 / 4."""
+        error = clustered_mean_standard_error([0.1, 0.9, 0.2, 1.5], ["g1", "g1", "g2", "g2"])
+        assert error == pytest.approx(math.sqrt(0.245) * math.sqrt(2) / 4)
+
+    def test_a_single_game_effect_prints_n_a(self):
+        tally = EffectMoveTally()
+        for share in (0.1, 0.9):
+            tally.fold("g1", [(share, 1.0)])
+        assert "± n/a (q" in tally.summary("a").render()
 
 
 def _effect(label: str, share: float, combats: int = 10) -> EffectMoves:
