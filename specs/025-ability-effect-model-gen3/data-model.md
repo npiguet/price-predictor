@@ -84,7 +84,7 @@ The manifest stores `{rule → RuleMapEntry}` and `rule_map_digest`, and `effect
 |---|---|---|
 | `rule` | rule id | |
 | `polarity` | `fires` \| `does_not_fire` \| `other` | from the variant situation the record matches |
-| `observed` | bool | whether the scenario's outcome happened in the record |
+| `observed` | bool or null | whether the scenario's outcome happened in the record; null where no scenario of the tag's polarity can be read (a merged tag is true when any readable scenario of its polarity says so) |
 | `condition` | list of entity refs | what the rule's condition reads: the carrier, the acting source and targets, the judged object (R1) |
 | `outcome` | list of entity refs | where the rule's outcome falls, as the record's targets place it; empty where the outcome is an absence (R1) |
 | `scenario` | scenario id | |
@@ -93,8 +93,8 @@ The manifest stores `{rule → RuleMapEntry}` and `rule_map_digest`, and `effect
   `fires` if any says so, else `does_not_fire`, else `other`; each role is the union of that role
   over the scenarios (R1). `entities`, both roles condition first, is where the hard mask trains
   the gate.
-- `observed ≠ (polarity == fires)` puts the record on the review list. Such a record is not a rule-test
-  record.
+- A tag whose polarity is not `other` and whose `observed` is not null, with `observed ≠ (polarity == fires)`,
+  puts the record on the review list. Such a record is not a rule-test record.
 - Tags are computed, never stored in collected shards. `build-corpus` stores them only through
   `curation` (below).
 
@@ -107,9 +107,10 @@ record carries). A gen-2 record is natural.
 ### RuleCounts (new; `rule-counts.json` and the manifest)
 
 ```
-records: n, rules: rule → { polarity → { source → count } }, declared_zero: [rule], not_countable: [rule],
-none: {rule → reason}, untaggable: {scenario → {rules, reason}},
-same_as: {scenario → {rules, same_as: [scenario], counted_under: [rule]}}, review: [{record_id, scenario}]
+generation: "gen-3", records: n, cut_games: n, rules: rule → { polarity → { source → count } },
+declared_zero: [rule], not_countable: [rule], none: {rule → reason}, untaggable: {scenario → {rules, reason}},
+same_as: {scenario → {rules, same_as: [scenario], counted_under: [rule]}}, review: [{record_id, scenario}],
+carriers: rule → [{script_file, records, lines: [{key, records}]}]
 ```
 
 A rule no record tags is absent from `rules` and listed in `declared_zero` when a taggable
@@ -261,7 +262,9 @@ games, written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
 Input: `GameCensus` (games, held-out games, random-seat games, keyword-combat games, held-out text
 games, per-game inventories `game → {(rule, polarity): n}` of rule-test-eligible records) and a
 `PlacementRule` (gen-2's draws, the pool factor, the half minimum, the item error). Only Forge-AI
-games enter a validation stratum. Output: `GameStrata` gains `halves`, `left_out_of_half` and
+games enter the game-disjoint stratum; the card-disjoint stratum admits a held-out game, a random-seat
+game included, only while it resolves a held-out text and every held-out text it resolves is under the
+per-text cap. Output: `GameStrata` gains `halves`, `left_out_of_half` and
 `surveyed` (every game the survey saw); a game outside `surveyed` is `dropped-unsurveyed`, never
 training, as is every record past the survey's count of its shard (`WriteTask.surveyed`); a game
 the survey found cut in a shard is `dropped-cut` there (`WriteTask.cut`).
@@ -315,7 +318,7 @@ collected corpus (the present lists come from pilot collections). Each count fie
 | Field | Rule |
 |---|---|
 | `state` | averaged tensors of encoder, model and identity table |
-| `start_step` | optimizer step at warmup's end |
+| `start_step` | the run's training step count, in batches, when the average began: the first optimizer step at or past warmup's end, or an epoch's end at or past it when no optimizer step has begun the average |
 | `rate` | `grad_accum / (steps_per_epoch × ema_epochs)` |
 
 ### EffectCheckpoint (extended)
