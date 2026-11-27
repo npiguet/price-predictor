@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import pkgutil
 import sys
 import threading
@@ -21,7 +22,24 @@ _OWN_PACKAGES = ("price_predictor", "sealed", "draft", "effects")
 _REAL_KILL = jvm_processes.kill_process_tree
 
 
+#: Threads each pytest-xdist worker gives torch and the BLAS/OpenMP pools, so
+#: six workers share the cores instead of each starting one thread per core.
+XDIST_WORKER_THREADS = 2
+
+
+def _limit_worker_threads() -> None:
+    """Cap the thread pools of one xdist worker (a plain run is left alone)."""
+    if "PYTEST_XDIST_WORKER" not in os.environ:
+        return
+    import torch
+    from threadpoolctl import threadpool_limits
+
+    torch.set_num_threads(XDIST_WORKER_THREADS)
+    threadpool_limits(XDIST_WORKER_THREADS)
+
+
 def pytest_configure(config):
+    _limit_worker_threads()
     config.addinivalue_line(
         "markers",
         "real_process_kill: let this test reach the real process-tree kill "

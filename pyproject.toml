@@ -26,6 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-xdist>=3.8",
     "ruff>=0.3",
     "httpx>=0.28",
 ]
