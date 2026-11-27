@@ -23,7 +23,9 @@ A paid X (the source's ``x_paid`` equals ``refs.x``) is redrawn in ``refs.x``,
 in the source's ``x_paid`` and in the mana its ``costs_paid`` states, together.
 An X the board computes ("damage equal to the number of creatures you control")
 is not redrawn: the copy keeps the amount and moves the toughness only. A copy's
-record carries no events: its labels travel in ``Counterfactual.targets``.
+record keeps only the events its record heads read (tokens and effect
+objects created, turn structure, day and night): its per-entity labels travel in
+``Counterfactual.targets``, so ``derive_targets`` of the copy names no outcome.
 """
 
 from __future__ import annotations
@@ -34,9 +36,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 
+from effects.domain.aux_head_targets import RECORD_HEAD_EVENTS
 from effects.domain.damage_step_keywords import KeywordsOf
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import EntityTargets
+from effects.domain.event_schema import Event
 from effects.domain.provenance import (
     ProvenanceKey,
     RoleSpan,
@@ -44,7 +48,7 @@ from effects.domain.provenance import (
     SidecarLookup,
     SourceTree,
 )
-from effects.domain.records import EffectRecord, Moment, RecordKind
+from effects.domain.records import EffectRecord, Moment, RecordKind, events_of
 from effects.domain.rule_outcomes import EffectKind, damage_lethal, lethal, shrink_lethal
 from effects.domain.script_text import (
     api_of,
@@ -700,6 +704,11 @@ def _relabelled_targets(targets: dict[str, EntityTargets], qualified: Qualified,
     return relabelled
 
 
+def _record_head_events(record: EffectRecord) -> tuple[Event, ...]:
+    """The source's events the record heads read, in record order."""
+    return tuple(e for e in events_of(record) if e.type in RECORD_HEAD_EVENTS)
+
+
 def counterfactual(material: CopyMaterial, rng: random.Random, copy: int) -> Counterfactual:
     """Copy number ``copy`` of ``material.record``: a new amount, a new
     toughness on one hit creature, and every creature and player the amount
@@ -708,8 +717,10 @@ def counterfactual(material: CopyMaterial, rng: random.Random, copy: int) -> Cou
     ``material.text`` is what the run encodes ``material.line`` from. A
     literal amount is edited in the text under a key of its own, a paid X in
     the references; where the text names neither, or the X is one the board
-    computes, only the toughness moves. The copy's record carries no events:
-    its labels are ``targets``.
+    computes, only the toughness moves. The copy's record keeps the source's
+    events of :data:`RECORD_HEAD_EVENTS` and no other: the verdict, global and
+    created-objects heads read them, and the copy changes none; its per-entity
+    labels are ``targets``.
     """
     record, qualified = material.record, material.qualified
     low, high = DRAW_RANGE
@@ -731,7 +742,7 @@ def counterfactual(material: CopyMaterial, rng: random.Random, copy: int) -> Cou
         record_id=f"{record.record_id}~cf{copy}",
         ability=(edit.key,) if edit.key is not None else record.ability,
         state=replace(record.state, entities=entities, refs=refs),
-        payload=replace(record.payload, events=()),
+        payload=replace(record.payload, events=_record_head_events(record)),
     )
     return Counterfactual(
         record=copied,

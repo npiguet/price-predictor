@@ -242,6 +242,14 @@ _TURN_STRUCTURE: tuple[EventType, ...] = (
 )
 
 
+#: Every event type the record heads (verdict, global, created-objects) read:
+#: what a lethality copy keeps of its source's events, as it changes none.
+RECORD_HEAD_EVENTS: frozenset[EventType] = frozenset({
+    *_EFFECT_OBJECTS, *_TURN_STRUCTURE, EventType.DAY_NIGHT_CHANGED,
+    EventType.TOKEN_CREATED, EventType.CARD_MADE,
+})
+
+
 def created_objects_targets(record: EffectRecord) -> tuple[list[float], list[bool]]:
     """The created-objects head's targets at ``[GLOBAL]`` (FR-078), and which
     columns the record says.
