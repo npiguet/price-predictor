@@ -288,7 +288,7 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
 def require_cache_stamps(paths: ProbePaths, loaded) -> None:
     """Refuse a shipping cache not stamped for ``loaded`` over the run's trees,
     and a taxonomy cache stamped for other trees, surface or vocabulary (no
-    weights enter it, so its checkpoint is not compared; finding 11.7)."""
+    weights enter it, so its checkpoint is not compared)."""
     from effects.domain.baselines import Baseline
     from effects.infrastructure.ability_cache_store import cache_stamp, require_cache_stamp
 

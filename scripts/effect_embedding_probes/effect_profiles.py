@@ -403,7 +403,7 @@ class ProfileTotals:
 
 def listed_training_shards(paths) -> list[str]:
     """The training shards the corpus manifest lists, checked against the
-    disk (finding 11.4): a stale shard of an earlier build is refused, not
+    disk: a stale shard of an earlier build is refused, not
     profiled."""
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.curated_shards import require_listed_shards

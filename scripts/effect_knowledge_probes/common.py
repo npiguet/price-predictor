@@ -175,7 +175,7 @@ def line_items(cards_folders: Iterable[Path], surface: Surface, cache=None) -> l
 
 def checked_cache(context: ProbeContext, abilities_root: Path, surface: Surface):
     """The shipping cache under ``abilities_root``, once its stamp names the
-    probed checkpoint and trees (finding 11.7): ``CacheStampError`` otherwise."""
+    probed checkpoint and trees: ``CacheStampError`` otherwise."""
     from effects.infrastructure.ability_cache_store import cache_stamp, require_cache_stamp
 
     return require_cache_stamp(abilities_root, lambda: cache_stamp(
@@ -402,7 +402,7 @@ class ProbeContext:
 
     def stratum_shards(self, stratum: str) -> tuple[Path, ...]:
         """The shards the manifest lists for ``stratum``, checked against the
-        disk once per context (finding 11.4): a stale shard is refused, so no
+        disk once per context: a stale shard is refused, so no
         probe reads one."""
         if self._listed is None:
             from effects.infrastructure.corpus_store import CorpusStore

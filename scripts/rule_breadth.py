@@ -1,4 +1,4 @@
-"""Flag rule detectors that tag a small share of their family's pool (feature 025, T036).
+"""Flag rule detectors that tag a small share of their family's pool (feature 025).
 
 Per declared scenario, counts the ``fires`` records its detector finds and the
 records its family finds with the rule-specific parameters dropped, writes

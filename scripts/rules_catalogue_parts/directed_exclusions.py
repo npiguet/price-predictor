@@ -13,7 +13,7 @@ ALWAYS_DIRECTED = {
 #: their fork from its live game, no fork of their board can be taken or kept,
 #: or no sealed pool makes their point happen, so a directed fork of theirs
 #: would add no record of the side it is for (the user's decisions of
-#: 2026-11-06, T096, and 2026-11-14).
+#: 2026-11-06 and 2026-11-14).
 NOT_DIRECTED = {
     # Their forced side ends the game, and curation drops every record holding a game's
     # end (the user's decision D13 of 2026-11-17), so their forks would write records

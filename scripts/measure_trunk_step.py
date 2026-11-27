@@ -1,4 +1,4 @@
-"""Time one trunk training step with and without relations (025 T105, T141a; quickstart stage 2).
+"""Time one trunk training step with and without relations (quickstart stage 2).
 
 Reads a fixed curated shard, lays its records out as token surfaces through
 ``SurfaceBuilder.build``, and times a training step of the effect model's

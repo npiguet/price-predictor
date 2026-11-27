@@ -22,12 +22,12 @@ def has_detector(scenario):
 
 #: The source of ``rule-counts`` no count here sums: a probe's, an
 #: intervention's or a protection fork's record re-records a moment of its
-#: live game, a combat once per probe (F01).
+#: live game, a combat once per probe.
 FORK_SOURCE = "fork"
 #: The sources the list is decided from: the natural records alone. A
 #: directed fork's records (``aimed``) are the forks' own, so a rule whose
 #: side only they show would read as covered, leave the list and stop the
-#: forks that make them (F15).
+#: forks that make them.
 DECIDING_SOURCES = frozenset({"forge_ai", "random_seat"})
 
 
