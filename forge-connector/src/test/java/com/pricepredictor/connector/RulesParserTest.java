@@ -46,6 +46,18 @@ class RulesParserTest {
         return RenderedLine.join(face.renderLines(0));
     }
 
+    /**
+     * The first line the converter writes for one ability, rendered the way a
+     * face renders it: through {@link Ability#appendBlock}, which numbers an
+     * actionable ability from a fresh counter (so {@code spell[1]: }) and
+     * folds line breaks as {@code BatchConverter}'s file does.
+     */
+    private static String lineOf(Ability ability) {
+        List<RenderedLine> lines = new ArrayList<>();
+        ability.appendBlock(new ActionCounter(0), 0, lines);
+        return lines.get(0).text();
+    }
+
     private CardFace face(String relativePath) {
         return convertFromFile(relativePath).faces().get(0);
     }
@@ -101,7 +113,7 @@ class RulesParserTest {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("flying")));
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("vigilance")));
-        assertFalse(keywords.get(0).formatLine(1).contains("["), "Static keywords should have no action number");
+        assertFalse(lineOf(keywords.get(0)).contains("["), "Static keywords should have no action number");
     }
 
     @Test
@@ -162,7 +174,7 @@ class RulesParserTest {
     void triggeredAbility() {
         var triggered = abilitiesOfType(face("t/thragtusk.txt"), AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty());
-        String line = triggered.get(0).formatLine(null);
+        String line = lineOf(triggered.get(0));
         assertTrue(line.startsWith("triggered:"));
         assertTrue(line.contains("CARDNAME"));
         assertTrue(line.contains("gain 5 life"));
@@ -172,14 +184,14 @@ class RulesParserTest {
     void staticAbility() {
         var statics = abilitiesOfType(face("b/blood_moon.txt"), AbilityType.STATIC);
         assertEquals(1, statics.size());
-        assertTrue(statics.get(0).formatLine(null).contains("nonbasic lands are mountains"));
+        assertTrue(lineOf(statics.get(0)).contains("nonbasic lands are mountains"));
     }
 
     @Test
     void replacementEffect() {
         var replacements = abilitiesOfType(face("r/rest_in_peace.txt"), AbilityType.REPLACEMENT);
         assertFalse(replacements.isEmpty());
-        assertTrue(replacements.stream().anyMatch(r -> r.formatLine(null).contains("exile it instead")));
+        assertTrue(replacements.stream().anyMatch(r -> lineOf(r).contains("exile it instead")));
     }
 
     @Test
@@ -268,9 +280,9 @@ class RulesParserTest {
         assertEquals("3", card.loyalty());
         var pw = abilitiesOfType(card, AbilityType.PLANESWALKER);
         assertEquals(3, pw.size());
-        assertTrue(pw.get(0).formatLine(null).contains("[+2]:"));
-        assertTrue(pw.get(1).formatLine(null).contains("[-1]:"));
-        assertTrue(pw.get(2).formatLine(null).contains("[-10]:"));
+        assertTrue(lineOf(pw.get(0)).contains("[+2]:"));
+        assertTrue(lineOf(pw.get(1)).contains("[-1]:"));
+        assertTrue(lineOf(pw.get(2)).contains("[-10]:"));
         // Verify sequential action numbers in formatted output
         String output = rendered(card);
         assertTrue(output.contains("planeswalker[1]:"));
@@ -282,12 +294,12 @@ class RulesParserTest {
     void sagaChapterAbilities() {
         var chapters = abilitiesOfType(face("t/the_eldest_reborn.txt"), AbilityType.CHAPTER);
         assertEquals(3, chapters.size());
-        assertTrue(chapters.get(0).formatLine(null).startsWith("chapter:"));
-        assertTrue(chapters.get(0).formatLine(null).contains("I \u2014"));
-        assertTrue(chapters.get(1).formatLine(null).contains("II \u2014"));
-        assertTrue(chapters.get(2).formatLine(null).contains("III \u2014"));
-        assertTrue(chapters.get(0).formatLine(null).contains("sacrifices"));
-        assertFalse(chapters.get(0).formatLine(1).contains("["), "Chapters should have no action number");
+        assertTrue(lineOf(chapters.get(0)).startsWith("chapter:"));
+        assertTrue(lineOf(chapters.get(0)).contains("I \u2014"));
+        assertTrue(lineOf(chapters.get(1)).contains("II \u2014"));
+        assertTrue(lineOf(chapters.get(2)).contains("III \u2014"));
+        assertTrue(lineOf(chapters.get(0)).contains("sacrifices"));
+        assertFalse(lineOf(chapters.get(0)).contains("["), "Chapters should have no action number");
     }
 
     @Test
@@ -313,7 +325,7 @@ class RulesParserTest {
         CardFace card = face("l/lightning_bolt.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
-        assertTrue(spells.get(0).formatLine(null).contains("CARDNAME deals 3 damage"));
+        assertTrue(lineOf(spells.get(0)).contains("CARDNAME deals 3 damage"));
         // Verify action number in formatted output
         String output = rendered(card);
         assertTrue(output.contains("spell[1]:"));
@@ -328,8 +340,8 @@ class RulesParserTest {
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), card.abilities().toString());
-        String line = spells.get(0).formatLine(null);
-        assertTrue(line.startsWith("spell: as an additional cost to cast this spell, discard X"), line);
+        String line = lineOf(spells.get(0));
+        assertTrue(line.startsWith("spell[1]: as an additional cost to cast this spell, discard X"), line);
         assertTrue(line.contains(". look at target opponent's hand"), line);
     }
 
@@ -337,7 +349,7 @@ class RulesParserTest {
     void cleaveEmittedAsAlternateCost() {
         CardFace card = face("a/alchemists_gambit.txt");
 
-        String altLine = abilitiesOfType(card, AbilityType.ALTERNATE_COST).get(0).formatLine(null);
+        String altLine = lineOf(abilitiesOfType(card, AbilityType.ALTERNATE_COST).get(0));
         assertTrue(altLine.contains("cleave"));
         assertTrue(altLine.contains("{4}{U}{U}{R}"));
         assertFalse(altLine.matches(".*\\{R}\\d.*"), "No trailing digits after cost");
@@ -357,19 +369,19 @@ class RulesParserTest {
         CardFace card = face("a/abhorrent_oculus.txt");
         var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
         assertEquals(1, costs.size());
-        assertTrue(costs.get(0).formatLine(null).contains("exile"));
+        assertTrue(lineOf(costs.get(0)).contains("exile"));
     }
 
     @Test
     void additionalCostFromRaiseCostStatic() {
         CardFace card = face("a/aether_tide.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
+        String costLine = lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
         assertTrue(costLine.contains("discard X creature cards"));
         assertFalse(costLine.contains("as an additional cost to cast"));
         assertEquals(0, countOfType(card, AbilityType.STATIC), "RaiseCost should not appear as static");
 
-        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine(null)
+        assertTrue(lineOf(abilitiesOfType(card, AbilityType.SPELL).get(0))
                 .contains("return X target creatures"));
         assertCostsBeforeSpells(card);
     }
@@ -386,7 +398,7 @@ class RulesParserTest {
     void optionalAdditionalCost() {
         CardFace card = face("a/analyze_the_pollen.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
+        String costLine = lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
         assertTrue(costLine.contains("you may collect evidence 8"));
         assertFalse(costLine.contains("as an additional cost to cast"));
         assertEquals(0, countOfType(card, AbilityType.STATIC));
@@ -397,14 +409,14 @@ class RulesParserTest {
     void alternateAdditionalCost() {
         CardFace card = face("a/annihilating_glare.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
+        String costLine = lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
         assertTrue(costLine.contains("sacrifice"));
         assertTrue(costLine.contains("or"));
         assertEquals(0, countOfType(card, AbilityType.STATIC)
                 + countOfType(card, AbilityType.ACTIVATED),
                 "AlternateAdditionalCost should not appear as keyword");
 
-        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine(null)
+        assertTrue(lineOf(abilitiesOfType(card, AbilityType.SPELL).get(0))
                 .contains("destroy target creature or planeswalker"));
         assertCostsBeforeSpells(card);
     }
@@ -418,12 +430,12 @@ class RulesParserTest {
         // Charm options are sub-abilities of the spell
         var options = spells.get(0).subAbilities();
         assertEquals(3, options.size());
-        assertTrue(options.get(0).formatLine(null).contains("{P} \u2014"));
-        assertTrue(options.get(0).formatLine(null).contains("create a 1/1"));
-        assertTrue(options.get(1).formatLine(null).contains("{P}{P} \u2014"));
-        assertTrue(options.get(1).formatLine(null).contains("exile target"));
-        assertTrue(options.get(2).formatLine(null).contains("{P}{P}{P} \u2014"));
-        assertTrue(options.get(2).formatLine(null).contains("return target"));
+        assertTrue(lineOf(options.get(0)).contains("{P} \u2014"));
+        assertTrue(lineOf(options.get(0)).contains("create a 1/1"));
+        assertTrue(lineOf(options.get(1)).contains("{P}{P} \u2014"));
+        assertTrue(lineOf(options.get(1)).contains("exile target"));
+        assertTrue(lineOf(options.get(2)).contains("{P}{P}{P} \u2014"));
+        assertTrue(lineOf(options.get(2)).contains("return target"));
     }
 
     @Test
@@ -485,8 +497,8 @@ class RulesParserTest {
 
     @Test
     void doubleKickerIncludesBothCosts() {
-        String costLine = abilitiesOfType(face("a/archangel_of_wrath.txt"),
-                AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
+        String costLine = lineOf(abilitiesOfType(face("a/archangel_of_wrath.txt"),
+                AbilityType.ADDITIONAL_COST).get(0));
         assertTrue(costLine.contains("kicker"));
         assertTrue(costLine.contains("{B}"));
         assertTrue(costLine.contains("{R}"));
@@ -717,7 +729,7 @@ class RulesParserTest {
         CardFace card = face("a/aetherspouts.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
-        assertTrue(spells.get(0).formatLine(null).contains("each attacking creature"));
+        assertTrue(lineOf(spells.get(0)).contains("each attacking creature"));
     }
 
     @Test
@@ -758,10 +770,10 @@ class RulesParserTest {
         // so choices become top-level OPTION abilities (no parent SPELL).
         var options = allOptions(face("w/what_must_be_done.txt"));
         assertEquals(2, options.size());
-        assertTrue(options.get(0).formatLine(null).contains("destroy all artifacts and creatures"));
-        assertTrue(options.get(1).formatLine(null).contains("release juno"));
-        assertTrue(options.get(1).formatLine(null).contains("return target historic permanent card"));
-        assertFalse(options.get(1).formatLine(null).contains("Artifacts, legendaries, and Sagas are historic"),
+        assertTrue(lineOf(options.get(0)).contains("destroy all artifacts and creatures"));
+        assertTrue(lineOf(options.get(1)).contains("release juno"));
+        assertTrue(lineOf(options.get(1)).contains("return target historic permanent card"));
+        assertFalse(lineOf(options.get(1)).contains("Artifacts, legendaries, and Sagas are historic"),
                 "Reminder text should be stripped");
     }
 
@@ -823,8 +835,8 @@ class RulesParserTest {
                 "SVar:DBDirect:DB$ GainLife | LifeAmount$ 3 | SpellDescription$ Gain 3 life.",
                 "Oracle:").faces().get(0));
         assertEquals(2, options.size());
-        assertTrue(options.get(0).formatLine(null).contains("draw a card from the chain"));
-        assertTrue(options.get(1).formatLine(null).contains("gain 3 life"));
+        assertTrue(lineOf(options.get(0)).contains("draw a card from the chain"));
+        assertTrue(lineOf(options.get(1)).contains("gain 3 life"));
     }
 
     // --- Draft-only cards ---
