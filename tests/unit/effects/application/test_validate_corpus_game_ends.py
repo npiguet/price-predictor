@@ -211,7 +211,7 @@ class TestTheManaReservoirFlushIsNotAGameBoundary:
 
 
 class TestGameEndMarkers:
-    """WP7: a gen-3 game that ended with every end-of-game write done ends
+    """A gen-3 game that ended with every end-of-game write done ends
     with a ``turn_action`` / ``game_end`` marker; one without was cut or is
     still running, which a window read mid-collection cannot tell apart."""
 
@@ -270,7 +270,7 @@ class TestGameEndMarkers:
         assert not finished.ok and "0:60" in finished.measured
 
     def test_a_pain_land_s_mana_record_is_deferred_whatever_it_did(self):
-        """Its damage and life loss are its own events (WP7): still the mana
+        """Its damage and life loss are its own events: still the mana
         reservoir's record, written at the game's end with an earlier board."""
         from effects.infrastructure.record_codec import record_from_dict
         from tests.unit.effects.builders import java_golden_records

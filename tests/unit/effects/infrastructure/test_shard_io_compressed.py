@@ -1,4 +1,4 @@
-"""Shard IO: compressed shards, truncation and damage (T027).
+"""Shard IO: compressed shards, truncation and damage.
 """
 
 from __future__ import annotations

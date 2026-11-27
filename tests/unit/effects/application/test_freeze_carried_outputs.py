@@ -1,6 +1,6 @@
 """A rule test of a per-entity rule counts a row only where the record carries
-one of the rule's effective outputs at the row's outcome entities (FR8,
-finding 7.8, CPC1 C-2, contracts/selection-set.md, Freeze step 4).
+one of the rule's effective outputs at the row's outcome entities
+(contracts/selection-set.md, Freeze step 4).
 
 The control score drops a request for an output the record defines no target
 for (``untargeted``), so the freeze does not count such a row. The records are

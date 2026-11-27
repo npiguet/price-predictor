@@ -1,6 +1,6 @@
-"""``rule_outcomes``: each rule function on the cases its former home pinned (T012),
-protection's rare qualities (702.16, T137), and the turn-structure rules the
-conditions probe reads (500.1, 307.1, 702.61, T161)."""
+"""``rule_outcomes``: each rule function on the cases its former home pinned,
+protection's rare qualities (702.16), and the turn-structure rules the
+conditions probe reads (500.1, 307.1, 702.61)."""
 
 from __future__ import annotations
 
@@ -307,6 +307,6 @@ class TestTurnStructure:
 
     def test_split_second_allows_a_special_action(self):
         """702.61b: turning a face-down creature face up, suspending a card and
-        the other special actions stay legal (TP4's suspected expected value)."""
+        the other special actions stay legal."""
         assert not split_second_forbids(split_second_on_stack=True, land_play=False,
                                         special_action=True)

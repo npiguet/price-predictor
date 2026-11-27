@@ -1,4 +1,4 @@
-"""Perturbing one script parameter (T138): a whitelisted number shifts or
+"""Perturbing one script parameter: a whitelisted number shifts or
 doubles, floored at one, and a selector swaps from a checked-in whitelist."""
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class TestNumericPerturbation:
     def test_a_shift_never_reaches_zero(self):
         """A negative count is a script Forge rejects, and a zero one can turn a
         free ability into one that changes nothing, which the Forge AI activates
-        again without end (T193, Sage of Hours at ``CounterNum$ 0``)."""
+        again without end (Sage of Hours at ``CounterNum$ 0``)."""
         rng = random.Random(0)
         for _ in range(200):
             assert shift(1, rng) >= 1
@@ -80,7 +80,7 @@ class TestNumericPerturbation:
         ("A:SP$ GainLife | LifeAmount$ 4 | Defined$ You | Amount$ 4", "Amount"),
     ])
     def test_a_key_never_edits_a_longer_key_ending_in_it(self, line, key):
-        """V4 #7: ``Num$`` must not rewrite an earlier ``CounterNum$`` of the
+        """``Num$`` must not rewrite an earlier ``CounterNum$`` of the
         same value, nor ``Amount$`` an earlier ``LifeAmount$``."""
         for seed in range(40):
             result = perturb(line, random.Random(seed))
@@ -102,7 +102,7 @@ class TestSelectorPerturbation:
         assert selector_params(script) == {"Affected": "Creature"}
 
     @pytest.mark.parametrize("script", [
-        # T191: gen-2's Opal Avenger, Hidden Predators and Veiled Crocodile
+        # Gen-2's Opal Avenger, Hidden Predators and Veiled Crocodile
         # variants swapped "Duration$ Permanent" for a card selector; the
         # animation then ended at once and the state trigger re-fired it,
         # 13,000 to 24,000 records a variant in a handful of games.

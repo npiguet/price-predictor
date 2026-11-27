@@ -1,4 +1,4 @@
-"""The gen-3 anthem probe (T162)."""
+"""The gen-3 anthem probe."""
 
 from __future__ import annotations
 

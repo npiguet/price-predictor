@@ -1,4 +1,4 @@
-"""The gen-3 wire as the connector writes it after WP3 and WP4 (contract
+"""The gen-3 wire as the connector writes it with this batch of members (contract
 ``record-schema-delta.md``): every new member decodes into its field and
 writes back where the collector wrote it.
 

@@ -93,7 +93,7 @@ def test_saving_a_manifest_removes_the_one_set_aside(tmp_path, a_manifest):
 def test_a_shard_the_clear_cannot_delete_stops_the_build_naming_it(tmp_path, a_manifest):
     """A shard held open (Windows refuses to delete an open file) would survive
     the clear and be read with the next build's shards, a stale shard possibly
-    of a game now placed in validation (finding 11.4). The manifest is moved
+    of a game placed in validation. The manifest is moved
     aside first all the same, so the failed clear leaves none matching the old
     dataset."""
     store = CorpusStore(tmp_path)

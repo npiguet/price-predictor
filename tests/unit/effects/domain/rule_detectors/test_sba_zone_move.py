@@ -1,4 +1,4 @@
-"""``sba_zone_move`` on real gen-3 records (T025, story 1 acceptance 1).
+"""``sba_zone_move`` on real gen-3 records (story 1 acceptance 1).
 
 Every case is a record cut from the gen-3 fixture; the near misses are real
 ``fires`` records edited by one fact, as the spec allows.
@@ -236,7 +236,7 @@ def _granted(record, entity_id, keyword):
 
 @pytest.mark.parametrize("keyword", ["wither", "infect"])
 def test_a_wither_or_infect_kill_is_no_lethal_damage(gen3_records, keyword):
-    """V5 #24: damage from a source with wither or infect is dealt as -1/-1
+    """Damage from a source with wither or infect is dealt as -1/-1
     counters (702.80a, 702.90b) and marks none, so its kill is 704.5f's, not
     704.5g's: neither side of ``lethal_damage``."""
     record = _fires(gen3_records, "lethal_damage")
@@ -250,7 +250,7 @@ def test_a_wither_or_infect_kill_is_no_lethal_damage(gen3_records, keyword):
 
 
 def test_two_legends_the_record_touches_neither_of_show_no_legend_rule(gen3_records):
-    """V5 #24: a pair already sharing the battlefield (Mirror Gallery, or a
+    """A pair already sharing the battlefield (Mirror Gallery, or a
     check that already ran) is no situation the record's changes made."""
     record = _fires(gen3_records, "legend_rule")
     found = FAMILY.match(record, None, {"check": "legend_rule"})

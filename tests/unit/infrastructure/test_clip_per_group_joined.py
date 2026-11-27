@@ -1,4 +1,4 @@
-"""Groups that share a name are clipped as one norm (task H06)."""
+"""Groups that share a name are clipped as one norm."""
 
 from __future__ import annotations
 

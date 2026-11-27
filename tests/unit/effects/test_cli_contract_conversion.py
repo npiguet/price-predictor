@@ -1,5 +1,4 @@
-"""The effects collectors are tied to the conversion their keys join against
-(finding 11.3, task K03).
+"""The effects collectors are tied to the conversion their keys join against.
 
 Before, nothing tied a shard to the converted tree its provenance keys were
 computed against: a tree reconverted at another Forge commit joined keys to
@@ -151,7 +150,7 @@ def test_a_dirty_conversion_is_recorded_and_warned_about_not_refused(collector, 
     assert "uncommitted changes" in caplog.text
 
 
-# ── a records directory holds one conversion (finding 11.3, task KR4) ───
+# ── a records directory holds one conversion ───
 
 
 def _reconverted(collector, commit: str = FORGE_COMMIT, digest: str = DIGEST) -> Path:

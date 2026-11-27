@@ -1,4 +1,4 @@
-"""``holdout-cards``: the depletion list `generate-pools` reads (T162, T163).
+"""``holdout-cards``: the depletion list `generate-pools` reads.
 
 The list and the trainer's split must agree exactly. They are two programs
 reading two different things — one the converted tree, the other its own
@@ -80,7 +80,7 @@ _SPEAR = "SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"
 
 
 def test_the_list_is_the_cards_the_trainer_holds_out(tmp_path) -> None:
-    """One rule, exercised through both entry points (T163)."""
+    """One rule, exercised through both entry points."""
     _convert(tmp_path, "cardsfolder/s/searing_spear.txt", "Searing Spear", [_SPEAR])
     _convert(tmp_path, "cardsfolder/l/lightning_strike.txt", "Lightning Strike", [_SPEAR])
     _convert(tmp_path, "cardsfolder/g/grizzly_bears.txt", "Grizzly Bears", [])
@@ -234,7 +234,7 @@ class TestTheTrainingCorpusFlag:
         assert config.deck_holdout.exclude_cards is None
 
 
-# ── the template unit (FR-040, FR-043; T040, T042) ──────────────────────
+# ── the template unit (FR-040, FR-043) ──────────────────────
 
 
 def test_the_report_counts_templates_texts_cards_and_the_depleted_share():
@@ -298,7 +298,7 @@ def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():
 
 
 class TestSplitCardsAreListedByTheirCombinedName:
-    """python D4: Forge names a split card "Fire // Ice" and depletes by exact
+    """Forge names a split card "Fire // Ice" and depletes by exact
     name, but the list wrote the converted first face ("fire"), so a held-out
     split card stayed in every depleted pool."""
 

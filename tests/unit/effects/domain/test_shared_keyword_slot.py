@@ -1,4 +1,4 @@
-"""A slot several keywords share keeps all of them (finding 13.4, S14 B8, S18 B3).
+"""A slot several keywords share keeps all of them.
 
 A static granting two keywords writes two keyword lines under its one key, and
 the surface reads one slot per key. The slot holds every keyword, so a strip of

@@ -1,4 +1,4 @@
-"""The effect head's token geometry (T043): the surface opens with
+"""The effect head's token geometry: the surface opens with
 ``[GLOBAL]`` then ``[ACT]``, players before cards; position ids restart at
 each ``[CARD]``; ``[ACT]`` is empty where no single line acts; every slot
 of one kind has one width."""

@@ -207,7 +207,7 @@ class TestQualify:
         assert _qualify(record, text) is None
 
     def test_a_death_a_shield_or_a_replacement_may_turn_is_not_copied(self):
-        """P3a #14: a regeneration shield (a floating effect from a Regenerate
+        """A regeneration shield (a floating effect from a Regenerate
         line affecting the hit creature) or a replacement of a move or a
         destruction on the board (an exile-instead) changes what the death
         does, which the copies' labels would not show."""

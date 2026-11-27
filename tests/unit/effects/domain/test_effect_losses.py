@@ -1,4 +1,4 @@
-"""The heads' losses (T069).
+"""The heads' losses.
 
 A conditional field contributes nothing where the gate's target is off, and
 every head's term reduces one way.

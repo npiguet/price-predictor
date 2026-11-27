@@ -1,5 +1,5 @@
 """``outcome_event``'s ``source_keyword`` speaks for a card's cast, and a qualified near miss
-needs an event it qualifies (CPC1 D-1, findings 7.1 and 7.3, task FR1).
+needs an event it qualifies (7.3).
 
 Real fixture records: Kitesail's Equip activation, which attaches, and the same record
 edited to be an Aura's cast (Sun Clasp: Enchant creature).

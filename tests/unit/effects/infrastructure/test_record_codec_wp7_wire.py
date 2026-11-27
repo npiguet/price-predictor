@@ -1,4 +1,4 @@
-"""The gen-3 wire as the connector writes it after WP7 (contract
+"""The gen-3 wire as the connector writes it with this batch of members (contract
 ``record-schema-delta.md``): the game-end marker, a rewrite whose incoming
 event is unknown or whose ability was set aside, and a blocker a lure
 requires elsewhere. Each member decodes into its field and writes back where

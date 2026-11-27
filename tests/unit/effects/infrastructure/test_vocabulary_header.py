@@ -1,4 +1,4 @@
-"""The effects vocabulary file records its surface in a header (finding 1.5).
+"""The effects vocabulary file records its surface in a header.
 
 The surface was read from the file's name, so a script vocabulary renamed or
 passed under another name tokenized every line on the prose surface. A file

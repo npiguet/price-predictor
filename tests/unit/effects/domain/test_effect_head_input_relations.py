@@ -1,4 +1,4 @@
-"""T115-T116: relations from the record's links and from the reader's own
+"""Relations from the record's links and from the reader's own
 layout."""
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from tests.unit.effects.domain.effect_head_input_support import (
 
 
 class TestAttachedTo:
-    """Story 5 acceptance 1 (T115, T116)."""
+    """Story 5 acceptance 1."""
 
     def test_an_aura_relates_to_its_creature_and_no_card_input_says_so(self, gen3_records):
         record = gen3_records[f"{_RUN}.0-mwqvqdyrb9c0.240"]
@@ -69,7 +69,7 @@ def _board(surface):
 
 
 class TestRelations:
-    """T116: relations from the record's links and from the reader's own layout."""
+    """Relations from the record's links and from the reader's own layout."""
 
     def test_a_cards_lines_its_modes_and_the_lines_of_one_card(self):
         modes = tuple(ProvenanceKey(_CHOICE.script_file, 0, "spell", 0, n) for n in range(2))

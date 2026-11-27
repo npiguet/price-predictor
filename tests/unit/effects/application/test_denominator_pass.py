@@ -1,5 +1,5 @@
-"""The loss denominators' startup pre-pass (FR-062, research T3, T144): its
-sample is prepared as training steps are (finding 15.4)."""
+"""The loss denominators' startup pre-pass (FR-062, research T3): its
+sample is prepared as training steps are."""
 
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ def _fixture_denominators(corpus, out, caplog, **overrides):
 def test_the_sample_holds_the_lethality_copies_training_steps_hold(
     monkeypatch, corpus, tmp_path, caplog,
 ):
-    """Finding 15.4: under ``--lethality-copies`` the zone and damage terms
+    """Under ``--lethality-copies`` the zone and damage terms
     are divided by a constant measured on the label mix the run trains."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     plain, plain_records, planned = _fixture_denominators(corpus, tmp_path, caplog)

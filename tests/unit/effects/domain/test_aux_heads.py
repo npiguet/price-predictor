@@ -1,4 +1,4 @@
-"""The verdict, created-objects and global heads' gen-3 outputs (T120, T121, T123).
+"""The verdict, created-objects and global heads' gen-3 outputs.
 
 Root spec section 11.2 puts the outputs on the acting ability on the verdict
 head, section 11.5 gives it a ``timing`` column and one per failed check, and

@@ -1,4 +1,4 @@
-"""A Ctrl-C between rounds ends the run (finding 16.5, task L05): once an
+"""A Ctrl-C between rounds ends the run: once an
 interrupt is latched, ``play_round`` returns without starting a pool."""
 
 from __future__ import annotations

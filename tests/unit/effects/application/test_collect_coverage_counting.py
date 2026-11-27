@@ -1,4 +1,4 @@
-"""The coverage collector (T102): counting each shard once, across the
+"""The coverage collector: counting each shard once, across the
 name boundary, with progress, in parallel."""
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ class TestIncrementalCounting:
 
 
 class TestCountingCrossesTheNameBoundary:
-    """Coverage units are converted names; record entities are Forge's (T174).
+    """Coverage units are converted names; record entities are Forge's.
 
     `build_coverage_units` keys off `ConvertedTrees.card_files`, which reads names out of
     converted card text — lowercased, `soul echo`. A record's `EntityState.name`

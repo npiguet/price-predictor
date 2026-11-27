@@ -119,7 +119,7 @@ class TestLeftOut:
             "game-disjoint", "selection", PROBES)
 
 
-# ── a rule test's readout (E6) ──────────────────────────────────────────
+# ── a rule test's readout (research E6) ──────────────────────────────────────────
 
 
 class TestRuleReadout:
@@ -537,7 +537,7 @@ def test_the_packed_cache_unpacks_bit_for_bit(run, records):
         assert got.dtype == want.dtype and torch.equal(got, want)
 
 
-# ── either half, and a saved checkpoint (T169) ──────────────────────────
+# ── either half, and a saved checkpoint ──────────────────────────
 
 
 class TestTheReportingHalf:

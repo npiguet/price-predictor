@@ -105,7 +105,7 @@ class TestLineSplit:
         assert line_split(carriers, held_out) == expected
 
 
-# ── the selection-set freeze (T156) ─────────────────────────────────────
+# ── the selection-set freeze ─────────────────────────────────────
 
 
 class TestFreezeSelectionSet:

@@ -1,5 +1,5 @@
 """Draft, sealed and effects commands that once defaulted a path under ``output/`` or
-``models/`` take it as a required flag (finding 16.6, task L06c): started without it they
+``models/`` take it as a required flag: started without it they
 exit with a usage error naming it, and ``--help`` names no such default."""
 
 from __future__ import annotations

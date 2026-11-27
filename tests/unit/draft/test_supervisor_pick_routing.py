@@ -1,4 +1,4 @@
-"""Supervisor live-pick routing with a fake worker stream (T008).
+"""Supervisor live-pick routing with a fake worker stream.
 
 Drives ``GenerateDraftDataSupervisor`` without a JVM: a fake worker yields a
 canned line stream and captures the responses written to its stdin.

@@ -1,6 +1,6 @@
 """``build-corpus`` refuses every record whose own changes end the game, in
-every stratum, under ``game-end``, counted per sampling class (decision D13,
-findings 9.7 and 13.3 (a)). The raw corpus keeps them."""
+every stratum, under ``game-end``, counted per sampling class (decision D13).
+The raw corpus keeps them."""
 
 from __future__ import annotations
 

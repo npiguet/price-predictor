@@ -1,4 +1,4 @@
-"""The conversion record on disk (finding 11.3, task K03): the sidecar digest,
+"""The conversion record on disk: the sidecar digest,
 which ``run.json`` names a tree's conversion, the connector JAR's Forge
 commit, and the Forge checkout's state."""
 

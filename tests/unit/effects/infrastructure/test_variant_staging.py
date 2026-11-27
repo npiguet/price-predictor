@@ -1,5 +1,5 @@
 """Taking a variant round's staged scripts back out of Forge's custom-cards
-directory (FR-058b; python R8)."""
+directory (FR-058b)."""
 
 from __future__ import annotations
 

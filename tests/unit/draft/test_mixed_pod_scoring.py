@@ -1,4 +1,4 @@
-"""Mixed-pod scoring is on one scale from shared boosters (US2, SC-006, T016).
+"""Mixed-pod scoring is on one scale from shared boosters (US2, SC-006).
 
 gen-1 labeling scores *every* seat regardless of who piloted it, so a mixed pod
 (agent + Forge seats) yields a per-draft agent-minus-Forge ``deck_score`` delta

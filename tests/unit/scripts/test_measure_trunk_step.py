@@ -1,4 +1,4 @@
-"""``scripts/measure_trunk_step.py`` on the gen-3 fixture records, on CPU (025 T105, T141a)."""
+"""``scripts/measure_trunk_step.py`` on the gen-3 fixture records, on CPU."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def surfaces(records):
 
 
 def test_the_relations_are_the_ones_the_surface_builder_feeds_training(records, surfaces):
-    """T141a: the measured triples are ``SurfaceBuilder.build``'s, read from
+    """The measured triples are ``SurfaceBuilder.build``'s, read from
     ``links``, not a set the script builds for itself."""
     builder = SurfaceBuilder(mts._EveryKeyLookup(), e_dim=1, rng=random.Random(0))
     assert any(s.relations for s in surfaces)

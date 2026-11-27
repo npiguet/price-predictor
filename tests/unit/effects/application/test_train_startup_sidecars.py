@@ -1,5 +1,5 @@
 """``train-effect-model`` refuses converted trees reconverted since its corpus
-was built (finding 11.3): the records' provenance keys were joined against the
+was built: the records' provenance keys were joined against the
 sidecars the manifest's ``sidecar_digest`` names, and another conversion's
 lines would be read under the same keys without anything raising."""
 

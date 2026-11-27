@@ -1,4 +1,4 @@
-"""``--allow-degraded`` on the effects collectors (finding 11.1, task K01c):
+"""``--allow-degraded`` on the effects collectors:
 off by default, it reaches the collector's config; a run refused for its
 workers' engine exits 1 with the reason in ``run.json``'s outcome."""
 

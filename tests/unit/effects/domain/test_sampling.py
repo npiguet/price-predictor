@@ -1,4 +1,4 @@
-"""The sampling mixture and rarity weighting (T041).
+"""The sampling mixture and rarity weighting.
 
 Three rules: the mixture renormalizes over the classes present (a stage-one
 corpus holds three of eight), rarity weights go as ``effective_games ** -0.5``

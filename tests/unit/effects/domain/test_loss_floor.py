@@ -284,7 +284,7 @@ def _sample(entity_records: int, heads: dict):
 
 
 class TestEveryHead:
-    """One function gives every shipped head's floor (T143): the verdict and
+    """One function gives every shipped head's floor: the verdict and
     global heads by field, the created-objects head by slot column."""
 
     def test_a_verdict_bit_s_floor_is_its_entropy_per_record_of_the_sample(self):

@@ -1,4 +1,4 @@
-"""The two ablations on a tiny random gen-3 model (T166)."""
+"""The two ablations on a tiny random gen-3 model."""
 
 from __future__ import annotations
 

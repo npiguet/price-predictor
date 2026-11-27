@@ -1,4 +1,4 @@
-"""``legality_membership`` on real gen-3 legality records (T029)."""
+"""``legality_membership`` on real gen-3 legality records."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def _forbidden_block(by_kind):
 
 
 #: A scope keeping every creature, so that a test's near miss is counted
-#: (finding 7.1: an unscoped list rule has none).
+#: (an unscoped list rule has none).
 _CREATURES = {"judged_type": "creature"}
 
 
@@ -154,7 +154,7 @@ class TestTheGen3Lists:
         assert found.outcome == ("P1",)
 
     def test_an_anchored_attackers_record_judges_its_anchor_alone(self):
-        """P3b #11: each of a declaration's per-creature records lists the same
+        """Each of a declaration's per-creature records lists the same
         ``legal_attackers`` and ``forbidden``; judging the whole list on each
         would count every creature once per creature."""
         inside = {"list": "legal_attackers", "fires_when": "inside"}
@@ -273,7 +273,7 @@ class TestKeywordAndCounter:
 
 
 class TestAnchorLists:
-    """``must_attack`` and ``min_blockers`` judge the anchor attacker (T030 follow-up)."""
+    """``must_attack`` and ``min_blockers`` judge the anchor attacker."""
 
     @staticmethod
     def _attackers():
@@ -318,7 +318,7 @@ class TestAnchorLists:
 
 
 class TestJudgedKind:
-    """``judged_type`` and ``min_types`` narrow the judged entities (T030 follow-up)."""
+    """``judged_type`` and ``min_types`` narrow the judged entities."""
 
     def test_only_a_judged_battle_counts(self):
         record = next(r for r in TestTheGen3Lists._golden("attackers")
@@ -372,7 +372,7 @@ class TestAttackerRestrictions:
 
     def test_a_tapped_creature_kept_out_fires_and_an_untapped_legal_one_is_no_near_miss(self):
         """Nothing lets a tapped creature attack: an untapped legal one says
-        nothing of 508.1a's tap condition (finding 7.1)."""
+        nothing of 508.1a's tap condition."""
         declared = {"list": "legal_attackers", "restriction": "tapped"}
         found = FAMILY.match(self._anchor("E3", tapped=True), None, declared)
         assert (found.polarity, found.condition) == (Polarity.FIRES, ("E3",))

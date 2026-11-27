@@ -1,4 +1,4 @@
-"""Tests for train progress messages (T037)."""
+"""Tests for train progress messages."""
 
 from __future__ import annotations
 

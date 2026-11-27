@@ -1,4 +1,4 @@
-"""``combat_keyword_effect`` on real gen-3 combat records and on hand-built boards (025 T030).
+"""``combat_keyword_effect`` on real gen-3 combat records and on hand-built boards.
 
 The gen-3 fixture's combats hold vigilance and a first striker in the regular
 step; toxic, absorb and trample over planeswalkers occur in no pilot record,
@@ -125,7 +125,7 @@ def test_another_attacker_s_poison_leaves_the_near_miss_unreadable():
 @pytest.mark.parametrize("keyword", ["toxic", "poisonous"])
 def test_a_poison_carrier_judges_only_the_step_it_strikes_in(keyword):
     """510.4: a creature without first or double strike deals no damage in the
-    first-strike step, so dealing none there is no near miss (V5 #21)."""
+    first-strike step, so dealing none there is no near miss."""
     plain = _creature("E1", (keyword,), combat=_attacking())
     assert FAMILY.match(_combat([plain], substep="first_strike"), None,
                         {"keyword": keyword}) is None
@@ -150,7 +150,7 @@ def test_trample_over_planeswalkers_judges_only_the_step_it_strikes_in():
 
 def test_vigilance_fires_on_its_carriers_and_has_no_near_miss():
     """An attacker without vigilance is 508.1f's ``fires`` side, and says
-    nothing of vigilance (finding 7.1)."""
+    nothing of vigilance."""
     vigilant = _creature("E1", ("vigilance",), combat=_attacking())
     plain = _creature("E2", seat=_Seat(tapped=True), combat=_attacking())
     found = FAMILY.match(_combat([vigilant, plain]), None, {"keyword": "vigilance"})
@@ -433,10 +433,10 @@ def test_thrasta_is_still_a_trampler_for_gate_2(thrasta_sidecars):
 #: attacking Forge's 506.4c placeholder (``E-1``) beside a Grizzly Bears
 #: attacking B (``P1``), and its directed fork's replacement (Colossal Dreadmaw;
 #: Thrasta): for each rule, the fork's record (``aimed_at`` the rule), then the
-#: live game's. On 2026-11-18 (task B05a, the commit after cbe63ad6) each
+#: live game's. On 2026-11-18 (the commit after cbe63ad6) each
 #: ``combat.attacking`` was rewritten from Forge's rendering of the defender to
 #: the ref its ``attacks`` link ends at, as the collector writes it since. On
-#: 2026-11-19 (task C07b) each fork record gained ``fork_kind: directed``.
+#: 2026-11-19 each fork record gained ``fork_kind: directed``.
 _PLAYED = Path(__file__).parents[4] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"
 
 

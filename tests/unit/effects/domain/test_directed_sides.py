@@ -1,10 +1,10 @@
 """What the collectors count of a run's directed forks, and the probabilities
-that follow (D8, task DF01b2).
+that follow.
 
 The records are the played gone-planeswalker forks of
 ``DirectedForkPlayedForwardCombatTest`` (``directed-702.19ef-combats.jsonl``) and one
 record of ``DirectedForkPlayedForwardInvertedTest``'s meld fork, a registration of
-three rules (``directed-meld-fork.jsonl``, task DF04), re-gamed;
+three rules (``directed-meld-fork.jsonl``), re-gamed;
 the sides come from the real catalogue under ``rules/``.
 """
 

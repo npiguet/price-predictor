@@ -151,7 +151,7 @@ class TestKeywordKeysJoinTheirSidecar:
     def test_a_key_in_a_tree_this_run_was_not_given_fails_as_unchecked(
         self, tmp_path,
     ):
-        """V5 #20: a stage-four corpus names variant-scripts keys, which a run
+        """A stage-four corpus names variant-scripts keys, which a run
         without that tree cannot join; they are no mismatch, but a run that
         checked none of them is no pass either: ``--variant-scripts`` names
         the tree."""

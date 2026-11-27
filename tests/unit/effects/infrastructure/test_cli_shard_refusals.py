@@ -1,6 +1,6 @@
 """Every command that reads shards exits 1 on a damaged shard, a line that
 does not decode, an unknown generation or a record of an older one, naming
-where (WP9, FR-033).
+where (FR-033).
 
 One damaged shard used to be truncated silently; now the read refuses it,
 and the command maps the refusal to exit 1 with the located message rather

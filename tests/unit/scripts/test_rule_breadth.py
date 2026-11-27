@@ -1,4 +1,4 @@
-"""``scripts/rule_breadth.py`` over the real gen-3 fixture (T036)."""
+"""``scripts/rule_breadth.py`` over the real gen-3 fixture."""
 
 from __future__ import annotations
 

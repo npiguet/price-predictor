@@ -1,4 +1,4 @@
-"""A near miss is counted only where the declaration scopes it (finding 7.1).
+"""A near miss is counted only where the declaration scopes it.
 
 A near miss that is "any record of the kind without the fact" says nothing
 of the rule: every family counts one only where a parameter of the

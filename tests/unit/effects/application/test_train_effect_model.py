@@ -96,7 +96,7 @@ class TestModelOutput:
 
 
 class TestHoldoutGuard:
-    """An empty card-disjoint stratum must stop the run (T160, FR-088b).
+    """An empty card-disjoint stratum must stop the run (FR-088b).
 
     Left alone it produces a training run that writes nothing: `Validator.score`
     over no records returns `nan`, and gate 1 and the reported losses would
@@ -237,8 +237,8 @@ def test_a_flag_a_resume_compares_is_one_the_settings_record():
 
 
 def test_the_settings_record_every_flag_that_shapes_a_step(tmp_path):
-    """Finding 19.1: these were in no checkpoint. The variant tree is the one
-    the run read, the manifest's when no flag named one (finding 16.6)."""
+    """Every flag that shapes a step is in the checkpoint. The variant tree is the one
+    the run read, the manifest's when no flag named one."""
     from effects.application.run_context import training_settings
     from effects.application.train_effect_model import CorpusFacts, RunSpec
 

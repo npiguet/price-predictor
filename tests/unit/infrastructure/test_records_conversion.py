@@ -1,4 +1,4 @@
-"""The conversions a records directory records (finding 11.3, task KR4)."""
+"""The conversions a records directory records."""
 
 from __future__ import annotations
 

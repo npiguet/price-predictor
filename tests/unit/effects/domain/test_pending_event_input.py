@@ -1,4 +1,4 @@
-"""What the pending event is reaches the input (finding 4.8, S14 D4, S15 answer 7).
+"""What the pending event is reaches the input.
 
 A ``trigger`` record's fired bit and a ``rewrite`` record's outgoing event
 depend on the pending event: "whenever CARDNAME deals combat damage" fires
@@ -123,7 +123,7 @@ def test_a_rewrites_incoming_event_is_its_pending_event(fixture_records):
 
 
 def test_a_rewrites_incoming_amount_reaches_the_input(records):
-    """The outgoing amount is the incoming one rewritten (S15 answer 7)."""
+    """The outgoing amount is the incoming one rewritten."""
     record = records[_TWO_DAMAGE]
     assert record.payload.incoming.params["amount"] == 2
     assert _global(record) != _global(_with_pending(record, amount=3))

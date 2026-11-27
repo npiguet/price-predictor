@@ -168,7 +168,7 @@ def test_a_different_held_out_text_still_moves_the_digest():
     ).digest()
 
 
-# ── curation fields (FR-053, FR-042; T082, T084) ───────────────────────────
+# ── curation fields (FR-053, FR-042) ───────────────────────────
 
 
 def test_the_curation_fields_round_trip_and_move_the_digest():
@@ -195,7 +195,7 @@ def test_the_curation_fields_round_trip_and_move_the_digest():
 
 
 def test_class_targets_round_trip_beside_what_was_delivered():
-    """G4: a class written short of its target shows in the manifest."""
+    """A class written short of its target shows in the manifest."""
     original = manifest(class_targets={"rewrite": 5})
     data = original.as_dict()
     assert data["class_targets"] == {"rewrite": 5}
@@ -203,7 +203,7 @@ def test_class_targets_round_trip_beside_what_was_delivered():
     assert original.digest() != manifest().digest()
 
 
-# ── gen-3 fields (FR-060, FR-060a; T138) ────────────────────────────────
+# ── gen-3 fields (FR-060, FR-060a) ────────────────────────────────
 
 
 def _gen3_fields(**extra_map) -> dict:
@@ -294,7 +294,7 @@ def test_an_unbudgeted_rule_no_training_record_shows_is_still_named():
 
 
 def test_the_collection_fields_round_trip():
-    """P3a #17: a validation stratum's rule rows, the collection flags, the
+    """A validation stratum's rule rows, the collection flags, the
     thresholds the build ran under and what reading met all read back."""
     from effects.domain.rule_budgets import RuleRow
 
@@ -324,7 +324,7 @@ def test_the_rules_tagged_nowhere_written_round_trip_and_leave_the_digest_alone(
 
 def test_the_curated_shards_round_trip_and_leave_the_digest_alone():
     """``shards`` lists each stratum's files and record counts, which the
-    trainer compares with what it finds on disk (finding 11.4). Two builds
+    trainer compares with what it finds on disk. Two builds
     deciding the same thing and naming their shards differently (another
     repack, another filesystem) have one digest."""
     listed = manifest(shards={

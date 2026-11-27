@@ -32,7 +32,7 @@ class TestTokenizerRulesByCheckpoint:
         from effects.domain.recorded_version import UnknownRecordedVersion
 
         # gen-2 read a variant's script by the prose grammar on the prose
-        # surface, descriptions and all (finding 1.5).
+        # surface, descriptions and all.
         for rules in ("gen-2", "gen-4"):
             with pytest.raises(UnknownRecordedVersion, match=rules):
                 tokenizer_surface("script", {"tokenizer_rules": rules})

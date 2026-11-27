@@ -1,4 +1,4 @@
-"""The coverage collector (T102): which cards the unit and the decks hold:
+"""The coverage collector: which cards the unit and the decks hold:
 non-deck types, the wording round, a hung consult and a card Forge cannot
 resolve."""
 
@@ -210,7 +210,7 @@ class TestTheWordingRound:
 
 
 class TestAHungConsultOnlyRanks:
-    """P1 #12: the castability consult runs under a timeout; a consult killed
+    """The castability consult runs under a timeout; a consult killed
     at it degrades like one that could not run, every card ranked castable."""
 
     def test_a_timed_out_consult_yields_no_verdicts(self, caplog):
@@ -225,7 +225,7 @@ class TestAHungConsultOnlyRanks:
 
 
 class TestACardForgeCannotResolve:
-    """P1 #11: a decks-only round refuses a whole deck naming a card Forge's
+    """A decks-only round refuses a whole deck naming a card Forge's
     card database does not hold, so one such card, unrecorded and weighted
     the most, failed every match its decks reached until it retired unseen.
     The consult answers every name the database holds: one it leaves

@@ -1,4 +1,4 @@
-"""The coverage collector (T102): retirement, the residues and the decks.
+"""The coverage collector: retirement, the residues and the decks.
 
 A card with no progress retires, which is the only thing that makes the run
 terminate; the unit's own rules are in ``tests/unit/effects/domain/test_coverage.py``.
@@ -240,7 +240,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
 
 
 class TestARoundChargesTheCardsItsGamesShowed:
-    """python D8: retirement is charged to the cards the round's games showed,
+    """Retirement is charged to the cards the round's games showed,
     not to every card of every deck written."""
 
     def test_a_written_card_no_game_showed_is_not_charged(self, tmp_path, fake_supervisor):

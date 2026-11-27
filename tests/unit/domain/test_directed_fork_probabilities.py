@@ -1,4 +1,4 @@
-"""The directed-fork probability of a rule from its two sides' counts (D8, DF01)."""
+"""The directed-fork probability of a rule from its two sides' counts."""
 
 from __future__ import annotations
 

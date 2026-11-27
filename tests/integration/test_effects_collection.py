@@ -1,4 +1,4 @@
-"""Collection against a real Forge (T045).
+"""Collection against a real Forge.
 
 Runs the instrumented worker for long enough to produce records, then checks the
 three things the acceptance path turns on: shards fill with ``resolution``

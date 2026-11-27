@@ -1,4 +1,4 @@
-"""Per-entity targets of what the WP7 wire adds (contract ``record-schema-delta.md``):
+"""Per-entity targets of what the game-end marker wire adds (contract ``record-schema-delta.md``):
 a rewrite's set-aside ability's run, a mana record's own effects, and the
 game-end marker. Read off the Java goldens, edited where the goldens hold no
 such case.

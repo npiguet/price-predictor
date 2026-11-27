@@ -298,22 +298,18 @@ class TestWorkerLogFiles:
         assert b"generation 0" not in backup
 
     def test_a_rotation_failure_degrades_rather_than_raising(self, tmp_path):
-        """final-fix-3.md item 5: on Windows especially, a rename can lose to
-        a concurrent reader with the file still open. Unguarded, that used to
-        propagate out of ``get`` -- which ``spawn_worker`` calls directly --
-        into ``ForgeWorkerPool._monitor_worker``'s bare ``except Exception``,
-        which retries with no backoff: a tight respawn/print loop instead of
-        a log that just missed one rotation.
+        """On Windows especially, a rename can lose to a concurrent reader
+        with the file still open. The failure must not propagate out of
+        ``get`` -- which ``spawn_worker`` calls directly -- into
+        ``ForgeWorkerPool._monitor_worker``'s bare ``except Exception``, which
+        retries with no backoff: a tight respawn/print loop instead of a log
+        that just missed one rotation.
 
-        Also covers what used to be a separate test
-        (``test_a_rotation_failure_does_not_leave_a_closed_handle_registered``,
-        folded in here per final-fix-4.md item 7): that test passed against an
-        implementation with the ``try/except`` around the rename but no
-        ``del self._open[worker_id]`` ahead of it, because ``get`` always
-        reassigns ``self._open[worker_id]`` before returning on every path
-        that does not raise -- once the rename itself cannot escape
-        unconditionally, nothing before this method's last two lines can
-        still be watching to notice a missing ``del``. What the ``del`` still
+        The test also pins that the closed handle is not registered after the
+        failure. The ``try/except`` around the rename alone does not
+        guarantee that, because ``get`` always reassigns
+        ``self._open[worker_id]`` before returning on every path that does
+        not raise. What the ``del self._open[worker_id]`` ahead of the rename
         guards is a handle leaking out to a call between the failed close and
         the reassignment, which a single-threaded test cannot observe by
         calling ``get`` again (a second real rotation could kick in once the
@@ -361,7 +357,7 @@ class TestWorkerLogFiles:
     def test_a_failed_close_during_rotation_still_degrades_rather_than_raising(
         self, tmp_path,
     ):
-        """final-fix-4.md item 6: ``handle.close()`` itself, immediately ahead
+        """``handle.close()`` itself, immediately ahead
         of the rename, was still unguarded -- only the rename and the stat
         above it were. A ``close()`` that raises must not stop rotation (or
         the eventual reopen) from completing.
@@ -427,8 +423,8 @@ class TestWorkerLogFiles:
 
 
 class TestKillProcessTree:
-    """TP1: no test killed a real process; and V4 #8: a wait that timed out
-    was swallowed, so a survivor was reported dead."""
+    """No test kills a real process; a wait that times out is not swallowed,
+    so a survivor is not reported dead."""
 
     @pytest.mark.real_process_kill
     def test_a_real_child_and_its_grandchild_both_die(self, tmp_path):
@@ -486,7 +482,7 @@ class TestKillProcessTree:
 
 @pytest.mark.skipif(os.name != "nt", reason="the job object is Windows-only")
 class TestWorkersDieWithTheirParent:
-    """V4 #2: a hard-killed supervisor (Stop-Process, taskkill without /T)
+    """A hard-killed supervisor (Stop-Process, taskkill without /T)
     left its JVMs running and appending to shards; a worker bound to the
     parent's job object is killed by Windows when the parent's handle closes."""
 
@@ -545,7 +541,7 @@ class TestWorkersDieWithTheirParent:
 
 
 class TestOneShotTimeout:
-    """P1 #12: a one-shot JVM had no timeout, so a hung Forge startup hung
+    """A one-shot JVM runs under a timeout, so a hung Forge startup does not hang
     the command."""
 
     @pytest.mark.real_process_kill
@@ -575,7 +571,7 @@ class TestOneShotTimeout:
 
 
 class TestStaleStagingIsClearedAtTheFirstLaunch:
-    """V4 #2: a hard-killed collect-variants never unstages its scripts, and
+    """A hard-killed collect-variants never unstages its scripts, and
     every later Forge start on the machine then loads them. The first JVM a
     process launches clears what the last staging left, once per process."""
 

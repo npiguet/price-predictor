@@ -14,7 +14,7 @@ from tests.unit.sealed.application.train_scorer_support import _tiny_transformer
 
 
 class TestPhaseBTraining:
-    """T018, T019, T021, T022 (US1) — Phase B training touches the encoder
+    """Phase B training touches the encoder
     once per unique card per batch (cache), captures the reference batch at
     step 0, and writes a Phase B checkpoint."""
 
@@ -41,13 +41,13 @@ class TestPhaseBTraining:
         result = TrainScorerUseCase().execute(config)
 
         assert len(result.metrics.train_losses) == 2
-        # Drift recorded each Phase B epoch (T019, FR-012); first value > 0.0
+        # Drift recorded each Phase B epoch (FR-012); first value > 0.0
         # because optimizer.step() ran before drift was measured.
         assert len(result.metrics.embedding_drifts) == 2
         for d in result.metrics.embedding_drifts:
             assert d >= 0.0
 
-        # T022: Phase B best_*.pt carries encoder state + train_config
+        # Phase B best_*.pt carries encoder state + train_config
         loaded = ScorerStore().load_checkpoint(
             ckpt_dir / config.best_checkpoint_name(),
         )
@@ -62,7 +62,7 @@ class TestPhaseBTraining:
     def test_within_batch_cache_runs_encoder_once_per_unique_card(
         self, phase_b_setup,
     ):
-        """T018: for a batch containing duplicates, the encoder is called
+        """For a batch containing duplicates, the encoder is called
         once per unique card; gradients still accumulate from every reference."""
         from sealed.application.scorer_phase_b import _phase_b_inject_encoder
         from sealed.application.scorer_training_context import _TrainingContext
@@ -209,7 +209,7 @@ def _grad_norm(module: torch.nn.Module) -> torch.Tensor:
 
 
 class TestPerGroupClipping:
-    """T041 (US4): each parameter group is clipped independently at the
+    """Each parameter group is clipped independently at the
     configured ``max_norm``; the returned values are the pre-clip totals
     (FR-008, FR-012)."""
 

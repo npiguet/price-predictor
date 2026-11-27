@@ -1,4 +1,4 @@
-"""``match-outcomes --directed-fork-probabilities FILE`` (DF01, DR1): each listed
+"""``match-outcomes --directed-fork-probabilities FILE``: each listed
 rule's one registered side and the records it has there, and the count a side
 needs, from which the supervisor computes the rule's probability at start and
 again at every log scan."""

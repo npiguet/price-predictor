@@ -1,4 +1,4 @@
-"""A combat record's damage assignment is no input (D3 a).
+"""A combat record's damage assignment is no input.
 
 The assignment states who deals damage in the step and how much, so it reads
 the first-strike rule without the keyword. The surface takes nothing from it:

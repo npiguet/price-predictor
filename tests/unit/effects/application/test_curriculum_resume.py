@@ -1,5 +1,5 @@
 """A run interrupted inside the curriculum's re-warm resumes to the run it
-interrupted (finding 15.5, D10).
+interrupted.
 
 The re-warmed rate is a function of the step and of flags a resume compares,
 and so is the averaged weights' start, so ``resume.pt`` stores nothing new
@@ -46,7 +46,7 @@ def test_a_run_interrupted_inside_the_re_warm_resumes_to_the_same_weights(
 def test_a_resume_file_recording_no_re_warm_is_refused_by_name(
     runner, tmp_path,
 ):
-    """A ``resume.pt`` written before the flag existed (D19)."""
+    """A ``resume.pt`` written before the flag existed."""
     from effects.infrastructure.effect_model_store import (
         ResumeMismatchError,
         load_resume_state,

@@ -372,7 +372,7 @@ class TestSupervisorStatusLineFormat:
 
 
 class TestTheRunReportsWhatItsWorkersLogged:
-    """V4 #3 on match-outcomes: worker failure lines went to the logs and
+    """Worker failure lines went to the logs and
     nowhere else, and a run that recorded nothing said nothing."""
 
     def _run(self, tmp_path, worker: _WorkerRun):
@@ -431,7 +431,7 @@ class TestTheRunReportsWhatItsWorkersLogged:
         assert self._run(tmp_path, _WorkerRun(matches=0, record_lines=0)).collected_nothing is False
 
     def test_a_run_of_random_seat_matches_alone_is_judged_too(self, tmp_path):
-        """A random-seat match writes no outcome row (WP7): such a run read
+        """A random-seat match writes no outcome row: such a run read
         as no match played, whatever it recorded."""
         supervisor = self._run(
             tmp_path, _WorkerRun(matches=0, record_lines=0, random_seat_matches=3),
@@ -471,7 +471,7 @@ class TestTheRunReportsWhatItsWorkersLogged:
     def test_the_fork_refusal_tally_is_printed_and_kept_and_is_no_failure(
         self, tmp_path, capsys,
     ):
-        """WP5: the worker prints how many forks declined, by kind and reason;
+        """The worker prints how many forks declined, by kind and reason;
         expected, so they are counted apart from every failure line and leave
         the run's verdict alone."""
         import json

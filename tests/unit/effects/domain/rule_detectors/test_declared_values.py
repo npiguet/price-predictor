@@ -49,7 +49,7 @@ _CONNECTOR = (_ROOT / "forge-connector" / "src" / "main" / "java" / "com" / "pri
     ("rewrite_event", "rewrite", {"event": "zone_change", "mode": "Movd"}),
 ])
 def test_a_misspelt_value_is_refused_naming_its_scenario(family, kind, params):
-    """V5 #22: a value no closed list holds stops the index, not a record mid-run."""
+    """A value no closed list holds stops the index, not a record mid-run."""
     bad = scenario("999.1-1", ("999.1",), kind, declaration(family, kind, **params))
     with pytest.raises(DeclarationError, match="999.1-1"):
         DetectorIndex.of(catalogue(bad))

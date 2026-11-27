@@ -160,7 +160,7 @@ class TestPlayerGlobalAndActInputs:
 class TestTheTargetsAsCast:
     """An effect half's ``targets`` leave out what became illegal before it
     resolved; the input reads ``targets_at_cast`` so that a fizzle is not
-    handed to the model it is asked to predict (``V5 #25``)."""
+    handed to the model it is asked to predict."""
 
     @staticmethod
     def _fizzled(**refs):

@@ -113,7 +113,7 @@ def test_every_payload_s_events_are_read():
 
 
 def test_a_buffered_ability_s_events_are_read():
-    """A rewrite's ``buffered_events`` are the set-aside ability's run (WP7)."""
+    """A rewrite's ``buffered_events`` are the set-aside ability's run."""
     raw = _record() | {"kind": "rewrite", "payload": {
         "incoming": {"type": "damage_dealt", "params": {"amount": 2}},
         "outgoing": None, "buffered": [], "buffered_ran": True,

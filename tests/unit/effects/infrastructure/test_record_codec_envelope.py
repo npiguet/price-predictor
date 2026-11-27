@@ -51,7 +51,7 @@ class TestTheRandomSeatAndWhatIf:
 
 
 class TestGen3EnvelopeFields:
-    """``generation``, ``aimed_at``, ``directed`` and the ``turn_action`` kind (FR-018, T014)."""
+    """``generation``, ``aimed_at``, ``directed`` and the ``turn_action`` kind (FR-018)."""
 
     def test_generation_is_first_after_the_record_id(self):
         keys = list(record_to_dict(_record()))

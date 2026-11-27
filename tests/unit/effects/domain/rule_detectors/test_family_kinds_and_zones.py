@@ -1,4 +1,4 @@
-"""A family states the record kinds and events it reads; trigger zones compare as sets (F05).
+"""A family states the record kinds and events it reads; trigger zones compare as sets.
 
 ``rewrite_event`` reads rewrite records, so a declaration of it on a
 resolution reads nothing; a script's ``Origin$ Any`` or comma list of

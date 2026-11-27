@@ -1,4 +1,4 @@
-"""The card holdout and what counts as naming a held-out card (T040).
+"""The card holdout and what counts as naming a held-out card.
 
 The holdout is the newest-printed cards rather than a random sample, because it
 stands in for deployment to a set the model has never seen. A record names a
@@ -61,7 +61,7 @@ class TestRecordNamesHeldOutCard:
 
 
 def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
-    """Searing Spear and Lightning Strike compile to the same script (T158).
+    """Searing Spear and Lightning Strike compile to the same script.
 
     A name-keyed holdout puts one in training and the other in the holdout, and
     gate 1 then drops those records for having text a training card carries. The
@@ -91,7 +91,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
 
 
 def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
-    """The guard needs the texts, not just the cards (T159)."""
+    """The guard needs the texts, not just the cards."""
     from effects.domain.split import text_keyed_holdout
 
     held = text_keyed_holdout(
@@ -137,7 +137,7 @@ class TestTheConvertedToRuntimeNameBoundary:
 
 
 class TestTokenScriptsCarryHeldOutTexts:
-    """A token script is a carrier like a card (G14).
+    """A token script is a carrier like a card.
 
     Counted out, a token printing a held-out text trains on it: no holdout
     test ever names its script, so its records and every game it appears in

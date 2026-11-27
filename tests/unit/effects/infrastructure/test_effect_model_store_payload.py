@@ -1,6 +1,5 @@
 """A checkpoint's payload is one table of members that save and load both read,
-and a loader refuses what it cannot run rather than filling a default
-(task H04, finding 11.8)."""
+and a loader refuses what it cannot run rather than filling a default."""
 
 from __future__ import annotations
 
@@ -43,7 +42,7 @@ def test_a_payload_missing_a_member_raises_a_key_error_naming_it(tmp_path, files
 
 def test_settings_without_rule_mask_raise_key_error_rule_mask(tmp_path, files):
     """The flags are settings, not payload members, and none is read with a
-    default (task H09)."""
+    default."""
     assert "rule_mask" not in _KEYS
     loaded = EffectModelStore(tmp_path).load(_saved_path(tmp_path, files))
     with pytest.raises(KeyError, match="rule_mask"):

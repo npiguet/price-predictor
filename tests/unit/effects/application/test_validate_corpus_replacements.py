@@ -20,7 +20,7 @@ from tests.unit.effects.application.validate_corpus_support import (
 
 
 class TestABufferedReplacementAgreesWithItsPayload:
-    """WP7: a damage replacement that set an ability aside (Swans of Bryn
+    """A damage replacement that set an ability aside (Swans of Bryn
     Argoll's draw, a ``Prevent$ True`` rider) names it in ``buffered`` and its
     run's events are ``buffered_events``; ``replaced_by`` names it too only
     where the replacement's own ability ran in the event's place and set its

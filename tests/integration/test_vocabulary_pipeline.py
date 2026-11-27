@@ -10,7 +10,7 @@ FIXTURE_CORPUS = Path(__file__).parent.parent / "fixtures" / "converted_cards_tr
 
 
 class TestVocabularyBuildPipeline:
-    """T008: Run build_vocabulary against fixture corpus and verify round-trip."""
+    """Run build_vocabulary against fixture corpus and verify round-trip."""
 
     def test_build_and_round_trip_via_save_load(self, tmp_path: Path):
         from price_predictor.application.build_vocabulary import build_vocabulary
@@ -61,7 +61,7 @@ class TestVocabularyBuildPipeline:
 
 
 class TestVocabularyToDatasetPipeline:
-    """T018: Full pipeline: vocabulary -> tokenizer -> dataset -> batch shapes."""
+    """Full pipeline: vocabulary -> tokenizer -> dataset -> batch shapes."""
 
     def test_full_pipeline_batch_shapes(self, tmp_path: Path):
         import torch

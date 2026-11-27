@@ -1,4 +1,4 @@
-"""``scan_forge_vocabularies.py`` and the module it writes (T112, root spec § 9.4, § 9.6)."""
+"""``scan_forge_vocabularies.py`` and the module it writes (root spec § 9.4, § 9.6)."""
 
 from __future__ import annotations
 

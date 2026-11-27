@@ -1,4 +1,4 @@
-"""A face-down card carries its real face as inactive ability slots (finding 4.8, S15 answer 7).
+"""A face-down card carries its real face as inactive ability slots.
 
 What turning a card face up does depends on its real face. The collector
 writes a face-down card's real-face lines among its ``lines`` with

@@ -1,4 +1,4 @@
-"""``rule_catalogue``: the catalogue's enums, value objects and derived output list (T009, T010)."""
+"""``rule_catalogue``: the catalogue's enums, value objects and derived output list."""
 
 from __future__ import annotations
 

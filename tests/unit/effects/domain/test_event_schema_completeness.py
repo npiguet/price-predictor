@@ -1,4 +1,4 @@
-"""The event vocabulary, and the connector's Java source that emits it (T025).
+"""The event vocabulary, and the connector's Java source that emits it.
 
 Reads the connector's source as text, so it needs no JVM and no ``../forge``
 checkout.

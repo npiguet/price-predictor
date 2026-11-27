@@ -3,8 +3,8 @@ label the converter renamed (``ResultSubAbilities$``, ``Trigger$``...), not
 only the ones after ``Execute$``/``SubAbility$``.
 
 The scripts are Forge's own card scripts, and the ``script_text`` strings are
-the provenance sidecar lines the converter wrote for them at commit 3a473430
-(task AR6); each is copied from the cards named in the comments.
+the provenance sidecar lines the converter wrote for them at commit 3a473430; each is copied
+from the cards named in the comments.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""A real ``collect-coverage`` round ends by the stop protocol (WP12).
+"""A real ``collect-coverage`` round ends by the stop protocol.
 
 One short card round over two wording cards, through the command line as an
 operator runs it: ``CollectorSupervisor`` and ``ForgeWorkerPool`` under a

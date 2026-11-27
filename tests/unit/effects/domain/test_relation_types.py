@@ -1,8 +1,8 @@
-"""``relation_types``: § 10.3's families as table rows (T099).
+"""``relation_types``: § 10.3's families as table rows.
 
 The family names are also the Java collector's ``LinkFamily`` spellings, which
 a snapshot's ``links[].type`` carries; ``LinkFamilyContractTest`` reads this
-side's source the other way (T058).
+side's source the other way.
 """
 
 from __future__ import annotations

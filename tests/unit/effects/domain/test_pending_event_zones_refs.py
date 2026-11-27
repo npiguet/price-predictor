@@ -1,4 +1,4 @@
-"""The pending event's zones, defender, blockers and cause reach the input (finding 4.8, S14 D4).
+"""The pending event's zones, defender, blockers and cause reach the input.
 
 A "dies" or "leaves the battlefield" trigger fires on a zone change from the
 battlefield to the graveyard, so ``[GLOBAL]`` reads the event's ``from_zone``

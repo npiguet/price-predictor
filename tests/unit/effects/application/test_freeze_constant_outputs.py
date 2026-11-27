@@ -1,5 +1,5 @@
 """The freeze leaves out a rule-test output whose targets are the same in both
-polarities, as the control score does (finding 12.9).
+polarities, as the control score does.
 
 The records are the real gen-3 fixture's, each its own game. In it the
 playability records alone supervise ``can_play`` (seven say 1, 29 say 0) and

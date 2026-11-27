@@ -1,4 +1,4 @@
-"""One file-name rule for a variant script (findings 1.6, 16.3).
+"""One file-name rule for a variant script (16.3).
 
 The Python writer (``write_variant``), the Python reader (the variant-tree
 ``ConvertedCardLocator``) and the Java collector's key

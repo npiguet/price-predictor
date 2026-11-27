@@ -1,5 +1,5 @@
 """A cost half's rule-test row is counted at the entities its payment trains
-at (task G11b, finding 10.5, decision D7; FR8's path).
+at (FR8's path).
 
 The freeze counts a row of a rule read at entities only where the record
 carries one of the rule's effective outputs at the tag's outcome entities

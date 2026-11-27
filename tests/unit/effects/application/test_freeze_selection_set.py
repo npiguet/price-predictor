@@ -603,7 +603,7 @@ def test_sc010_on_the_fixture_every_component_and_balance_holds(tmp_path) -> Non
 
 
 def test_a_grid_freezes_the_fewest_records_its_precision_target_needs() -> None:
-    """T160: a grid's records cost a forward per cell every epoch, so it
+    """A grid's records cost a forward per cell every epoch, so it
     keeps the fewest games, by smallest keyed hash, that bring its worst-case
     standard error ``1 / (2 sqrt(N) B)`` to the target; outcomes (1, 0) give
     B = 0.5, so a target of 0.5 needs 4 records and one of 1 needs 1."""

@@ -55,7 +55,7 @@ def test_a_prose_text_is_encoded_with_its_lines_role_spans():
 
 
 class TestRelationsUnderTheMasks:
-    """T102: the board's links are state, so the no-state baseline reads none."""
+    """The board's links are state, so the no-state baseline reads none."""
 
     def _inputs(self):
         from effects.domain.input_layout import SlotKind
@@ -152,7 +152,7 @@ def test_no_state_zeroes_the_line_flags_and_the_card_ids():
 
 
 def test_a_floating_effects_card_reads_its_source_lines_text():
-    """Root spec § 9.3 (T114): a timestamped floating effect's ``[CARD]``
+    """Root spec § 9.3: a timestamped floating effect's ``[CARD]``
     is followed by its source line, encoded with the batch like any other."""
     from effects.domain.surface_builder import command_zone_entities
     from effects.infrastructure.record_codec import record_from_dict

@@ -1,4 +1,4 @@
-"""``rules_catalogue_io`` over the real ``rules/`` tree (T011)."""
+"""``rules_catalogue_io`` over the real ``rules/`` tree."""
 
 from __future__ import annotations
 

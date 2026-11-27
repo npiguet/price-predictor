@@ -1,4 +1,4 @@
-"""A real match worker recycles itself at a game end, under the real supervisor (WP12).
+"""A real match worker recycles itself at a game end, under the real supervisor.
 
 ``MatchOutcomeSupervisor`` and its ``ForgeWorkerPool`` run one Forge worker the
 way ``sealed match-outcomes --effect-records`` runs it, inside the command's own

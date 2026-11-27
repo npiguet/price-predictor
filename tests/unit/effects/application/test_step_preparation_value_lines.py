@@ -1,4 +1,4 @@
-"""The value head's targets are keyed by line, not by text (task G13b, finding 1.10).
+"""The value head's targets are keyed by line, not by text.
 
 Two lines can share an encoding text (the prose of a trigger whose script
 differs by a granted ability) and so one row of ``e``; each has its own targets,
@@ -36,7 +36,7 @@ def _sidecar_line(card: str, line_index: int) -> SidecarLine:
 
 #: Golden Scale Aeronaut's and Scorn Blade Berserker's backup 1: one prose text,
 #: two scripts, the second granting an ability that draws (which the trigger's
-#: own targets leave out: G13d).
+#: own targets leave out).
 _AERONAUT = _sidecar_line("g/golden_scale_aeronaut", 4)
 _BERSERKER = _sidecar_line("s/scorn_blade_berserker", 4)
 

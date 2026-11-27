@@ -1,7 +1,7 @@
 
 
 def test_the_relation_tables_norms_are_reported_beside_the_groups():
-    """T104: each table set's pre-clip norm, read with the group norms."""
+    """Each table set's pre-clip norm, read with the group norms."""
     import torch
 
     from effects.application.training_log import format_norms

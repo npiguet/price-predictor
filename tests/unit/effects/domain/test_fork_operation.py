@@ -1,4 +1,4 @@
-"""The Python half of the fork-operation contract pair (T017).
+"""The Python half of the fork-operation contract pair.
 
 Reads the Java enum's source and compares its wire names with
 :class:`ForkOperation`, in order; ``ForkOperationContractTest`` reads this

@@ -156,7 +156,7 @@ def test_a_copied_class_fills_its_quota_with_distinct_natural_copies(tmp_path, m
         assert all(not r.curation.is_added for r in sample), stratum
 
 
-# ── FR-051: round-robin over held-out texts (T081) ──────────────────────
+# ── FR-051: round-robin over held-out texts ──────────────────────
 
 
 def test_round_robin_takes_four_per_text_per_round_by_smallest_value():

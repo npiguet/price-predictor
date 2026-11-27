@@ -1,4 +1,4 @@
-"""Gate 2's table qualifies only what the record can show (finding 13.3).
+"""Gate 2's table qualifies only what the record can show.
 
 One case per board the review found the table counting against agreement:
 a blocker carrier in a multi-block (deathtouch 702.2, indestructible

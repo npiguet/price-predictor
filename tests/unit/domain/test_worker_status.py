@@ -1,4 +1,4 @@
-"""The worker's status line, read back (findings 11.1, 16.4): one JSON object
+"""The worker's status line, read back (16.4): one JSON object
 per line, never split, so a refusal reason, a gap or a rule id holding a comma
 reads back whole; each lifetime's latest line stands, and lifetimes and slots
 add up."""
@@ -191,7 +191,7 @@ def test_the_directed_tally_adds_up_over_lifetimes_and_slots_in_rule_name_order(
     assert directed_fork_tally_document([]) == {}
 
 
-# ── The engine a run's workers link (finding 11.1, task K01c) ───────────
+# ── The engine a run's workers link ───────────
 
 
 def _status(lifetime: str = "a", **members):
@@ -278,7 +278,7 @@ def test_the_check_keeps_its_first_refusal_and_warns_once():
     assert refusing.refusal == first_reason is not None
 
 
-# ── The Forge build the workers loaded (finding 11.1, task KR1) ─────────
+# ── The Forge build the workers loaded ─────────
 
 #: A Forge commit other than :data:`FORGE_COMMIT`.
 OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"

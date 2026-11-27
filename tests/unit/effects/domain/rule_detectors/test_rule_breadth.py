@@ -1,4 +1,4 @@
-"""The breadth check: the pool a detector's rule is cut from, on real gen-3 records (T036)."""
+"""The breadth check: the pool a detector's rule is cut from, on real gen-3 records."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def test_a_small_share_of_a_large_pool_is_flagged_and_nothing_else():
 
 
 def test_the_game_end_marker_counts_in_no_pool():
-    """As ``tag_record`` reads it (WP7): no detector reads the marker."""
+    """As ``tag_record`` reads it: no detector reads the marker."""
     from effects.domain.records import TurnActionPayload, TurnActionSubkind
     from effects.domain.rule_catalogue import Polarity
     from effects.domain.rule_detectors import FamilyMatch

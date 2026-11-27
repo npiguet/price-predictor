@@ -341,7 +341,7 @@ class TestTheDirectedForks:
 
 
 class TestThePerRuleDirectedProbabilities:
-    """DF01: a rule's own probability travels as ``effect.directed.probability.<rule>``
+    """A rule's own probability travels as ``effect.directed.probability.<rule>``
     beside the run's; a rule without one takes the run's."""
 
     def test_none_travel_by_default(self):

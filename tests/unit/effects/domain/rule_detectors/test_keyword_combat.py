@@ -1,4 +1,4 @@
-"""``keyword_combat`` on real gen-3 combat records and probes (T027, story 1 acceptance 2)."""
+"""``keyword_combat`` on real gen-3 combat records and probes (story 1 acceptance 2)."""
 
 from __future__ import annotations
 

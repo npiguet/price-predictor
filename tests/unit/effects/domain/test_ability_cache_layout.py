@@ -1,4 +1,4 @@
-"""The cache layout and the card representation it feeds (T087).
+"""The cache layout and the card representation it feeds.
 
 Row alignment is the whole interface: a consumer holds the cache file and the
 sidecar and needs nothing else. A misaligned cache is the worst failure
@@ -129,7 +129,7 @@ class TestPooling:
 
 class TestTheStamp:
     """The stamp ties a cache to the checkpoint, surface, vocabulary and
-    converted trees it was encoded from (finding 11.7)."""
+    converted trees it was encoded from."""
 
     _STAMP = dict(checkpoint_hash="c" * 64, surface="prose", vocab_hash="v" * 64,
                   sidecar_digest="s" * 64)

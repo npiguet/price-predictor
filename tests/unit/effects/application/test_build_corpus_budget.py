@@ -174,4 +174,4 @@ def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_cor
     assert "g-clean-1.decide" not in written
 
 
-# ── the gen-3 fixture under the real catalogue (T140) ────────────────────
+# ── the gen-3 fixture under the real catalogue ────────────────────

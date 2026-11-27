@@ -1,4 +1,4 @@
-"""The gen-3 wire as the connector writes it after WP5 (contract
+"""The gen-3 wire as the connector writes it with this batch of members (contract
 ``record-schema-delta.md``): a fork record's ``copy_dropped``, and a forced
 resolution holding the events the engine hooks report.
 

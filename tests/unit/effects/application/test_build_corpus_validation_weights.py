@@ -1,8 +1,8 @@
-"""A validation stratum is written as the training stratum is (D9 (b), FR-059a,
+"""A validation stratum is written as the training stratum is (FR-059a,
 FR-068a): each record's natural copy once, plus the copies the rule budgets
 plan for it, up to the reuse cap; the class mix is a weight each row carries
 (``curation.class_weight``), never a repetition. A protection copy counts
-toward its drawn rule alone (finding 14.2)."""
+toward its drawn rule alone."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def test_a_training_row_weighs_1(weighted_build):
 
 
 def test_a_class_weighed_4_carries_its_weight_and_takes_added_copies(tmp_path):
-    """Finding 14.2: a class the mix weighs at the reuse cap was written four
+    """A class the mix weighs at the reuse cap was written four
     times a record, which left a short rule no room for a copy. Here the mix
     asks far more combat than the fixture holds, so the card-disjoint
     stratum's combat class weighs 4, and first strike (702.7b, tagged on one

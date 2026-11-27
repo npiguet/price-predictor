@@ -1,4 +1,4 @@
-"""Variant scripts Forge can read, and only on the script surface (T139).
+"""Variant scripts Forge can read, and only on the script surface.
 
 A variant deck is made of cards nobody printed, so a variant run that appended
 to ``match-outcomes.txt`` would put synthetic cards into the scorer's training

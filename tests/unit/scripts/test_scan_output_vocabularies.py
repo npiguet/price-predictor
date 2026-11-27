@@ -1,5 +1,5 @@
 """``scan_output_vocabularies.py``, ``output_list_survey`` and the module the scan writes
-(T119, T121; root spec section 11.2, section 11.3)."""
+(root spec section 11.2, section 11.3)."""
 
 from __future__ import annotations
 

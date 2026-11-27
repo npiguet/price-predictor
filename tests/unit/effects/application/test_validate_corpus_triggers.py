@@ -35,7 +35,7 @@ class TestTriggerNegatives:
                                        state=_snapshot(turn=30)))
 
     def test_a_finished_game_s_negatives_only_fail(self):
-        """V5 #19: the ceiling alone let 0% fired pass, the positives the
+        """The ceiling alone let 0% fired pass, the positives the
         reservoir writes at the game's end all lost. Judged over games that
         ended in the window: an unfinished game's positives are still held."""
         game = "run.0-L1.0"

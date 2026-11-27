@@ -1,5 +1,5 @@
 """``train-scorer``'s encoder source: no default, and a fresh Phase B run is refused
-without ``--encoder-checkpoint`` (FR-024, FR-026, task L06e)."""
+without ``--encoder-checkpoint`` (FR-024, FR-026)."""
 
 from __future__ import annotations
 

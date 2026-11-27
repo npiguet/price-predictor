@@ -1,5 +1,5 @@
 """A frozen grid keeps the rule's answer for each of its records in each cell,
-and its standard error reads them (findings 12.5, 12.6; research E4)."""
+and its standard error reads them (12.6; research E4)."""
 
 from __future__ import annotations
 

@@ -170,4 +170,4 @@ def test_a_class_that_keeps_most_of_its_records_raises_nothing():
     ))
 
 
-# ── selection, placement and refusals (T036, T069, T080, T083) ─────
+# ── selection, placement and refusals ─────

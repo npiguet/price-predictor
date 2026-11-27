@@ -1,4 +1,4 @@
-"""``rule-counts`` over the real gen-3 fixture (T033).
+"""``rule-counts`` over the real gen-3 fixture.
 
 The catalogue is a small ``rules/scenarios`` tree written per test, declaring
 detectors the fixture's records show; the records are the real ones.
@@ -150,7 +150,7 @@ def test_a_none_rule_is_listed_with_its_reason(tmp_path, gen3_dir):
 
 
 def test_a_declared_rule_no_record_tags_is_listed_with_zero_records(tmp_path, gen3_dir):
-    """D3(d), V5 #22: absent is no longer silent."""
+    """A declared rule no record tags is listed, never silently absent."""
     counts, standing = count(_config(tmp_path, gen3_dir))
     document = counts.to_json(standing)
     assert "704.5k" not in document["rules"]
@@ -160,7 +160,7 @@ def test_a_declared_rule_no_record_tags_is_listed_with_zero_records(tmp_path, ge
 
 
 def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen3_dir):
-    """V5 #14 and D4: a declaration asking a Draw resolution for the game's
+    """A declaration asking a Draw resolution for the game's
     end tags nothing and is named with its reason; a same_as scenario is reported
     under the one it points at and counted nowhere else."""
     counts, standing = count(_config(tmp_path, gen3_dir))
@@ -271,7 +271,7 @@ def test_unit_of(rule, unit):
     assert unit_of(rule) == unit
 
 
-# --- carriers (T185, FR-058f) ---------------------------------------------------------------
+# --- carriers (FR-058f) ---------------------------------------------------------------
 
 _CARRIER_CATALOGUE = (
     _scenario("702.2b-1", ["702.2b"], "combat", {
@@ -312,7 +312,7 @@ def _gen3_counts(tmp_path, workers=1, copies=1):
 def test_a_cut_game_is_left_out_of_every_count_and_counted(tmp_path):
     """The fixture without its game-end markers, as a killed worker leaves a
     shard: every game in it reads as cut, build-corpus drops each, so no
-    record of them may count toward a rule (WP7, P1 #1)."""
+    record of them may count toward a rule."""
     from tests.unit.effects.builders import GEN3_FIXTURE_GAMES
 
     ended = _gen3_document(tmp_path / "ended")
@@ -364,7 +364,7 @@ def test_carriers_add_up_across_workers(tmp_path):
         one, "702.2b", "cardsfolder/t/thornweald_archer.txt")["records"]
 
 
-# --- fork records count apart (F01, finding 5.8) ----------------------------------------------
+# --- fork records count apart ----------------------------------------------
 
 _510_1A = _scenario("510.1a-1", ["510.1a"], "combat", {
     "family": "outcome_event", "record_kind": "combat", "outcome": "o", "near_miss": "n",
@@ -420,7 +420,7 @@ def test_a_probe_of_an_aimed_game_counts_as_a_fork_not_as_aimed(tmp_path):
     assert found == {"fires": {"aimed": 1, "fork": 2}}
 
 
-# --- a legality rule's carriers (F01, finding 7.7) --------------------------------------------
+# --- a legality rule's carriers --------------------------------------------
 
 _LEGALITY_CATALOGUE = (
     # A decision's target legality: every permanent of the battlefield is judged.

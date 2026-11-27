@@ -258,7 +258,7 @@ class TestResume:
         assert resumed["purpose"] == "Gen-3 arm."
         assert resumed["continues"] == ["models/effects/gen3/effect-model/2026-11-01-base"]
         assert resumed["inputs"] == ["a.txt", "b.txt"]
-        # V4 #4: the run's own start and commits stay the first command's;
+        # The run's own start and commits stay the first command's;
         # each command keeps its own start, commits and ending beside them.
         assert resumed["started"] == document["started"]
         assert resumed["commits"] == COMMITS
@@ -491,7 +491,7 @@ class TestReadCommits:
 
 class TestAnnotateRun:
     """What a command adds to its own invocation while it runs: the collector's
-    supervisor run id, resolved caps and worker-log failures (V4 #3, #4)."""
+    supervisor run id, resolved caps and worker-log failures."""
 
     def test_fields_land_on_the_running_command_s_invocation(self, repo: Path):
         def body():

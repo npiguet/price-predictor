@@ -188,7 +188,7 @@ class TestCollateSurfaces:
 
 
 class TestRelations:
-    """T102: each surface's relations, offset by its batch row, as one ``(N, 4)`` tensor."""
+    """Each surface's relations, offset by its batch row, as one ``(N, 4)`` tensor."""
 
     def _surface(self, relations):
         slots = tuple(Slot(kind=SlotKind.CARD, position=i, features=(0.0,)) for i in range(3))

@@ -1,5 +1,5 @@
 """validate-corpus on the real gen-3 fixture, broken so that a thin check gives
-the wrong verdict (V5 #11.9, task K05b): the repeat-event check, the
+the wrong verdict: the repeat-event check, the
 attribution share, the copy-key count and the per-kind duplicate floor.
 
 Each case edits records of ``gen3-records.jsonl.gz`` and asserts the finding

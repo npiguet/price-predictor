@@ -1,4 +1,4 @@
-"""The edit grids in the package (T159, T160): the control score's grid editor
+"""The edit grids in the package: the control score's grid editor
 edits a frozen record into exactly the cells, in exactly the order, the
 freeze's grid sources froze them, reading the entity each grid reads; the
 damage grid's amount is edited in the encoded text under a key of its own.

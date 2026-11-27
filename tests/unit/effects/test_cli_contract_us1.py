@@ -1,4 +1,4 @@
-"""Every flag and default of the US1 CLI surface (T039).
+"""Every flag and default of the US1 CLI surface.
 
 Parsed values only, no execution, with one deliberate exception
 (``TestVariantAcceptsCorpusAtThePreflightCheck``): a defaulted flag can drift

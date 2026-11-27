@@ -1,4 +1,4 @@
-"""``rules_catalogue.py validate``'s detector, operation and departure checks (T020, T021).
+"""``rules_catalogue.py validate``'s detector, operation and departure checks.
 
 Each failing case is a real scenario from ``rules/scenarios/`` edited by the
 one fact its check refuses.
@@ -113,7 +113,7 @@ def test_the_registry_the_validator_reads_is_the_package_s(families):
 
 
 def test_the_real_tree_passes_every_check_but_the_gen3_fields():
-    """The detector and operation passes (T030, T031) fill in what the gen-3
+    """The detector and operation passes fill in what the gen-3
     checks ask; every earlier check holds over the real tree already."""
     rules = reading.load_rules()
     all_ids = {r["id"] for r in rules}
@@ -125,7 +125,7 @@ def test_the_real_tree_passes_every_check_but_the_gen3_fields():
         assert errors == [], (unit, errors[:3])
 
 
-# --- directed-rules (T095a): the run-time lists of FR-014b and FR-038a ------------------------
+# --- directed-rules: the run-time lists of FR-014b and FR-038a ------------------------
 
 
 @dataclass(frozen=True)
@@ -381,7 +381,7 @@ def test_the_subcommand_writes_the_counts_it_decided_from(catalogue, capsys):
         catalogue.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8").split()
 
 
-# --- gen3-fields (T108): newly learnable rules and the turn_action verdict -------------------
+# --- gen3-fields: newly learnable rules and the turn_action verdict -------------------
 
 
 def _registry():
@@ -547,7 +547,7 @@ def test_the_gen3_fields_subcommand_is_wired(mapped, monkeypatch, capsys):
     assert (mapped.rules_dir / "GEN3-FIELDS.md").exists()
 
 
-# --- script_edit (T184, FR-058f) ------------------------------------------------------------
+# --- script_edit (FR-058f) ------------------------------------------------------------
 
 _SKELETONS = ["Name:Drudge Skeletons", "ManaCost:3", "Types:Artifact Creature Skeleton",
               "PT:1/1", "A:AB$ Regenerate | Cost$ B | SpellDescription$ Regenerate CARDNAME."]

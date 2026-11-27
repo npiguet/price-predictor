@@ -192,7 +192,7 @@ class TestTheFloorReadsPresenceToo:
 
 #: The fields whose event the collector writes on every resolution that
 #: does it, so a resolution's effect half that names an entity and no such
-#: event says 0 (finding 10.2): soulbond, mutate and a Class level are clause
+#: event says 0: soulbond, mutate and a Class level are clause
 #: rules on the only APIs that do them, the blessing and a completed dungeon
 #: bus readings of the command zone.
 _SILENT_ON_EFFECT_HALVES = (
@@ -209,7 +209,7 @@ _LEFT_WITHOUT_A_SILENT_VALUE = {
     "became_blocked": "a creature put onto the battlefield blocking blocks its attacker unread",
 }
 #: The one-valued fields whose silent 0 is a continuous record's alone: a
-#: contribution names every ability its static grants or takes (task G09),
+#: contribution names every ability its static grants or takes,
 #: and an Animate of its own source names no subject on a resolution.
 _SILENT_ON_CONTINUOUS = ("abilities_gained", "abilities_lost")
 
@@ -267,7 +267,7 @@ class TestAbilitiesTakeTheirSilentZeroOnAContinuousRecord:
 
 class TestAWrittenValueOutsideTheScopeIsRefused:
     """``damage_taken`` is a permanent's field: a player's damage is its
-    ``life_delta`` and ``poison_delta`` (finding 10.6)."""
+    ``life_delta`` and ``poison_delta``."""
 
     _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 

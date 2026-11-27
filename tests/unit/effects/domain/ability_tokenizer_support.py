@@ -1,4 +1,4 @@
-"""The ability tokenizer (T063).
+"""The ability tokenizer.
 
 Three properties the shared ``MtgTokenizer`` cannot provide and the encoder
 depends on: offsets that line up with the sidecar's role spans, whole-token

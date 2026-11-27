@@ -1,4 +1,4 @@
-"""What the targets read of the gen-3 wire WP3 and WP4 write."""
+"""What the targets read of the gen-3 wire's second and third batches of members."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from tests.unit.effects.domain.effect_targets_support import (
 
 
 class TestTheWp4Wire:
-    """What the targets read of the gen-3 wire WP3 and WP4 write
+    """What the targets read of the gen-3 wire's second and third batches of members
     (``record-schema-delta.md``): each decision is stated in
     ``src/effects/docs/training.md`` § Losses."""
 

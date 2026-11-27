@@ -155,7 +155,7 @@ class TestADamageEventReadsItsDamageType:
 
 class TestAContinuousContributionsSetBaseAndControl:
     """``set_pt`` and ``controller`` are present only where a static sets a
-    base or gives control (B1, L2)."""
+    base or gives control (L2)."""
 
     def test_they_read_and_write_back_where_present(self):
         record = _record(**ALL_KINDS["continuous"])

@@ -1,5 +1,5 @@
 """``draft play-draft-games --workers``: the Forge pool's size, 1 to 12, as
-on every other command that starts Forge workers (V4 #9)."""
+on every other command that starts Forge workers."""
 
 from __future__ import annotations
 

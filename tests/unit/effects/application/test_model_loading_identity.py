@@ -1,5 +1,5 @@
 """The identity baseline's embedding table rides in its checkpoint, and a
-checkpoint without it is refused (task H04, finding 11.8)."""
+checkpoint without it is refused."""
 
 from __future__ import annotations
 

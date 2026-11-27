@@ -1,4 +1,4 @@
-"""The failure lines a collection worker logs, by kind (V4 #3, P1 #3): no
+"""The failure lines a collection worker logs, by kind: no
 reader of the worker logs existed, so a run losing its matches looked like a
 run that played fewer of them."""
 

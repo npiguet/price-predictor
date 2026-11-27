@@ -1,7 +1,7 @@
 """validate-corpus on the real gen-3 fixture, broken in one way each.
 
 Each case edits the records of ``gen3-records.jsonl.gz`` the way a collector
-regression would and asserts the check that owns the defect fails (V5 #11.9):
+regression would and asserts the check that owns the defect fails:
 a check that passes a corpus it exists to refuse is worse than none.
 """
 

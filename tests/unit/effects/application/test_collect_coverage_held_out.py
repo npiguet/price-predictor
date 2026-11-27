@@ -1,4 +1,4 @@
-"""The coverage collector (T102): held-out exclusion, the held-out text
+"""The coverage collector: held-out exclusion, the held-out text
 unit and the held-out round's refusals and caps."""
 
 from __future__ import annotations
@@ -44,13 +44,11 @@ class TestHeldOutExclusion:
 
 
 class TestExclusionsWithoutACheckpoint:
-    """The holdout no longer needs a trained model to exist (T171).
+    """The holdout needs no trained model to exist.
 
-    `--split-from` was the only way to learn the holdout when it was derived at
-    training time. It is now derived from the converted tree and two flags, so
-    requiring a checkpoint makes coverage collection wait for a training run
-    that is itself supposed to come after it — which the quickstart papered over
-    by telling an operator to run step 6 once and come back.
+    The holdout is derived from the converted tree and two flags, so requiring
+    a checkpoint would make coverage collection wait for a training run that
+    itself comes after it.
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
@@ -76,7 +74,7 @@ class TestExclusionsWithoutACheckpoint:
             DeckHoldout(split_from=tmp_path / "latest.pt", exclude_cards=listed)
 
 
-# ── the held-out coverage round (FR-035–FR-038; T044, T045) ──────────────
+# ── the held-out coverage round (FR-035–FR-038) ──────────────
 
 
 class TestHeldOutTextUnit:
@@ -120,7 +118,7 @@ class TestHeldOutTextUnit:
 
     def test_a_cut_game_counts_toward_no_text(self, tmp_path):
         """The fixture without its game-end markers, as a killed worker leaves
-        a shard: every game reads as cut (WP7), and build-corpus would drop each."""
+        a shard: every game reads as cut, and build-corpus would drop each."""
         from effects.application.coverage_counting import count_text_shard
 
         cut = write_cut_gen3_fixture(tmp_path / "cut.jsonl.gz")
@@ -316,7 +314,7 @@ class TestOnlyCardsRefusals:
 
 
 class TestHeldOutRoundCaps:
-    """FR-059a (T183, python R7): every stratum has one record composition,
+    """FR-059a: every stratum has one record composition,
     so the held-out round collects under the run's own caps. It used to lift
     ``--playability-rate`` to 1.0, which made special decision records about
     a hundred times denser in the card-disjoint stratum than in training."""

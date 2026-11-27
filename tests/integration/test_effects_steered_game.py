@@ -1,4 +1,4 @@
-"""One real steered game (T188, FR-058d).
+"""One real steered game (FR-058d).
 
 A steered variant round's deck names the rule it is aimed at in a fourth
 deck-file column, and the worker stamps every record of a game with its two

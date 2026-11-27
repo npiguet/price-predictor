@@ -42,7 +42,7 @@ class TestAbilityTokens:
 
     def test_an_unmet_static_is_one_more_token_flagged_inactive(self):
         """The lines in force read as tokens, printed or granted; an unmet
-        static is one more token, flagged inactive (T074)."""
+        static is one more token, flagged inactive."""
         from effects.domain.state_snapshot import CardLine
 
         lines = (

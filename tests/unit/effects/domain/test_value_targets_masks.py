@@ -1,4 +1,4 @@
-"""What the value head's targets mask rather than state (task G13b, finding 1.10).
+"""What the value head's targets mask rather than state.
 
 Lines are real gen-3 sidecar lines: read from the fixture where it holds one,
 and pasted from ``output/effects/gen3/converted`` where it holds none (the coin

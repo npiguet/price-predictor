@@ -1,5 +1,5 @@
 """Which sources of the counts ``rules_catalogue.py directed-rules`` decides
-the list from (F01): a fork's record re-records a moment of its live game, so
+the list from: a fork's record re-records a moment of its live game, so
 a rule's side is lacking when only forks show it."""
 
 from __future__ import annotations

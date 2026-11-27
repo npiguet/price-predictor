@@ -1,4 +1,4 @@
-"""Filling a reminder template the way Forge fills it (T030, FR-017, FR-018).
+"""Filling a reminder template the way Forge fills it (FR-017, FR-018).
 
 Templates and detail strings are the real ones: the templates from Forge's
 ``Keyword`` enum as ``extract-keyword-definitions`` writes them, the details

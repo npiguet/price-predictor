@@ -53,7 +53,7 @@ class TestCheckpointRoundTrip:
         assert loaded.encoder_config is None
 
     def test_phase_b_round_trip(self, tmp_path):
-        """Phase B: encoder fields persist (T021)."""
+        """Phase B: encoder fields persist."""
         model = _make_model()
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         store = ScorerStore()

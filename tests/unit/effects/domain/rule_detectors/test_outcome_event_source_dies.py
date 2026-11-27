@@ -123,7 +123,7 @@ class TestSourceDies:
         striker = dealt[0]
         declared = {**self.DECLARED, "source_dies": False}
         died = self._events(record, (striker, self._dies(striker.params["cause"])))
-        # A combat has no acting line to scope the near miss by (finding 7.1).
+        # A combat has no acting line to scope the near miss by.
         assert FAMILY.match(died, None, declared) is None
         assert FAMILY.match(self._events(record, (striker,)), None,
                             declared).polarity is Polarity.FIRES

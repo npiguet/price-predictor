@@ -1,4 +1,4 @@
-"""The probing run over the selection set's halves (T168)."""
+"""The probing run over the selection set's halves."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """``keyword_combat`` tags no combat that ends the game, on either side
-(decision D13, finding 9.7).
+(decision D13).
 
 Forge destroys no creature in a combat whose damage ends the game, so neither
 a real combat nor a damage-step probe of one shows what the keyword did. The

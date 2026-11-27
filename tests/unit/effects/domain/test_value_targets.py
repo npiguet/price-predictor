@@ -1,4 +1,4 @@
-"""The value head's targets, read from a line's script (T091, FR-058, FR-058a).
+"""The value head's targets, read from a line's script (FR-058, FR-058a).
 
 Texts are real script lines from the converted tree, chained by hand in the
 sidecar form where a test needs more than one segment.

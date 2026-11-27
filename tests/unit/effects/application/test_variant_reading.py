@@ -1,4 +1,4 @@
-"""A variant line reads its script on the prose surface (finding 1.5, D4).
+"""A variant line reads its script on the prose surface.
 
 A variant card has no prose, so it is encoded from its script. Read through
 the prose grammar against a vocabulary that never saw a script, every API name

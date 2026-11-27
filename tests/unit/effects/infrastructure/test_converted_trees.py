@@ -116,7 +116,7 @@ def test_a_process_keeps_one_cache_per_roots(tmp_path) -> None:
     assert process_sidecars(other) is not process_sidecars(roots)
 
 
-# ── the conversion the card trees come from (finding 11.3, task K03) ─────
+# ── the conversion the card trees come from ─────
 
 
 @pytest.fixture(autouse=True)

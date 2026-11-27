@@ -1,4 +1,4 @@
-"""The coverage collector (T102): the run's own decks file, the earlier
+"""The coverage collector: the run's own decks file, the earlier
 runs it counts from, and what the run itself played and wrote."""
 
 from __future__ import annotations
@@ -41,9 +41,9 @@ class TestTheDeckFileIsTheRunsOwn:
 
 
 class TestCountFrom:
-    """V4 #5: coverage was counted only under the directory written to, so a
-    run in its own run directory (the artifact layout) started at zero and
-    re-collected what earlier runs already hold."""
+    """Coverage counts the directory written to and the earlier runs named by
+    ``--count-from``, so a run in its own run directory (the artifact layout)
+    does not start at zero and re-collect what earlier runs already hold."""
 
     def _shard_crediting(self, directory, name, records):
         directory.mkdir(parents=True, exist_ok=True)

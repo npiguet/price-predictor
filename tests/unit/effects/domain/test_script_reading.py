@@ -1,4 +1,4 @@
-"""What a line with no prose reads: its script reading (finding 1.5, D4).
+"""What a line with no prose reads: its script reading.
 
 A variant card's ``.txt`` is a Forge source script, so its lines have no prose.
 Each reads its script with every ``...Description$`` and ``TgtPrompt$``

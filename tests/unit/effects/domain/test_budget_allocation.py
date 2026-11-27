@@ -1,4 +1,4 @@
-"""``allocate``: equal shares, capped by capacity, redistributed (T073, FR-049)."""
+"""``allocate``: equal shares, capped by capacity, redistributed (FR-049)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""A card slot says what kind of entity it is (findings 4.7, B10).
+"""A card slot says what kind of entity it is.
 
 A gen-3 snapshot holds entities beyond the four tiers, each with a ``role``
 (``state_snapshot.EntityRole``). A last-known copy keeps the zone it last had,

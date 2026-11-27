@@ -1,4 +1,4 @@
-"""D4: the blocking, targeting and timing rules each tag their own records.
+"""The blocking, targeting and timing rules each tag their own records.
 
 Before the per-rule rewrite, 16 blocking scenarios, 12 targeting scenarios and
 27 timing scenarios each shared one unfiltered declaration, so a blockers
@@ -84,7 +84,7 @@ def _fires(index, record, rules):
 
 
 def test_one_tapped_forbidden_creature_fires_the_tapped_rule_alone(index):
-    """V5 #16: a vanilla ground attacker and one tapped forbidden creature
+    """A vanilla ground attacker and one tapped forbidden creature
     fired all fourteen blocking rules, flying included."""
     tapped = _creature("E2", look=_Look(tapped=True))
     record = _blockers(_creature("E1", controller="P0"), forbidden=(tapped,))
@@ -125,7 +125,7 @@ def _decision(source, targets, legal, actor="P0"):
 
 
 def test_an_opponents_hexproof_creature_fires_hexproof_alone(index):
-    """V5 #16: a land outside every legal target list fired hexproof,
+    """A land outside every legal target list fired hexproof,
     shroud, protection, enchant and equip at once."""
     shock = make_entity("E9", "shock", zone="stack", types=("Instant",), colors=("R",))
     bears = _creature("E2")
@@ -262,7 +262,7 @@ def _forbidding(attacker, legal=(), forbidden=()):
 
 
 def test_a_blocker_nothing_on_the_record_explains_is_detain_s(index):
-    """WP7: the connector names Pacifism's static, so a forbidden blocker with
+    """The connector names Pacifism's static, so a forbidden blocker with
     none, untapped and under no evasion, hidden keyword or lure is detained."""
     attacker = _creature("E1", controller="P0")
     record = _forbidding(attacker, legal=(_creature("E3"),),

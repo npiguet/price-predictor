@@ -1,5 +1,5 @@
 """``match-outcomes --effect-records`` is tied to the conversion its keys join
-against (finding 11.3, task K03).
+against.
 
 The collection names its converted tree, ``--cards-folder``, and refuses to
 start (exit 1, the reason in ``run.json``'s outcome) when the connector JAR

@@ -135,7 +135,7 @@ def test_an_absent_module_is_left_out_and_a_foreign_state_refused():
 
 
 def test_the_average_starts_one_epoch_after_the_curriculum_switch():
-    """Finding 15.5, D10 c: at the defaults (warmup 10,000, the switch at the
+    """At the defaults (warmup 10,000, the switch at the
     first step of epoch 3 at 5,000 steps an epoch, step 10,000) the average starts at
     step 15,000, not on the switch; with no switch, at warmup's end."""
     assert Curriculum(3).average_start(warmup=10_000, steps_per_epoch=5000) == 15_000

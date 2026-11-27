@@ -1,4 +1,4 @@
-"""``verdict_bit`` on real gen-3 decision records (T028)."""
+"""``verdict_bit`` on real gen-3 decision records."""
 
 from __future__ import annotations
 
@@ -172,7 +172,7 @@ def test_other_subkinds_show_nothing_and_a_bad_bit_is_refused(by_kind):
 
 class TestLandPlays:
     """Rule 305's land-play candidates (FR-002a, FR-033a), on the gen-3
-    fixture's real land-play decisions (T064c)."""
+    fixture's real land-play decisions."""
 
     LIMIT = {"bit": "failed_check", "check": "land_play_limit", "land_play": True}
 
@@ -245,7 +245,7 @@ class TestLandPlays:
         declared = {s["id"]: s["detector"]["params"] for s in scenarios
                     if s.get("detector", {}).get("family") == "verdict_bit"}
         # 305.1-1 and 305.2b-1 state 116.2a's and 305.2's facts (same_as); 305.4-1's
-        # effect-put land is read by no filter (none): D4.
+        # effect-put land is read by no filter (none).
         assert set(declared) == {"305.2-1", "305.2a-1", "305.3-1"}
         land = self._land(lambda c: True)
         for scenario, params in declared.items():
@@ -255,7 +255,7 @@ class TestLandPlays:
 
 
 class TestCandidateFace:
-    """A candidate acting through its card's first face or another (T030 follow-up)."""
+    """A candidate acting through its card's first face or another."""
 
     def test_the_face_is_read_off_the_candidate_key(self, by_kind):
         record = next(r for r in _decisions(by_kind) if r.payload.candidates[0].ability)

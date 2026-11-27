@@ -1,6 +1,6 @@
 """The control score's grids: each record's reading against that record's
 answer, and the damage, combat and evasion grids weighing one third each
-(findings 12.5, 12.6; root spec § 14.1).
+(12.6; root spec § 14.1).
 
 The scorer runs over the gen-3 fixture records and a selection set frozen
 over them by hand; the readings are set by hand in place of the model's, so
@@ -70,7 +70,7 @@ def _scored(scorer, readings) -> float:
 
 
 def test_a_base_rate_model_scores_below_one_that_knows_each_record(prepared):
-    """Finding 12.6: the cell means of the two models are the same, so a
+    """The cell means of the two models are the same, so a
     cell-mean score cannot tell them apart. Against each record's answer the
     base rate errs by 0.5 on every ``high`` read: MAE 0.25 over B = 0.375."""
     scorer, grid, asked = prepared
@@ -86,7 +86,7 @@ GRID_ITEMS = {"damage": 1.0, "combat/none/blocker": 0.0,
 
 
 def test_the_three_grids_weigh_equally_whatever_their_variants():
-    """Finding 12.5: two combat variants and one damage grid, beside the
+    """Two combat variants and one damage grid, beside the
     evasion grid; the damage grid weighs one third of the component."""
     assert component_score(GRID_ITEMS, GRID_COMPONENT) == pytest.approx(1 / 3)
 

@@ -1,4 +1,4 @@
-"""``scan_keyword_flags.py`` and the module it writes (T110, M5, FR-044a)."""
+"""``scan_keyword_flags.py`` and the module it writes (M5, FR-044a)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from effects.domain.damage_step_keywords import DAMAGE_STEP_KEYWORDS
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 
 #: The evasion keywords Forge names in a selector or a check: gate 2 strips the
-#: damage-step keywords and the grids edit these through the flag (T118). Fear and
+#: damage-step keywords and the grids edit these through the flag. Fear and
 #: intimidate are absent: Forge implements each as its own generated static, which
 #: names no keyword, and no card script selects either, so their lines carry them.
 EVASION_FLAGS = frozenset({

@@ -1,5 +1,5 @@
 """A cost half trains no affected gate, and trains what its payment did
-(task G11, finding 10.5, decision D7).
+.
 
 Whether an entity was affected is the effect half's question, so a cost half
 trains the gate nowhere, as a playability record does not. Its payment still

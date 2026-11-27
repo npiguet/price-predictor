@@ -1,4 +1,4 @@
-"""Shard IO: filtered reads, the window and values off the closed lists (T027).
+"""Shard IO: filtered reads, the window and values off the closed lists.
 """
 
 from __future__ import annotations

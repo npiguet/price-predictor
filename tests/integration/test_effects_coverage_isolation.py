@@ -1,4 +1,4 @@
-"""Coverage matches never touch the sealed corpora (T103).
+"""Coverage matches never touch the sealed corpora.
 
 Coverage decks are built for coverage rather than as a fair self-play sample, so
 a coverage run that appended to ``match-outcomes.txt`` would corrupt what the

@@ -1,5 +1,5 @@
 """A damage-prevented copy of a combat record never keeps a block its
-protection forbids (702.16f, 702.16j): FR7, finding 12.3 (CPC1 C-1)."""
+protection forbids (702.16f, 702.16j)."""
 
 from __future__ import annotations
 

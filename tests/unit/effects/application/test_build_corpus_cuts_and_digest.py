@@ -120,7 +120,7 @@ def _part_name(name: str) -> str:
 
 
 def test_a_cut_game_is_written_nowhere_and_counted(tmp_path, a_corpus, caplog):
-    """WP7: a gen-3 game whose shard holds no game-end marker was cut (a
+    """A gen-3 game whose shard holds no game-end marker was cut (a
     killed worker); its records are incomplete, so no stratum holds them,
     even when it names a held-out card, and the manifest counts it."""
     cut = [

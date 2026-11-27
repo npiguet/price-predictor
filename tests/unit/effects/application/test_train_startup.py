@@ -77,7 +77,7 @@ def _card_tree(root):
 def _card_tree_digest() -> str:
     """The sidecar digest of :func:`_card_tree`, which names its files by
     relative path and size alone: the manifest's, so the trainer reads the
-    config's tree as the one the corpus was built against (finding 11.3)."""
+    config's tree as the one the corpus was built against."""
     with tempfile.TemporaryDirectory() as root:
         tree = _card_tree(Path(root) / "cardsfolder")
         return SourceTrees.of((tree,)).converted_sidecar_digest()
@@ -213,7 +213,7 @@ def test_a_corpus_without_validation_samples_is_refused(corpus, config, started)
     assert not started
 
 
-# ── the shards the manifest lists (finding 11.4) ─────────────────────────
+# ── the shards the manifest lists ─────────────────────────
 
 
 def test_an_extra_training_shard_is_refused_by_name_before_any_step(
@@ -357,7 +357,7 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts.rule_map_digest == "map-digest"
 
 
-# ── the keyword file and the tokenizer hashes (finding 11.5) ─────────────
+# ── the keyword file and the tokenizer hashes ─────────────
 
 
 def _sha(path: Path) -> str:
@@ -583,7 +583,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
         sidecars.resolution_of(key)  # neither raises nor reports no tree
 
 
-# ── the holdout recompute (FR-041, FR-042; T043) ─────────────────────────
+# ── the holdout recompute (FR-041, FR-042) ─────────────────────────
 
 
 def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
@@ -607,7 +607,7 @@ def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(corpus, config, make_
 
 
 def test_a_manifest_naming_a_subtype_the_closed_lists_lack_is_refused(corpus, config, started):
-    """Finding 10.4: ``bard`` is a subtype a record's effects change that no
+    """``bard`` is a subtype a record's effects change that no
     output column holds, so training on it would read the change as "none
     gained"; the refusal names it and the script that regenerates the lists."""
     corpus.save(_manifest(subtypes=("golem", "bard"), keywords=("flying", "assist")))
@@ -627,7 +627,7 @@ def test_a_manifest_whose_lists_the_module_covers_is_trained_on(
 
 
 
-# ── the record classes the run trains (finding 15.2) ─────────────────────
+# ── the record classes the run trains ─────────────────────
 
 
 def _counted(*classes: str) -> dict[str, ClassCounts]:
@@ -653,7 +653,7 @@ def test_a_manifest_with_no_legality_record_leaves_the_legality_fields_untrained
     corpus, config, started, caplog,
 ):
     """The classes that fix every epoch's field set are the manifest's
-    training counts, not the validation samples' (finding 15.2): a class the
+    training counts, not the validation samples': a class the
     manifest counts no training record of trains none of the fields only it
     supervises, and the run says so naming the manifest."""
     others = [name for name in SAMPLING_CLASSES if name is not SamplingClass.PLAYABILITY_LEGALITY]

@@ -1,4 +1,4 @@
-"""A pool's signal handlers last as long as its run (finding 16.5, task L05):
+"""A pool's signal handlers last as long as its run:
 the previous SIGINT and SIGTERM handlers are back when ``run()`` ends, by
 return or by exception."""
 

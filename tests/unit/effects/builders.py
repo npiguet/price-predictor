@@ -109,7 +109,7 @@ def gen3_fixture_records() -> list[dict]:
 
 
 def game_end_marker(last: EffectRecord, *, records_withheld: int = 0) -> EffectRecord:
-    """The game-end marker a game whose last record is ``last`` writes (WP7):
+    """The game-end marker a game whose last record is ``last`` writes:
     a ``turn_action`` / ``game_end`` on ``last``'s board, no events."""
     from dataclasses import replace
 

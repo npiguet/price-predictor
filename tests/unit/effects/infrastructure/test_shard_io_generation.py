@@ -1,4 +1,4 @@
-"""Shard IO: the generation check (T027, FR-033).
+"""Shard IO: the generation check (FR-033).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from tests.unit.effects.infrastructure.shard_io_support import (
 
 class TestTheGenerationCheck:
     """FR-033: a records set of gen-3 shards passes; a shard whose first record
-    is older is refused naming it, its shard and its line (T069)."""
+    is older is refused naming it, its shard and its line."""
 
     def test_an_empty_shard_passes(self, tmp_path):
         from effects.infrastructure.shard_io import require_generation

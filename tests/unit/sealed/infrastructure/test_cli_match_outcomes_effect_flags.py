@@ -1,4 +1,4 @@
-"""The instrumentation opt-in on ``sealed match-outcomes`` (T044).
+"""The instrumentation opt-in on ``sealed match-outcomes``.
 
 ``--effect-records`` has **no default** here, unlike on the effects-owned
 collectors where collection is the whole point. That asymmetry is the contract
@@ -294,7 +294,7 @@ class TestDirectedForkFlags:
 
 
 class TestProbeKeywordSpelling:
-    """python R6: the JVM compares each listed keyword exactly against Forge's
+    """The JVM compares each listed keyword exactly against Forge's
     keyword as ``KeywordEdit.normalize`` spells it (lower case, spaces as
     ``_``), so ``Trample`` or ``first strike`` was never probed, silently."""
 
@@ -322,7 +322,7 @@ class TestProbeKeywordSpelling:
 
 
 class TestWorkersAndTheEnd:
-    """V4 #9 on match-outcomes: ``--workers`` is 1 to 12; and a run collecting
+    """``--workers`` is 1 to 12; and a run collecting
     effect records that completed matches and recorded nothing exits 1."""
 
     @pytest.mark.parametrize("workers", ["0", "13", "-1"])
@@ -351,7 +351,7 @@ class TestWorkersAndTheEnd:
 
 
 class TestTheWorkerStopFlags:
-    """V4 #1 / P1 #1: with effect records the run's end asks each worker to
+    """With effect records the run's end asks each worker to
     stop at its game's end; the flags bound the wait and set the recycle."""
 
     def test_unset_they_take_the_defaults(self, monkeypatch):
@@ -470,7 +470,7 @@ class TestWhereTheTwoSealedCorporaGo:
 
 
 class TestTheEngineRefusal:
-    """Finding 11.1 (task K01c): a run collecting effect records whose workers'
+    """A run collecting effect records whose workers'
     engine is not whole exits 1, its reason in ``run.json``'s outcome, unless
     ``--allow-degraded``; the flag needs ``--effect-records``."""
 

@@ -1,4 +1,4 @@
-"""Collection against a patched checkout (T104).
+"""Collection against a patched checkout.
 
 Skips on stock Forge, which is the ordinary case and not a failure: stage one is
 defined as the patch-free stage, and the worker is required to degrade rather

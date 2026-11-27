@@ -19,7 +19,7 @@ class _Line:
 class TestPairingLoss:
     def test_a_variant_has_only_the_script_surface(self):
         """So it contributes no pairing term: there is no prose to pair with,
-        and both surfaces read its script reading (finding 1.5)."""
+        and both surfaces read its script reading."""
         line = _Line("NumDmg$ 7")
         assert encoding_text(line, None, Surface.SCRIPT) == script_reading("NumDmg$ 7")
         assert encoding_text(line, None, Surface.PROSE) == script_reading("NumDmg$ 7")

@@ -239,7 +239,7 @@ class TestMarginAccumulator:
 
     def test_two_models_differing_only_in_dispersion_score_the_same_deviance(self):
         """Each read under its own, a wider dispersion alone would win the
-        margin (finding 13.5); under the main model's the same predictions
+        margin; under the main model's the same predictions
         score the same, and each own-dispersion figure is kept beside it."""
         chunk = _cells("damage_taken", [0.5, 0.5, 0.5], [0.0, 3.0, 1.0])
         main = model_dispersion(4.6)

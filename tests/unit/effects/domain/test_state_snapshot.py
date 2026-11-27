@@ -1,4 +1,4 @@
-"""The snapshot's reader rules (T024).
+"""The snapshot's reader rules.
 
 Two of these are the ones a collector or a consumer gets wrong quietly: an
 absent tier read as an empty board, and a perspective baked in at collection
@@ -106,7 +106,7 @@ def _line(name: str, kind: str = "static", index: int = 0, **members) -> CardLin
 
 class TestAnEntityDerivesItsKeysFromItsLines:
     """The one mapping from an entity's ``lines`` onto ``printed`` and
-    ``ability_keys`` (T074)."""
+    ``ability_keys``."""
 
     def test_printed_is_the_lines_printed_on_the_card_in_force_or_not(self):
         own, unmet = _line("angel", "keyword"), _line("angel", index=1, active=False)
@@ -180,7 +180,7 @@ class TestAnEntityDerivesItsKeysFromItsLines:
 
 
 class TestTheJavaGoldensRead:
-    """The gen-3 JSON the connector's tests emit, through the codec (T074)."""
+    """The gen-3 JSON the connector's tests emit, through the codec."""
 
     @staticmethod
     def _entities() -> list[EntityState]:
@@ -235,7 +235,7 @@ class TestTheJavaGoldensRead:
 
 
 class TestTheGen3FactsRead:
-    """A card's, a player's and the board's gen-3 facts, from the goldens (T074)."""
+    """A card's, a player's and the board's gen-3 facts, from the goldens."""
 
     @staticmethod
     def _states() -> list[StateSnapshot]:
@@ -319,7 +319,7 @@ class TestTheGen3FactsRead:
         assert any(p.monarch for p in players)
 
     def test_a_player_carries_its_land_plays_and_null_is_unlimited(self):
-        """1 on every golden player; null is unlimited (Fastbond) (T074a)."""
+        """1 on every golden player; null is unlimited (Fastbond)."""
         from effects.infrastructure.record_codec import _player_from_json
 
         players = [p for state in self._states() for p in state.players]
@@ -379,7 +379,7 @@ class TestTheGen3FactsRead:
 
 class TestTheGen3FixtureRead:
     """Story 2's snapshot scenarios on real records: the gen-3 fixture cut from
-    the T079 pilot, through the codec (T074, T079a)."""
+    the gen-3 pilot, through the codec."""
 
     @staticmethod
     def _states() -> list[StateSnapshot]:
@@ -477,7 +477,7 @@ class TestTheGen3FixtureRead:
 
     def test_a_last_known_copy_on_the_battlefield_is_no_permanent(self):
         """Aven Heartstabber's dies trigger: its copy L7 keeps zone
-        ``battlefield``, but no rule, attack or block reaches it (finding 4.7)."""
+        ``battlefield``, but no rule, attack or block reaches it."""
         copies = [e for state in self._states() for e in state.entities
                   if e.role == EntityRole.LAST_KNOWN and e.zone == "battlefield"]
         assert [e.id for e in copies] == ["L7"]

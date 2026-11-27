@@ -1,4 +1,4 @@
-"""``effect_family`` over real gen-3 records and their sidecars (T071, FR-047–048).
+"""``effect_family`` over real gen-3 records and their sidecars (FR-047–048).
 
 Every record here is cut from a real shard (``scripts/make_fixture_records.py``);
 the few tests that need a shape the sample lacks — a keyword on a combat

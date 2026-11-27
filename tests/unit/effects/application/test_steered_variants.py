@@ -1,5 +1,5 @@
 """``collect-variants --round steered`` on a fixture catalogue and fixture
-counts (T188; FR-058c, FR-058d)."""
+counts (FR-058c, FR-058d)."""
 
 from __future__ import annotations
 

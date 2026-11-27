@@ -1,4 +1,4 @@
-"""A fork record's ``fork_kind`` through the codec (finding 5.8, task C07b).
+"""A fork record's ``fork_kind`` through the codec.
 
 The connector writes it right after ``fork`` on a fork's records alone; the
 decoder reads it into its closed list and refuses a kind outside it, as it

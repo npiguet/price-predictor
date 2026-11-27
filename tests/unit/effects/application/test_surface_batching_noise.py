@@ -1,4 +1,4 @@
-"""Noise on ``e`` (FR-056, T089): the covariance, the sigma schedule and the ramp."""
+"""Noise on ``e`` (FR-056): the covariance, the sigma schedule and the ramp."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import torch
 
 from effects.application.surface_batching import NoiseState
 
-# ── noise on e (FR-056, T089) ────────────────────────────────────────────
+# ── noise on e (FR-056) ────────────────────────────────────────────
 
 def _spread_matrix(rows: int = 4000, dim: int = 3) -> torch.Tensor:
     generator = torch.Generator().manual_seed(3)

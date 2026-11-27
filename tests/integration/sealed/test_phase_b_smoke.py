@@ -3,8 +3,7 @@
 Runs Phase A for one epoch, Phase B for two epochs against a tiny synthetic
 corpus + tiny encoder, then refreshes the `.npz` cache from the resulting
 Phase B checkpoint and confirms every fixture card got a new vector that
-differs from the pre-Phase-B baseline. (Spec § Phase B integration test,
-T043.)
+differs from the pre-Phase-B baseline. (Spec § Phase B integration test.)
 """
 
 from __future__ import annotations

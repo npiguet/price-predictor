@@ -41,7 +41,7 @@ def test_groups_are_named_and_hold_every_parameter_once():
 
 
 def test_no_decay_reaches_a_bias_a_gain_a_table_or_a_learned_vector():
-    """Finding 15.3: decay only on the matrices."""
+    """Decay only on the matrices."""
     modules = _modules()
     found = _decay_by_name(parameter_groups(*modules), modules)
     for name, (_, decay) in found.items():
@@ -87,8 +87,8 @@ def test_a_resume_file_with_other_optimizer_groups_is_refused_by_name():
 
 
 def test_a_run_records_a_digest_of_every_layout_vocabulary():
-    """What the run writes is what ``require_input_layout`` reads back
-    (finding 11.6): one digest per registered vocabulary."""
+    """What the run writes is what ``require_input_layout`` reads back: one digest per
+    registered vocabulary."""
     from effects.application.run_context import training_settings
     from effects.application.train_effect_model import (
         CorpusFacts,
@@ -106,7 +106,7 @@ def test_a_run_records_a_digest_of_every_layout_vocabulary():
 
 
 def test_a_run_and_a_saved_model_are_laid_out_by_the_layouts_widths():
-    """One source for the widths (finding 19.1): the trunk a run builds and
+    """One source for the widths: the trunk a run builds and
     the batcher a loaded checkpoint runs under read the layout's, never a
     record's."""
     from types import SimpleNamespace

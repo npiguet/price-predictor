@@ -150,7 +150,7 @@ def _built_run(monkeypatch, tmp_path):
 
 
 def test_a_checkpoint_records_the_settings_the_resume_file_holds(monkeypatch, tmp_path):
-    """One record of the run's settings (finding 19.1): what a checkpoint
+    """One record of the run's settings: what a checkpoint
     holds is what a resume compares."""
     from effects.application import resume_state
 
@@ -166,7 +166,7 @@ def test_a_checkpoint_records_the_settings_the_resume_file_holds(monkeypatch, tm
 def test_a_resume_file_recording_the_settings_in_the_old_shape_is_refused(
     monkeypatch, tmp_path,
 ):
-    """No backward compatibility (D19): refused by name, never compared key by key."""
+    """No backward compatibility: refused by name, never compared key by key."""
     from effects.application import resume_state
     from effects.infrastructure.effect_model_store import ResumeMismatchError
 

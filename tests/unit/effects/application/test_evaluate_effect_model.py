@@ -29,7 +29,7 @@ class TestUnimplementedChecks:
         assert report.render().startswith("[todo] probe-diff: not implemented")
 
 
-# ── the reporting half (T169) ───────────────────────────────────────────
+# ── the reporting half ───────────────────────────────────────────
 
 
 def _context(tmp_path, selection_digest=None):
@@ -141,7 +141,7 @@ def test_the_breakdowns_read_each_distinct_record_once(tmp_path):
     assert read[Stratum.GAME_DISJOINT] == []
 
 
-# ── the reported checks the base spec lists and nothing builds (finding 13.8) ──
+# ── the reported checks the base spec lists and nothing builds ──
 
 
 def test_every_unbuilt_reported_check_of_the_base_spec_is_a_todo_line():

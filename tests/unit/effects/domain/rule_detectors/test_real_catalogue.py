@@ -19,7 +19,7 @@ from effects.infrastructure.rules_catalogue_io import load_scenarios
 
 RULES = Path(__file__).parents[5] / "rules"
 
-#: The declarations no record can show (V5 #14), each reported, none tagging:
+#: The declarations no record can show, each reported, none tagging:
 #: an event no collector writes on the kind they ask.
 UNTAGGABLE = {
     # game_drawn: no collector writes it
@@ -39,7 +39,7 @@ def index(catalogue):
 
 def test_every_declaration_of_the_real_catalogue_is_readable(index):
     """``DetectorIndex.of`` refuses an undeclared parameter or a value its
-    family cannot read (V5 #22); building it over the real tree is the test."""
+    family cannot read; building it over the real tree is the test."""
     assert sum(len(found) for found in index.by_kind.values()) > 700
 
 
@@ -95,7 +95,7 @@ def _normalised(family: str, params) -> str:
 
 
 def test_no_two_rules_share_an_identical_declaration(catalogue):
-    """D4: scenarios of different rules declaring the same family, record kind
+    """Scenarios of different rules declaring the same family, record kind
     and parameters (as the family reads them: case, list order and defaults
     aside) tag one population, so the rules are indistinguishable;
     a scenario stating another's fact declares itself ``same_as`` it (exempt

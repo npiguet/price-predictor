@@ -41,7 +41,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
         assert "card-disjoint stratum holds no records" in caplog.text
 
 
-# ── the gen-3 flags and startup checks (contracts/cli.md, T149) ──────────
+# ── the gen-3 flags and startup checks (contracts/cli.md) ──────────
 
 
 def _parse(*argv: str):

@@ -18,7 +18,7 @@ class TestBaselineMasks:
 
 class TestEveryBaselineStagesEveryText:
     """Staging reads each text through its sidecar line; a keyword line has
-    none, and no variant may crash on one (finding 13.8)."""
+    none, and no variant may crash on one."""
 
     @staticmethod
     def _batcher(masks):

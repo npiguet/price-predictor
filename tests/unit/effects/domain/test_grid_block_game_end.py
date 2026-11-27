@@ -1,5 +1,5 @@
 """The combat grids pair no creatures of a combat that ends the game (decision
-D13, finding 9.7).
+D13).
 
 Forge destroys no creature in a combat whose damage ends the game, so the
 outcome a grid reads there is not the rule's. ``grid_block`` leaves such a

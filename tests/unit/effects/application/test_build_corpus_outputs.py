@@ -1,4 +1,4 @@
-"""The build's outputs are what its manifest says (findings 11.4, 14.3).
+"""The build's outputs are what its manifest says (14.3).
 
 The manifest lists every shard each stratum holds, with the records the
 write pass put in it, so a reader can tell a stale or missing shard from the
@@ -77,13 +77,13 @@ def test_the_listing_is_sorted_by_name_and_sums_to_the_stratum_counts(built):
         assert sum(shard.records for shard in shards) == manifest.per_stratum[stratum]
 
 
-# ── F09b: the empty-stratum refusal, the merged supply, the digest's paths ──
+# ── the empty-stratum refusal, the merged supply, the digest's paths ──
 
 
 def test_a_second_decide_over_one_survey_gives_the_same_plan(fake_sidecars):  # noqa: F811
     """``decide`` folds the training candidates into a copy of the survey's
-    supply. Merged by reference, the survey's own heaps took the candidates'
-    hashes, and a second ``decide`` counted them twice (finding 14.3)."""
+    supply. Merging by reference would put the candidates' hashes into the survey's
+    own heaps, and a second ``decide`` would count them twice."""
     cell = Cell(REWRITE, family="Draw")
     survey = a_survey(SurveySpec(
         cells={(cell, REPRINT_A): (20, range(100, 120))}, heap_cap=10,
@@ -118,7 +118,7 @@ def test_an_empty_game_disjoint_stratum_with_a_sample_asked_for_is_refused_befor
 ):
     """The trainer validates on the stratum's sample, which an empty stratum
     leaves empty; told only after the write pass, the old dataset was already
-    cleared (finding 14.3). Refused at the decision, it stays byte for byte."""
+    cleared. Refused at the decision, it stays byte for byte."""
     out = tmp_path / "curated"
     a_corpus.build(out, validation_sample=8)
     before = _files(out)
@@ -138,7 +138,7 @@ def test_one_build_typed_with_either_slash_has_one_digest(
     tmp_path, a_corpus_with_variants,  # noqa: F811
 ):
     """The digest a checkpoint pins holds ``vocab_path`` and ``variant_scripts``:
-    as typed, one file spelled two ways pinned two digests (finding 14.3)."""
+    as typed, one file spelled two ways pinned two digests."""
     fixture, variant_root = a_corpus_with_variants
     vocab = Path(fixture.config(tmp_path).vocab_path)
     native = fixture.build(

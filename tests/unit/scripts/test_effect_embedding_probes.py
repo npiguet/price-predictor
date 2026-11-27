@@ -1,4 +1,4 @@
-"""The embedding-probe scripts read any checkpoint's cache (T114; Story 6
+"""The embedding-probe scripts read any checkpoint's cache (Story 6
 scenarios 9 and 10).
 
 ``scripts/`` is not part of the installed package; the conftest puts it on the
@@ -198,7 +198,7 @@ class TestTheTextTable:
 
 class TestTheKeymap:
     """The keymap reads through the one join, so keys differing only in
-    ``built`` are distinct entries (finding 19.1)."""
+    ``built`` are distinct entries."""
 
     _SAGA = "cardsfolder/b/braidss_frightful_return.txt"
 

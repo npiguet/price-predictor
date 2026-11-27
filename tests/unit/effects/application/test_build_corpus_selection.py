@@ -111,11 +111,11 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     assert manifest.legality_counts["blockers"] == {"real": 8, "what-if": what_if}
 
 
-# ── what the plan counts, and what it may train on (G4, G13, G14) ──────
+# ── what the plan counts, and what it may train on ──────
 
 
 def test_a_held_back_game_takes_no_training_slot(tmp_path, a_corpus):
-    """A text's capped slots go to its training games' records (G4).
+    """A text's capped slots go to its training games' records.
 
     Counted over every kept record, a text's smallest hashes could all sit in
     a held-out game: the plan's threshold admitted those, the write pass then

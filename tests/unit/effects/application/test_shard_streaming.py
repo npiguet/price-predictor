@@ -1,4 +1,4 @@
-"""Reading the corpus one shard at a time (T155): which shards an epoch
+"""Reading the corpus one shard at a time: which shards an epoch
 reads, how its steps divide among them, and which step reports.
 
 The corpus reaches 14M records and would need hundreds of gigabytes to hold,

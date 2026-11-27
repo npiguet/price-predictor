@@ -1,5 +1,5 @@
 """The probe scripts' hash and the selection set's digest go through the package's
-shared ones (T007, T008)."""
+shared ones."""
 
 from __future__ import annotations
 

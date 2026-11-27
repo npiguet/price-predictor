@@ -1,4 +1,4 @@
-"""The ability cache as a command (T085).
+"""The ability cache as a command.
 
 Row alignment against the sidecar, one subtree per source tree, variant files
 written beside the shipping cache rather than over it, and idempotence — a

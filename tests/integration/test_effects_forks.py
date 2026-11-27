@@ -1,4 +1,4 @@
-"""Fork collection against a real game (T125).
+"""Fork collection against a real game.
 
 Forks need a live game to copy, so this is where the budget arithmetic meets the
 engine. Two worker runs serve the module: a stage-one run, which takes no fork

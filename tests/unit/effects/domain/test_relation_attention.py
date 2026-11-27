@@ -1,4 +1,4 @@
-"""The relation-aware layer's properties (T098, FR-046, FR-049, root spec § 10.5).
+"""The relation-aware layer's properties (FR-046, FR-049, root spec § 10.5).
 
 Written before the layer: each test states one property the root spec asks of
 it. All run on CPU at a tiny size.

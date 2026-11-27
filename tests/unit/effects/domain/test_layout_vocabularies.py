@@ -85,8 +85,8 @@ def test_the_heads_keep_their_widths():
 
 def test_the_card_slot_keeps_its_width_and_parts():
     """A card slot is 575 features in 20 parts. A combat record's damage
-    assignment is no part of it (D3): it reads the first-strike rule
-    without the keyword. The role is (finding 4.7): six columns, the five
+    assignment is no part of it: it reads the first-strike rule
+    without the keyword. The role is: six columns, the five
     of :data:`ENTITY_ROLES` and "other". The pending event's part is six
     columns: a pending event, the card is its subject, its source, its
     defender, among its blockers, its cause; a face-down card's real face
@@ -111,7 +111,7 @@ def test_the_global_and_player_slots_keep_their_widths():
     mode, one-hot over the 81 :data:`PENDING_EVENT_MODES` and "other", and
     its combat bit, and 16 its from- and to-zone, each one-hot over
     :data:`ZONES` and "other"; a player slot is 116, three the pending
-    event's subject, defender and cause (finding 4.8)."""
+    event's subject, defender and cause."""
     assert len(PENDING_EVENT_MODES) == 81
     widths = layout_widths()
     assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (226, 116)
@@ -120,7 +120,7 @@ def test_the_global_and_player_slots_keep_their_widths():
 
 def test_the_layout_widths_are_what_the_slot_builders_emit_on_real_records():
     """The widths are constants of the layout, computed once from a blank
-    record (finding 19.1): every slot of every fixture record is as wide."""
+    record: every slot of every fixture record is as wide."""
     widths = layout_widths()
     for record in map(record_from_dict, gen3_fixture_records()):
         assert len(global_features(record)) == widths[SlotKind.GLOBAL]
@@ -149,7 +149,7 @@ def test_the_value_head_keeps_its_slices():
     assert AT_LEAST_SLICES["damage"] == (21, 61)
 
 
-# ── every list a checkpoint's columns hang on is recorded (finding 11.6) ──
+# ── every list a checkpoint's columns hang on is recorded ──
 
 #: Module-level name lists no column hangs on by itself, each with the
 #: recorded list that carries it.

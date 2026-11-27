@@ -1,4 +1,4 @@
-"""A dungeon's rooms are ability slots, the current room flagged active (finding 4.8, S14 B16f).
+"""A dungeon's rooms are ability slots, the current room flagged active.
 
 A dungeon is a command-zone card whose one keyword line reads as one slot per
 room line (``board_keys``), each room a ``RoomEntered`` trigger of the

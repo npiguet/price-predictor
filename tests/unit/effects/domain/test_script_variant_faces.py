@@ -1,5 +1,5 @@
-"""A multi-faced script is never varied, whichever section marker it uses
-(finding 16.3), and a rename rewrites only the first ``Name:`` line."""
+"""A multi-faced script is never varied, whichever section marker it uses, and a rename rewrites
+only the first ``Name:`` line."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
-"""Rule-test and AUC-probe standard errors cluster by game (finding 12.7,
-research E4: "every one clusters by game").
+"""Rule-test and AUC-probe standard errors cluster by game (research E4: "every one
+clusters by game").
 
 ``n₊`` and ``n₋`` of the Hanley–McNeil bound count the distinct games among an
 item's positive rows and among its negative rows, so 40 records from 4 games

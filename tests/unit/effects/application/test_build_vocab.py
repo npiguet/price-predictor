@@ -1,4 +1,4 @@
-"""The effects vocabulary (T061).
+"""The effects vocabulary.
 
 Three things separate it from the sealed one it wraps: the scan covers converted
 cards, token scripts and the keyword-definition file; ``[CLS]`` is seeded
@@ -107,7 +107,7 @@ def _config(corpus, tmp_path, **overrides) -> BuildVocabConfig:
 
 class TestTheProseSurfaceReadsTheSidecarsScript:
     """A line with no prose (a variant's) reads its script on the prose surface
-    too (finding 1.5), so the prose build stages the trees' script lines."""
+    too, so the prose build stages the trees' script lines."""
 
     def test_prose_takes_the_sidecars_script_names(self, corpus, tmp_path):
         _scripted_corpus(corpus, ["DB$ PutCounter | CounterNum$ 2"], copies=1)

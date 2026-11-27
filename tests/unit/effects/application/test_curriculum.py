@@ -58,7 +58,7 @@ def test_the_loop_resets_the_stopper_when_the_curriculum_switches():
     assert Curriculum(1).resets_at(1) is False
 
 
-# ── the re-warm at the switch (finding 15.5, D10 a) ──
+# ── the re-warm at the switch ──
 
 
 def test_the_rate_re_warms_linearly_from_zero_at_the_switch():

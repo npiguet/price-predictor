@@ -1,5 +1,5 @@
 """The real gen-3 records lay out at one width per slot kind, and run
-through the model, relations included (T117)."""
+through the model, relations included."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class TestTheGen3Fixture:
 
 
 class TestTheGen3FixtureInTheModel:
-    """The fixture's widths are the model's, relations included (T117)."""
+    """The fixture's widths are the model's, relations included."""
 
     def test_the_fixture_runs_through_the_model(self, gen3_records):
         import torch

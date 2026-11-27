@@ -1,4 +1,4 @@
-"""Scanning a run's worker logs for failure lines, a round at a time (V4 #3)."""
+"""Scanning a run's worker logs for failure lines, a round at a time."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ def _hooks(n: int) -> dict:
 
 
 def test_the_status_lines_are_followed_across_scans_lifetimes_and_slots(tmp_path):
-    """Counts each worker JVM prints and no failure line (WP7, K01b): the
+    """Counts each worker JVM prints and no failure line (K01b): the
     run's counts are each lifetime's latest status line, summed over
     lifetimes and slots, a lifetime told by the line's own token."""
     first, second = tmp_path / "run.0.log", tmp_path / "run.1.log"
@@ -144,7 +144,7 @@ def test_the_totals_reach_the_manifest_fields(tmp_path):
 
 
 def test_the_first_status_line_stays_the_first_and_later_lifetimes_are_compared(tmp_path):
-    """Finding 11.1: the run's engine is its first lifetime's; a later one on
+    """The run's engine is its first lifetime's; a later one on
     another engine shows in the verdict."""
     logs = [tmp_path / "run.0.log", tmp_path / "run.1.log"]
     scan = WorkerLogScan()
@@ -163,7 +163,7 @@ def test_the_first_status_line_stays_the_first_and_later_lifetimes_are_compared(
     assert set(verdict.changed) == {"c"}
 
 
-# ── Workers that print no status line, and the run's conversion (task KR1) ──
+# ── Workers that print no status line, and the run's conversion ──
 
 #: K1-2's probe: a worker on a connector built before the status line existed
 #: names its shard with the old mode line and prints the old hook report.

@@ -85,7 +85,7 @@ class TestPoolConnectorErrorPropagation:
 
 
 class TestDepletedPools:
-    """`--exclude-cards` reaches the JVM, and stays absent without it (T165).
+    """`--exclude-cards` reaches the JVM, and stays absent without it.
 
     A depleted pool is how the effect model's training corpus avoids holding
     held-out cards. The flag going missing is silent from this side: pools
@@ -118,7 +118,7 @@ class TestDepletedPools:
 
 
 class TestDepletedCollection:
-    """`match-outcomes --exclude-cards` reaches the worker (T164).
+    """`match-outcomes --exclude-cards` reaches the worker.
 
     `generate-pools --exclude-cards` does not cover the collection path:
     `MatchGenerator` opens its own pool per match rather than reading a pools

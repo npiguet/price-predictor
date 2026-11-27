@@ -1,4 +1,4 @@
-"""The loss terms beside the per-entity loss, wired into training (T095, T086).
+"""The loss terms beside the per-entity loss, wired into training.
 
 Feature 023 defined the verdict, created-objects, MLM and script-API heads and
 called none of their losses, so a decision record's ``[ACT]`` read a zero ``e``

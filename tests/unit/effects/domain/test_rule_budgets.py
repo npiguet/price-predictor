@@ -143,7 +143,7 @@ def test_a_multi_tagged_copy_counts_toward_each_rule():
 
 
 def test_a_protection_copy_counts_toward_its_drawn_rule_alone():
-    """Finding 14.2: a record offering 702.16b and 702.16j enters the budgets
+    """A record offering 702.16b and 702.16j enters the budgets
     as one protection record tagged with both; 702.16b's half is already
     filled, so its one copy is drawn for 702.16j and adds to 702.16j only."""
     filled = make(2, ("702.16b", FIRES), shape=Shape(natural=1, start=10))
@@ -161,7 +161,7 @@ def test_a_protection_copy_counts_toward_its_drawn_rule_alone():
 
 
 def test_a_row_says_how_much_of_its_added_was_drawn_for_its_rule():
-    """Finding 14.2: a natural record's copy counts toward every rule the record
+    """A natural record's copy counts toward every rule the record
     is tagged with, so 702.16e's ``added`` holds the two copies drawn for
     702.16b on a record tagged with both, beside the one drawn for 702.16e on
     another record. ``drawn`` is the part whose ``drawn_rule`` is the row's
@@ -234,7 +234,7 @@ def test_rows_split_available_and_written_by_source():
 
 
 def test_a_fork_record_is_written_and_left_out_of_available():
-    """F01: a probe re-records its live combat, so the records available to
+    """A probe re-records its live combat, so the records available to
     a rule count the combat once; its copies are written all the same."""
     records = (make(2, ("x", FIRES), shape=Shape(natural=1))
                + make(3, ("x", FIRES), shape=Shape(start=2, natural=1, source=RuleSource.FORK)))

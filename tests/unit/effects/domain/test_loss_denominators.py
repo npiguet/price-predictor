@@ -1,4 +1,4 @@
-"""Each term's loss divided by its floored constant-prediction loss (FR-062, T144)."""
+"""Each term's loss divided by its floored constant-prediction loss (FR-062)."""
 
 from __future__ import annotations
 

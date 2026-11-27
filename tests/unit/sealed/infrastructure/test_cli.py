@@ -28,7 +28,7 @@ SUPERVISOR = "sealed.application.match_outcomes.MatchOutcomeSupervisor"
 
 @pytest.fixture(autouse=True)
 def _workers_could_start():
-    """The JAR and ``java`` exist, as far as these tests know (python R2's
+    """The JAR and ``java`` exist, as far as these tests know (the
     check must not make a unit test depend on a built connector)."""
     with (
         patch(CONNECTOR_JAR),
@@ -221,7 +221,7 @@ class TestEvaluateScorerBestOf:
 
 
 class TestTrainScorerCliRejections:
-    """T015 (US1): the run_train_scorer CLI layer rejects every invalid
+    """The run_train_scorer CLI layer rejects every invalid
     invocation shape with the contract's exact error messages."""
 
     def test_resume_phase_a_with_phase_b_lr_rejected(self, tmp_path, capsys):
@@ -333,7 +333,7 @@ def _encode_cards_args(**overrides) -> Namespace:
 
 
 class TestEncodeCardsMutualExclusivity:
-    """T033 (US2): explicit --encoder-checkpoint + --scorer-checkpoint rejected;
+    """Explicit --encoder-checkpoint + --scorer-checkpoint rejected;
     --scorer-checkpoint alone (default --encoder-checkpoint) accepted (FR-013)."""
 
     def test_explicit_both_rejected(self, tmp_path, capsys):
@@ -380,7 +380,7 @@ class TestEncodeCardsMutualExclusivity:
 
 
 class TestEncodeCardsPhaseARejected:
-    """T034 (US2): scorer-checkpoint pointed at a Phase A checkpoint rejected
+    """Scorer-checkpoint pointed at a Phase A checkpoint rejected
     with the contract's error message (FR-014)."""
 
     def test_phase_a_rejected_with_helpful_message(self, tmp_path, capsys):
@@ -454,7 +454,7 @@ class TestParseLabel:
 
 
 class TestMatchOutcomesWorkerPrerequisites:
-    """python R2: the JAR, ``java`` and the ``--exclude-cards`` file are checked
+    """The JAR, ``java`` and the ``--exclude-cards`` file are checked
     before any worker starts, and a pool none of whose workers can start ends
     the run with an error instead of restarting forever."""
 

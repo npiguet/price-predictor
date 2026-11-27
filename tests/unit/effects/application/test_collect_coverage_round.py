@@ -1,4 +1,4 @@
-"""The coverage collector (T102): a round plays the computed decks, ends in
+"""The coverage collector: a round plays the computed decks, ends in
 its report, and a Ctrl-C ends the run."""
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ class TestARoundEndsInItsReport:
     def test_a_round_whose_last_game_was_cut_credits_nothing_and_says_so(
         self, tmp_path, caplog, ended,
     ):
-        """WP7 / P1 #1: a worker killed mid-game leaves a game without its
+        """A worker killed mid-game leaves a game without its
         game-end marker, which build-corpus drops whole; counted, it would
         satisfy the card with records the corpus never holds. The round
         report and the run's manifest name the cut game."""
@@ -201,7 +201,7 @@ class TestARoundEndsInItsReport:
         assert code == 0, "the cut game's records are still records the run wrote"
 
     def test_a_run_that_wrote_no_record_fails_and_says_where_to_look(self, tmp_path, caplog):
-        """V4 #3: every match failing (a broken deck, a dead worker) played its
+        """Every match failing (a broken deck, a dead worker) played its
         rounds, collected nothing, retired every card and exited 0."""
         played = []
 
@@ -255,7 +255,7 @@ class TestCtrlCEndsTheRun:
     def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path, fake_supervisor):
         """The control: no game ever shows the card, so it retires after
         ``UNSEEN_RETIRE_FACTOR`` times five written rounds, which ends the run;
-        and since those rounds wrote no record, the run fails (V4 #3)."""
+        and since those rounds wrote no record, the run fails."""
         from effects.domain.coverage import UNSEEN_RETIRE_FACTOR
 
         code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=False)

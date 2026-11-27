@@ -67,7 +67,7 @@ def test_each_main_runs_on_the_full_runtime_and_returns_its_exit_code(
 
 
 def test_an_unreadable_answer_yields_no_verdicts(caplog):
-    """P1 #12: a truncated or garbled verdicts file raised JSONDecodeError out
+    """A truncated or garbled verdicts file does not raise JSONDecodeError out
     of the consult, which only ranks and must degrade instead."""
     _, launch = _run_with('{"Forest": "unc')
     with launch:
@@ -76,7 +76,8 @@ def test_an_unreadable_answer_yields_no_verdicts(caplog):
 
 
 def test_every_main_runs_under_a_timeout(tmp_path):
-    """P1 #12: a one-shot JVM had none, so a hung Forge startup hung the command."""
+    """A one-shot JVM runs under a timeout, so a hung Forge startup does not hang
+    the command."""
     seen, launch = _run_with(None)
     with launch:
         one_shot_workers.write_keyword_definitions(tmp_path / "k.json")

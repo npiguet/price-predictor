@@ -1,5 +1,5 @@
 """A worker's startup line is found whatever precedes it in its log, and a
-log that cannot be opened fails the spawn (finding 16.1, 16.5, task L01)."""
+log that cannot be opened fails the spawn (16.5)."""
 
 from __future__ import annotations
 

@@ -209,7 +209,7 @@ def test_an_uncurated_record_trains_at_full_weight():
 
 
 def test_an_aimed_natural_copy_follows_n_over_d_under_soft_and_trains_fully_under_hard():
-    """D15: a directed fork's natural copy is a natural record like any other
+    """A directed fork's natural copy is a natural record like any other
     (FR-061); ``aimed_at: []`` (a coverage or variants run naming no rule) is
     aimed all the same (FR-009), and neither is exempt from the soft share."""
     for aimed_at in (("704.5f",), ()):

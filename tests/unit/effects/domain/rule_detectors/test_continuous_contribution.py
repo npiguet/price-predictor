@@ -1,4 +1,4 @@
-"""``continuous_contribution`` on real gen-3 continuous records (T029)."""
+"""``continuous_contribution`` on real gen-3 continuous records."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def test_a_static_granting_the_keyword_fires(by_kind):
 
 
 #: A scope naming every static (its root segment's ``Mode$``), so that a
-#: test's near miss is counted (finding 7.1: an unscoped declaration has none).
+#: test's near miss is counted (an unscoped declaration has none).
 _ANY_STATIC = {"script_param": "Mode"}
 
 
@@ -59,7 +59,7 @@ def test_a_pt_boost_fires_the_pt_field(by_kind):
 
 def test_a_pt_set_alone_fires_value_equals(by_kind):
     """208.2a's ``=`` asks for a set base P/T: an anthem's boost is never its
-    ``fires`` side (V5 #17), and no near miss either without a scope."""
+    ``fires`` side, and no near miss either without a scope."""
     record = next(r for r in by_kind("continuous")
                   if any(c.pt_boost != (0, 0) for c in r.payload.contributions)
                   and all(c.set_pt is None for c in r.payload.contributions))
@@ -185,7 +185,7 @@ def test_a_card_type_set_reads_as_every_card_type_removed(by_kind):
 
 
 class TestT030Parameters:
-    """Source keyword, script parameter, face state and designation (T030 follow-up)."""
+    """Source keyword, script parameter, face state and designation."""
 
     @staticmethod
     def _carriers_as(record, **changes):

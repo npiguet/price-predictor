@@ -199,7 +199,7 @@ class TestServerAutoFill:
     def test_known_card_without_printing_data_returns_200(
         self, printing_data_client: TestClient
     ) -> None:
-        """T023: POST known card text WITHOUT printing data, server looks up its printing data."""
+        """POST known card text WITHOUT printing data, server looks up its printing data."""
         response = printing_data_client.post(
             "/api/v1/predict",
             content=BOLT_NO_PRINTING,
@@ -213,7 +213,7 @@ class TestServerAutoFill:
     def test_unknown_card_without_printing_data_returns_200(
         self, printing_data_client: TestClient
     ) -> None:
-        """T028: POST unknown card text (not in printing_data_map), server applies defaults."""
+        """POST unknown card text (not in printing_data_map), server applies defaults."""
         response = printing_data_client.post(
             "/api/v1/predict",
             content=UNKNOWN_CARD,
@@ -227,7 +227,7 @@ class TestServerAutoFill:
     def test_unknown_card_with_partial_printing_data_returns_200(
         self, printing_data_client: TestClient
     ) -> None:
-        """T029: POST unknown card with rarity: mythic only, server fills remaining defaults."""
+        """POST unknown card with rarity: mythic only, server fills remaining defaults."""
         response = printing_data_client.post(
             "/api/v1/predict",
             content=UNKNOWN_CARD_WITH_RARITY,

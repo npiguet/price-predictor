@@ -1,4 +1,4 @@
-"""``rule-counts``' command line (T035, contracts/cli.md).
+"""``rule-counts``' command line (contracts/cli.md).
 
 Flags and defaults as the contract lists them; the counts file and the
 printed table say the same thing; an empty directory and a mix of

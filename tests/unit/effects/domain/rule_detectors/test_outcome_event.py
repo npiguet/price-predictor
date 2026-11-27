@@ -47,7 +47,7 @@ def test_the_same_resolution_edited_to_create_nothing_is_the_near_miss_of_its_ap
 
 @pytest.mark.parametrize("hookless", [{"mode": CollectionMode.DEGRADED}])
 def test_a_hookless_record_without_a_hook_event_shows_no_side(by_kind, gen3_sidecars, hookless):
-    """V5 #15: a degraded worker hears no hook, so a missing ``token_created``
+    """A degraded worker hears no hook, so a missing ``token_created``
     (an outcome-hook event) may have happened: neither the near miss nor an
     ``absent`` declaration's ``fires`` side is read; the event present still fires."""
     record = _token_maker(by_kind, gen3_sidecars)
@@ -371,7 +371,7 @@ class TestEntityRoles:
 
 
 class TestChainParam:
-    """A parameter on any segment of the acting line's chain (T030 follow-up)."""
+    """A parameter on any segment of the acting line's chain."""
 
     def test_a_sub_ability_parameter_narrows_the_line(self, by_kind, gen3_sidecars):
         from effects.domain.script_text import params, segments

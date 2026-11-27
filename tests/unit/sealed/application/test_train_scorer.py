@@ -100,7 +100,7 @@ class TestCheckpointing:
 
 
 class TestEpochLoggingContract:
-    """T042 (US4): Phase B logs both `scorer` and `encoder` grad-norm keys; Phase A
+    """Phase B logs both `scorer` and `encoder` grad-norm keys; Phase A
     logs only `scorer`. embedding_drifts is empty in Phase A and length=epochs
     in Phase B (contracts/train-scorer-cli.md §End-of-Epoch Logging Contract)."""
 
@@ -125,7 +125,7 @@ class TestEpochLoggingContract:
 
 
 class TestPatienceEarlyStopping:
-    """T020 (US1): training stops after `patience` epochs without a new peak
+    """Training stops after `patience` epochs without a new peak
     val_acc; `best_*.pt` reflects the actual peak (FR-011)."""
 
     def test_early_stop_after_patience_window(self, tmp_path, scorer_corpus):
@@ -142,7 +142,7 @@ class TestPatienceEarlyStopping:
 
 
 class TestTrainConfigInCheckpoint:
-    """T022 (US1): every saved checkpoint carries the full training-flag dict
+    """Every saved checkpoint carries the full training-flag dict
     (FR-009, Decision §1)."""
 
     def test_phase_a_checkpoint_contains_train_config(self, tmp_path, scorer_corpus):
@@ -165,7 +165,7 @@ class TestTrainConfigInCheckpoint:
 
 
 class TestDeterministicTrainValSplit:
-    """T047: deterministic split locked in (FR-011a, research.md Decision §10)."""
+    """Deterministic split locked in (FR-011a, research.md Decision §10)."""
 
     def test_same_seed_same_split(self, tmp_path, scorer_corpus):
         from sealed.application.scorer_dataset import _load_dataset

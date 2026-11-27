@@ -1,6 +1,6 @@
 """The control score's host cache: every form rebuilds its tensor exactly, the
 smallest is kept, and one grid record's cells cost little more than one cell
-(research E2; T160)."""
+(research E2)."""
 
 from __future__ import annotations
 

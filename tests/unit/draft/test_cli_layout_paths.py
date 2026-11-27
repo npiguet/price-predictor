@@ -1,5 +1,5 @@
 """Where the draft commands write and read under ``output/`` and ``models/``:
-each path has a flag, and none has a default (025 LAYOUT-2, finding 16.6)."""
+each path has a flag, and none has a default (025 LAYOUT-2)."""
 
 from __future__ import annotations
 

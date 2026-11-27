@@ -28,7 +28,7 @@ FIXTURES = Path(__file__).parents[4] / "fixtures" / "effects"
 #: holding more than this share of its record kind's records, over at least
 #: ``_MIN_KIND`` records of the kind, reads no situation of its own: a rule's
 #: condition holds on a minority of what a kind records, and a near miss is
-#: counted only where the declaration scopes it (finding 7.1).
+#: counted only where the declaration scopes it.
 UNSCOPED_SHARE = 0.5
 _MIN_KIND = 20
 #: Declarations above the share whose rule is the kind's own general fact.

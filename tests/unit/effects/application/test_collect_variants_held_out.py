@@ -1,5 +1,5 @@
 """The variants a run keeps: only those Forge loads, and none printing a
-held-out text (T138, G14)."""
+held-out text."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ class TestNoVariantPrintsAHeldOutText:
     """A perturbation can land on a held-out text, or under template on its template.
 
     Its source card is not held out, so the name test passes it; nothing else
-    would keep a held-out text's mechanics out of training (G14).
+    would keep a held-out text's mechanics out of training.
     """
 
     _HELD = "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 2"

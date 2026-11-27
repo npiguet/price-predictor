@@ -1,4 +1,4 @@
-"""Shard IO: writing a shard and finding the games it ended (T027).
+"""Shard IO: writing a shard and finding the games it ended.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def test_write_shard_writes_a_readable_empty_shard_for_no_records(tmp_path):
 
 
 def test_ended_games_are_the_games_whose_marker_the_shard_holds(tmp_path):
-    """WP7: what the build reads for cut games, a reordered envelope included."""
+    """What the build reads for cut games, a reordered envelope included."""
     from dataclasses import replace
 
     from effects.infrastructure.shard_io import ended_games, write_shard

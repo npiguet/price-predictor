@@ -325,7 +325,7 @@ def test_a_refused_record_still_routes_its_game_to_the_card_disjoint_stratum(tmp
     assert out.games.games == set()
 
 
-# ── the training supply: training-bound records only (G4) ──────────────
+# ── the training supply: training-bound records only ──────────────
 
 
 def test_the_supply_counts_only_records_of_games_that_train_whatever_placement_does(
@@ -360,7 +360,7 @@ def test_the_supply_counts_only_records_of_games_that_train_whatever_placement_d
 
 
 def test_a_random_seat_game_trains_unless_it_names_a_held_out_card(tmp_path):
-    """FR-059 (T182): a random-seat game never enters the game-disjoint
+    """FR-059: a random-seat game never enters the game-disjoint
     stratum, so one in the pool trains outright; one naming a held-out card is
     a card-disjoint candidate like a Forge-AI game naming one."""
     games = [f"g{i}" for i in range(400)]
@@ -383,7 +383,7 @@ def test_a_random_seat_game_trains_unless_it_names_a_held_out_card(tmp_path):
     assert {record.game for record in out.candidates} == {pooled[1]}
 
 
-# ── held-out texts (G13, G14) ──────────────────────────────────────────
+# ── held-out texts ──────────────────────────────────────────
 
 
 def test_only_a_resolution_counts_a_game_toward_its_held_out_text(tmp_path):
@@ -421,7 +421,7 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
 
 
 def test_a_game_naming_a_variant_printing_a_held_out_text_is_held_out_whole(tmp_path):
-    """Acting or only on the board, the variant's game is held out (finding 14.5)."""
+    """Acting or only on the board, the variant's game is held out."""
     variant = (ProvenanceKey("variant-scripts/secret_variant_1.txt", 0, "spell", 0),)
     roots = converted_tree(
         tmp_path, *variant, *_BOLT, text={variant[0]: _SECRET_TEXT},
@@ -435,7 +435,7 @@ def test_a_game_naming_a_variant_printing_a_held_out_text_is_held_out_whole(tmp_
     assert out.games.held_out == {"g1"}
 
 
-# ── the gen-3 survey: tags, inventories, turn actions, closed lists (T135) ─
+# ── the gen-3 survey: tags, inventories, turn actions, closed lists ─
 
 
 @pytest.fixture(scope="module")
@@ -488,7 +488,7 @@ def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey
 
 
 def test_the_survey_s_rule_counts_are_rule_counts_own_forks_apart(gen3_survey, tmp_path):
-    """F01: the manifest's counts and ``rule-counts`` put a probe's, an
+    """The manifest's counts and ``rule-counts`` put a probe's, an
     intervention's and a protection fork's record under ``fork`` alike."""
     import shutil
 
@@ -559,7 +559,7 @@ def test_the_closed_lists_are_what_effects_grant_or_remove(gen3_survey):
 
 
 class TestACutGame:
-    """WP7: a gen-3 game with no game-end marker in its shard was cut (a kill,
+    """A gen-3 game with no game-end marker in its shard was cut (a kill,
     a game that threw): its records are incomplete, and the survey drops it
     whole, counting it."""
 

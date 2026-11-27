@@ -1,4 +1,4 @@
-"""The match workers' stop protocol, supervisor side (V4 #1, P1 #1).
+"""The match workers' stop protocol, supervisor side.
 
 The only way the pool ended a worker was ``taskkill /F /T``, mid-game: every
 round's workers when its match budget was reached, and one worker a minute

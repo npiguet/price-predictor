@@ -1,4 +1,4 @@
-"""The detector framework: registry, per-rule merging, not-countable rules and review (T024)."""
+"""The detector framework: registry, per-rule merging, not-countable rules and review."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def test_an_unregistered_family_is_refused_when_the_index_is_built():
     ("resolution_outcome", {"outcome": "fizzle"}, "fizzle"),
 ])
 def test_a_misspelt_declaration_is_refused_when_the_index_is_built(family, params, message):
-    """V5 #22: a parameter name the family does not declare, or a value it
+    """A parameter name the family does not declare, or a value it
     cannot read, stops the command at the index, naming the scenario, rather
     than tagging nothing or raising mid-run."""
     kind = sorted(families()[family].kinds)[0]
@@ -144,7 +144,7 @@ def test_a_misspelt_declaration_is_refused_when_the_index_is_built(family, param
 
 
 def test_a_declaration_asking_its_kind_for_an_event_it_never_lists_is_untaggable():
-    """V5 #14: a combat never lists ``spell_cast`` (a trigger record's
+    """A combat never lists ``spell_cast`` (a trigger record's
     event), so a combat record must not read as the rule's near miss."""
     asks = scenario("9.9-2", ("9.9",), "combat", declaration(
         "outcome_event", "combat", event="regenerated", with_event="spell_cast"))
@@ -213,7 +213,7 @@ def test_every_family_module_registers_its_family():
 
 
 def test_the_game_end_marker_is_tagged_by_no_detector():
-    """The marker holds no event and no board change of its own (WP7): no
+    """The marker holds no event and no board change of its own: no
     declaration of its kind, an absence's included, may read it."""
     from effects.domain.records import (
         RecordKind,

@@ -1,4 +1,4 @@
-"""Target legality read off target_legal (T167)."""
+"""Target legality read off target_legal."""
 
 from __future__ import annotations
 

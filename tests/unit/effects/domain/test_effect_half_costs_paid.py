@@ -1,8 +1,8 @@
-"""The acting source's ``costs_paid`` is no input on an effect half (finding 4.5, B11).
+"""The acting source's ``costs_paid`` is no input on an effect half.
 
 A forced resolution skips the payment, so its spell reads "paid no mana": on
 the pilots, 67% of forced effect halves of a spell with a mana cost against
-0.4% of live ones, the one feature that tells them apart (D16: a defect). The
+0.4% of live ones, the one feature that tells them apart. The
 acting source's ``costs_paid`` block is zero on every effect half; the cost
 half and every other card keep theirs.
 """

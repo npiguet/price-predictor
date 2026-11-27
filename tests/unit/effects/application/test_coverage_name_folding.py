@@ -1,6 +1,6 @@
-"""Card names are folded once, where the converted tree is loaded (review
-findings 16.2, 19.1): a converted name that keeps a capital (``dimension X``)
-meets the lower-case holdout and the lower-case credits as the same card."""
+"""Card names are folded once, where the converted tree is loaded: a converted name that keeps a
+capital (``dimension X``) meets the lower-case holdout and the lower-case credits as the same
+card."""
 
 from __future__ import annotations
 

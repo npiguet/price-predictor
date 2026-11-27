@@ -1,4 +1,4 @@
-"""The collecting supervisors' flags and their shared caps (T101).
+"""The collecting supervisors' flags and their shared caps.
 
 ``--effect-records`` has a default on the effects-owned collectors and **no**
 default on ``sealed match-outcomes``. That asymmetry is the contract: on this
@@ -54,7 +54,7 @@ def parse(*argv: str):
     return build_parser().parse_args(argv)
 
 
-#: Stands in for the JAR, ``java`` and input-file check (python R2), which a
+#: Stands in for the JAR, ``java`` and input-file check, which a
 #: unit test must not make depend on a built connector.
 PREREQUISITES = "price_predictor.infrastructure.forge_classpath.check_worker_prerequisites"
 
@@ -460,7 +460,7 @@ class TestDirectedForksOnCollectVariants:
 
 
 class TestAHoldoutSourceIsRequired:
-    """T190, FR-058g (python D3): without --exclude-cards, --split-from or
+    """FR-058g: without --exclude-cards, --split-from or
     --training-corpus a collector decks and varies held-out cards, so it exits
     1 before any worker starts."""
 
@@ -506,7 +506,7 @@ class TestAHoldoutSourceIsRequired:
 
 
 class TestWorkersMustBeAbleToStart:
-    """python R2: the JAR, ``java`` and the list files are checked before any
+    """The JAR, ``java`` and the list files are checked before any
     worker starts, and a pool whose every slot fails to start ends the run."""
 
     @COLLECTORS
@@ -617,9 +617,9 @@ class TestTheSteeredRoundNeedsGen3Counts:
 
 
 class TestTheBounds:
-    """V4 #9: ``--workers 0`` never stopped, no flag capped the workers at the
-    machine's twelve processes, ``--decks-per-round 0`` exited 0 having
-    played nothing, and a negative per-game budget was accepted."""
+    """``--workers 0`` is refused, the workers are capped at the machine's
+    twelve processes, ``--decks-per-round 0`` is refused rather than exiting 0
+    having played nothing, and a negative per-game budget is refused."""
 
     @pytest.mark.parametrize(("command", "argv"), [
         ("collect-coverage", ("--workers", "0")),
@@ -691,7 +691,7 @@ class TestTheBounds:
 
 
 class TestCountFrom:
-    """V4 #5: ``--count-from DIR`` counts an earlier run's coverage, read-only."""
+    """``--count-from DIR`` counts an earlier run's coverage, read-only."""
 
     def test_it_is_off_by_default(self):
         assert parse("collect-coverage").count_from is None
@@ -729,7 +729,7 @@ class TestCountFrom:
 
 
 class TestContinues:
-    """V4 #6: ``collect-variants --continues RUN_ID`` resumes an interrupted
+    """``collect-variants --continues RUN_ID`` resumes an interrupted
     run; a run id naming no shard, or the steered round, is refused."""
 
     def _records_of(self, tmp_path, run_id):
@@ -781,7 +781,7 @@ class TestContinues:
 
 
 class TestTheWorkerStopFlags:
-    """V4 #1 / P1 #1: how long a worker asked to stop may take to finish its
+    """How long a worker asked to stop may take to finish its
     game, and when it recycles itself; the old pool killed instead."""
 
     @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])

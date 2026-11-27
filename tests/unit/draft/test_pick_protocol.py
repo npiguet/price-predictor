@@ -1,4 +1,4 @@
-"""Live-pick message round-trip + validation (data-model §2.1–2.3, T005)."""
+"""Live-pick message round-trip + validation (data-model §2.1–2.3)."""
 
 from __future__ import annotations
 

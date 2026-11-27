@@ -131,7 +131,7 @@ def _gate(name: str, status: CheckStatus) -> CheckResult:
 
 
 class TestTheVerdictLine:
-    """`SHIPS` is said only of gates that were measured and held (finding 11.10)."""
+    """`SHIPS` is said only of gates that were measured and held."""
 
     def _verdict(self, *checks: CheckResult) -> str:
         report = EvaluationReport()

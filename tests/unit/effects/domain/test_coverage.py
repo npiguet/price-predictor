@@ -1,4 +1,4 @@
-"""The coverage unit's rules (T102).
+"""The coverage unit's rules.
 
 Satisfaction counts acting hosts, event subjects and referenced refs but
 **not** mere snapshot presence; the castability consult ranks a card but never
@@ -177,7 +177,7 @@ def _anthem_record(host_lines) -> EffectRecord:
 
 
 class TestAStaticCreditsItsHost:
-    """python D5: a ``continuous`` record names no ``refs.source`` and holds
+    """A ``continuous`` record names no ``refs.source`` and holds
     contributions, not events, so it credited no card at all."""
 
     def test_the_host_printing_the_acting_script_is_credited(self):
@@ -194,7 +194,7 @@ class TestAStaticCreditsItsHost:
 
 
 class TestCreditGoesToTheConvertedCard:
-    """python D6: a split card in hand is "Fire // Ice", its half on the stack
+    """A split card in hand is "Fire // Ice", its half on the stack
     "Ice", a transformed card its back face: none of them a converted card's
     name. Credit goes through the entity's printed script file instead."""
 
@@ -222,7 +222,7 @@ class TestCreditGoesToTheConvertedCard:
 
 
 class TestOnlyPlayedDecksCountAStalledRound:
-    """python D8: workers draw decks with replacement, so about one deck in
+    """Workers draw decks with replacement, so about one deck in
     seven written is never played; its cards were still charged a stalled
     round. A round now charges the cards its games showed; a card written but
     never shown retires only after ``UNSEEN_RETIRE_FACTOR`` times as many

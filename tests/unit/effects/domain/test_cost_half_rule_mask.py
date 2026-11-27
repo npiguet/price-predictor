@@ -1,6 +1,5 @@
 """A cost half's tag names the entities its payment trains at, so an added
-copy of it trains what the payment did under the hard rule mask (task G11b,
-finding 10.5, decision D7).
+copy of it trains what the payment did under the hard rule mask.
 
 G11 made a cost half train, without the gate, ``zone_outcome``, ``tap_state``,
 the counter deltas and ``life_delta`` at the entities ``payload.costs`` names.

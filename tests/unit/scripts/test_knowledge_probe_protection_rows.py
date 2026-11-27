@@ -1,4 +1,4 @@
-"""The gen-3 protection rows over every quality (T164)."""
+"""The gen-3 protection rows over every quality."""
 
 from __future__ import annotations
 

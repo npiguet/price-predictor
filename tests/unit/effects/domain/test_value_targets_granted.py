@@ -1,4 +1,4 @@
-"""A segment the root grants adds nothing to the root's amounts (task G13d, finding 1.10).
+"""A segment the root grants adds nothing to the root's amounts.
 
 Lines are real gen-3 sidecar lines of the fixture.
 """

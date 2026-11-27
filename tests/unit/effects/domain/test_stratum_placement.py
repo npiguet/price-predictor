@@ -104,7 +104,7 @@ def _half_of(strata, game_id):
 
 
 def test_a_random_seat_game_naming_a_held_out_card_is_card_disjoint():
-    """FR-059 (T182): the card-disjoint stratum keeps every game naming a
+    """FR-059: the card-disjoint stratum keeps every game naming a
     held-out card, random-seat games included; the random seat casts held-out
     cards the AI never casts."""
     seat_held = sorted(HELD)[:3]
@@ -200,7 +200,7 @@ def test_rule_test_records_are_natural_observed_tags():
     assert not rule_test_eligible(make_record(generation=3), _tag(observed=False))
 
 
-# ── what build-corpus can already tell of the precision target (E5) ─────
+# ── what build-corpus can already tell of the precision target (research E5) ─────
 
 
 def _halves(selection: dict[str, dict], reporting: dict[str, dict]):

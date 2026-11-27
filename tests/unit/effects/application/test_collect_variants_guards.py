@@ -1,6 +1,6 @@
 """The collector's guard against variants printing a held-out text is a
 refusal: no converted card tree to check against, or a variant with no
-sidecar to read, stops the run (finding 14.5)."""
+sidecar to read, stops the run."""
 
 from __future__ import annotations
 

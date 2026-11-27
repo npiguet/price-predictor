@@ -1,4 +1,4 @@
-"""The freeze reads the shards the manifest lists, and nothing else (finding 11.4)."""
+"""The freeze reads the shards the manifest lists, and nothing else."""
 
 from __future__ import annotations
 

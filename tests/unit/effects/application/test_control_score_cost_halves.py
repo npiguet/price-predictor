@@ -1,8 +1,8 @@
 """The control score reads a gated field conditionally on a record that trains
-no gate, as training reads it (task G11b, finding 10.5, decision D7).
+no gate, as training reads it.
 
 A cost half trains no affected gate and trains what its payment did at the
-entities ``payload.costs`` names (G11); a rule test of such a row reads the
+entities ``payload.costs`` names; a rule test of such a row reads the
 field head alone there, never ``P(affected) ×`` it, and its targets are the
 payment's. The records are the real gen-3 fixture's cost halves; the rule-test
 rows are written by hand, as the control score's own tests write them.

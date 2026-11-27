@@ -1,4 +1,4 @@
-"""The random-seat pilot against a real Forge (T067, SC-001a).
+"""The random-seat pilot against a real Forge (SC-001a).
 
 One worker plays ``match-outcomes``' own matches with every match seating a
 random player (``--random-seat-share 1 --random-seat-probability 0.5``) and

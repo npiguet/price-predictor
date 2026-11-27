@@ -1,4 +1,4 @@
-"""The shards on disk against the manifest's listing (finding 11.4)."""
+"""The shards on disk against the manifest's listing."""
 
 from __future__ import annotations
 

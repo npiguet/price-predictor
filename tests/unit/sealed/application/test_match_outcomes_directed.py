@@ -1,4 +1,4 @@
-"""DR1 (finding 6.1): the ``match-outcomes`` supervisor recomputes each listed
+"""DR1: the ``match-outcomes`` supervisor recomputes each listed
 rule's directed-fork probability at every log scan from the forks its workers
 kept, and starts each later worker with those, so a rule whose side fills
 within the run stops taking the game's budget."""

@@ -1,4 +1,4 @@
-"""The variant round (T138, FR-058a): variants staged, decked and played in
+"""The variant round (FR-058a): variants staged, decked and played in
 rounds weighted by the games each lacks, their games counted from this run's
 own shards."""
 
@@ -285,7 +285,7 @@ class TestTheUntargetedRound:
         assert found.games == {self.BOLT: {"g7"}}
 
     def test_a_cut_game_gives_its_variant_no_game(self, tmp_path):
-        """WP7 / P1 #1: a gen-3 game without its game-end marker is one
+        """A gen-3 game without its game-end marker is one
         build-corpus drops; it must not finish a variant's games."""
         from effects.application.collect_variants import count_variant_shard
         from effects.infrastructure.shard_io import write_shard
@@ -341,7 +341,7 @@ class TestTheUntargetedRound:
     def test_a_continued_run_s_games_count_and_its_finished_variants_are_not_replayed(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):
-        """V4 #6: an interrupted run restarted with the same seed replayed
+        """An interrupted run restarted with the same seed replayed
         every variant it had finished, doubling their games. ``--continues``
         counts the earlier run's shards first."""
         from tests.unit.effects.builders import write_ended_shard
@@ -480,7 +480,7 @@ class TestTheUntargetedRound:
     def test_a_sidecar_pass_past_its_timeout_ends_the_run_with_1(
         self, tmp_path, monkeypatch, fake_supervisor, caplog,
     ):
-        """P1 #12: the one-shot JVM is killed at its timeout; the run says so."""
+        """The one-shot JVM is killed at its timeout; the run says so."""
         from price_predictor.infrastructure.jvm_processes import ForgeWorkerTimeout
 
         collect_variants, config = self._fixture(
@@ -497,7 +497,7 @@ class TestTheUntargetedRound:
     def test_the_round_s_staged_variants_are_taken_out_however_it_ends(
         self, round_env, sidecar_code, plays,
     ):
-        """FR-058b, python R8: the sidecar pass and every worker stage the
+        """FR-058b: the sidecar pass and every worker stage the
         tree into Forge's custom-cards directory, which every later Forge
         startup on the machine reads."""
         rounds = [self._games(self.BOLT, "g1", "g2") + self._games(self.SHOCK, "g1", "g2")]

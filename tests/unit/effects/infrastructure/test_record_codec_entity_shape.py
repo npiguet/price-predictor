@@ -77,7 +77,7 @@ def _member_reader_spelling(k, v):
 
 
 class TestTheGen3EntityShape:
-    """``lines``, ``base_pt`` and ``pt_boosts`` as the Java collector writes them (T074)."""
+    """``lines``, ``base_pt`` and ``pt_boosts`` as the Java collector writes them."""
 
     def test_every_golden_record_reads_as_gen3(self):
         records = [record_from_dict(raw) for raw in java_golden_records()]
@@ -88,10 +88,9 @@ class TestTheGen3EntityShape:
 
     def test_a_golden_record_writes_back_as_the_collector_wrote_it(self):
         """Every member, in the collector's order, with the collector's values:
-        nothing gen-3 writes is dropped or changed on a read and a write
-        (T074). The written line is the Java line byte for byte, but for the
-        two spellings the reader normalizes by design: an overlay keyword
-        (``protection from green``) and a counter type (``+1/+1``)."""
+        nothing gen-3 writes is dropped or changed on a read and a write. The written line is
+        the Java line byte for byte, but for the two spellings the reader normalizes by design:
+        an overlay keyword (``protection from green``) and a counter type (``+1/+1``)."""
         lines = [line for path in sorted(JAVA_GOLDENS.glob("*.jsonl"))
                  if path.name not in _ENVELOPE_ONLY_GOLDENS
                  for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -157,7 +156,7 @@ class TestTheGen3EntityShape:
 
     def test_a_player_s_land_plays_read_and_write_right_after_this_turn(self):
         """1 without a raise in every golden; null is unlimited, which an
-        absent member (a record collected before it) is not (T074a)."""
+        absent member (a record collected before it) is not."""
         records = [record_from_dict(raw) for raw in java_golden_records()]
         players = [p for r in records for p in r.state.players]
         assert players and all(p.max_land_plays == 1 and not p.land_plays_unlimited
@@ -224,7 +223,7 @@ class TestTheGen3EntityShape:
 
 
 class TestALinesGrant:
-    """A granted line's ``grant``, why it is granted (finding 1.7)."""
+    """A granted line's ``grant``, why it is granted."""
 
     @staticmethod
     def _with_a_granted_trigger(grant: str | None) -> tuple[dict, dict]:

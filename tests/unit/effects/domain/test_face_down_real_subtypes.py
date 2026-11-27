@@ -1,4 +1,4 @@
-"""A face-down card's real subtypes ride the subtype table, marked apart (finding 4.8, G05d).
+"""A face-down card's real subtypes ride the subtype table, marked apart.
 
 The card slot lists its own subtypes, its chosen types and, on a face-down
 card, its real face's subtypes: three id lists over one table. The real-face

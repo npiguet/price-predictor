@@ -1,4 +1,4 @@
-"""``rewrite_event`` on real gen-3 rewrite records (T029)."""
+"""``rewrite_event`` on real gen-3 rewrite records."""
 
 from __future__ import annotations
 
@@ -130,7 +130,7 @@ def test_another_event_or_destination_shows_nothing(by_kind):
 
 
 class TestSubjectQualifiers:
-    """``outcome_event``'s subject qualifiers on the incoming event (T030 follow-up)."""
+    """``outcome_event``'s subject qualifiers on the incoming event."""
 
     @staticmethod
     def _rewrite(by_kind):
@@ -168,7 +168,7 @@ class TestSubjectQualifiers:
 
 
 def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
-    """WP7: ``incoming`` then holds the event as it left; what came in, and
+    """``incoming`` then holds the event as it left; what came in, and
     whether the replacement edited it, are unknown, so no side is read."""
     record = _entering(by_kind)
     params = {"event": "zone_change", "result": "replaced"}
@@ -179,7 +179,7 @@ def test_a_record_whose_incoming_event_is_unknown_shows_no_side(by_kind):
 
 
 class TestPaidAsCost:
-    """118.11 (WP6): ``caused_with_empty_stack`` reads an incoming event naming a cause
+    """118.11: ``caused_with_empty_stack`` reads an incoming event naming a cause
     while the stack is empty. Forge pays an activated ability's costs before
     it puts the ability on the stack, so a cost paid then is read; so is any
     other event a cause made off the stack, and a cost paid while the stack

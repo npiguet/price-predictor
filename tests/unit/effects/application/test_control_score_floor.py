@@ -1,5 +1,5 @@
 """The control score marks down what it cannot read and reads only outputs
-whose targets differ between a rule's polarities (findings 11.12, 12.9).
+whose targets differ between a rule's polarities (12.9).
 
 The scorer runs over the gen-3 fixture records and the hand-frozen selection
 set of ``test_control_score``; a reading is made infinite by hand where the

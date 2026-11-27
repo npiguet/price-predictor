@@ -114,7 +114,7 @@ def test_class_targets_rejects_a_mixture_that_sums_to_nothing():
         class_targets({"combat": 5}, {"combat": 0.0})
 
 
-# ── gen-2: copy counts, signatures, stratum placement (T074–T076) ────────
+# ── gen-2: copy counts, signatures, stratum placement ────────
 
 
 class TestCopiesForText:
@@ -499,7 +499,7 @@ class TestConditionBalance:
 
 
 class TestValidationClassMix:
-    """FR-059a (T183): each validation stratum is weighed into the training
+    """FR-059a: each validation stratum is weighed into the training
     stratum's class mix. A validation record is never dropped, so the
     over-represented class weighs 1 and the others weigh more, at most
     ``--reuse-cap`` a record, the most copies training writes of one."""

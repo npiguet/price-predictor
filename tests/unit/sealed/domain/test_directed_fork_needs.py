@@ -1,4 +1,4 @@
-"""DR1 (finding 6.1): ``match-outcomes`` recomputes each listed rule's
+"""DR1: ``match-outcomes`` recomputes each listed rule's
 directed-fork probability from the forks its workers kept, as ``collect-variants``
 does from its shards, so a rule whose side fills within a run stops forking."""
 

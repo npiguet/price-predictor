@@ -16,7 +16,7 @@ from tests.unit.effects.domain.rule_detectors.builders import effect_halves
 
 def _on_its_api(record, lines, declared):
     """``declared`` scoped to ``record``'s own acting API, the scope a
-    qualifier's near miss needs (finding 7.1)."""
+    qualifier's near miss needs."""
     api = acting_api(record, lines)
     assert api is not None
     return {**declared, "api": api}
@@ -178,7 +178,7 @@ def _with_subject(record, subject, **changes):
 
 
 class TestGen3SubjectQualifiers:
-    """A melded, merged, copied or designated subject (T030 follow-up)."""
+    """A melded, merged, copied or designated subject."""
 
     _MOVE = {"event": "zone_change", "from_zone": "battlefield"}
 

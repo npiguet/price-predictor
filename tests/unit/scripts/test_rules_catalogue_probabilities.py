@@ -1,6 +1,6 @@
-"""``rules_catalogue.py directed-rules``' probabilities file (DF01): each listed rule's
+"""``rules_catalogue.py directed-rules``' probabilities file: each listed rule's
 records per registered side, from the counts the list was decided from, which
-`match-outcomes` computes each rule's directed-fork probability from (DR1)."""
+`match-outcomes` computes each rule's directed-fork probability from."""
 
 from __future__ import annotations
 

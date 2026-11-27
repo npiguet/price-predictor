@@ -1,4 +1,4 @@
-"""The coverage collector (T102): what a coverage count credits, an older
+"""The coverage collector: what a coverage count credits, an older
 record stopping it, and the workers it runs on."""
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ from tests.unit.effects.builders import (
 )
 from tests.unit.effects.domain.test_coverage import _record
 
-# ── what a coverage count credits (python D1, D5, D6, D8, R5; the generation) ──
+# ── what a coverage count credits (the generation) ──
 
 
 class TestOnlyWhatBuildCorpusKeepsCounts:
-    """python D1: ``count_shard`` credited every record kind, ``turn_action``
+    """``count_shard`` credited every record kind, ``turn_action``
     included, so every card drawn (and every permanent untapped) made
     progress though build-corpus writes no such record to any stratum."""
 
@@ -111,8 +111,8 @@ class TestAnOlderRecordStopsTheCount:
 
 
 class TestTheCountersUseTheRunsWorkers:
-    """python R5: shard counting passed no ``workers``, so it ran one process
-    per CPU (32 here), above the machine's budget."""
+    """Shard counting passes the run's ``workers``, so it never runs one
+    process per CPU, which would exceed the machine's budget."""
 
     def test_every_count_runs_on_config_workers(self, tmp_path, fake_supervisor):
         from effects.application import collect_coverage

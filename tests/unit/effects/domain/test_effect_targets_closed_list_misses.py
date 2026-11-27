@@ -1,6 +1,6 @@
-"""A changed subtype or keyword the head's closed output lists lack is counted
-(finding 10.4): the targets drop it, and a reader takes the silence for "none
-gained", so ``RecordTargets.unsupervised`` says how many were dropped.
+"""A changed subtype or keyword the head's closed output lists lack is counted: the targets drop it,
+and a reader takes the silence for "none gained", so ``RecordTargets.unsupervised`` says how many
+were dropped.
 
 The records are hand-built: no gen-3 record names a value the checked-in lists
 lack until the lists are regenerated from a later corpus (``bard``, ``assist``,

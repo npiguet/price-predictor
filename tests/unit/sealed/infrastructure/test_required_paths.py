@@ -1,5 +1,5 @@
 """Every path a sealed command reads or writes is a required flag: no default names a
-location under ``output/`` or ``models/`` (finding 16.6, task L06e)."""
+location under ``output/`` or ``models/``."""
 
 from __future__ import annotations
 

@@ -119,8 +119,8 @@ def test_shard_discovery_never_takes_the_manifest_for_a_shard(tmp_path: Path):
 
 
 class TestTheCollectorsListWhatTheyRead:
-    """P1 #10: ``collect-variants`` listed neither the variant tree it reads
-    and extends nor the rules catalogue its steered round reads; V4 #5:
+    """``collect-variants`` listed neither the variant tree it reads
+    and extends nor the rules catalogue its steered round reads; and
     ``collect-coverage --count-from`` reads earlier runs."""
 
     def test_collect_variants_lists_its_variant_tree(self):

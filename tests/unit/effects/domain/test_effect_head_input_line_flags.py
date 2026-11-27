@@ -53,7 +53,7 @@ class TestLineFlags:
             _line(_ANTHEM, kind="activated", granted=True, grant="static")) == [(1.0, 0.0)]
 
     def test_a_trigger_a_static_grants_is_not_by_an_effect(self):
-        """Finding 1.7: a second Fungus Sliver's trigger keys to its own
+        """A second Fungus Sliver's trigger keys to its own
         trigger line, and is no effect's for that."""
         assert self._grant_flags(
             _line(_SLIVER, kind="trigger", granted=True, grant="static")) == [(1.0, 0.0)]

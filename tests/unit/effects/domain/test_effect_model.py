@@ -1,4 +1,4 @@
-"""The effect model: its trunk, its heads and its training-only auxiliaries (T069)."""
+"""The effect model: its trunk, its heads and its training-only auxiliaries."""
 
 from __future__ import annotations
 
@@ -136,7 +136,7 @@ class TestGen2Heads:
 
 
 class TestRelationTrunk:
-    """T101: the trunk is relation layers; with empty tables the relations change nothing."""
+    """The trunk is relation layers; with empty tables the relations change nothing."""
 
     def test_the_trunk_is_relation_layers_with_one_table_row_per_type(self, model):
         from effects.domain.relation_attention import RelationEncoderLayer
@@ -176,7 +176,7 @@ class TestRelationTrunk:
 
 
 class TestGen3Inputs:
-    """T111-T112: the line-flag projection and the card slot's id tables."""
+    """The line-flag projection and the card slot's id tables."""
 
     def _model(self) -> EffectModel:
         torch.manual_seed(0)

@@ -1,4 +1,4 @@
-"""Pick-mode determinism + rival-checkpoint binding (US3, SC-007, T017)."""
+"""Pick-mode determinism + rival-checkpoint binding (US3, SC-007)."""
 
 from __future__ import annotations
 

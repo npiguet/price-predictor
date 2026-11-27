@@ -1,4 +1,4 @@
-"""The ability cache is tied to the checkpoint it was encoded from (finding 11.7).
+"""The ability cache is tied to the checkpoint it was encoded from.
 
 ``encode-abilities`` writes a stamp beside each variant's cache (the
 checkpoint's content hash, its encoding surface, the vocabulary hash and the

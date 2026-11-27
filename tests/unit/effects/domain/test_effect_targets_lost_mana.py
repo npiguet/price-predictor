@@ -1,4 +1,4 @@
-"""A player's mana targets read a ``mana_lost``'s ``mana_by_color`` (task B51).
+"""A player's mana targets read a ``mana_lost``'s ``mana_by_color``.
 
 The events are spelled as the connector writes them (``LostManaTest`` pins
 the Java side on real boards): a drain's effect half holds the mana the pool

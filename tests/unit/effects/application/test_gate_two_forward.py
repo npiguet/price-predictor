@@ -1,12 +1,12 @@
 """Gate 2 reads the model through the one chunked forward, on pairs that differ
-in the keyword alone (findings 13.1, 13.4, 13.7).
+in the keyword alone (13.4, 13.7).
 
 The pairs are the fixture's real combats, each built twice in one batch: as
 collected, and with the carrier stripped of the row's keyword. Every collated
 tensor of the pair is diffed slot by slot: the twin may differ from the record
 only at the carrier's keyword flags and its lines (a dropped slot, the
 positions after it, the links that ended at it), so nothing else, the damage
-assignment above all (G03), states the keyword's consequence in the twin.
+assignment above all, states the keyword's consequence in the twin.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """``collect-variants`` recomputes each directed rule's fork probability after
 every round from the directed forks its shards hold, and hands the next
-round's workers the result (D8, task DF01b2)."""
+round's workers the result."""
 
 from __future__ import annotations
 

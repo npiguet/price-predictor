@@ -1,6 +1,6 @@
 """Every checkpoint file is written to a temporary name and moved into place,
 and a file under ``epochs/`` is named for its epoch and says whose score and
-which weights it holds (task H03, findings 15.1, 13.7)."""
+which weights it holds (13.7)."""
 
 from __future__ import annotations
 

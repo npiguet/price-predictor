@@ -247,7 +247,7 @@ class TestEmbeddingsApartFromTheCards:
 
 
 class TestEncodeCardsScorerCheckpointHappyPath:
-    """T035 (US2): with a Phase B scorer checkpoint, encode-cards constructs a
+    """With a Phase B scorer checkpoint, encode-cards constructs a
     fresh CardPriceTransformerModel from `encoder_config`, loads weights from
     `encoder_state_dict`, and re-encodes every `.txt` (including never-seen
     cards) into a sibling `.npz` (FR-014, FR-015, US2 acceptance scenario 3)."""

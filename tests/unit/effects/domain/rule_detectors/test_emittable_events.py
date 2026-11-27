@@ -3,7 +3,7 @@
 Each source set of ``emittable_events`` is the event types its Java shapers
 name (``EventType.X``), so a shaper that starts or stops building a type fails
 here rather than leaving a declaration reading every record of a kind as the
-event's absence, as V5 #14 found.
+event's absence.
 """
 
 from __future__ import annotations

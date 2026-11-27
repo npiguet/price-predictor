@@ -1,4 +1,4 @@
-"""Shard IO: shards in subdirectories and Java-written shards (T027).
+"""Shard IO: shards in subdirectories and Java-written shards.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from effects.infrastructure.shard_io import (
 
 
 class TestShardsInSubdirectories:
-    """Shards nested under the corpus directory are part of the corpus (T173).
+    """Shards nested under the corpus directory are part of the corpus.
 
     A flat directory is what the quickstart writes, but separating a depleted
     collection run from a full-strength one into two subdirectories is the

@@ -1,4 +1,4 @@
-"""The smaller label rules of the per-entity and global targets (finding 10.7).
+"""The smaller label rules of the per-entity and global targets.
 
 A tutor is the collector's ``mode: SearchedLibrary`` and nothing inferred from a
 shuffle; a ``pt_change`` duration is unknown where one entity's events mix
@@ -37,7 +37,7 @@ _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 #: Elfhame Sanctuary's search: its ``card_looked_at`` names ``SearchedLibrary``.
 _ELFHAME_SANCTUARY = f"{_RUN}.0-mwqvqdyrb9c0.1"
 #: Thada Adel's search of an opponent's library: reveal, exile, shuffle, and no
-#: ``card_looked_at`` (a collector gap, reported with finding 10.7).
+#: ``card_looked_at`` (a collector gap).
 _THADA_ADEL = f"{_RUN}.0-mwqvqdyrb9c0.681"
 #: Choking Miasma: E35 gets a permanent +1/+1 and an end-of-turn -2/-2; its
 #: other five victims one end-of-turn -2/-2 each.

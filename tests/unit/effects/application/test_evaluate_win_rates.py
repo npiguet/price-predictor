@@ -1,6 +1,6 @@
 """Where the evaluator's paths come from.
 
-``--win-rates`` reaches the decodability battery (T108, Story 6 scenario 7),
+``--win-rates`` reaches the decodability battery (Story 6 scenario 7),
 and the variant tree defaults to the one the checkpoint's corpus recorded.
 """
 

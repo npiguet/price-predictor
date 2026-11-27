@@ -50,9 +50,8 @@ def _spelling_free(value):
 
 
 class TestTheGen3Fixture:
-    """The gen-3 fixture cut from the T079 pilot: every record reads, writes back
-    as the collector wrote it and carries the payload members story 2 asks of it
-    (T074 on real records, T079a)."""
+    """The gen-3 fixture cut from the gen-3 pilot: every record reads, writes back
+    as the collector wrote it and carries the payload members story 2 asks of it."""
 
     @staticmethod
     def _records() -> list[EffectRecord]:
@@ -119,7 +118,7 @@ class TestTheGen3Fixture:
         actions = [r for r in self._records() if r.kind is RecordKind.TURN_ACTION]
         assert {r.subkind for r in actions} == set(TurnActionSubkind)
         assert all(r.ability is None for r in actions)
-        # The game-end marker alone holds no event (WP7): its payload is
+        # The game-end marker alone holds no event: its payload is
         # ``{events: [], records_withheld}``.
         _assert_every_played_action_holds_events(actions)
         _assert_every_game_end_marker_holds_none(actions)

@@ -1,6 +1,6 @@
-"""What a continuous record says was lost and gained on each characteristic line
-(finding 10.3): a lone ``=`` in ``keywords``, the whole-class type tokens, a line
-set to what the entity already held, and a contribution's ``abilities``.
+"""What a continuous record says was lost and gained on each characteristic line: a lone ``=`` in
+``keywords``, the whole-class type tokens, a line set to what the entity already held, and a
+contribution's ``abilities``.
 
 The records are real: ``continuous-lines.jsonl`` holds six lines of the review
 pilots, each as the collector wrote it, and the gen-3 fixture holds the rest. A

@@ -1,5 +1,5 @@
 """A game with a variant on its board whose sidecar prints a held-out text is
-held out whole, as a held-out card's game is (finding 14.5)."""
+held out whole, as a held-out card's game is."""
 
 from __future__ import annotations
 

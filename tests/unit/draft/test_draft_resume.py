@@ -1,7 +1,7 @@
 """Resume precedence for train-draft-agent: CLI > resumed checkpoint > default.
 
 Also covers ``generate-draft-data --resume`` counting of model-labeled records
-(FR-014, T025): a corpus whose seats carry a model label counts toward
+(FR-014): a corpus whose seats carry a model label counts toward
 ``--n-drafts`` exactly as gen-1, and a pick-fault-abandoned draft leaves no
 partial record for resume to miscount (SC-005).
 """
@@ -134,7 +134,7 @@ def test_resume_lr_override_survives_scheduler_rebuild() -> None:
     assert new_opt.param_groups[0]["lr"] <= new_lr
 
 
-# ── generate-draft-data --resume counts model-labeled records (T025, FR-014) ──
+# ── generate-draft-data --resume counts model-labeled records (FR-014) ──
 
 def _record(draft_id: str, agent: str) -> DraftRecord:
     return DraftRecord(

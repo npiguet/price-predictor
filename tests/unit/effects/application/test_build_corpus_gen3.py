@@ -62,7 +62,7 @@ def _gen3_config(records: Path, output: Path, **overrides) -> BuildCorpusConfig:
 
 @pytest.fixture(scope="module")
 def gen3_build(tmp_path_factory) -> CorpusStore:
-    """The fixture built once with the precision thresholds lowered (E5)."""
+    """The fixture built once with the precision thresholds lowered (research E5)."""
     root = tmp_path_factory.mktemp("gen3-build")
     assert build(_gen3_config(_gen3_records(root), root / "out")) == 0
     return CorpusStore(root / "out")

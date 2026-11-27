@@ -1,4 +1,4 @@
-"""The record envelope's invariants (T022).
+"""The record envelope's invariants.
 
 The schema is frozen before collection, so these are contract rather than
 implementation detail: a corpus written against a violated invariant cannot be
@@ -251,7 +251,7 @@ def test_python_and_java_spell_the_playability_checks_alike_in_order():
 
 def test_python_and_java_spell_the_turn_action_subkinds_alike():
     """A subkind the collector writes and the reader does not know fails the
-    whole record's decode (the game-end marker did until WP7's Python side)."""
+    whole record's decode (the game-end marker once did)."""
     from effects.domain.records import TurnActionSubkind
 
     source = _JAVA_UNRESOLVED_REASON.with_name("TurnActionSubkind.java").read_text(
@@ -416,7 +416,7 @@ class TestContributionChannels:
 
 
 class TestGen3Envelope:
-    """The directed-fork signature and the ``turn_action`` kind (T013)."""
+    """The directed-fork signature and the ``turn_action`` kind."""
 
     def _tag(self):
         from effects.domain.fork_operation import ForkOperation
@@ -471,7 +471,7 @@ def _golden(name: str, *, fork: bool) -> EffectRecord:
 
 
 class TestRecordOrigin:
-    """What produced a record, read off ``fork_kind`` and ``synthetic`` (finding 5.8)."""
+    """What produced a record, read off ``fork_kind`` and ``synthetic``."""
 
     @pytest.mark.parametrize(("golden", "fork", "origin"), [
         ("record-combat.jsonl", False, RecordOrigin.LIVE),

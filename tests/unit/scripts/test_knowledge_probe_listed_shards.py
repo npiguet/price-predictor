@@ -1,4 +1,4 @@
-"""The probes' record walk reads the shards the manifest lists (finding 11.4)."""
+"""The probes' record walk reads the shards the manifest lists."""
 
 from __future__ import annotations
 

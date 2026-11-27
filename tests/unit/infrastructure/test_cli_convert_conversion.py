@@ -1,9 +1,7 @@
-"""``convert`` records the conversion it leaves in its ``run.json`` (finding
-11.3, task K03): the Forge checkout's full commit, whether it was dirty, and
-its sidecars' digest once it finished whole; ``null`` once it may have
-changed the trees without finishing; nothing when ``ConvertMain`` refused
-before touching them (exit 2). The JVM is stood in by a function writing the
-sidecars a conversion would."""
+"""``convert`` records the conversion it leaves in its ``run.json``: the Forge checkout's full
+commit, whether it was dirty, and its sidecars' digest once it finished whole; ``null`` once it may
+have changed the trees without finishing; nothing when ``ConvertMain`` refused before touching them
+(exit 2). The JVM is stood in by a function writing the sidecars a conversion would."""
 
 from __future__ import annotations
 

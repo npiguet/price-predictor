@@ -3,7 +3,7 @@
 ``effects`` imports downward from ``sealed`` and ``price_predictor`` and never
 the reverse, and it imports only the surface FR-002 declares.
 
-Depleted collection is the case that tempts an inversion (T170): `sealed
+Depleted collection is the case that tempts an inversion: `sealed
 generate-pools --exclude-cards` needs the holdout, which only `effects` can
 compute. It takes a plain file of card names written by `effects holdout-cards`
 rather than importing the rule, and the first test below is what keeps it that
@@ -60,12 +60,12 @@ _ALLOWED: dict[str, set[str] | None] = {
         "READ_ONLY", "REFUSAL_DEST", "ManifestTable", "Writes", "dispatch", "tag_subcommands",
     },
     # A collector's supervisor writes its run id, resolved caps and worker-log
-    # failures into the running command's run.json entry (V4 #3, #4).
+    # failures into the running command's run.json entry.
     "price_predictor.infrastructure.run_manifest": {"annotate_run"},
-    # The worker-log scan, shared with sealed match-outcomes (V4 #3).
+    # The worker-log scan, shared with sealed match-outcomes.
     "price_predictor.domain.worker_failures": {"WorkerFailures"},
-    # The worker status line's run totals, rendered for the round report (K01b),
-    # and the refusal of a run whose workers' engine is not whole (K01c).
+    # The worker status line's run totals, rendered for the round report,
+    # and the refusal of a run whose workers' engine is not whole.
     "price_predictor.domain.worker_status": {
         "render_fork_refusals", "render_hook_failures", "ALLOW_DEGRADED_HELP",
         "WorkerEngineRefused",
@@ -73,17 +73,17 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
     # The sidecars and their digest, one definition for convert, build-corpus
     # and the collectors, and the conversion a collection reads from its tree
-    # and checks against the connector JAR (finding 11.3, K03).
+    # and checks against the connector JAR.
     "price_predictor.infrastructure.converted_provenance": {
         "SIDECAR_SUFFIX", "sidecar_paths", "sidecar_digest", "collection_conversion",
         "record_conversion", "trees_conversion",
     },
     # A records directory holds one conversion: a collection into it and
-    # build-corpus over it refuse another (finding 11.3, KR4).
+    # build-corpus over it refuse another.
     "price_predictor.infrastructure.records_conversion": {"record_collection", "require_joinable"},
     "price_predictor.domain.converted_provenance": {"Conversion", "ConversionRefused"},
     # A directed rule's fork probability, one formula for collect-variants and
-    # sealed match-outcomes, which never imports effects (DR1).
+    # sealed match-outcomes, which never imports effects.
     "price_predictor.domain.directed_fork_probabilities": {"directed_fork_probability"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
@@ -96,7 +96,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     },
     "sealed.infrastructure.directed_fork_check": {"directed_fork_error"},
     "sealed.infrastructure.dropped_events": {"dropped_events_report"},
-    # The caps' one definition, which ``sealed`` reads too (M04b).
+    # The caps' one definition, which ``sealed`` reads too.
     "sealed.domain.collection_caps": {
         "DEFAULT_DIRECTED_FORK_PROBABILITY", "DEFAULT_DIRECTED_FORKS_PER_GAME",
         "DEFAULT_INTERVENTIONS_PER_GAME", "DEFAULT_MANA_CAP",

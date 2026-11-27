@@ -1,4 +1,4 @@
-"""AgentRegistry: LABEL=PATH parsing, label + geometry validation (T007)."""
+"""AgentRegistry: LABEL=PATH parsing, label + geometry validation."""
 
 from __future__ import annotations
 

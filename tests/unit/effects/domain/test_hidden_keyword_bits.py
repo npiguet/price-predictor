@@ -1,4 +1,4 @@
-"""A card slot reads Forge's hidden "can't block" and "can't attack" (finding 4.8, S14 B16b).
+"""A card slot reads Forge's hidden "can't block" and "can't attack".
 
 Forge keeps "can't block" and "can't attack" a pump or a static grants as a
 hidden keyword, ``granted_temporary.hidden_keywords``, which no line and no

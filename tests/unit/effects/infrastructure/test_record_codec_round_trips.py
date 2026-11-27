@@ -1,4 +1,4 @@
-"""Record codec round-trips (T027).
+"""Record codec round-trips.
 
 The corpus cannot be rebuilt cheaply, so a serializer bug is unrecoverable
 rather than inconvenient. Every record kind round-trips here, including the

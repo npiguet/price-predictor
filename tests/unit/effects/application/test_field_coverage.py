@@ -151,7 +151,7 @@ class TestTheWalk:
         assert "record.payload<ContinuousPayload>.contributions" in coverage
 
     def test_each_event_parameter_has_a_cell_of_its_own(self):
-        """P3b #14: every parameter collapsed into one ``params`` cell, so a
+        """Every parameter collapsed into one ``params`` cell, so a
         parameter the collector never writes could not show."""
         events = tuple(
             Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
@@ -282,7 +282,7 @@ class TestReportLines:
     def _coverage(self, *rows: FieldCoverage) -> dict[str, FieldCoverage]:
         return {row.path: row for row in rows}
 
-    #: A listed field for the tags' sake: the real list is empty since T079.
+    #: A listed field for the tags' sake: the real list is empty.
     _KNOWN = "record.state.global_.emblems"
 
     @pytest.fixture(autouse=True)
@@ -359,7 +359,7 @@ def _event_members_held_constant() -> set[str]:
 
 
 class TestTheGen3Fields:
-    """Each member of the gen-3 table, with a row of its own on a gen-3 corpus (T076)."""
+    """Each member of the gen-3 table, with a row of its own on a gen-3 corpus."""
 
     @staticmethod
     def _golden() -> list[EffectRecord]:

@@ -24,8 +24,8 @@ from tests.unit.effects.builders import make_record
 
 
 class TestEveryRecordKindIsPresent:
-    """V5 #19: a kind no record of a long gen-3 window holds was reported
-    ``ok`` ("no records of this kind") by every per-kind check."""
+    """A kind no record of a long gen-3 window holds is not reported ``ok``
+    ("no records of this kind") by a per-kind check."""
 
     @staticmethod
     def _window(records: int):
@@ -127,7 +127,7 @@ class TestWhatIfPresence:
 
 class TestGen3FieldPresence:
     """Root § 8.13 on the raw lines: what every gen-3 record owes, what a
-    gen-3 attackers record no longer carries, and the curation member (T076)."""
+    gen-3 attackers record no longer carries, and the curation member."""
 
     def _write(self, path: Path, rows: list[dict]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,7 +164,7 @@ class TestGen3FieldPresence:
             f"{half['record_id']}: no payload<resolution/resolution>.conditions_met")
 
     def test_a_game_end_marker_without_its_withheld_count_is_short(self, tmp_path):
-        """WP7: the marker says how many of its game's records the cap withheld."""
+        """The marker says how many of its game's records the cap withheld."""
         rows = self._golden()
         marker = next(row for row in rows if row.get("subkind") == "game_end")
         del marker["payload"]["records_withheld"]

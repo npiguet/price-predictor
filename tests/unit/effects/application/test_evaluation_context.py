@@ -127,7 +127,7 @@ class TestVariantCheckpointFlag:
 
 class TestVariantCheckpointRefusals:
     """``--variant-checkpoint NAME=PATH`` names a checkpoint trained as NAME on
-    the corpus the main one read (finding 11.8): ``identity=<a full model>``
+    the corpus the main one read: ``identity=<a full model>``
     would run as a full model, and gate 1 would print that the encoder beats
     the identity baseline."""
 
@@ -174,7 +174,7 @@ class TestVariantCheckpointRefusals:
 
 class TestTheTreesTheCheckpointRecorded:
     """``--cards-folder`` defaults to the trees the checkpoint trained against,
-    and trees reconverted since the corpus was built are refused (finding 11.3):
+    and trees reconverted since the corpus was built are refused:
     a reconverted tree joins the records' keys to other lines in every gate."""
 
     @staticmethod

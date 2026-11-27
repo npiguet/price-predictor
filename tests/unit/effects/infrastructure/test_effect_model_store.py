@@ -1,4 +1,4 @@
-"""The checkpoint contract (T082).
+"""The checkpoint contract.
 
 A checkpoint has to describe the model *as trained*, not as remembered: its
 split, the vocabulary and keyword files it actually read, and the keyword it was
@@ -140,7 +140,7 @@ class TestCorpusProvenance:
     """
 
     def test_split_provenance_round_trips_the_corpus_and_holdout_it_read(self):
-        """The holdout flags too (T169, FR-134): a depleted corpus was composed
+        """The holdout flags too (FR-134): a depleted corpus is composed
         against them, and a run inheriting the split must be able to tell."""
         original = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
@@ -419,7 +419,7 @@ class TestTheInputLayout:
     def test_a_reordered_vocabulary_is_refused_by_its_name(self, tmp_path, files, monkeypatch):
         """Two event types swapped keep every width, so only the recorded
         order tells the checkpoint written under them from one this code
-        reads (finding 11.6)."""
+        reads."""
         from effects.domain import checkpoint_layout
         from effects.domain.checkpoint_layout import CheckpointLayoutError
 
@@ -448,7 +448,7 @@ class TestTheInputLayout:
 
 
 class TestSweepSettings:
-    """What a checkpoint records of its sweep flags and roots (T101, FR-059, FR-061, FR-063)."""
+    """What a checkpoint records of its sweep flags and roots (FR-059, FR-061, FR-063)."""
 
     def test_the_sweep_flags_and_roots_round_trip(self, tmp_path, files):
         """Spec Story 5 scenario 6: unit, size, noise ratio, value weight."""
@@ -474,7 +474,7 @@ class TestSweepSettings:
 
 
 class TestGen3Checkpoint:
-    """The fields data-model.md § EffectCheckpoint adds (T149)."""
+    """The fields data-model.md § EffectCheckpoint adds."""
 
     def test_the_gen3_fields_round_trip(self, tmp_path, files):
         store = EffectModelStore(tmp_path)
@@ -491,7 +491,7 @@ class TestGen3Checkpoint:
         assert loaded.extra == {}
 
     def test_a_checkpoint_is_scored_under_the_flags_its_settings_record(self, tmp_path, files):
-        """One accessor for the reporting half (S18 R6), never a default."""
+        """One accessor for the reporting half, never a default."""
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(files, training_settings={
             **_checkpoint(files).training_settings,
@@ -502,7 +502,7 @@ class TestGen3Checkpoint:
     def test_a_checkpoint_recording_its_settings_in_the_old_shape_is_refused(
         self, tmp_path, files,
     ):
-        """No backward compatibility (D19): settings recorded before they were
+        """No backward compatibility: settings recorded as anything but
         one dict are refused by name on load."""
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(files, training_settings=layout_settings()))

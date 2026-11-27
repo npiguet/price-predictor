@@ -1,4 +1,4 @@
-"""Generating synthetic script variants (T138): what is written, what is skipped
+"""Generating synthetic script variants: what is written, what is skipped
 (held-out, multi-face, nothing to perturb), the name and seed it takes, and the
 protection-quality swap.
 

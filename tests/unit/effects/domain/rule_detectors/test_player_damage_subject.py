@@ -82,7 +82,7 @@ def _blocked(record):
 
 
 def test_a_blocked_attacker_s_damage_to_the_player_does_not_fire_510_1b(by_kind):
-    """CPC1 D-5, task FR4: the player is attacked, but the damage's source is blocked."""
+    """The player is attacked, but the damage's source is blocked."""
     record = next(r for r in _to_player(by_kind)
                   if any(e.subjects[0].startswith("P") and (e.params or {}).get("source")
                          in r.payload.attackers for e in _damage(r)))

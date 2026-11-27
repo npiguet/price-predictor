@@ -1,4 +1,4 @@
-"""Tests for evaluate progress messages (T038)."""
+"""Tests for evaluate progress messages."""
 
 from __future__ import annotations
 

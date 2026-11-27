@@ -1,4 +1,4 @@
-"""The pending event's subject bit is on its last-known copy too (finding 4.7, S14 B10).
+"""The pending event's subject bit is on its last-known copy too.
 
 A pending event names the card (``E<id>``), the game's object for it now:
 Aven Heartstabber's dies trigger names E7, in the graveyard. The event

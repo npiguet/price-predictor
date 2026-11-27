@@ -1,4 +1,4 @@
-"""The toughness sweep on activated any-target damage (T165)."""
+"""The toughness sweep on activated any-target damage."""
 
 from __future__ import annotations
 

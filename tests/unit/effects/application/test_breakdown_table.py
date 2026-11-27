@@ -1,4 +1,4 @@
-"""The breakdowns' lines and the table file beside them (task J05, finding 19.7):
+"""The breakdowns' lines and the table file beside them:
 a line prints a group's total, the per-field means go to ``breakdowns.csv``, and
 every line's name parses back into its head and qualifier."""
 

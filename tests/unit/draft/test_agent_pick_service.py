@@ -1,4 +1,4 @@
-"""AgentPickService: masked argmax pick, un-embeddable handling, faults (T006)."""
+"""AgentPickService: masked argmax pick, un-embeddable handling, faults."""
 
 from __future__ import annotations
 

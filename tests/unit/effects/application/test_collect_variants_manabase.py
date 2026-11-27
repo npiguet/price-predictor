@@ -1,4 +1,4 @@
-"""A variant reaches the manabase as a converted card of its cost would (T138)."""
+"""A variant reaches the manabase as a converted card of its cost would."""
 
 from __future__ import annotations
 

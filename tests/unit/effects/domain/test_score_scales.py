@@ -79,7 +79,7 @@ class TestRescaling:
         assert math.isnan(grid_score([[0.2], [0.9]], [[1.0], [1.0]]))
 
     def test_each_reading_is_scored_against_its_own_records_answer(self):
-        """Finding 12.6: in a cell whose answers differ between records, a
+        """In a cell whose answers differ between records, a
         model reading the cell's base rate errs on every record, one reading
         each record's answer on none."""
         answers = [[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 1.0, 0.0]]

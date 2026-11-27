@@ -1,4 +1,4 @@
-"""``trigger_mode`` on real gen-3 trigger records (T026)."""
+"""``trigger_mode`` on real gen-3 trigger records."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def _phase_trigger(by_kind, sidecars, fired=True):
 
 
 class TestT030Parameters:
-    """Phase, script parameters, step, source and spawned triggers (T030 follow-up)."""
+    """Phase, script parameters, step, source and spawned triggers."""
 
     def test_the_phase_and_a_script_parameter_read_the_trigger_segment(
             self, by_kind, gen3_sidecars):

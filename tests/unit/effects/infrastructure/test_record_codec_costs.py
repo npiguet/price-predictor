@@ -1,5 +1,5 @@
 """The cost half's ``costs`` members beyond mana, tapped, life, sacrificed,
-discarded and exiled (contract ``record-schema-delta.md``, task B14): each
+discarded and exiled (contract ``record-schema-delta.md``): each
 decodes into its field and writes back where the collector wrote it.
 
 Starts from a Java golden's cost half, edited here.

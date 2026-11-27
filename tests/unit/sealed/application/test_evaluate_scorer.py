@@ -215,7 +215,7 @@ class TestResolveSetCode:
 
 
 class TestEvaluateScorerToleratesPhaseBCheckpoints:
-    """T040 (US3): the evaluate-scorer loader ignores Phase B-only keys
+    """The evaluate-scorer loader ignores Phase B-only keys
     (`encoder_state_dict`, `encoder_config`, `train_config`) so the same code
     path scores Phase A and Phase B checkpoints identically (SC-003)."""
 

@@ -1,4 +1,4 @@
-"""The gen-3 turn and step condition probes (T161) on a tiny random gen-3 model."""
+"""The gen-3 turn and step condition probes on a tiny random gen-3 model."""
 
 from __future__ import annotations
 

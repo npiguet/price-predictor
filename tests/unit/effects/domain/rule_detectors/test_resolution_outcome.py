@@ -20,7 +20,7 @@ def _resolved(by_kind):
 def test_a_resolved_spell_is_the_near_miss_of_a_targeted_fizzle_rule(by_kind):
     found = FAMILY.match(_resolved(by_kind), None, {"outcome": "fizzled", "targeted": True})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
-    # Unscoped, every resolution would be a near miss: none is (finding 7.1).
+    # Unscoped, every resolution would be a near miss: none is.
     assert FAMILY.match(_resolved(by_kind), None, {"outcome": "fizzled"}) is None
 
 
@@ -98,7 +98,7 @@ def test_a_cost_half_shows_nothing(by_kind):
 
 
 def test_a_fizzled_half_reads_its_targets_as_cast():
-    """V5 #25: an effect half's ``targets`` lose the illegal targets; the
+    """An effect half's ``targets`` lose the illegal targets; the
     targets it was cast with are ``targets_at_cast`` (``Refs.as_cast``)."""
     from effects.domain.records import ResolutionPayload
     from effects.domain.state_snapshot import Refs
@@ -150,7 +150,7 @@ def test_keyword_and_source_keyword_read_the_acting_card_s_line(by_kind):
         assert FAMILY.match(record, None, declared) is None
 
 
-# ── 701.5a-1 reads the countered object's kind (CPC1 D-2, task FR2) ─────────────
+# ── 701.5a-1 reads the countered object's kind ─────────────
 
 _CAST_RESOLVES = {"outcome": "resolved", "near": ["countered"], "ability_kind": "cast"}
 

@@ -1,4 +1,4 @@
-"""Gate 1's stratum and its plumbing (T099).
+"""Gate 1's stratum and its plumbing.
 
 Gate 1 blocks shipping, and until this existed it was reported only when its
 baseline was *missing* — supplying the baseline produced no gate-1 line at all,
@@ -338,7 +338,7 @@ def test_measure_reads_the_deviance_under_the_dispersions_it_is_given(run, strat
 
 def test_two_models_differing_only_in_dispersion_have_a_zero_deviance_margin(run, context):
     """Each read under its own dispersions, the wider one alone moved the
-    margin (finding 13.5)."""
+    margin."""
     result = run_gate_one(context, _wider(run.model))
     assert result.values["deviance_reduction"] == 0.0
     assert result.values["affected_gate_f1_gain"] == 0.0

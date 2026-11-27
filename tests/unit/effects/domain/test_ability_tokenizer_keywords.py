@@ -1,5 +1,5 @@
-"""Keyword lines on the prose surface and the multi-word keywords' token forms
-(finding 1.14). Definitions are the real ones in ``keyword-definitions.json``."""
+"""Keyword lines on the prose surface and the multi-word keywords' token forms. Definitions are the
+real ones in ``keyword-definitions.json``."""
 
 from __future__ import annotations
 

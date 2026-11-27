@@ -1,4 +1,4 @@
-"""Root spec § 9.3 (T114): floating effects, delayed triggers and the
+"""Root spec § 9.3: floating effects, delayed triggers and the
 other extra cards are card slots their links relate."""
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ _FALTER = ProvenanceKey("cardsfolder/f/falter.txt", 0, "spell", 0)
 
 
 class TestCommandZoneSlots:
-    """Root spec § 9.3 (T114) and story 5 acceptance 2."""
+    """Root spec § 9.3 and story 5 acceptance 2."""
 
     def _falter_record(self, **effect):
         from effects.domain.state_snapshot import CommandZoneObject, LineRef, Link

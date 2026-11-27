@@ -1,4 +1,4 @@
-"""Choosing the held-out ability texts (T156, FR-088/FR-088a).
+"""Choosing the held-out ability texts (FR-088/FR-088a).
 
 The holdout is keyed on the ability text rather than the card, because the model
 never sees a card's name and functional reprints compile to the same script. A
@@ -101,7 +101,7 @@ def test_the_hash_is_stable_across_processes() -> None:
     assert len(runs) == 1, f"verdict varied by hash seed: {runs}"
 
 
-# ── the masked template (FR-039, FR-040; T039) ──────────────────────────
+# ── the masked template (FR-039, FR-040) ──────────────────────────
 
 _FIXTURE_SIDECARS = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars"
 

@@ -50,7 +50,7 @@ class TestLinkHalvesPair:
                            game_id=game, state=snapshot)
 
     def test_cost_halves_none_of_which_meets_its_effect_half_fail(self):
-        """V5 #18: a lone cost half is a paired link (its item countered, or on
+        """A lone cost half is a paired link (its item countered, or on
         the stack at the game's end), so 500 of them read 500/500 paired; a
         window where no cost half meets its effect half is the collector."""
         records = [r for r in _healthy() if r.link_id is None] + [

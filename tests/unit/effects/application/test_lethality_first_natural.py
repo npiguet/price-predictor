@@ -1,4 +1,4 @@
-"""Lethality copies are made for a record's first natural copy only (D15, FR-063e).
+"""Lethality copies are made for a record's first natural copy only (FR-063e).
 
 A step holds a record's natural copies and its rule-budget copies as rows of
 one record id. A lethality copy of each would repeat the same redrawn board

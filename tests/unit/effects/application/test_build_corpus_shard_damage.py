@@ -87,7 +87,7 @@ def test_records_a_shard_gains_between_the_passes_are_written_nowhere(
     """A collection still appending under --records-dir. A new game was never
     placed and may name a held-out card; a game the survey placed has records
     it never planned. Either way the write pass reads past what the survey
-    read, writes those records nowhere and counts them (V5 #1)."""
+    read, writes those records nowhere and counts them."""
     import gzip
 
     from effects.application import build_corpus as module
@@ -179,7 +179,7 @@ def test_a_damaged_last_member_after_a_marker_is_named_once_and_changes_nothing(
 def test_the_manifest_records_how_its_records_were_collected_and_read(
     tmp_path, a_corpus, caplog,
 ):
-    """P3a #17: per class, the kept records collected as forks, interventions,
+    """Per class, the kept records collected as forks, interventions,
     directed forks, aimed or degraded; the placement thresholds and the
     keyword table the build ran under; and what reading met without stopping:
     values outside the wire's closed lists and keys of a tree with no root."""

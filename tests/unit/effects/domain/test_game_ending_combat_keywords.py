@@ -1,4 +1,4 @@
-"""Gate 2's table reads no combat that ends the game (decision D13, finding 9.7).
+"""Gate 2's table reads no combat that ends the game (decision D13).
 
 Forge's state-based check tests the game-over condition first and returns
 before any creature is destroyed, so a combat whose damage ends the game shows

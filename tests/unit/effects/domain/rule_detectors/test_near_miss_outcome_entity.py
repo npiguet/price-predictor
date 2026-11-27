@@ -1,5 +1,4 @@
-"""A tag whose outcome is an absence names where the outcome would have fallen
-(finding 7.8).
+"""A tag whose outcome is an absence names where the outcome would have fallen.
 
 A rule test reads a rule's per-entity outputs at the tag's outcome entities,
 so a ``does_not_fire`` tag naming none gives its rule no reading on that
@@ -69,7 +68,7 @@ def test_an_absent_declaration_s_fires_side_names_the_acting_clause_s_targets(
 def test_a_qualified_near_miss_names_where_the_events_that_missed_fell(
         by_kind, gen3_sidecars):
     """A card's ``zone_change`` read for ``subject_is_token``: the event happened and
-    fails the qualifier, so the near miss names where it fell (task FR1: a qualified
+    fails the qualifier, so the near miss names where it fell (a qualified
     near miss needs an event of the declared type; without one it is no near miss)."""
     record = next(r for r in by_kind("resolution")
                   if r.moment.value == "resolution" and r.mode.value == "patched"

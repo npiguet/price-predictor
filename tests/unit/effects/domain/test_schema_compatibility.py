@@ -1,5 +1,5 @@
-"""The four rules that let later stages widen the corpus (T023), pinned to
-the gen-3 schema (T075, FR-019).
+"""The four rules that let later stages widen the corpus, pinned to
+the gen-3 schema (FR-019).
 
 The rules hold within a generation: a record says its own (``generation``).
 These tests pin the gen-3 schema — the envelope, the kinds and the card slot
@@ -95,7 +95,7 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "generation": "int",
     "aimed_at": "tuple[str, ...] | None",
     "directed": "DirectedTag | None",
-    # What a fork's copy left out (WP5), by kind; None on live records.
+    # What a fork's copy left out, by kind; None on live records.
     "copy_dropped": "tuple[tuple[str, int], ...] | None",
     # The kind of fork that wrote a record; None on live records.
     "fork_kind": "ForkKind | None",
@@ -129,8 +129,8 @@ _FROZEN_GEN3_ENTITY = (
     "granted_temporary", "lines", "stack_extras", "role",
 )
 #: A line's members (``FE/CardLines.java``): the ones always written, and the
-#: ones written only when set (``grant`` on a granted line, a member added
-#: by finding 1.7).
+#: ones written only when set (``grant`` on a granted line, a member the
+#: collector added later).
 _FROZEN_LINE_MEMBERS = {"keys", "kind", "granted"}
 _FROZEN_OPTIONAL_LINE_MEMBERS = {
     "grant", "active", "cast_with", "chosen", "fragment", "affected"}

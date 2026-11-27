@@ -207,7 +207,7 @@ def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
         assert torch.equal(value, second["parameters"][name]), name
 
 
-# ── the averaged weights (T4, story 7 acceptance 4) ─────────────────────
+# ── the averaged weights (research T4, story 7 acceptance 4) ─────────────────────
 
 
 def test_the_average_starts_one_epoch_after_the_curriculum_switch(in_process):

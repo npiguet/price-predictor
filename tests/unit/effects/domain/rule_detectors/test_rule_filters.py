@@ -1,4 +1,4 @@
-"""The parameters D4 added to tell one rule's records from another's.
+"""The parameters that tell one rule's records from another's.
 
 ``verdict_bit``'s candidate, source type, source designation and sorcery
 speed; ``outcome_event``'s source type, acting face and target face state;
@@ -44,7 +44,7 @@ def _decision(source, timing, key=_CAST):
 
 
 def test_a_cast_is_judged_by_its_card_s_type():
-    """D4: 301.1-310.1 each read the timing of their own card type's casts."""
+    """301.1-310.1 each read the timing of their own card type's casts."""
     bears = make_entity("E1", "grizzly bears", zone="hand", types=("Creature",))
     record = _decision(bears, True)
     timing = {"bit": "timing", "fires_when": True, "candidate": "cast"}
@@ -181,7 +181,7 @@ def test_subject_type_reads_the_event_s_subject():
     on_land = replace(record, payload=ResolutionPayload(events=(
         Event(type=EventType.UNATTACHED, subjects=("E3",)),)))
     declared = {"event": "unattached", "subject_type": "creature"}
-    # Unscoped, the near miss is no near miss (finding 7.1); a Pump line scopes it.
+    # Unscoped, the near miss is no near miss; a Pump line scopes it.
     assert OUTCOME.match(on_land, None, declared) is None
     assert OUTCOME.match(on_land, _Lines("SP$ Pump"), {**declared, "api": "Pump"}
                          ).polarity is Polarity.DOES_NOT_FIRE
@@ -239,7 +239,7 @@ def test_amount_change_compares_the_rewrite_s_amounts():
 
 
 class TestOneObjectCannotBeNamedTwice:
-    """601.2c (WP6): Undo ("return two target creatures") with one creature
+    """601.2c: Undo ("return two target creatures") with one creature
     out has a legal object but no legal choice of targets."""
 
     UNDO = _Lines("SP$ ChangeZone | TargetMin$ 2 | TargetMax$ 2 | ValidTgts$ Creature "

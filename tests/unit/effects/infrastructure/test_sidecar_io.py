@@ -1,4 +1,4 @@
-"""The provenance join on disk (T036).
+"""The provenance join on disk.
 
 The join's cases are the whole contract — a key resolves, a key was
 deduplicated away, a trait exists only at runtime, or the sidecar does not

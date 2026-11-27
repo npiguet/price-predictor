@@ -336,9 +336,9 @@ def _run_with_watchdog(pool: ForgeWorkerPool, seconds: float = 5.0) -> float:
 
 
 class TestAWorkerThatCannotStart:
-    """python R2: a missing JAR or ``java`` made ``spawn_worker`` raise, and a
-    worker failing at startup exited at once; both were restarted forever, at
-    full speed, collecting nothing and naming no reason."""
+    """A missing JAR or ``java`` makes ``spawn_worker`` raise, and a worker
+    failing at startup exits at once; neither is restarted forever at full
+    speed, collecting nothing and naming no reason: the run ends with an error."""
 
     def test_a_spawn_that_always_raises_ends_the_run_with_an_error(self, tmp_path):
         calls = []
@@ -403,8 +403,8 @@ class TestAWorkerThatCannotStart:
 
 
 class TestNoWorkerOutlivesTheRun:
-    """python R4: a worker spawned while the pool shut down was appended after
-    ``_terminate_all`` took its snapshot, and was never killed."""
+    """A worker spawned while the pool shuts down is killed too, though it is
+    appended after ``_terminate_all`` took its snapshot."""
 
     def test_a_worker_spawned_during_shutdown_is_killed(self, tmp_path):
         from tests.unit.sealed.conftest import FakeProcess
@@ -438,8 +438,8 @@ class TestNoWorkerOutlivesTheRun:
 
 
 class TestARunThatRaises:
-    """V4 #2 / TP1: ``run`` had no ``finally``, so a supervisor loop that
-    raised left every worker running (the monitor threads are daemons)."""
+    """``run`` kills every worker in a ``finally``, so a supervisor loop that
+    raises leaves none running (the monitor threads are daemons)."""
 
     @pytest.mark.real_process_kill
     def test_every_worker_is_killed_when_the_loop_raises(self, tmp_path):
@@ -470,8 +470,8 @@ class TestARunThatRaises:
 
 
 class TestSurvivors:
-    """V4 #8: a worker the kill could not end was counted as ended; and a
-    worker is killed once, a survivor being one still alive at the end."""
+    """A worker the kill cannot end is not counted as ended; and a worker is
+    killed once, a survivor being one still alive at the end."""
 
     def test_a_worker_the_kill_cannot_end_is_reported(self, tmp_path):
         pool = _pool(tmp_path / "out.txt", worker_count=1)
@@ -544,7 +544,7 @@ class TestSurvivors:
 
 
 class TestEveryWorkerIsBound:
-    """V4 #2: every spawned worker is bound to the supervisor's process, so a
+    """Every spawned worker is bound to the supervisor's process, so a
     hard-killed supervisor takes them with it."""
 
     def test_the_monitor_binds_each_worker_it_spawns(self, tmp_path):

@@ -1,5 +1,5 @@
 """A rule test of a per-entity rule counts only rows naming an outcome entity
-(finding 7.8, contracts/selection-set.md, Freeze step 4).
+(contracts/selection-set.md, Freeze step 4).
 
 The control score reads a rule's per-entity outputs at the tag's outcome
 entities, so a row naming none is read nowhere: for a rule whose effective
@@ -7,7 +7,7 @@ outputs are all per-entity, the freeze counts only rows naming one toward n
 and the standard error, and leaves out, naming it, a rule with a polarity
 holding none. A rule with a verdict, global or created-objects output keeps
 every row. The records are the real gen-3 fixture's, their games edited into
-the two halves, one game a record (a standard error counts games, finding 12.7).
+the two halves, one game a record (a standard error counts games).
 """
 
 from __future__ import annotations

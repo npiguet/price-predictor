@@ -1,4 +1,4 @@
-"""A collector refuses a degraded engine (finding 11.1, task K01c).
+"""A collector refuses a degraded engine.
 
 A run on stock Forge collected ``degraded`` records and a partly patched
 build collected with an empty channel, both exiting 0: no supervisor read the
@@ -154,7 +154,7 @@ def _record_conversion(run_dir, commit: str) -> None:
 
 
 class TestTheForgeBuildTheWorkersLoad:
-    """Finding 11.1, task KR1: a stale ../forge jar reads patched with no gap;
+    """A stale ../forge jar reads patched with no gap;
     its build commit, against the connector's and the conversion's, tells it."""
 
     def test_a_worker_on_another_forge_build_is_refused_naming_both_commits(self, tmp_path):

@@ -75,7 +75,7 @@ class TestAKeyALineDeclaresResolvesToThatLine:
         assert [sidecar.line_for(_chapter(n)) for n in range(3)] == chapters
 
     def test_a_detector_reads_the_chapter_s_own_script(self):
-        """Finding 7.9: a script parameter is read off the joined line, chapter
+        """A script parameter is read off the joined line, chapter
         III's trigger, not chapter I's. A real gen-3 resolution, edited to act
         through chapter III."""
         record = _record(GEN3_RECORDS, 31)

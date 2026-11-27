@@ -1,8 +1,7 @@
-"""``match-outcomes --effect-records`` refuses a degraded engine (finding 11.1,
-task K01c): the log scan at each status line reads the workers' status
-lines, asks the pool to stop once the engine is not ``patched`` with every
-hook, and ``run`` raises, unless ``allow_degraded``. Without effect records
-the workers keep no log and nothing is judged."""
+"""``match-outcomes --effect-records`` refuses a degraded engine: the log scan at each status line
+reads the workers' status lines, asks the pool to stop once the engine is not ``patched`` with every
+hook, and ``run`` raises, unless ``allow_degraded``. Without effect records the workers keep no log
+and nothing is judged."""
 
 from __future__ import annotations
 
@@ -123,7 +122,7 @@ def test_allow_degraded_lets_it_run_and_run_json_records_the_engine(tmp_path, ca
 
 
 def test_a_worker_on_another_forge_build_than_the_conversion_is_refused(tmp_path):
-    """Finding 11.1, task KR1: judged against the conversion the run records."""
+    """Judged against the conversion the run records."""
     other = "fedcba9876543210fedcba9876543210fedcba98"
     records = tmp_path / "records"
     records.mkdir()

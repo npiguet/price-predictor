@@ -1,4 +1,4 @@
-"""The gen-3 combats with several blocked attackers (T163)."""
+"""The gen-3 combats with several blocked attackers."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Declarations that tagged the wrong records (findings 7.2, 7.3, 7.6 / 603.6d, task F03).
+"""Declarations that tagged the wrong records (7.3, 7.6 / 603.6d).
 
 A cast rule's ``source_keyword`` is the card's, so an Aura's activated or granted
 ability was taken for its cast; 306.6 fired on every attacker; 701.5a on every

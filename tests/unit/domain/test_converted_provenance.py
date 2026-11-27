@@ -1,4 +1,4 @@
-"""The conversion record's rules (finding 11.3, task K03): reading the latest
+"""The conversion record's rules: reading the latest
 conversion from a ``run.json`` document, the JAR manifest's commit, and the
 refusal of a connector built at another Forge commit."""
 

@@ -1,5 +1,5 @@
 """The flags a run cannot start with are refused when the config is built,
-before any start-up work (finding 11.11)."""
+before any start-up work."""
 
 from __future__ import annotations
 

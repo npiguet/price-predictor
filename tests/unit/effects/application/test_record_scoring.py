@@ -1,4 +1,4 @@
-"""The breakdowns' per-record losses (T104).
+"""The breakdowns' per-record losses.
 
 Each record is scored on its own, by the trainer's own loss over a batch of
 one, so the breakdowns cannot drift from what training minimized.
@@ -12,7 +12,7 @@ from tests.unit.effects.builders import make_entity_targets
 
 
 class TestPerRecordLosses:
-    """``score_records``' per-record rows sum the trainer's own loss terms (T104)."""
+    """``score_records``' per-record rows sum the trainer's own loss terms."""
 
     def test_a_record_s_total_is_the_per_entity_loss_of_that_record_alone(self):
         import torch
@@ -71,7 +71,7 @@ class TestPerRecordLosses:
 
     def test_a_record_that_trains_no_gate_has_no_gate_key(self):
         """A playability record scores no gate: its result names none, so no
-        breakdown's gate mean counts a zero it never trained (finding 13.6)."""
+        breakdown's gate mean counts a zero it never trained."""
         import torch
 
         from effects.application.breakdowns import TOTAL

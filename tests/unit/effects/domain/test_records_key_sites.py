@@ -84,7 +84,7 @@ def test_emblems_are_never_named(make_record, snapshot):
 
 
 def test_a_gen3_entity_names_every_line_s_key_in_force_or_not(make_record, snapshot, ability_key):
-    """A face not up and a granted line join their sidecars too (T074)."""
+    """A face not up and a granted line join their sidecars too."""
     from effects.domain.state_snapshot import CardLine
 
     own, other_face, granted = _key("printed", "trigger"), _key("back"), _key("anthem")

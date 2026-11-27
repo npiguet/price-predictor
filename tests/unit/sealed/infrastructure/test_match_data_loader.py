@@ -277,7 +277,7 @@ class TestSetTextVectors:
     """``set_text_vectors`` splices encoder text vectors into the leading
     ``2 * encoder_d_model`` columns while leaving the trailing
     deterministic-feature slice untouched, and gradients flow back through
-    the source tensor (FR-007, T002, T012)."""
+    the source tensor (FR-007)."""
 
     def _table(self):
         encoder_d_model = 8

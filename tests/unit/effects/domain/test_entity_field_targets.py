@@ -1,4 +1,4 @@
-"""Where the per-entity head's gate and fields train (T122, T123).
+"""Where the per-entity head's gate and fields train.
 
 Root spec section 11.4: the legality outputs train on every entity they name,
 whatever the affected gate's target, and a playability record trains no gate.

@@ -1,4 +1,4 @@
-"""The evaluation report's breakdowns (T106; spec Story 6 scenarios 1–5).
+"""The evaluation report's breakdowns (spec Story 6 scenarios 1–5).
 
 The rows are real records from the fixture, grouped by the families
 ``effect_family`` gives them over their real sidecars; only the losses are made
@@ -210,7 +210,7 @@ class TestTheReport:
         assert bd.TOTAL in overall.values and f"text:{bd.TOTAL}" in overall.values
 
 
-# ── a half's control score (T169) ───────────────────────────────────────
+# ── a half's control score ───────────────────────────────────────
 
 
 class TestHalfScoreChecks:

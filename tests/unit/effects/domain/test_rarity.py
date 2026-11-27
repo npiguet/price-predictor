@@ -1,4 +1,4 @@
-"""``rarity_bucket`` at every edge (T012), and where a text's games come from."""
+"""``rarity_bucket`` at every edge, and where a text's games come from."""
 
 from __future__ import annotations
 

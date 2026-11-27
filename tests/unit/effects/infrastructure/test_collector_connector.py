@@ -60,7 +60,7 @@ class TestCollectorSupervisorWorkerLogs:
     def test_the_log_file_lives_under_the_run_s_logs_named_by_run_and_worker(
         self, tmp_path,
     ):
-        """V4 #20: the artifact layout puts every worker log under the run
+        """The artifact layout puts every worker log under the run
         directory's ``logs/``, never beside the shards."""
         records = tmp_path / "records"
         supervisor = _supervisor(records, run_id="run-xyz")
@@ -134,9 +134,9 @@ class TestPlayRound:
         assert stop(501) is True
 
     def test_each_round_counts_its_own_progress_file_under_logs(self, tmp_path):
-        """V4 #8: a worker the kill could not end appends to the progress
+        """A worker the kill could not end appends to the progress
         file it was started with; a second round sharing that file counted
-        the survivor's matches as its own. V4 #20: the file is under ``logs/``."""
+        the survivor's matches as its own. The file is under ``logs/``."""
         supervisor = self._supervisor(tmp_path)
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
@@ -287,7 +287,7 @@ class TestTheRoundShutsTheRealPoolDown:
 
 
 class TestTheRoundReportsItsWorkerLogs:
-    """V4 #3 / P1 #3: worker failure lines went to the logs and nowhere else;
+    """Worker failure lines went to the logs and nowhere else;
     nothing read them, so a run losing its matches reported success."""
 
     def _round_logging(self, tmp_path, lines_by_slot, *, workers=2, survivors=()):
@@ -340,7 +340,7 @@ class TestTheRoundReportsItsWorkerLogs:
         assert "outlived the kill (PID 4242)" in caplog.text
 
     def test_the_run_s_totals_reach_its_manifest(self, tmp_path):
-        """V4 #3, #4: the run id, the resolved caps and the failures land in
+        """The run id, the resolved caps and the failures land in
         the running command's entry of ``run.json``."""
         import json
 
@@ -374,7 +374,7 @@ class TestTheRoundReportsItsWorkerLogs:
     def test_the_hook_failure_report_reaches_the_round_report_and_the_manifest(
         self, tmp_path, caplog,
     ):
-        """WP7: the worker prints its hook-failure counts and nothing read them."""
+        """The worker prints its hook-failure counts and nothing read them."""
         report = status_line("a", hook_failures={
             "connector": {"RESOLVE": 3}, "forge": {"resolve": 3}})
         supervisor = self._round_logging(tmp_path, {0: [report]})
@@ -386,7 +386,7 @@ class TestTheRoundReportsItsWorkerLogs:
     def test_the_fork_refusal_tally_reaches_the_round_report_and_the_manifest(
         self, tmp_path, caplog,
     ):
-        """WP5: the worker prints how many forks declined, by kind and reason,
+        """The worker prints how many forks declined, by kind and reason,
         and nothing read it. Refusals are expected: no failure line, no
         warning, nothing a failure threshold counts."""
         import json
@@ -420,7 +420,7 @@ class TestTheRoundReportsItsWorkerLogs:
 
 
 class TestTheWorkersStopAtAGameEnd:
-    """V4 #1 / P1 #1: a round's end killed every worker mid-game."""
+    """A round's end killed every worker mid-game."""
 
     def test_each_worker_gets_its_stop_file_and_recycle_time(self, tmp_path):
         supervisor = _supervisor(tmp_path / "records", run_id="r1",
@@ -528,7 +528,7 @@ class TestTheWorkersStopAtAGameEnd:
 
 
 class TestTheDecksFileIsTheRunsOwn:
-    """V4 #20: the decks file the workers read sits under the run's
+    """The decks file the workers read sits under the run's
     ``decks/``, named by the run id, so two runs never share one."""
 
     def test_the_decks_path_is_under_decks_and_names_the_run(self, tmp_path):
@@ -582,9 +582,9 @@ class TestInterruptIsVisibleToTheCaller:
 
 
 class TestACtrlCDuringARoundIsNotLost:
-    """python R9: the supervisor latches ``interrupted`` from the pool right
+    """The supervisor latches ``interrupted`` from the pool right
     after ``run()`` returns, so the Ctrl-C that ended a round stops the run.
-    The pool's handlers last only as long as its run (finding 16.5)."""
+    The pool's handlers last only as long as its run."""
 
     def test_sigint_during_play_round_reads_as_interrupted_and_handlers_return(
         self, tmp_path,
@@ -617,7 +617,7 @@ class TestACtrlCDuringARoundIsNotLost:
 
 
 class TestTheSupervisorRecordsWhatItIsTold:
-    """P1 #11: the application's facts about a run (the cards Forge cannot
+    """The application's facts about a run (the cards Forge cannot
     resolve) reach the running command's run.json entry through the supervisor."""
 
     def test_record_writes_into_the_running_command_s_entry(self, tmp_path):
@@ -636,9 +636,8 @@ class TestTheSupervisorRecordsWhatItIsTold:
 
 
 class TestTheCapsReachTheJavaCommandLine:
-    """TP1: the cap flag to ``-D`` property chain was tested in links with the
-    joints untested. Here the whole chain: a collector's argv, the config the
-    CLI builds from it, the supervisor that config's caps go to, and the
+    """The whole cap flag to ``-D`` property chain, not its links one by one: a collector's argv,
+    the config the CLI builds from it, the supervisor that config's caps go to, and the
     command line the real launcher builds for a worker."""
 
     def test_every_flagged_cap_is_a_property_on_the_worker_s_command(self, tmp_path):

@@ -1,4 +1,4 @@
-"""What the acting item targets on the stack: a spell, or an ability (finding 3.3, B12).
+"""What the acting item targets on the stack: a spell, or an ability.
 
 ``refs.targets_on_stack`` names a target on the stack by its card, a spell
 and an ability alike. The acting item's ``targets`` link tells them apart: it

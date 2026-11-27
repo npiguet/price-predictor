@@ -161,7 +161,7 @@ class TestTheCli:
 
     def test_an_undecodable_line_is_a_failed_finding_and_the_rest_is_read(
             self, tmp_path, capsys):
-        """V5 #20: one line that does not decode is the shard's finding, not a
+        """One line that does not decode is the shard's finding, not a
         stop: the other shards and the lines before it are still measured."""
         with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
@@ -176,7 +176,7 @@ class TestTheCli:
         assert "[PASS] record_id is unique" in out
 
     def test_values_outside_the_closed_lists_are_watched_figures(self, tmp_path, capsys):
-        """The decode tally the read keeps (WP9) is reported, never judged."""
+        """The decode tally the read keeps is reported, never judged."""
         from effects.infrastructure.record_codec import record_to_dict
 
         with RawShardWriter(tmp_path, "run", 0, "L1") as writer:

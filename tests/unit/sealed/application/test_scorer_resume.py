@@ -63,7 +63,7 @@ def _save_phase_b_checkpoint(
 
 
 class TestArchitectureInheritance:
-    """T016 (US1): when --scorer-checkpoint bootstraps a fresh Phase B run, the
+    """When --scorer-checkpoint bootstraps a fresh Phase B run, the
     constructed scorer's architecture matches the checkpoint's stored config
     and the CLI architecture-flag defaults are ignored (FR-003a)."""
 
@@ -92,7 +92,7 @@ class TestArchitectureInheritance:
 
 
 class TestAdamWTwoGroupDispatch:
-    """T017 (US1): _build_optimizer returns one group in Phase A, two groups
+    """_build_optimizer returns one group in Phase A, two groups
     in Phase B; AdamW in both (FR-005a, FR-005)."""
 
     def test_phase_a_single_group(self, tmp_path):
@@ -170,7 +170,7 @@ def _config_built_by_cli(ns: Namespace) -> TrainScorerConfig:
 
 
 class TestResumePrecedence:
-    """T048 (US1): explicit CLI > resumed train_config > dataclass default
+    """Explicit CLI > resumed train_config > dataclass default
     (FR-010, contracts/checkpoint-format.md §Resume Precedence)."""
 
     def test_resume_inherits_train_config_when_no_cli_flags(self, tmp_path, capsys):

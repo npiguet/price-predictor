@@ -373,7 +373,7 @@ class TestSetCodeExtraction:
 
 
 class TestKeywordNamesSeedMultiWordKeywords:
-    """Finding 1.14: the multi-word keywords come from the definitions' names."""
+    """The multi-word keywords come from the definitions' names."""
 
     def test_names_with_a_space_or_hyphen_are_seeded_in_token_form(self, tmp_path: Path):
         from price_predictor.application.build_vocabulary import build_vocabulary

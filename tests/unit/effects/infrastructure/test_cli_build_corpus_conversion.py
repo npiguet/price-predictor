@@ -1,5 +1,5 @@
 """``build-corpus`` joins only against the conversion its records were
-collected against (finding 11.3, task KR4): each ``run.json`` under
+collected against: each ``run.json`` under
 ``--records-dir`` records the conversion its collection ran against, and the
 build exits 1, both conversions named, when one differs from the
 ``--cards-folder`` trees', or when a shard's directory records none."""

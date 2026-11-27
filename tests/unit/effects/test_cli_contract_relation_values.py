@@ -1,4 +1,4 @@
-"""``train-effect-model --relation-values on|off`` (T103, story 4 acceptance 5)."""
+"""``train-effect-model --relation-values on|off`` (story 4 acceptance 5)."""
 
 from __future__ import annotations
 
