@@ -383,3 +383,27 @@ class TestTheCombatGridsBoards:
         rows, _ = grid_records(record, (attacker, blocker), "blocker", variant)
         assert {(cell.state.global_.phase, cell.state.global_.combat_substep)
                 for row in rows for cell in row} == {(phase, substep)}
+
+
+class TestTheRuleMatrixFromTheNumbers:
+    """The freeze's outcomes come from the pair's numbers; the control score's
+    cells are the edited records: the two agree cell for cell."""
+
+    @pytest.mark.parametrize("variant", list(VARIANTS))
+    @pytest.mark.parametrize("which", ["blocker", "attacker"])
+    @pytest.mark.parametrize(("attacker", "blocker"), [
+        ((2, 3), (2, 3)), ((1, 1), (0, 9)), ((9, 2), (3, 12)), ((4, 4), (4, 4)),
+    ])
+    def test_it_equals_the_one_the_edited_records_give(self, variant, which, attacker, blocker):
+        import numpy as np
+
+        from effects.domain.grid_edits import grid_records
+
+        record = _record(
+            _creature("A", power=attacker[0], toughness=attacker[1]),
+            _creature("B", power=blocker[0], toughness=blocker[1]),
+        )
+        _, built = grid_records(record, ("A", "B"), which, variant)
+        computed = VARIANTS[variant].rule_matrix(record, ("A", "B"), which)
+        assert computed.dtype == built.dtype
+        np.testing.assert_array_equal(computed, built)

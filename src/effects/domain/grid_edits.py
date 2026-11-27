@@ -198,6 +198,44 @@ class Variant:
         return tuple(index for index, (power, toughness) in enumerate(square)
                      if which != "blocker" or self.survives_first_hit(power, toughness))
 
+    def rule_matrix(self, record, pair: tuple[str, str], which: str) -> np.ndarray:
+        """The rule's answer in each of the 8 x 8 cells of a grid of this
+        variant read at ``which``: :func:`grid_records`' second value, from the
+        pair's numbers without the 64 edited records. The striker's power and
+        the struck creature's toughness are the cell's; every other number is
+        the record's, damage cleared, the granted keyword added to its holder,
+        and a carried first hit marked on the blocker."""
+        attacker, blocker = pair
+        a, a_kw = side_of(record, attacker)
+        b, b_kw = side_of(record, blocker)
+        keywords = self._granted(a_kw, b_kw)
+        read = 1 if which == "blocker" else 0
+        return np.array([
+            [step_deaths(*self._cell_sides(a, b, (power, toughness), which), keywords,
+                         self.step)[read] for toughness in VALUES]
+            for power in VALUES], dtype=float)
+
+    def _granted(self, attacker: frozenset[str], blocker: frozenset[str]) -> BlockKeywords:
+        """The two creatures' keywords with this variant's grant on its holder."""
+        if self.keyword is None:
+            return BlockKeywords(attacker, blocker)
+        if self.holder == "attacker":
+            return BlockKeywords(attacker | {self.keyword}, blocker)
+        return BlockKeywords(attacker, blocker | {self.keyword})
+
+    def _cell_sides(self, attacker: tuple[int, int, int], blocker: tuple[int, int, int],
+                    cell: tuple[int, int], which: str) -> tuple[tuple[int, int, int], ...]:
+        """Both creatures as ``(power, toughness, marked damage)`` in one cell:
+        no damage, but a carried first hit on the blocker."""
+        power, toughness = cell
+        if which == "blocker":
+            attacker, blocker = (power, attacker[1], 0), (blocker[0], toughness, 0)
+        else:
+            attacker, blocker = (attacker[0], toughness, 0), (power, blocker[1], 0)
+        if self.carried:
+            blocker = (blocker[0], blocker[1], attacker[0])
+        return attacker, blocker
+
     def shows(self, record, pair: tuple[str, str], which: str) -> bool:
         """Whether a grid of this variant read at ``which`` can edit the
         record's ``(attacker, blocker)``: read at the attacker, every cell
@@ -737,8 +775,7 @@ class CombatGrid:
         variant = VARIANTS[self.variant]
         if pair is None or not variant.shows(record, pair, self.which):
             return None
-        _, rule = grid_records(record, pair, self.which, self.variant)
-        flat = rule.ravel()
+        flat = variant.rule_matrix(record, pair, self.which).ravel()
         return GridQualification(pair, tuple(
             float(flat[index]) for index in variant.held_cells(self.which)))
 
