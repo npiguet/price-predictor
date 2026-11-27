@@ -5,9 +5,10 @@
 Some of the effect model's output fields stay weak while the others improve, and training cannot
 respond: each record's share of training is fixed when the corpus is built. Gen-4 plans training
 that draws more of the records a weak field needs, from the whole corpus, with the mechanism and the
-controller still to choose. It also takes up the problems gen-3 leaves because fixing them needs the
-cards converted again, such as the hand-written copy of Forge's keyword reminder formatting. Nothing
-has run.
+controller still to choose. It also takes up what gen-3 leaves to a later generation: the model sees
+both players' hidden information, no output says which library cards a player knows, three outcome
+fields learn only from the times they happened, and keyword reminder text comes from a hand-written
+copy of Forge's formatting. Nothing has run.
 
 ## Background
 
@@ -36,6 +37,37 @@ average. The table reads gen-2's first arm, which predicts 46 output fields per 
 **Which fields are weak after gen-3 is not known until gen-3 trains.** Gen-3 adds outputs, reads
 every line of a permanent, ties each line to its card, rebalances by rule and puts every field on
 one scale in the loss. Gen-4 starts from gen-3's per-field scores rather than gen-2's.
+
+### The model sees both players' hidden information, though it is meant to play from one seat
+
+**Gen-3's input shows the model every card a player could not see.** Collection is omniscient by
+design: a record holds both hands, the real face of every face-down card and the order of each
+library. Gen-3's reader puts all of it in the input. It gives both hands' cards a slot each, and it
+reads a face-down card's real face and the ability lines printed on it whoever controls the card. A model meant
+to advise one player therefore learns from information that player never has.
+
+### No output says how many cards from the top of a library a player knows
+
+**After a scry, a look or a reveal, a player knows the top cards of a library, and gen-3 neither
+records nor predicts it.** Gen-3's collector records what happens to cards, not what each player
+knows about them. No output field can therefore say how many cards from the top of a library a
+player has seen.
+
+### Three outcome fields learn only from the times they happened
+
+**`door_unlocked`, `entered_in_combat` and `became_blocked` take no value when no event names them,
+so the model sees them only where they are 1.** An output field takes a silent value, 0 when no
+event names it, only where the collector writes its event for every occurrence. Gen-3's records miss
+some occurrences of these three:
+- A Room spell's entry unlocks the half that was cast and writes no `door_unlocked`.
+- Forge puts a creature into combat through `Dig`, `DigUntil`, `Meld`, `ChangeCombatants`, `Block`
+  or a sneak cast, and writes no `entered_attacking` or `entered_blocking`.
+- An attacker blocked by a creature put onto the battlefield blocking, or through `SwitchBlock` or
+  `Camouflage`, gets no `became_blocked`.
+
+A silent 0 on these fields would teach the model that the outcome did not happen in records where it
+did. The collector fix is planned for the end of gen-3's implementation, but the gen-3 records
+collected before it keep the gaps.
 
 ### Gen-3 leaves problems whose fix needs the cards converted again
 
@@ -110,6 +142,34 @@ choice between pools, an index and a database.
 training records.** Gen-3 scores each field that way on the card-disjoint stratum to judge
 checkpoints, so the training side and checkpoint selection share their bookkeeping and keep their
 data apart.
+
+### The model sees the board from one seat
+
+**Gen-4 shows each record from one player's seat and masks what that player cannot see.** The seat
+is the point-of-view player, chosen independently of the player who acts in the record. The reader
+replaces the other player's hand by a count of its cards, and drops the real faces of that player's
+face-down cards with the lines printed on them. It may also mask that player's library top and the cards it
+exiled face down. The records stay omniscient, so the change is in the reader alone and needs no
+recollection.
+
+**Three questions are open.**
+- Which seat a record is shown from: fixed for a whole game, drawn for each example, or both.
+- What an outcome the seat cannot predict does to the loss, such as a random discard from the other
+  player's hand or the card a tutor finds.
+- Which of the rules catalogue's 68 hidden-zone rules become unlearnable from one seat.
+
+### An output says how many cards from the top of a library are known
+
+**The collector records what each player knows of each library's top, and an output field predicts
+how many cards from the top a player knows.** A scry, a look or a reveal adds to that count, and a
+shuffle clears it.
+
+### The three outcome fields take their silent 0 once every record comes from the fixed collector
+
+**`door_unlocked`, `entered_in_combat` and `became_blocked` take a silent 0 on a resolution's effect
+half in a corpus whose records all come from the collector that writes every occurrence of their
+events.** A corpus that still holds records from before that fix keeps the three fields without a
+silent value.
 
 ### The converter writes each keyword line's filled reminder text
 
