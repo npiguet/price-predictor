@@ -117,17 +117,19 @@ def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
 def _require_counts(config: TrainEffectModelConfig) -> None:
     """The counts a run trains nothing with below one, and the two that may be
     zero (no lethality copies, no early stop) but not negative."""
-    for name in ("grad_accum", "batch_size", "steps_per_epoch", "epochs",
-                 "shards_per_epoch", "e_dim"):
-        if getattr(config, name) < 1:
-            raise ValueError(
-                f"--{name.replace('_', '-')} must be at least 1, got {getattr(config, name)}."
-            )
-    for name in ("lethality_copies", "patience"):
-        if getattr(config, name) < 0:
-            raise ValueError(
-                f"--{name.replace('_', '-')} must not be negative, got {getattr(config, name)}."
-            )
+    for name, least, wording in (
+        *((n, 1, "at least 1") for n in (
+            "grad_accum", "batch_size", "steps_per_epoch", "epochs", "shards_per_epoch", "e_dim")),
+        *((n, 0, "negative") for n in ("lethality_copies", "patience")),
+    ):
+        _require_at_least(config, name, least, wording)
+
+
+def _require_at_least(config: TrainEffectModelConfig, name: str, least: int, wording: str) -> None:
+    value = getattr(config, name)
+    if value < least:
+        verb = "must not be" if wording == "negative" else "must be"
+        raise ValueError(f"--{name.replace('_', '-')} {verb} {wording}, got {value}.")
 
 
 def _require_whole_accumulations(config: TrainEffectModelConfig) -> None:
