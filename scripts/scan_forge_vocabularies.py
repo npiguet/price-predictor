@@ -11,6 +11,10 @@ section 9.4, section 9.6):
 - **Named counters** (``forge-game/.../card/CounterEnumType.java``): each counter type
   as a record spells it (its name upper-cased, then
   ``effects.domain.state_snapshot.normalize_counter_type``), one scalar input each.
+- **Pending-event modes** (``TriggerType.java`` and ``ReplacementType.java``): the name of
+  the trigger or replacement a hook's record names as its ``mode`` (the connector writes
+  ``String.valueOf(trait.getMode())``), trigger names first, then the replacement names no
+  trigger has, in each enum's order; the pending event's mode one-hot reads it.
 - **Keyword counters** (``CounterKeywordType.java``'s rule 122.1b list): a counter that
   grants a keyword, read as a granted keyword line rather than as a scalar.
 
@@ -39,6 +43,10 @@ TYPE_LISTS = Path("forge-gui/res/lists/TypeLists.txt")
 COUNTER_ENUM = Path("forge-game/src/main/java/forge/game/card/CounterEnumType.java")
 KEYWORD_COUNTERS = Path("forge-game/src/main/java/forge/game/card/CounterKeywordType.java")
 
+TRIGGER_TYPE = Path("forge-game/src/main/java/forge/game/trigger/TriggerType.java")
+REPLACEMENT_TYPE = Path("forge-game/src/main/java/forge/game/replacement/ReplacementType.java")
+
+_ENUM_CONSTANT = re.compile(r"^\s+([A-Z][A-Za-z0-9_]*)\s*\(", re.M)
 _ENUM_ENTRY = re.compile(r"^\s+([A-Z][A-Z0-9_]*)\((.*)\),?\s*$", re.M)
 _LEADING_STRINGS = re.compile(r'^\s*"([^"]*)"\s*,\s*"([^"]*)"')
 _KEYWORD_COUNTER_LIST = re.compile(r"keywordCounter\s*=\s*ImmutableList\.of\((.*?)\);", re.S)
@@ -107,6 +115,23 @@ def keyword_counters(counter_keyword_type: str) -> tuple[str, ...]:
     return tuple(normalize_keyword(name) for name in re.findall(r'"([^"]*)"', match.group(1)))
 
 
+def enum_constants(enum_source: str) -> tuple[str, ...]:
+    """The constants of the first enum in ``enum_source``, in declaration order: the
+    entries before the enum's first ``;``, each ``Name(Class.class)``."""
+    start = enum_source.index("enum ")
+    body = enum_source[enum_source.index("{", start):]
+    return tuple(_ENUM_CONSTANT.findall(body[: body.index(";")]))
+
+
+def pending_event_modes(trigger_type: str, replacement_type: str) -> tuple[str, ...]:
+    """Every name a hook's ``mode`` can carry: ``TriggerType``'s, then the
+    ``ReplacementType`` names no trigger shares (``Moved``, ``AddCounter``)."""
+    found: dict[str, None] = dict.fromkeys(enum_constants(trigger_type))
+    for name in enum_constants(replacement_type):
+        found.setdefault(name, None)
+    return tuple(found)
+
+
 def scan(forge: Path) -> dict[str, tuple[str, ...]]:
     def read(path: Path) -> str:
         return (forge / path).read_text(encoding="utf-8", errors="replace")
@@ -116,6 +141,7 @@ def scan(forge: Path) -> dict[str, tuple[str, ...]]:
         "SUBTYPE_SECTIONS": subtype_sections(read(TYPE_LISTS)),
         "NAMED_COUNTERS": named_counters(read(COUNTER_ENUM)),
         "KEYWORD_COUNTERS": keyword_counters(read(KEYWORD_COUNTERS)),
+        "PENDING_EVENT_MODES": pending_event_modes(read(TRIGGER_TYPE), read(REPLACEMENT_TYPE)),
     }
 
 
@@ -124,6 +150,8 @@ _COMMENTS = {
     "SUBTYPE_SECTIONS": "Each ``TypeLists.txt`` section and the end of its rows in ``SUBTYPES``.",
     "NAMED_COUNTERS": "Counter types, in ``CounterEnumType`` order, as a record spells them.",
     "KEYWORD_COUNTERS": "The keywords a counter grants (rule 122.1b), in the package's spelling.",
+    "PENDING_EVENT_MODES": (
+        "Every hook ``mode``: ``TriggerType``'s names, then ``ReplacementType``'s others."),
 }
 
 

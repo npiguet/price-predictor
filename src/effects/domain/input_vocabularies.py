@@ -16,6 +16,7 @@ from types import MappingProxyType
 
 from effects.domain.event_schema import EventType
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
+from effects.domain.forge_vocabularies import PENDING_EVENT_MODES as FORGE_PENDING_EVENT_MODES
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import (
     Moment,
@@ -92,27 +93,10 @@ CHOSEN_PARITIES: tuple[str, ...] = ("even", "odd")
 EVENT_TYPES: tuple[str, ...] = tuple(event.value for event in EventType)
 #: The pending event's ``mode`` (the engine's name for the hook that wrote
 #: it: a ``state_flag_change`` is a phase, a room entered or an attacker
-#: unblocked only by it): every mode the gen-3 fixture's and the five
-#: 2026-11-21/22 review pilots' pending events carry, in case-blind
-#: alphabetical order. The corpus manifest lists no event modes.
-PENDING_EVENT_MODES: tuple[str, ...] = (
-    "AbilityCast", "AddCounter", "Always", "Attached", "AttackerBlocked",
-    "AttackerBlockedByCreature", "AttackersDeclared", "AttackersDeclaredOneTarget",
-    "AttackerUnblocked", "Attacks", "BecomeMonstrous", "BecomesSaddled",
-    "BecomesTarget", "BeginPhase", "Blocks", "ChangesController", "ChangesZone",
-    "ChangesZoneAll", "ClassLevelGained", "CollectEvidence", "CommitCrime",
-    "CounterAdded", "CounterAddedOnce", "CounterRemoved", "CounterRemovedOnce",
-    "CreateToken", "Crewed", "Cycled", "DamageDealtOnce", "DamageDone",
-    "DamageDoneOnce", "DamageDoneOnceByController", "DayTimeChanges", "Destroy",
-    "Discarded", "DiscardedAll", "Draw", "Drawn", "Enlisted", "Evolved",
-    "ExcessDamageAll", "Exerted", "Exiled", "Exploited", "GainLife", "GameLoss",
-    "Immediate", "LandPlayed", "LifeGained", "LifeLost", "LifeLostAll", "LifeReduced",
-    "ManaExpend", "ManifestDread", "Moved", "Mutates", "PayCumulativeUpkeep", "PayEcho",
-    "Phase", "Proliferate", "RingTemptsYou", "RollDice", "RolledDieOnce", "RoomEntered",
-    "Sacrificed", "SacrificedOnce", "SpellCast", "SpellCastOrCopy", "Surveil",
-    "TakesInitiative", "Taps", "TapsForMana", "TokenCreated", "Transformed",
-    "TurnBegin", "TurnFaceUp", "Unattached", "UnlockDoor", "Untap", "Untaps", "Vote",
-)
+#: unblocked only by it): every ``TriggerType`` and ``ReplacementType`` name
+#: Forge defines, so no mode a hook can name falls into "other". Generated
+#: (``scripts/scan_forge_vocabularies.py``), in Forge's order.
+PENDING_EVENT_MODES: tuple[str, ...] = FORGE_PENDING_EVENT_MODES
 
 # Forge's own spellings of phases, counters and protection miss the
 # vocabularies above and would land in "other"; the layout aliases them.

@@ -34,6 +34,7 @@ from effects.domain.input_vocabularies import (
     ENTITY_ROLES,
     PENDING_EVENT_MODES,
     ZONES,
+    one_hot,
 )
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.slot_widths import layout_widths
@@ -107,15 +108,30 @@ def test_the_card_slot_keeps_its_width_and_parts():
 
 
 def test_the_global_and_player_slots_keep_their_widths():
-    """The ``[GLOBAL]`` slot is 226 features, 83 of them the pending event's
-    mode, one-hot over the 81 :data:`PENDING_EVENT_MODES` and "other", and
+    """The ``[GLOBAL]`` slot is 325 features, 182 of them the pending event's
+    mode, one-hot over the 180 :data:`PENDING_EVENT_MODES` and "other", and
     its combat bit, and 16 its from- and to-zone, each one-hot over
     :data:`ZONES` and "other"; a player slot is 116, three the pending
     event's subject, defender and cause."""
-    assert len(PENDING_EVENT_MODES) == 81
+    assert len(PENDING_EVENT_MODES) == 180
     widths = layout_widths()
-    assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (226, 116)
+    assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (325, 116)
     assert widths[SlotKind.CARD] == 575
+
+
+# The modes the 2026-11-23 pilot's pending events carried that the hand-made list lacked.
+_PILOT_MODES_ONCE_OTHER = (
+    "DamageAll", "BecomesCrewed", "Scry", "FullyUnlock", "BecomeMonarch", "PhaseIn",
+    "FlippedCoin", "CounterAddedAll", "Discover", "Saddled", "Foretell", "CaseSolved",
+    "Explores", "Countered", "Forage", "Trains",
+)
+
+
+@pytest.mark.parametrize("mode", _PILOT_MODES_ONCE_OTHER)
+def test_a_mode_the_pilot_fired_has_a_slot_of_its_own(mode):
+    """The list is Forge's trigger and replacement names, not a survey: a mode
+    off the survey fell into "other" (CPD1 G-3)."""
+    assert one_hot(mode, PENDING_EVENT_MODES).index(1.0) < len(PENDING_EVENT_MODES)
 
 
 def test_the_layout_widths_are_what_the_slot_builders_emit_on_real_records():

@@ -69,9 +69,34 @@ def test_keyword_counters_are_in_the_package_s_spelling():
         "flying", "first_strike", "double_strike")
 
 
+_TRIGGER_TYPE = """public enum TriggerType {
+    Abandoned(TriggerAbandoned.class),
+    Moved(TriggerMoved.class),
+    Vote(TriggerVote.class)
+    ;
+    Class<? extends Trigger> clasz;
+    TriggerType(Class<? extends Trigger> clasz) {}
+}
+"""
+
+_REPLACEMENT_TYPE = """public enum ReplacementType {
+    AddCounter(ReplaceAddCounter.class),
+    Moved(ReplaceMoved.class);
+
+    ReplacementType(Class<? extends ReplacementEffect> cls) {}
+}
+"""
+
+
+def test_a_mode_is_a_trigger_or_a_replacement_name_each_once():
+    assert sfv.pending_event_modes(_TRIGGER_TYPE, _REPLACEMENT_TYPE) == (
+        "Abandoned", "Moved", "Vote", "AddCounter")
+
+
 def test_the_written_module_reads_back(tmp_path):
     lists = {"SUBTYPES": ("human",), "SUBTYPE_SECTIONS": (("CreatureTypes", 1),),
-             "NAMED_COUNTERS": ("P1P1",), "KEYWORD_COUNTERS": ("flying",)}
+             "NAMED_COUNTERS": ("P1P1",), "KEYWORD_COUNTERS": ("flying",),
+             "PENDING_EVENT_MODES": ("Moved",)}
     target = tmp_path / "vocabularies.py"
     target.write_text(sfv.render(lists), encoding="utf-8")
     namespace: dict = {}
