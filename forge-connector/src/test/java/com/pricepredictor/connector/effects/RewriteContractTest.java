@@ -196,10 +196,8 @@ class RewriteContractTest {
                 replacement, before, after, ReplacementResult.Prevented, ran},
                 HookShapes.Replacement.class);
 
-        assertTrue(line.contains("\"to_zone\":\"graveyard\""), line);
-        assertTrue(line.contains("\"to_zone\":\"exile\""), line);
-        assertTrue(line.contains("\"result\":\"prevented\""), line);
-        assertTrue(line.contains("cardsfolder/r/rest_in_peace.txt"), line);
+        assertMentions(line, "\"to_zone\":\"graveyard\"", "\"to_zone\":\"exile\"",
+                "\"result\":\"prevented\"", "cardsfolder/r/rest_in_peace.txt");
     }
 
     /**
@@ -340,13 +338,9 @@ class RewriteContractTest {
                 Map.of("Affected", rest, "Destination", ZoneType.Exile),
                 ReplacementResult.Replaced, null));
 
-        assertTrue(json.contains("\"kind\":\"rewrite\""), json);
-        assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
-        assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
-        assertTrue(json.contains("\"ability_unresolved\":null"), json);
-        assertTrue(json.contains(
-                "\"source\":\"" + Refs.of(rest) + "\""), json);
-        assertTrue(json.contains("\"incoming\":{\"type\":\"zone_change\""), json);
+        assertMentions(json, "\"kind\":\"rewrite\"", "\"trait_kind\":\"replacement\"",
+                "cardsfolder/r/rest_in_peace.txt", "\"ability_unresolved\":null",
+                "\"source\":\"" + Refs.of(rest) + "\"", "\"incoming\":{\"type\":\"zone_change\"");
     }
 
     /**
@@ -376,12 +370,11 @@ class RewriteContractTest {
                 prevention, Map.of("Affected", paralyze), Map.of("Affected", paralyze),
                 ReplacementResult.Skipped, null));
 
-        assertTrue(json.contains("\"result\":\"skipped\""), json);
+        assertMentions(json, "\"result\":\"skipped\"", "\"mode\":\"Untap\"");
         assertTrue(json.contains("\"outgoing\":null"),
                 "null, never a copy of incoming: " + json);
         assertTrue(json.contains("\"replaced_by\":[]"),
                 "a skip returns above the ability that would have run: " + json);
-        assertTrue(json.contains("\"mode\":\"Untap\""), json);
     }
 
     /**
@@ -435,13 +428,28 @@ class RewriteContractTest {
         Tally updated = tallyAfter(before, after, ReplacementResult.Updated);
         Tally declined = tallyAfter(before, before, ReplacementResult.NotReplaced);
 
+        assertUpdatedWasRewrite(start, updated);
+        assertDeclinedWasRecordOnly(updated, declined);
+    }
+
+    private static void assertUpdatedWasRewrite(Tally start, Tally updated) {
         assertEquals(start.records() + 1, updated.records());
         assertEquals(start.rewritten() + 1, updated.rewritten(),
                 "a destination moved in place is a rewrite");
+    }
+
+    private static void assertDeclinedWasRecordOnly(Tally updated, Tally declined) {
         assertEquals(updated.records() + 1, declined.records(),
                 "a replacement that declined is still a record");
         assertEquals(updated.rewritten(), declined.rewritten(),
                 "a replacement that declined rewrote nothing");
+    }
+
+    /** Asserts {@code text} holds each fragment, naming the text when one is missing. */
+    private static void assertMentions(String text, String... fragments) {
+        for (String fragment : fragments) {
+            assertTrue(text.contains(fragment), text);
+        }
     }
 
     /**
