@@ -123,27 +123,34 @@ class ForkIsolationTest {
         return TestCaps.caps().randomSeat(new TestCaps.RandomSeat(1.0, 0.5));
     }
 
+    /** One seeded match: its name (the directory its shards go to), its two decks and its seed. */
+    private record Pairing(String name, Deck a, Deck b, long seed) {
+    }
+
     /** The live records one seeded match writes, in order. */
-    private List<String> liveRecords(String name, Deck a, Deck b, long seed, CollectionCaps caps)
-            throws IOException {
-        Path out = Files.createDirectory(dir.resolve(name));
+    private List<String> liveRecords(Pairing match, CollectionCaps caps) throws IOException {
+        Path out = Files.createDirectory(dir.resolve(match.name()));
         RecordShardWriter writer = new RecordShardWriter(out, new ShardId("run", 0, "l1"));
         Random was = MyRandom.getRandom();
-        MyRandom.setRandom(new Random(seed));
+        MyRandom.setRandom(new Random(match.seed()));
         try {
-            new GamePlayer(new GamePlayer.Config(1, writer, caps, WorkerStop.NEVER, Match::startGame, () -> START + seed))
-                    .playMatch(a, b);
+            new GamePlayer(new GamePlayer.Config(
+                    1, writer, caps, WorkerStop.NEVER, Match::startGame, () -> START + match.seed()))
+                    .playMatch(match.a(), match.b());
         } finally {
             MyRandom.setRandom(was);
             writer.close();
         }
+        return LiveRecordIds.renumbered(collected(out));
+    }
+
+    /** Every record the match's shards hold, sorted into the fork and live lists; the live ones, as written without their timestamp. */
+    private List<String> collected(Path out) throws IOException {
         List<String> written = new ArrayList<>();
-        int forked = 0;
         try (Stream<Path> files = Files.walk(out)) {
             for (Path shard : files.filter(p -> p.toString().endsWith(".jsonl.gz")).sorted().toList()) {
                 for (String line : lines(shard)) {
                     if (line.contains("\"fork\":true")) {
-                        forked++;
                         forkRecords.add(line);
                     } else {
                         liveWritten.add(line);
@@ -152,64 +159,11 @@ class ForkIsolationTest {
                 }
             }
         }
-        return renumbered(written);
+        return written;
     }
-
-    /**
-     * The live records with each record id that names one of them (its own,
-     * a link's, a mirror's) replaced by the record's place among them: a
-     * fork's records take ids from the same sequence, which is no change to
-     * the live game.
-     */
-    private static List<String> renumbered(List<String> written) {
-        java.util.Map<String, String> place = new java.util.HashMap<>();
-        for (String line : written) {
-            java.util.regex.Matcher own = RECORD_ID.matcher(line);
-            assertTrue(own.find(), "every record has an id");
-            place.put(own.group(1), "#" + place.size());
-        }
-        List<String> live = new ArrayList<>();
-        for (String line : written) {
-            java.util.regex.Matcher id = ID_MEMBER.matcher(line);
-            StringBuilder out = new StringBuilder();
-            while (id.find()) {
-                String to = id.group(1).equals("game_id") ? id.group(2)
-                        : place.getOrDefault(id.group(2), "fork:" + id.group(2));
-                id.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(
-                        "\"" + id.group(1) + "\":\"" + to + "\""));
-            }
-            id.appendTail(out);
-            live.add(out.toString());
-        }
-        // Link ids too: a fork's cost and effect halves take them from the same sequence.
-        // So do a delayed trigger's (D<trigger id>), from the counter every game of the JVM shares.
-        java.util.Map<String, String> links = new java.util.HashMap<>();
-        List<String> relinked = new ArrayList<>();
-        for (String line : live) {
-            java.util.regex.Matcher link = LINK_ID.matcher(line);
-            StringBuilder out = new StringBuilder();
-            while (link.find()) {
-                String to = links.computeIfAbsent(link.group(), l -> "link#" + links.size());
-                link.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(to));
-            }
-            link.appendTail(out);
-            relinked.add(out.toString());
-        }
-        return relinked;
-    }
-
-    private static final java.util.regex.Pattern LINK_ID =
-            java.util.regex.Pattern.compile("run\\.0-l1\\.\\d+\\.link\\.\\d+|(?<=\")D\\d+(?=\")");
 
     private static final java.util.regex.Pattern DELAYED_TRIGGER_ID =
             java.util.regex.Pattern.compile("\"D\\d+\"");
-
-    private static final java.util.regex.Pattern RECORD_ID =
-            java.util.regex.Pattern.compile("\"record_id\":\"([^\"]+)\"");
-
-    /** A member whose value is an id of this run's sequence. */
-    private static final java.util.regex.Pattern ID_MEMBER =
-            java.util.regex.Pattern.compile("\"(\\w+)\":\"(run\\.0-l1\\.\\d+)\"");
 
     private static List<String> lines(Path shard) throws IOException {
         try (InputStream in = new GZIPInputStream(Files.newInputStream(shard))) {
@@ -223,15 +177,15 @@ class ForkIsolationTest {
         }
     }
 
-    private void assertForksLeaveTheLiveGame(String name, Deck a, Deck b, long seed) throws IOException {
-        assertForksLeaveTheLiveGame(name, a, b, seed, off(), allForks());
+    private void assertForksLeaveTheLiveGame(Pairing match) throws IOException {
+        assertForksLeaveTheLiveGame(match, off(), allForks());
     }
 
-    private void assertForksLeaveTheLiveGame(String name, Deck a, Deck b, long seed,
-                                             CollectionCaps withoutForks, CollectionCaps withForks)
-            throws IOException {
-        List<String> off = liveRecords(name + "-off", a, b, seed, withoutForks);
-        List<String> on = liveRecords(name + "-on", a, b, seed, withForks);
+    private void assertForksLeaveTheLiveGame(
+            Pairing match, CollectionCaps withoutForks, CollectionCaps withForks) throws IOException {
+        String name = match.name();
+        List<String> off = liveRecords(new Pairing(name + "-off", match.a(), match.b(), match.seed()), withoutForks);
+        List<String> on = liveRecords(new Pairing(name + "-on", match.a(), match.b(), match.seed()), withForks);
         assertTrue(off.size() > 10, name + ": the match was played");
         for (int i = 0; i < Math.min(off.size(), on.size()); i++) {
             assertEquals(off.get(i), on.get(i), name + ": live record #" + i);
@@ -241,13 +195,14 @@ class ForkIsolationTest {
 
     @Test
     void forksLeaveABurnMirrorsLiveRecordsAsTheyWere() throws IOException {
-        assertForksLeaveTheLiveGame("burn", burn(), burn(), 11);
+        assertForksLeaveTheLiveGame(new Pairing("burn", burn(), burn(), 11));
     }
 
     @Test
     void forksLeaveAMixedMatchsLiveRecordsAsTheyWere() throws IOException {
         for (long seed : new long[] {11, 12, 13, 14, 15, 16}) {
-            assertForksLeaveTheLiveGame("mixed" + seed, boros("Savannah Lions"), boros("Savannah Lions"), seed);
+            assertForksLeaveTheLiveGame(
+                    new Pairing("mixed" + seed, boros("Savannah Lions"), boros("Savannah Lions"), seed));
         }
         // The boards hold what outlives a resolution: a delayed trigger, a
         // keyword counter and a lasting effect.
@@ -286,7 +241,7 @@ class ForkIsolationTest {
     @Test
     void forksForcingAPlayLeaveTheLiveRecordsAsTheyWere() throws IOException {
         for (long seed : new long[] {21, 22, 23}) {
-            assertForksLeaveTheLiveGame("forced" + seed, rakdos(), rakdos(), seed);
+            assertForksLeaveTheLiveGame(new Pairing("forced" + seed, rakdos(), rakdos(), seed));
         }
         assertTrue(forcedCastRecorded(false), "a plain AI seat's forced cast");
     }
@@ -304,7 +259,7 @@ class ForkIsolationTest {
         // seat make a 704.5f fork's forced cast (asserted below); a change to
         // how game seeds are derived re-pins them.
         for (long seed : new long[] {38, 39, 40, 41, 42, 43, 44, 45}) {
-            assertForksLeaveTheLiveGame("random" + seed, boros(), rakdos(), seed,
+            assertForksLeaveTheLiveGame(new Pairing("random" + seed, boros(), rakdos(), seed),
                     off(randomSeat()), allForks(randomSeat()));
         }
         assertTrue(forcedCastRecorded(true), "a random seat's forced cast");
