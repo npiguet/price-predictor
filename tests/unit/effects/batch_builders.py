@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,10 +26,19 @@ class PreparerOptions:
     rarity: Mapping[str, int] | None = None
 
 
+def _refuse_option_names(config) -> None:
+    taken = sorted(config.keys() & {field.name for field in fields(PreparerOptions)})
+    if taken:
+        raise TypeError(f"make_preparer: pass {taken} in PreparerOptions, not as config")
+
+
 def make_preparer(directory, options: PreparerOptions = PreparerOptions(), **config):
     """A ``StepPreparer`` over a vocabulary of the specials alone, for tests
     about how it builds batchers rather than about what they read; ``config``
-    overrides ``TrainEffectModelConfig`` fields."""
+    overrides ``TrainEffectModelConfig`` fields, except a name
+    ``PreparerOptions`` holds: ``seed`` is both, and a config seed passed
+    here would silently leave the preparer's at its default."""
+    _refuse_option_names(config)
     from effects.application.step_preparation import PreparerSettings, StepPreparer
     from effects.application.train_effect_model import TrainEffectModelConfig
     from effects.domain.split import CorpusSplit
