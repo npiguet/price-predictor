@@ -20,7 +20,7 @@ pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cu126
 (cd forge-connector && mvn install -DskipTests)
 
 pytest tests/unit                  # the unit tests; a bare pytest also runs tests/integration, which drives Forge JVMs
-pytest tests/unit -n 6 -q          # the same on six pytest-xdist workers (about 8 minutes); the block-end run
+pytest tests/unit -n 6 --dist loadfile -q   # the same on six pytest-xdist workers (about 7 minutes), each file on one worker in order (test_no_real_process_kill.py's tests run in pairs); the block-end run
 ```
 
 ## Modules
