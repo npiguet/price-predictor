@@ -15,6 +15,7 @@ import static com.pricepredictor.connector.effects.SnapshotReading.entitiesIn;
 import static com.pricepredictor.connector.effects.SnapshotReading.entityOf;
 import static com.pricepredictor.connector.effects.SnapshotReading.keywordLine;
 import static com.pricepredictor.connector.effects.SnapshotReading.linesOf;
+import static com.pricepredictor.connector.effects.SnapshotReading.valuesOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -80,9 +81,8 @@ class SnapshotCopiesAndFacesTest {
                 new SnapshotBuilder(board.game).ofCandidate(stomp).render()).stream()
                 .filter(e -> Refs.of(giant).equals(e.get("id"))).findFirst().orElseThrow();
 
-        assertEquals("Stomp", entity.get("name"), entity.toString());
-        assertEquals(List.of("instant"), entity.get("types"), entity.toString());
-        assertEquals("hand", entity.get("zone"), entity.toString());
+        assertEquals(List.of("Stomp", List.of("instant"), "hand"),
+                valuesOf(entity, "name", "types", "zone"), entity.toString());
         assertEquals("Bonecrusher Giant", giant.getName(), "the game's card is untouched");
     }
 
