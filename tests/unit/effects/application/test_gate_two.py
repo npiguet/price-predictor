@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
+from typing import Any
 
 import pytest
 import torch
@@ -65,10 +66,7 @@ from effects.domain.state_snapshot import (
     CardLine,
     CombatStatus,
     EntityState,
-    GlobalState,
-    GrantedTemporary,
     PlayerState,
-    PowerToughness,
     Refs,
     StateSnapshot,
 )
@@ -76,11 +74,15 @@ from effects.domain.surface_builder import NO_STRIP
 from effects.domain.surface_collation import gather_entities
 from tests.unit.effects.builders import (
     keyword_score,
-    lines_of,
     make_batcher,
     make_entity,
     make_record,
     slots_of_kind,
+)
+from tests.unit.effects.damage_step_boards import (
+    CreatureTraits,
+    creature,
+    damage_step_global,
 )
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
@@ -135,29 +137,8 @@ def _active_statics(lines: tuple[CardLine, ...]) -> tuple[CardLine, ...]:
                  for line in lines)
 
 
-def _creature(
-    entity_id: str,
-    power: int,
-    toughness: int,
-    *,
-    controller: str = "P0",
-    keywords: tuple[str, ...] = (),
-    printed: tuple[ProvenanceKey, ...] = (),
-    combat: CombatStatus | None = None,
-) -> EntityState:
-    return EntityState(
-        id=entity_id, name=entity_id, zone="battlefield", controller=controller,
-        types=("creature",), pt=PowerToughness(base=(power, toughness)),
-        combat=combat, lines=_active_statics(lines_of(printed)),
-        granted_temporary=GrantedTemporary(keywords=keywords),
-    )
-
-
-#: Each damage step's phase, keyed by its substep, as a real record spells them.
-_STEPS = {
-    "first_strike": "combat_first_strike_damage",
-    "regular": "combat_damage",
-}
+def _creature(entity_id: str, power: int, toughness: int, **traits: Any) -> EntityState:
+    return creature(entity_id, power, toughness, CreatureTraits(active_statics=True, **traits))
 
 
 def _combat_record(
@@ -168,10 +149,7 @@ def _combat_record(
         kind=RecordKind.COMBAT, actor_player="P0",
         payload=CombatPayload(attackers=("A",)),
         state=StateSnapshot(
-            global_=GlobalState(
-                turn=4, phase=_STEPS[substep], active="P0", priority="P0",
-                stack_size=0, combat_substep=substep,
-            ),
+            global_=damage_step_global(substep),
             players=(
                 PlayerState(id="P0", life=20, hand=3, library=30, graveyard=1,
                             max_land_plays=1),

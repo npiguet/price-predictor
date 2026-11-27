@@ -21,6 +21,7 @@ every rule these predicates encode is a rule about two creatures.
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 import pytest
 
@@ -36,18 +37,19 @@ from effects.domain.records import RecordKind
 from effects.domain.state_snapshot import (
     CombatStatus,
     EntityState,
-    GlobalState,
-    GrantedTemporary,
     PlayerState,
-    PowerToughness,
     StateSnapshot,
 )
 from tests.unit.effects.builders import (
     fresh_interpreter_env,
-    lines_of,
     make_entity,
     make_record,
     make_snapshot,
+)
+from tests.unit.effects.damage_step_boards import (
+    CreatureTraits,
+    creature,
+    damage_step_global,
 )
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
@@ -60,37 +62,13 @@ _PLAYER_DEFENDER = "P1"
 
 
 
-def _creature(
-    entity_id: str,
-    power: int,
-    toughness: int,
-    *,
-    controller: str = "P0",
-    damage: int = 0,
-    keywords: tuple[str, ...] = (),
-    printed: tuple[ProvenanceKey, ...] = (),
-    combat: CombatStatus | None = None,
-) -> EntityState:
-    return make_entity(
-        entity_id, entity_id, controller=controller, types=("creature",),
-        pt=PowerToughness(base=(power, toughness)), damage=damage, combat=combat,
-        lines=lines_of(printed), granted_temporary=GrantedTemporary(keywords=keywords),
-    )
-
-
-#: Each damage step's phase, keyed by its substep, as a real record spells them.
-_STEPS = {
-    "first_strike": "combat_first_strike_damage",
-    "regular": "combat_damage",
-}
+def _creature(entity_id: str, power: int, toughness: int, **traits: Any) -> EntityState:
+    return creature(entity_id, power, toughness, CreatureTraits(**traits))
 
 
 def _board(*entities: EntityState, substep: str = "regular") -> StateSnapshot:
     return make_snapshot(
-        global_=GlobalState(
-            turn=4, phase=_STEPS[substep], active="P0", priority="P0",
-            stack_size=0, combat_substep=substep,
-        ),
+        global_=damage_step_global(substep),
         players=(
             PlayerState(id="P0", life=20, hand=3, library=30, graveyard=2),
             PlayerState(id="P1", life=17, hand=4, library=28, graveyard=1),
