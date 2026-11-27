@@ -3,6 +3,7 @@ package com.pricepredictor.connector;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.aggregator.AggregateWith;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
@@ -47,9 +48,10 @@ class RulesParserKeywordsTest {
             // K:Protection:Card.MultiColor:multicolored must not leak the filter expression.
             "a filter expression; e/enemy_of_the_guildpact.txt; protection from multicolored",
     })
-    void protectionKeywordReadsAsProtectionFromTheTarget(String ignoredCase, String file, String expectedTexts) {
-        var statics = abilitiesOfType(cards.face(file), AbilityType.STATIC);
-        for (String expected : expectedTexts.split("\\|")) {
+    void protectionKeywordReadsAsProtectionFromTheTarget(
+            @AggregateWith(ScriptText.FromNamedCsv.class) ScriptText protection) {
+        var statics = abilitiesOfType(cards.face(protection.file()), AbilityType.STATIC);
+        for (String expected : protection.text().split("\\|")) {
             assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains(expected)),
                     "expected '" + expected + "' in: " + statics);
         }
@@ -156,14 +158,14 @@ class RulesParserKeywordsTest {
     }
 
     /** Each visit attraction yields exactly one TRIGGERED, led by "visit —", with no SPELL children. */
-    private Ability assertSingleVisitTrigger(String file, String effectText) {
-        CardFace card = cards.face(file);
+    private Ability assertSingleVisitTrigger(ScriptText attraction) {
+        CardFace card = cards.face(attraction.file());
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), file + " should have exactly 1 TRIGGERED: " + card.abilities());
+        assertEquals(1, triggered.size(), attraction.file() + " should have exactly 1 TRIGGERED: " + card.abilities());
         Ability visit = triggered.get(0);
         String desc = visit.descriptionText().toLowerCase();
         assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertTrue(desc.contains(effectText), "Description should contain oracle effect: " + desc);
+        assertTrue(desc.contains(attraction.text()), "Description should contain oracle effect: " + desc);
         assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
                 "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
         return visit;
@@ -175,9 +177,9 @@ class RulesParserKeywordsTest {
             "Ferris Wheel,  f/ferris_wheel.txt,   phases out",
             "Swinging Ship, s/swinging_ship.txt,  additional combat phase",
     })
-    void visitWithDuplicatePrefixEmitsOneTrigger(String ignoredCase, String file, String effectText) {
+    void visitWithDuplicatePrefixEmitsOneTrigger(@AggregateWith(ScriptText.FromNamedCsv.class) ScriptText attraction) {
         // SpellDescription starts with "Visit — " → Forge TrigDesc doubles it to "Visit — Visit — …"
-        Ability visit = assertSingleVisitTrigger(file, effectText);
+        Ability visit = assertSingleVisitTrigger(attraction);
         assertFalse(visit.descriptionText().toLowerCase().contains("visit — visit"),
                 "Description must not double 'visit —': " + visit.descriptionText());
     }
@@ -187,11 +189,11 @@ class RulesParserKeywordsTest {
             "Storybook Ride, s/storybook_ride.txt, exile the top",
             "Trash Bin,      t/trash_bin.txt,      mill",
     })
-    void visitWithDuplicateSpellChildrenEmitsOneTrigger(String ignoredCase, String file, String effectText) {
+    void visitWithDuplicateSpellChildrenEmitsOneTrigger(@AggregateWith(ScriptText.FromNamedCsv.class) ScriptText attraction) {
         // SpellDescription doesn't start with "Visit — " → no prefix doubling, but
         // SpellEffect.fromChain produces spurious spell[1]/spell[2] sub-abilities.
         // The leading "visit —" also rules out the raw "visit:trigexile" key leaking through.
-        assertSingleVisitTrigger(file, effectText);
+        assertSingleVisitTrigger(attraction);
     }
 
     @Test
