@@ -10,12 +10,14 @@ import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static com.pricepredictor.connector.effects.SnapshotReading.entityOf;
 import static com.pricepredictor.connector.effects.SnapshotReading.globalOf;
 import static com.pricepredictor.connector.effects.SnapshotReading.playerOf;
+import static com.pricepredictor.connector.effects.SnapshotReading.valuesOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,14 +39,10 @@ class SnapshotPlayerFactsTest {
         Map<String, Object> you = playerOf(board, 0);
         Map<String, Object> them = playerOf(board, 1);
 
-        assertEquals(2L, you.get("speed"));
-        assertEquals(true, you.get("city_blessing"));
-        assertEquals(false, them.get("city_blessing"));
-        assertEquals(3L, them.get("rad"));
-        assertEquals(true, you.get("monarch"));
-        assertEquals(false, them.get("monarch"));
-        assertEquals(false, you.get("initiative"));
-        assertEquals(true, them.get("initiative"));
+        assertEquals(List.of(2L, true, true, false),
+                valuesOf(you, "speed", "city_blessing", "monarch", "initiative"), you.toString());
+        assertEquals(List.of(false, 3L, false, true),
+                valuesOf(them, "city_blessing", "rad", "monarch", "initiative"), them.toString());
     }
 
     @Test
@@ -60,11 +58,9 @@ class SnapshotPlayerFactsTest {
         Map<String, Object> you = RecordLines.asMap(playerOf(board, 0).get("turn_counts"));
         Map<String, Object> them = RecordLines.asMap(playerOf(board, 1).get("turn_counts"));
 
-        assertEquals(1L, you.get("cards_drawn"));
-        assertEquals(3L, you.get("life_gained"));
+        assertEquals(List.of(1L, 3L, 1L, 1L),
+                valuesOf(you, "cards_drawn", "life_gained", "permanents_to_graveyard", "descended"));
         assertEquals(2L, them.get("life_lost"));
-        assertEquals(1L, you.get("permanents_to_graveyard"));
-        assertEquals(1L, you.get("descended"));
         assertEquals(Set.of("cards_drawn", "life_gained", "life_lost", "damage_taken",
                 "permanents_to_graveyard", "spells_cast_last_turn", "dungeons_completed",
                 "descended"), you.keySet());
