@@ -15,7 +15,7 @@ Rules to respect when changing the input layout, the relation attention or an ou
 
 ## Input slots
 
-- `slot_lines` is the one list of a card's ability slots, read by both the batcher and the surface builder. `board_entities` is the one card list.
+- `slot_lines` is the one list of a card's ability slots, read by both the batcher and the surface builder. `board_entities` is the one card list. The batcher reads each record's board once (`RecordBoard`: each card with its `slot_lines`, the command-zone cards after the board's) in its text pass and hands it to `SurfaceBuilder.build`, so neither `slot_lines` nor `command_zone_entities` runs twice for a record.
 - A library card below its library's top gets no slot, and `derive_targets` writes it no target (`has_card_slot`; only order rank 0 is the top). The snapshot holds such a card only because the record's own events draw, mill or search for it, so its slot would hand the head the outcome. Its player's counts and library events keep what happened to it.
 - A keyword keeps a card-level flag only where a Forge card-script selector or engine check names it. Every keyword is also read through its line's reminder text, a line with no key through `keyword-line/<fragment>`.
 - A continuous record's keyword flags read its board as written, with no mask of the record's own keywords. The collector already writes that board without the record's static, so a keyword left on it comes from another source; hiding it again clears a flag the creature holds on a creature the record's `keywords_gained` names, which hands the head the answer.

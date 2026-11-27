@@ -38,9 +38,16 @@ from effects.domain.grid_edits import TextOverride
 from effects.domain.input_layout import SlotKind
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
-from effects.domain.slot_lines import slot_lines
 from effects.domain.slot_widths import layout_widths
-from effects.domain.surface_builder import NO_STRIP, SurfaceBuilder, board_entities
+from effects.domain.surface_builder import (
+    NO_STRIP,
+    BoardCard,
+    RecordBoard,
+    SurfaceBuilder,
+    board_card,
+    command_zone_entities,
+    slotted_entities,
+)
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 from effects.domain.value_targets import ValueLine
 
@@ -60,9 +67,11 @@ class EncodedBatch:
 @dataclass
 class BatchLines:
     """The lines of one batch: its unique texts, each with the first line met,
-    and every distinct line the value head reads a row of ``e`` for."""
+    every distinct line the value head reads a row of ``e`` for, and each
+    record's board with its slot lines, read once for the surface build."""
 
     texts: dict[str, SidecarLine | None] = dataclasses.field(default_factory=dict)
+    boards: list[RecordBoard] = dataclasses.field(default_factory=list)
     _value: dict[ValueLine, None] = dataclasses.field(default_factory=dict)
 
     def note(self, text: str, line: SidecarLine | None) -> None:
@@ -274,10 +283,21 @@ class SurfaceBatcher:
         return found
 
     def _note_board(self, found: BatchLines, record) -> None:
-        """The lines of ``record``'s board, and the modes that follow each."""
-        for entity in board_entities(record):
-            for line in slot_lines(entity, self.board_keys):
+        """The lines of ``record``'s board, and the modes that follow each;
+        the board itself into ``found``."""
+        slotted = self._noted_cards(found, slotted_entities(record))
+        command_zone = self._noted_cards(found, command_zone_entities(record))
+        found.boards.append(RecordBoard(slotted, command_zone))
+
+    def _noted_cards(self, found: BatchLines, entities) -> tuple[BoardCard, ...]:
+        """Each of ``entities`` as a board card, its lines noted as it is read."""
+        cards = []
+        for entity in entities:
+            card = board_card(entity, self.board_keys)
+            for line in card.lines:
                 self._note_with_modes(found, line.key)
+            cards.append(card)
+        return tuple(cards)
 
     def _note_with_modes(self, found: BatchLines, key) -> None:
         """``key``'s text into ``found``, then its charm modes' where it has one."""
@@ -356,7 +376,8 @@ class SurfaceBatcher:
         staged = self.stage(texts)
         strips = strip_per_record or [NO_STRIP] * len(records)
         builder = self.surface_builder(staged.rows)
-        surfaces = [builder.build(record, strip) for record, strip in zip(records, strips)]
+        surfaces = [builder.build(record, strip, board)
+                    for record, strip, board in zip(records, strips, found.boards)]
         inputs = apply_masks(collate_surfaces(
             surfaces, e_dim=self.spec.e_dim, widths=self.spec.widths,
         ), self.spec.masks)

@@ -11,8 +11,8 @@ last, over the slots as they stand (:mod:`effects.domain.slot_relations`).
 from __future__ import annotations
 
 import random
-from collections.abc import Iterator, Mapping
-from dataclasses import replace
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Protocol
 
@@ -137,6 +137,49 @@ def board_entities(record: EffectRecord) -> tuple[EntityState, ...]:
     return (*slotted_entities(record), *command_zone_entities(record))
 
 
+@dataclass(frozen=True, slots=True)
+class BoardCard:
+    """A board entity and its slot lines (:func:`~effects.domain.slot_lines.slot_lines`)."""
+
+    entity: EntityState
+    lines: tuple[SlotLine, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RecordBoard:
+    """A record's board with every card's slot lines read once: the cards
+    that get a ``[CARD]`` slot (:func:`slotted_entities`), then the command
+    zone's (:func:`command_zone_entities`). The batch's text pass reads it and
+    the surface build reuses it."""
+
+    slotted: tuple[BoardCard, ...]
+    command_zone: tuple[BoardCard, ...]
+
+    @property
+    def cards(self) -> tuple[BoardCard, ...]:
+        """Every card the surface lays out, in board order."""
+        return (*self.slotted, *self.command_zone)
+
+
+def board_card(
+    entity: EntityState, board_keys: Callable[[ProvenanceKey], tuple[ProvenanceKey, ...]],
+) -> BoardCard:
+    """``entity`` with its slot lines read through ``board_keys``
+    (:meth:`LineLookup.board_keys`)."""
+    return BoardCard(entity, slot_lines(entity, board_keys))
+
+
+def record_board(
+    record: EffectRecord, board_keys: Callable[[ProvenanceKey], tuple[ProvenanceKey, ...]],
+) -> RecordBoard:
+    """``record``'s board, each card's lines read once through ``board_keys``."""
+    return RecordBoard(
+        slotted=tuple(board_card(entity, board_keys) for entity in slotted_entities(record)),
+        command_zone=tuple(board_card(entity, board_keys)
+                           for entity in command_zone_entities(record)),
+    )
+
+
 class LineLookup(Protocol):
     """What the surface asks of each ability key's rendered line."""
 
@@ -195,8 +238,10 @@ class SurfaceBuilder:
 
     def build(
         self, record: EffectRecord, stripped: Mapping[str, frozenset[str]] = NO_STRIP,
+        board: RecordBoard | None = None,
     ) -> EffectHeadInput:
-        """One record's surface.
+        """One record's surface, over ``board`` where the caller has read it
+        (:func:`record_board`), else the board read here.
 
         A ``decision`` record's ``[ACT]`` reads its candidate's ``e``
         (FR-060a). A ``continuous`` record's keyword flags read its board as
@@ -211,6 +256,7 @@ class SurfaceBuilder:
         Relations are built last, over the slots as they stand after context
         dropout and the strip (:class:`SlotRelations`).
         """
+        board = record_board(record, self.lines.board_keys) if board is None else board
         act_row, act_vector = _split_e(self._act_vector(record))
         slots = [
             Slot(
@@ -235,20 +281,21 @@ class SurfaceBuilder:
             ))
 
         source_id = record.state.refs.source
-        for entity in slotted_entities(record):
+        for card in board.slotted:
+            entity = card.entity
             entity_slots.append(len(slots))
             block, keys, unremoved = self._entity_block(
-                entity, record, stripped=stripped.get(entity.id, frozenset()),
+                card, record, stripped=stripped.get(entity.id, frozenset()),
                 dropout=self.context_dropout if entity.id != source_id else 0.0,
             )
             unremovable += [entity.id] * unremoved
             relations.add_card(entity, len(slots), block, keys)
             slots += block
-        for entity in command_zone_entities(record):
+        for card in board.command_zone:
             block, keys, _ = self._entity_block(
-                entity, record, stripped=frozenset(), dropout=self.context_dropout,
+                card, record, stripped=frozenset(), dropout=self.context_dropout,
             )
-            relations.add_card(entity, len(slots), block, keys)
+            relations.add_card(card.entity, len(slots), block, keys)
             slots += block
         return EffectHeadInput(
             slots=tuple(slots), entity_slots=tuple(entity_slots),
@@ -256,7 +303,7 @@ class SurfaceBuilder:
         )
 
     def _entity_block(
-        self, entity: EntityState, record: EffectRecord, *,
+        self, card: BoardCard, record: EffectRecord, *,
         stripped: frozenset[str], dropout: float,
     ) -> tuple[list[Slot], list[ProvenanceKey | None], bool]:
         """One entity's ``CARD`` slot, then an ``ABILITY`` slot per line it
@@ -264,6 +311,7 @@ class SurfaceBuilder:
         Beside the block, the key each slot reads (None for the card) and
         whether the strip left a stripped keyword's statement in a kept slot.
         ``stripped`` is gate 2's strip of this entity's keywords."""
+        entity = card.entity
         gone = frozenset(overlay_keyword(keyword) for keyword in stripped)
         keys: list[ProvenanceKey | None] = [None]
         block = [Slot(
@@ -275,7 +323,7 @@ class SurfaceBuilder:
             real_face_subtypes=real_face_subtype_rows(entity),
             counters=counter_rows(entity),
         )]
-        kept = [line for line in self._slot_lines(entity, record)
+        kept = [line for line in self._slot_lines(card, record)
                 if self._keeps(line, gone=gone, dropout=dropout)]
         for line in kept:
             for slot, key in self._line_slots(line, entity.id, len(block)):
@@ -304,14 +352,14 @@ class SurfaceBuilder:
         # would read it as a miss.
         return self._zero if e is None else e
 
-    def _slot_lines(self, entity: EntityState, record: EffectRecord) -> tuple[SlotLine, ...]:
-        """:func:`slot_lines`, a dungeon's room lines active for the room its
+    def _slot_lines(self, card: BoardCard, record: EffectRecord) -> tuple[SlotLine, ...]:
+        """``card``'s slot lines, a dungeon's room lines active for the room its
         player is in only (``global.dungeons[].room``, root spec § 9.3)."""
         lines = tuple(
             replace(line, keywords=line.keywords or overlay_keyword_set(
                 self.lines.keyword_of(line.key)))
-            for line in slot_lines(entity, self.lines.board_keys))
-        room = dungeon_room(record, entity.id)
+            for line in card.lines)
+        room = dungeon_room(record, card.entity.id)
         if room is None:
             return lines
         return tuple(self._in_room(line, name_key(room)) for line in lines)
