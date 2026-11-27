@@ -36,12 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * sidecar join would fail loudly and the record carry no ability text at all.
  * The copier keeps the token's paper card, so the fork keys it as the live
  * board does.
- *
- * <p>Its own class rather than {@code ForkRecordsTest}, whose class doc says
- * outright that forking a live game is not its job and whose fixture is a
- * player-less {@code TestCards.game()} the copier cannot clone; and not
- * {@code SnapshotBuilderTest}, which is deliberately game-free and does not
- * even initialise the card database.
  */
 @ExtendWith(ForgeExtension.class)
 class CopiedTokenProvenanceTest {
