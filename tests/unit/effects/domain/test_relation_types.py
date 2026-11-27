@@ -18,7 +18,6 @@ from effects.domain.relation_types import (
     TARGET_INDICES,
     Direction,
     relation_type,
-    reverse,
 )
 
 _JAVA = (Path(__file__).resolve().parents[4] / "forge-connector" / "src" / "main" / "java"
@@ -34,7 +33,6 @@ def test_directions_are_distinct_types():
     forward = relation_type("attached_to")
     backward = relation_type("attached_to", Direction.REVERSE)
     assert forward != backward
-    assert reverse(forward) == backward and reverse(backward) == forward
 
 
 @pytest.mark.parametrize("index, shared", [(0, 0), (1, 1), (2, 2), (3, 3), (4, 3), (9, 3)])

@@ -258,7 +258,7 @@ class TestTheGen3FactsRead:
     @staticmethod
     def _assert_the_tiered_chose_nothing(entities: list[EntityState]) -> None:
         tiered = [e for e in entities if e.role is None]
-        assert all(e.chosen == CardChoices() and e.in_tiers for e in tiered)
+        assert all(e.chosen == CardChoices() for e in tiered)
 
     @staticmethod
     def _assert_a_gone_target_has_no_zone_or_rank(entities: list[EntityState]) -> None:
@@ -376,9 +376,6 @@ class TestTheGen3FactsRead:
         assert link.line_keys() == (key,)
         assert Link(from_="P0", to="E2", type="owns").line_keys() == ()
 
-    def test_an_extra_entity_is_not_one_of_the_tiers(self):
-        assert not make_entity("L7", "Bear", role=EntityRole.LAST_KNOWN).in_tiers
-        assert make_entity("E7", "Bear").in_tiers
 
 class TestTheGen3FixtureRead:
     """Story 2's snapshot scenarios on real records: the gen-3 fixture cut from

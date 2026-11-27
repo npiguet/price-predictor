@@ -277,8 +277,6 @@ def test_the_gen3_fields_hold_what_the_build_decided():
     assert gen3.subtypes == tuple(sorted(("zombie", "plains"), key=SUBTYPES.index))
     assert gen3.keywords == ordered_keywords({"toxic", "flying"})
     assert gen3.budgeted_rules == {"702.16e"}
-    assert gen3.rule_outputs("702.16e") == ("damage_taken", "gate")
-    assert gen3.rule_outputs("999.9") == ()
     # Only the outputs a tagged record carried are effective, in the map's order.
     assert data["effective_outputs"] == {"510.1": [], "702.16e": ["damage_taken"]}
     assert gen3.effective_rule_outputs == {"510.1": (), "702.16e": ("damage_taken",)}

@@ -598,12 +598,6 @@ class EntityState:
         return self.toughness - self.damage
 
     @property
-    def in_tiers(self) -> bool:
-        """Whether the entity is one of the four inclusion tiers' rather than
-        a gen-3 extra (:class:`EntityRole`)."""
-        return self.role is None
-
-    @property
     def is_creature(self) -> bool:
         return "creature" in self.types
 

@@ -500,12 +500,6 @@ class CorpusManifest:
         return frozenset(
             rule for rule, entry in self.rule_map.items() if entry.verdict is MapVerdict.TRAINED)
 
-    def rule_outputs(self, rule: str) -> tuple[str, ...]:
-        """The outputs the recorded map names for ``rule``; empty for a rule
-        it does not hold (FR-060a)."""
-        entry = self.rule_map.get(rule)
-        return () if entry is None else entry.outputs
-
     @property
     def effective_rule_outputs(self) -> dict[str, tuple[str, ...]]:
         """``rule -> effective outputs`` for every mapped rule: what the rule

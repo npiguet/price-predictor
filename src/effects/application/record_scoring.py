@@ -103,14 +103,10 @@ class _Grouping:
         )
 
     def _family(self, record) -> str | None:
-        try:
-            return effect_family(
-                record, self.batcher.sidecars, resolver=self.resolver,
-                legality_mode_counts=self.legality_mode_counts,
-            )
-        except KeyError:
-            # The sidecar does not describe the card the record names.
-            return None
+        return effect_family(
+            record, self.batcher.sidecars, resolver=self.resolver,
+            legality_mode_counts=self.legality_mode_counts,
+        )
 
 
 def record_keywords(

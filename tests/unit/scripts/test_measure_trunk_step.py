@@ -8,7 +8,7 @@ import random
 import measure_trunk_step as mts
 import pytest
 
-from effects.domain.relation_types import FAMILIES, RELATION_TYPES, reverse
+from effects.domain.relation_types import FAMILIES, RELATION_TYPES, Direction
 from effects.domain.surface_builder import SurfaceBuilder
 from tests.unit.effects.builders import GEN3_RECORDS, curated_fixture_records
 
@@ -45,6 +45,13 @@ def test_every_triple_names_two_slots_of_its_surface_and_a_known_type(surfaces):
         for a, b, kind in surface.relations:
             assert 0 <= a < len(surface.slots) and 0 <= b < len(surface.slots)
             assert 0 <= kind < len(RELATION_TYPES)
+
+
+def reverse(row: int) -> int:
+    """The type that reads the same link from the other end."""
+    stem, _, direction = RELATION_TYPES[row].rpartition(":")
+    other = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+    return RELATION_TYPES.index(f"{stem}:{other}")
 
 
 def test_every_link_is_read_from_both_ends(surfaces):

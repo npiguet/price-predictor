@@ -66,6 +66,17 @@ RELATION_TYPES: tuple[str, ...] = _names()
 _INDEX = {name: index for index, name in enumerate(RELATION_TYPES)}
 
 
+def _type_name(family: str, direction: Direction, target_index: int | None) -> str:
+    """One type's name, refusing a ``target_index`` that does not fit the family."""
+    if (family == "targets") != (target_index is not None):
+        raise ValueError(f"target_index is given for targets and only for targets ({family})")
+    if family != "targets":
+        return f"{family}:{Direction(direction)}"
+    if target_index < 0:
+        raise ValueError(f"target index {target_index}")
+    return f"targets_{min(target_index, TARGET_INDICES - 1)}:{Direction(direction)}"
+
+
 def relation_type(family: str, direction: Direction = Direction.FORWARD,
                   target_index: int | None = None) -> int:
     """The table row of one family's type in one direction.
@@ -73,23 +84,8 @@ def relation_type(family: str, direction: Direction = Direction.FORWARD,
     ``target_index`` is required for ``targets`` and refused elsewhere; an index
     at or past :data:`TARGET_INDICES` - 1 reads the shared last type.
     """
-    if (family == "targets") != (target_index is not None):
-        raise ValueError(f"target_index is given for targets and only for targets ({family})")
-    if family == "targets":
-        if target_index < 0:
-            raise ValueError(f"target index {target_index}")
-        name = f"targets_{min(target_index, TARGET_INDICES - 1)}:{Direction(direction)}"
-    else:
-        name = f"{family}:{Direction(direction)}"
+    name = _type_name(family, direction, target_index)
     try:
         return _INDEX[name]
     except KeyError:
         raise ValueError(f"no relation family {family!r}") from None
-
-
-def reverse(row: int) -> int:
-    """The type that reads the same link from the other end."""
-    name = RELATION_TYPES[row]
-    stem, _, direction = name.rpartition(":")
-    other = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
-    return _INDEX[f"{stem}:{other}"]

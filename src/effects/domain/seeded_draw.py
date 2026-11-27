@@ -13,8 +13,7 @@ choosing what they chose:
 - :func:`id_hash`, crc32 of the id alone — one fixed order; game placement and
   the probe-set selections follow it.
 
-:func:`stable_order` and :func:`smallest_k` are the orderings new code takes,
-over the keyed hash.
+:func:`stable_order` is the ordering new code takes, over the keyed hash.
 
 Torch-free.
 """
@@ -22,7 +21,6 @@ Torch-free.
 from __future__ import annotations
 
 import hashlib
-import heapq
 import zlib
 from collections.abc import Iterable
 
@@ -51,14 +49,3 @@ def stable_order(ids: Iterable[str], seed: int) -> list[str]:
     to every other id whatever else is added.
     """
     return sorted(set(ids), key=lambda value: (keyed_hash(value, seed), value))
-
-
-def smallest_k(ids: Iterable[str], k: int, seed: int) -> list[str]:
-    """The ``k`` ids with the smallest keyed hash under ``seed``, in that order.
-
-    Equal to ``stable_order(ids, seed)[:k]`` without sorting everything.
-    """
-    if k <= 0:
-        return []
-    return heapq.nsmallest(
-        k, set(ids), key=lambda value: (keyed_hash(value, seed), value))

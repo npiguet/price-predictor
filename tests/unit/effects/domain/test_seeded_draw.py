@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.corpus_curation import game_hash, record_hash
-from effects.domain.seeded_draw import id_hash, keyed_hash, smallest_k, stable_order
+from effects.domain.seeded_draw import id_hash, keyed_hash, stable_order
 
 #: (value, keyed hash under seed 0, under seed 7, id hash), from the draws as
 #: they stood before they were moved here.
@@ -51,9 +51,3 @@ def test_an_id_keeps_its_place_relative_to_the_others_when_ids_are_added():
 def test_seeds_give_different_orders():
     ids = [f"g{i}" for i in range(50)]
     assert stable_order(ids, seed=1) != stable_order(ids, seed=2)
-
-
-@pytest.mark.parametrize("k", [0, 1, 7, 50, 80])
-def test_smallest_k_is_the_head_of_the_stable_order(k):
-    ids = [f"g{i}" for i in range(50)]
-    assert smallest_k(ids, k, seed=5) == stable_order(ids, seed=5)[:k]

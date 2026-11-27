@@ -145,10 +145,6 @@ class RuleBudgets:
     #: rule the map does not mark ``trained`` (FR-054).
     unbudgeted: dict[str, dict[str, dict[str, int]]]
 
-    def added(self, game: str, record_hash: RecordHash) -> tuple[str, ...]:
-        """The drawn rule of each added copy of one record; empty for none."""
-        return self.copies.get(game, {}).get(record_hash, ())
-
 
 @dataclass(frozen=True, slots=True)
 class BudgetInputs:

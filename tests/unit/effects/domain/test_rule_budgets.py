@@ -58,6 +58,11 @@ def plan(records, *, target=400_000, budgeted=None, reuse_cap=4, text_cap=0):
     )
 
 
+def _added(budgets, game, record_hash) -> tuple[str, ...]:
+    """The drawn rule of each added copy of one record; empty for none."""
+    return budgets.copies.get(game, {}).get(record_hash, ())
+
+
 def written(budgets, rule, polarity, klass=KLASS) -> int:
     return budgets.rows[klass][rule][str(polarity)].written_total
 
@@ -88,7 +93,7 @@ def test_scenario_2_a_copy_goes_to_the_rule_further_below_its_share():
             reuse_cap=1, text_cap=0,
         ),
     )
-    assert budgets.added("g0", 0) == ("a",)
+    assert _added(budgets, "g0", 0) == ("a",)
 
 
 def test_scenario_7_one_polarity_fills_and_the_other_stays_short_and_is_named():
@@ -126,13 +131,13 @@ def test_other_counts_toward_the_rule_and_draws_no_half():
     other = budgets.rows[KLASS]["x"]["other"]
     assert other.share is None and other.written_total == 2 and not other.added
     for i in (0, 1):
-        assert budgets.added(f"g{i}", i) == ()
+        assert _added(budgets, f"g{i}", i) == ()
 
 
 def test_a_multi_tagged_copy_counts_toward_each_rule():
     records = make(1, ("a", FIRES), ("b", NOT), shape=Shape(natural=0))
     budgets = plan(records, target=100, reuse_cap=3)
-    assert len(budgets.added("g0", 0)) == 3
+    assert len(_added(budgets, "g0", 0)) == 3
     assert written(budgets, "a", FIRES) == 3
     assert written(budgets, "b", NOT) == 3
 
@@ -147,7 +152,7 @@ def test_a_protection_copy_counts_toward_its_drawn_rule_alone():
         tags=(("702.16b", FIRES), ("702.16j", FIRES)), protection=True,
     )]
     budgets = plan(offering + filled, target=8, reuse_cap=1)
-    assert budgets.added("g0", 0) == ("702.16j",)
+    assert _added(budgets, "g0", 0) == ("702.16j",)
     rows = budgets.rows[KLASS]
     assert rows["702.16j"]["fires"].added == {"forge_ai": 1}
     assert rows["702.16j"]["fires"].written == {"forge_ai": 1}
@@ -164,8 +169,8 @@ def test_a_row_says_how_much_of_its_added_was_drawn_for_its_rule():
     other = make(1, ("702.16e", FIRES), shape=Shape(natural=1, start=10))
     both = make(1, ("702.16b", FIRES), ("702.16e", FIRES), shape=Shape(natural=0))
     budgets = plan(both + other, target=12, reuse_cap=2)
-    assert budgets.added("g0", 0) == ("702.16b", "702.16b")
-    assert budgets.added("g10", 10) == ("702.16e",)
+    assert _added(budgets, "g0", 0) == ("702.16b", "702.16b")
+    assert _added(budgets, "g10", 10) == ("702.16e",)
     rows = budgets.rows[KLASS]
     assert (rows["702.16b"]["fires"].added, rows["702.16b"]["fires"].drawn) == (
         {"forge_ai": 2}, {"forge_ai": 2})
@@ -179,7 +184,7 @@ def test_a_record_never_passes_the_reuse_cap():
                + make(5, ("x", NOT), shape=Shape(start=5, natural=4)))
     budgets = plan(records, target=1_000, reuse_cap=4)
     for record in records:
-        assert record.natural + len(budgets.added(record.game, record.record_hash)) <= 4
+        assert record.natural + len(_added(budgets, record.game, record.record_hash)) <= 4
     assert budgets.rows[KLASS]["x"]["fires"].added == {"forge_ai": 10}
     assert budgets.rows[KLASS]["x"]["does_not_fire"].added == {}
 
@@ -187,7 +192,7 @@ def test_a_record_never_passes_the_reuse_cap():
 def test_repeats_spread_over_a_rules_records():
     records = make(10, ("x", FIRES), shape=Shape(natural=0))
     budgets = plan(records, target=30, reuse_cap=4)
-    counts = sorted(len(budgets.added(r.game, r.record_hash)) for r in records)
+    counts = sorted(len(_added(budgets, r.game, r.record_hash)) for r in records)
     assert sum(counts) == 15 and counts[-1] - counts[0] <= 1
 
 

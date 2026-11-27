@@ -143,7 +143,6 @@ def test_the_manifest_reports_the_rule_row_and_its_one_side(budget_build):
         row.share)
     assert manifest.one_sided_rules == {"resolution-effect": (_BUDGET_RULE,)}
     assert manifest.budgeted_rules == {_BUDGET_RULE}
-    assert manifest.rule_outputs(_BUDGET_RULE) == ("damage_taken",)
     # The damaged creature carries damage_taken, so the output is effective.
     assert manifest.effective_rule_outputs[_BUDGET_RULE] == ("damage_taken",)
 

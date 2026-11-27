@@ -439,16 +439,6 @@ class SelectionSet:
         """The set with its digest computed over everything else."""
         return replace(self, digest=self.computed_digest())
 
-    def record_ids(self, stratum: str, half: str) -> frozenset[str]:
-        """Every record one half's probes, grids and rule tests read, once each."""
-        ids = {r.record_id for rows in self.probes.get(stratum, {}).get(half, {}).values()
-               for r in rows}
-        ids |= {r.record_id for grid in self.grids.get(stratum, {}).get(half, {}).values()
-                for r in grid.records}
-        ids |= {r.record_id for sides in self.rule_tests.get(stratum, {}).get(half, {}).values()
-                for rows in sides.values() for r in rows}
-        return frozenset(ids)
-
 
 def canonical_digest(payload: Mapping) -> str:
     """sha256 of the canonical JSON (sorted keys, no whitespace), ``digest`` excluded."""

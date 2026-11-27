@@ -81,12 +81,6 @@ def test_digest_moves_with_any_field_and_ignores_itself() -> None:
     assert one.computed_digest() == _selection().computed_digest()
 
 
-def test_record_ids_reads_every_distinct_record_of_a_half_once() -> None:
-    assert _selection().record_ids("game-disjoint", "selection") == {
-        "r1", "r2", "r3", "r4", "r5", "r6"}
-    assert _selection().record_ids("card-disjoint", "selection") == frozenset()
-
-
 def test_file_is_named_by_the_corpus_digest_and_loads_back(tmp_path) -> None:
     path = selection_set_path(tmp_path, "abc123")
     assert path.name == "selection-set-abc123.json"
