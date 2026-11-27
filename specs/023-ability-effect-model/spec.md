@@ -868,8 +868,8 @@ loss.
   calibration; matched real-vs-fork agreement; the `identity` variant on the game-disjoint split; the
   linear-decodability battery; the `taxonomy` comparison; the average-effect control (the `no-state`
   variant); and the probe-diff re-check.
-- **FR-111**: Three FR-110 checks are not implemented: matched real-vs-fork agreement, the probe-diff
-  re-check and the role-polarity probe. Each MUST be reported on every run with status
+- **FR-111**: Two FR-110 checks are not implemented: matched real-vs-fork agreement and the
+  role-polarity probe. Each MUST be reported on every run with status
   `NOT_IMPLEMENTED`, printed `[todo]`, naming what it would measure, and never as skipped: the
   corpus holds the fork, probe and mana records they would read. Every other check runs against any
   corpus.
@@ -897,8 +897,9 @@ loss.
   the in-distribution memorization ceiling; the average-effect control, comparing the `no-state`
   variant on the decodability battery, the ward canary, and scaling
   calibration; and the probe-diff re-check, gate 2's canary re-run over real-and-fork combat pairs
-  joined by `mirror_of`, for probed keywords only. The role-polarity probe and the probe-diff
-  re-check are not implemented (FR-111).
+  joined by `mirror_of`, for probed keywords only. The role-polarity probe is not implemented
+  (FR-111); the probe-diff re-check reports the predicted move over Forge's real-minus-fork move
+  per probed keyword (root spec gen 3 § 14.5).
 - **FR-117**: The trainer MUST support withholding one implemented keyword's token from training so
   the zero-shot keyword check can run. One tokenizer path, `AbilityTokenizer.encoding_tokens`, MUST
   force-expand the withheld keyword wherever it occurs and then drop its token everywhere it is

@@ -345,8 +345,8 @@ otherwise, beside rather than replacing the shipping cache.
 The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
 records it alongside the split.
 
-Gate 1 reads its stratum from the curated corpus `--checkpoint` records. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
-not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111).
+Gate 1 reads its stratum from the curated corpus `--checkpoint` records. Matched real-vs-fork agreement and the role-polarity probe are
+not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111). The probe-diff re-check reports its lines beside gate 2 (FR-116).
 
 The UMAP check (FR-110) writes two files into `<checkpoint stem>.evaluation/` beside `--checkpoint`,
 and its report line names both: `umap.png`, one panel per script API type (the twelve most frequent,
