@@ -12,11 +12,15 @@ import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.pricepredictor.connector.effects.SnapshotReading.entitiesIn;
 import static com.pricepredictor.connector.effects.SnapshotReading.entityOf;
+import static com.pricepredictor.connector.effects.SnapshotReading.memberOfEach;
+import static com.pricepredictor.connector.effects.SnapshotReading.valuesOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,12 +60,13 @@ class SnapshotCardFactsTest {
 
         List<Map<String, Object>> entities = entitiesIn(
                 new SnapshotBuilder(board.game).ofBoard().render());
-        List<Object> ranks = java.util.stream.Stream.of(bears, elves, angel)
+        List<Object> ranks = Stream.of(bears, elves, angel)
                 .map(card -> entities.stream().filter(e -> Refs.of(card).equals(e.get("id")))
                         .findFirst().orElseThrow().get("order_rank"))
                 .toList();
         assertEquals(List.of(0L, 1L, 2L), ranks);
     }
+
     @Test
     void faceStateNamesTheFaceUp() {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
@@ -73,10 +78,8 @@ class SnapshotCardFactsTest {
         Card guide = board.battlefield("Foothill Guide", board.you);
         guide.turnFaceDown(true);
 
-        assertEquals("front", entityOf(board, bears).get("face_state"));
-        assertEquals("back", entityOf(board, delver).get("face_state"));
-        assertEquals("flipped", entityOf(board, bushi).get("face_state"));
-        assertEquals("face_down", entityOf(board, guide).get("face_state"));
+        assertEquals(List.of("front", "back", "flipped", "face_down"),
+                memberOfEach(board, "face_state", bears, delver, bushi, guide));
     }
 
     @Test
@@ -150,10 +153,10 @@ class SnapshotCardFactsTest {
         Map<String, Object> freshHistory = RecordLines.asMap(entityOf(board, fresh).get("history"));
         Map<String, Object> oldHistory = RecordLines.asMap(entityOf(board, old).get("history"));
 
-        assertEquals(true, freshHistory.get("entered_this_turn"));
-        assertEquals(false, oldHistory.get("entered_this_turn"));
-        assertEquals(true, oldHistory.get("blocked_this_turn"));
-        assertEquals(false, freshHistory.get("blocked_this_turn"));
+        assertEquals(List.of(true, false),
+                valuesOf(freshHistory, "entered_this_turn", "blocked_this_turn"), "the fresh bears");
+        assertEquals(List.of(false, true),
+                valuesOf(oldHistory, "entered_this_turn", "blocked_this_turn"), "the old giant");
         assertEquals(true, RecordLines.asMap(entityOf(board, elspeth).get("history"))
                 .get("loyalty_activated"));
     }
@@ -166,10 +169,8 @@ class SnapshotCardFactsTest {
         Card first = board.graveyard("Shock", board.you);
         Card second = board.graveyard("Giant Growth", board.you);
 
-        assertEquals(0L, entityOf(board, older).get("order_rank"));
-        assertEquals(1L, entityOf(board, newer).get("order_rank"));
-        assertEquals(0L, entityOf(board, first).get("order_rank"));
-        assertEquals(1L, entityOf(board, second).get("order_rank"));
+        assertEquals(List.of(0L, 1L, 0L, 1L),
+                memberOfEach(board, "order_rank", older, newer, first, second));
     }
 
     @Test
@@ -195,25 +196,21 @@ class SnapshotCardFactsTest {
                 board.hand("Invasion of Zendikar", board.you));
         Map<String, Object> bears = entityOf(board, board.hand("Grizzly Bears", board.you));
 
-        assertEquals(4L, elspeth.get("printed_loyalty"));
-        assertNull(elspeth.get("printed_defense"));
-        assertEquals(3L, invasion.get("printed_defense"));
-        assertNull(bears.get("printed_loyalty"));
+        assertEquals(Arrays.asList(4L, null, 3L, null), Arrays.asList(
+                elspeth.get("printed_loyalty"), elspeth.get("printed_defense"),
+                invasion.get("printed_defense"), bears.get("printed_loyalty")));
     }
 
     @Test
     void manaCostCountsEachSymbolKind() {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
 
-        assertEquals(Map.of("generic", 1L, "G/W", 2L),
-                entityOf(board, board.hand("Kitchen Finks", board.you)).get("mana_cost"));
-        assertEquals(Map.of("U/P", 1L),
-                entityOf(board, board.hand("Gitaxian Probe", board.you)).get("mana_cost"));
-        assertEquals(Map.of("X", 1L, "R", 1L),
-                entityOf(board, board.hand("Fireball", board.you)).get("mana_cost"));
-        assertEquals(Map.of(),
-                entityOf(board, board.hand("Ornithopter", board.you)).get("mana_cost"));
-        assertNull(entityOf(board, board.hand("Forest", board.you)).get("mana_cost"));
+        assertEquals(
+                Arrays.asList(Map.of("generic", 1L, "G/W", 2L), Map.of("U/P", 1L),
+                        Map.of("X", 1L, "R", 1L), Map.of(), null),
+                Stream.of("Kitchen Finks", "Gitaxian Probe", "Fireball", "Ornithopter", "Forest")
+                        .map(name -> entityOf(board, board.hand(name, board.you)).get("mana_cost"))
+                        .toList());
     }
 
     // ── base power and toughness (FR-025) ───────────────────────────────

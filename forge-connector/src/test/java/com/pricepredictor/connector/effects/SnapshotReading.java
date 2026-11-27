@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.card.Card;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,16 @@ final class SnapshotReading {
         return entitiesIn(state).stream()
                 .filter(entity -> Refs.of(card).equals(entity.get("id")))
                 .findFirst().orElseThrow(() -> new AssertionError(card + " not in " + state));
+    }
+
+    /** These members of a parsed object, in this order; an absent member reads as null. */
+    static List<Object> valuesOf(Map<String, Object> object, String... members) {
+        return Arrays.stream(members).map(object::get).toList();
+    }
+
+    /** This member of each card's entity, rendered one card after the other. */
+    static List<Object> memberOfEach(CharacterizationBoard board, String member, Card... cards) {
+        return Arrays.stream(cards).map(card -> entityOf(board, card).get(member)).toList();
     }
 
     static List<Object> idsIn(String state) {
