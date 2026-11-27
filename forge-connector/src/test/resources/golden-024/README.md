@@ -35,13 +35,13 @@ The synthetic mana lines of `m/mountain.txt` and `t/tundra.txt` were later edite
 end in a period, when the synthesized land-mana line took the shape of a scripted mana line
 (`{T}: add {W} or {U}.`, with the serial comma from three colours on).
 
-When a spell came to print one line (task A04), the expected text of `l/label_a.txt` and
+When a spell came to print one line, the expected text of `l/label_a.txt` and
 `l/label_b.txt` (two sentences, once two `spell` lines) and `r/ranger_class.txt` (level 3's
 continuation line folded into the level line) was edited to match.
 
-When a face's keyword lines came to print in the sorted order of the keywords' original text (task A16), the expected text of `b/blast_from_the_past.txt` was edited to match: only its line order changed.
+When a face's keyword lines came to print in the sorted order of the keywords' original text, the expected text of `b/blast_from_the_past.txt` was edited to match: only its line order changed.
 
-When a sentence the description already holds stopped being appended again (task A14, finding 1.12), the expected text of `a/aberrant_mind_sorcerer.txt` was edited to match: its trigger line says "roll a d20." once. When a haunt line came to name its card as CARDNAME, `b/blind_hunter.txt`'s haunted-dies line was edited likewise.
+When a sentence the description already holds stopped being appended again, the expected text of `a/aberrant_mind_sorcerer.txt` was edited to match: its trigger line says "roll a d20." once. When a haunt line came to name its card as CARDNAME, `b/blind_hunter.txt`'s haunted-dies line was edited likewise.
 
 | Script | Why it is here |
 |---|---|
@@ -61,7 +61,7 @@ When a sentence the description already holds stopped being appended again (task
 | `s/serra_angel.txt` | `Flying`, `Vigilance` |
 | `p/pacifism.txt` | `Enchant:Creature` |
 | `b/blast_from_the_past.txt` | five keyword lines (keyword ordinal coupling) |
-| `b/blightsteel_colossus.txt` | `K:` lines in reverse alphabetical order: the converted lines come out sorted (task A16) |
+| `b/blightsteel_colossus.txt` | `K:` lines in reverse alphabetical order: the converted lines come out sorted |
 | `g/glorious_anthem.txt` | static ability |
 | `f/fountain_of_youth.txt` | activated ability |
 | `a/ajanis_pridemate.txt` | simple trigger (the sidecar contract's worked example) |
