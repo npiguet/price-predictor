@@ -2,12 +2,17 @@ package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.aggregator.AggregateWith;
+import org.junit.jupiter.params.aggregator.ArgumentsAccessor;
+import org.junit.jupiter.params.aggregator.ArgumentsAggregator;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
 
 import static com.pricepredictor.connector.AbilityRendering.lineOf;
+import static com.pricepredictor.connector.ConvertedTextAssertions.assertContainsAll;
 import static com.pricepredictor.connector.FaceAbilities.abilitiesOfType;
 import static com.pricepredictor.connector.FaceAbilities.allOptions;
 import static com.pricepredictor.connector.FaceAbilities.rendered;
@@ -26,14 +31,10 @@ class RulesParserCharmsTest {
         assertEquals(1, spells.size());
 
         // Charm options are sub-abilities of the spell
-        var options = spells.get(0).subAbilities();
-        assertEquals(3, options.size());
-        assertTrue(lineOf(options.get(0)).contains("{P} \u2014"));
-        assertTrue(lineOf(options.get(0)).contains("create a 1/1"));
-        assertTrue(lineOf(options.get(1)).contains("{P}{P} \u2014"));
-        assertTrue(lineOf(options.get(1)).contains("exile target"));
-        assertTrue(lineOf(options.get(2)).contains("{P}{P}{P} \u2014"));
-        assertTrue(lineOf(options.get(2)).contains("return target"));
+        assertLinesHold(spells.get(0).subAbilities(), List.of(
+                List.of("{P} \u2014", "create a 1/1"),
+                List.of("{P}{P} \u2014", "exile target"),
+                List.of("{P}{P}{P} \u2014", "return target")));
     }
 
     @Test
@@ -41,10 +42,9 @@ class RulesParserCharmsTest {
         // "What Must Be Done" has no SpellDescription on the Charm itself,
         // so choices become top-level OPTION abilities (no parent SPELL).
         var options = allOptions(cards.face("w/what_must_be_done.txt"));
-        assertEquals(2, options.size());
-        assertTrue(lineOf(options.get(0)).contains("destroy all artifacts and creatures"));
-        assertTrue(lineOf(options.get(1)).contains("release juno"));
-        assertTrue(lineOf(options.get(1)).contains("return target historic permanent card"));
+        assertLinesHold(options, List.of(
+                List.of("destroy all artifacts and creatures"),
+                List.of("release juno", "return target historic permanent card")));
         assertFalse(lineOf(options.get(1)).contains("Artifacts, legendaries, and Sagas are historic"),
                 "Reminder text should be stripped");
     }
@@ -121,14 +121,8 @@ class RulesParserCharmsTest {
         Ability t = triggered.get(0);
         assertTrue(t.descriptionText().contains("choose one"),
                 "ABILITY placeholder must be replaced with 'choose one': " + t.descriptionText());
-        List<Ability> options = t.subAbilities();
-        assertEquals(2, options.size(), "Should have 2 charm options: " + options);
-        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION),
-                "Options must be OPTION type: " + options);
-        assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("remove all counters")),
-                "Option 1 must mention counter removal: " + options);
-        assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("loses all counters")),
-                "Option 2 must mention opponent losing counters: " + options);
+        assertOptions(t.subAbilities(), 2);
+        assertSomeOptionSays(t.subAbilities(), "remove all counters", "loses all counters");
     }
 
     @Test
@@ -202,20 +196,31 @@ class RulesParserCharmsTest {
             "choose one among triggers,   h/hylda_of_the_icy_crown.txt,    tap an untapped creature,  choose one, 3",
     })
     void immediatelyTriggeredCharmExpandsAbilityPlaceholder(
-            String ignoredCase, String file, String triggerText, String chooseText, int optionCount) {
+            @AggregateWith(ImmediateCharm.FromCsv.class) ImmediateCharm charm) {
         // TriggerDescription ends with "ABILITY", which must be replaced by the charm's header.
-        CardFace card = cards.face(file);
+        CardFace card = cards.face(charm.file());
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty());
         Ability t = triggered.stream()
-                .filter(a -> a.descriptionText().contains(triggerText))
+                .filter(a -> a.descriptionText().contains(charm.triggerText()))
                 .findFirst().orElseThrow();
-        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
-        assertTrue(t.descriptionText().contains(chooseText),
-                "Must say '" + chooseText + "': " + t.descriptionText());
-        List<Ability> options = t.subAbilities();
-        assertEquals(optionCount, options.size(), "Must have " + optionCount + " options: " + options);
-        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
+        assertExpandsToOptions(t, charm.chooseText(), charm.optionCount());
+    }
+
+    /**
+     * One immediately triggered charm: the trigger of the card in {@code file}
+     * whose text holds {@code triggerText} reads {@code chooseText} and has
+     * {@code optionCount} options.
+     */
+    record ImmediateCharm(String file, String triggerText, String chooseText, int optionCount) {
+
+        /** Reads a case from a CSV row whose first column only names the case. */
+        static final class FromCsv implements ArgumentsAggregator {
+            @Override
+            public ImmediateCharm aggregateArguments(ArgumentsAccessor row, ParameterContext context) {
+                return new ImmediateCharm(row.getString(1), row.getString(2), row.getString(3), row.getInteger(4));
+            }
+        }
     }
 
     @Test
@@ -228,12 +233,7 @@ class RulesParserCharmsTest {
         Ability hauntTrig = triggered.stream()
                 .filter(a -> a.descriptionText().contains("haunts dies"))
                 .findFirst().orElseThrow();
-        assertFalse(hauntTrig.descriptionText().contains("ABILITY"),
-                "ABILITY must be replaced: " + hauntTrig.descriptionText());
-        assertTrue(hauntTrig.descriptionText().contains("choose one"),
-                "Must say 'choose one': " + hauntTrig.descriptionText());
-        assertEquals(2, hauntTrig.subAbilities().size(), "Must have 2 options: " + hauntTrig.subAbilities());
-        assertTrue(hauntTrig.subAbilities().stream().allMatch(o -> o.type() == AbilityType.OPTION));
+        assertExpandsToOptions(hauntTrig, "choose one", 2);
     }
 
     @Test
@@ -246,12 +246,40 @@ class RulesParserCharmsTest {
         Ability charmChapter = chapters.stream()
                 .filter(c -> c.descriptionText().contains("I") && c.descriptionText().contains("II"))
                 .findFirst().orElseThrow();
-        assertFalse(charmChapter.descriptionText().contains("ABILITY"),
-                "ABILITY must be replaced: " + charmChapter.descriptionText());
-        assertTrue(charmChapter.descriptionText().contains("choose one"),
-                "Must say 'choose one': " + charmChapter.descriptionText());
-        assertEquals(3, charmChapter.subAbilities().size(),
-                "Must have 3 charm options: " + charmChapter.subAbilities());
-        assertTrue(charmChapter.subAbilities().stream().allMatch(o -> o.type() == AbilityType.OPTION));
+        assertExpandsToOptions(charmChapter, "choose one", 3);
+    }
+
+    /**
+     * {@code options} are one line per entry of {@code expectedParts}, in
+     * order, each line holding every part of its entry.
+     */
+    private static void assertLinesHold(List<Ability> options, List<List<String>> expectedParts) {
+        assertEquals(expectedParts.size(), options.size(), options.toString());
+        for (int i = 0; i < options.size(); i++) {
+            assertContainsAll(lineOf(options.get(i)), expectedParts.get(i).toArray(String[]::new));
+        }
+    }
+
+    /** The ability's ABILITY placeholder reads {@code chooseText}, and it has {@code optionCount} options. */
+    private static void assertExpandsToOptions(Ability ability, String chooseText, int optionCount) {
+        String text = ability.descriptionText();
+        assertFalse(text.contains("ABILITY"), "ABILITY must be replaced: " + text);
+        assertTrue(text.contains(chooseText), "Must say '" + chooseText + "': " + text);
+        assertOptions(ability.subAbilities(), optionCount);
+    }
+
+    /** {@code options} are {@code count} abilities, each an OPTION. */
+    private static void assertOptions(List<Ability> options, int count) {
+        assertEquals(count, options.size(), "Must have " + count + " options: " + options);
+        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION),
+                "Options must be OPTION type: " + options);
+    }
+
+    /** Each of {@code texts} is in the description of one of {@code options}. */
+    private static void assertSomeOptionSays(List<Ability> options, String... texts) {
+        for (String text : texts) {
+            assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains(text)),
+                    "An option must say '" + text + "': " + options);
+        }
     }
 }
