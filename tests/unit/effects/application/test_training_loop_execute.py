@@ -56,7 +56,7 @@ def run(tmp_path, make_record, monkeypatch):
     original = ControlScoreStopper.reset
     monkeypatch.setattr(
         ControlScoreStopper, "reset",
-        lambda self: (resets.append(1), original(self))[1],
+        lambda self: (resets.append(len(events)), original(self))[1],
     )
 
     config = TrainEffectModelConfig.unpathed(
@@ -100,6 +100,21 @@ def test_an_epoch_scores_the_field_set_it_trained_with(run):
 def test_the_stopper_forgets_its_best_once_at_the_curriculum_boundary(run):
     _, _, resets, _ = run
     assert len(resets) == 1
+
+
+def test_the_stopper_resets_where_the_curriculum_names_its_switch_epoch(run):
+    """FR-082, FR-069: the reset sits at ``Curriculum.resets_at`` (epoch 2), so
+    every event of epoch 1 precedes it and every event of epoch 2 follows it.
+
+    ``resets`` holds the length of the event log at each reset.
+    """
+    _, events, resets, _ = run
+    fields_of_each_event = [fields for _kind, fields, _payload in events]
+    epoch_two_starts = next(
+        index for index, fields in enumerate(fields_of_each_event)
+        if fields != fields_of_each_event[0]
+    )
+    assert resets == [epoch_two_starts]
 
 
 def test_the_gate_one_margins_ride_the_card_disjoint_pass_alone(run):
