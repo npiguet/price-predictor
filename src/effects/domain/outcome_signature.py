@@ -6,7 +6,7 @@ pairs over its entities, which splits a sampling class's family into cells
 from __future__ import annotations
 
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
-from effects.domain.effect_targets import derive_targets
+from effects.domain.record_reading import RecordReading
 from effects.domain.records import RecordKind, ResolutionOutcome
 from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import Zone
@@ -36,7 +36,7 @@ def _spell_on_the_stack(record) -> str | None:
     return source if entity is not None and entity.zone == Zone.STACK else None
 
 
-def outcome_signature(record) -> frozenset[tuple[str, bool]]:
+def outcome_signature(record, reading: RecordReading | None = None) -> frozenset[tuple[str, bool]]:
     """The distinct ``(zone outcome, changed)`` pairs over a record's entities,
     from the targets the head trains on.
 
@@ -50,13 +50,16 @@ def outcome_signature(record) -> frozenset[tuple[str, bool]]:
     half that did not resolve names its outcome instead (``fizzled``,
     ``declined``, ``partially_fizzled``), so a fizzle never shares a cell
     with a kill.
+
+    ``reading`` is ``record``'s, where the caller holds one: its targets are
+    derived once however many reads ask.
     """
     pairs = set()
     spell = _spell_on_the_stack(record)
     outcome_of_half = getattr(record.payload, "outcome", None)
     if outcome_of_half not in (None, ResolutionOutcome.RESOLVED):
         pairs.add((str(outcome_of_half), False))
-    for subject, entry in derive_targets(record).items():
+    for subject, entry in RecordReading.or_new(record, reading).targets.items():
         zone = entry.fields.get(HeadField.ZONE_OUTCOME)
         if subject == spell and zone in _OFF_THE_STACK:
             continue

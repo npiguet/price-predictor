@@ -477,7 +477,7 @@ class TestConditionBalance:
         assert cell_signature(effect, SamplingClass.RESOLUTION_EFFECT, _Lines({})) == plain
 
     def test_met_and_unmet_draw_equal_budgets_a_short_side_repeating(self):
-        from effects.domain.corpus_plan import Cell, Member, plan_selection
+        from effects.domain.corpus_plan import Cell, CopyCaps, Member, plan_selection
         from effects.domain.sampling import SamplingClass
 
         klass = SamplingClass.PLAYABILITY_DECISION
@@ -485,7 +485,7 @@ class TestConditionBalance:
         unmet = Cell(klass, family="Destroy", signature="condition:unmet")
         plan = plan_selection(
             {met: {"": Member(distinct=10)}, unmet: {"": Member(distinct=2)}},
-            mix={klass: 1.0}, ceiling=12, text_cap=0, reuse_cap=4,
+            mix={klass: 1.0}, ceiling=12, caps=CopyCaps(0, 4),
         )
         assert plan.keyless[unmet].base == 3
         assert plan.keyless[met] == rate_plan(10, 6)

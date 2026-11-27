@@ -271,7 +271,7 @@ class _ShardWriter:
             return
         cell = self.context.cell_of(record, self.plan.mode_counts)
         natural = planned_copies(
-            self.plan.plans, self.plan.keyless_plans, cell, keys, self.context.hash_of(record),
+            self.plan.plans, self.plan.keyless_plans, (cell, keys), self.context.hash_of(record),
         )
         written = len(self._write(Stratum.TRAINING, record, keys, _Weighed(natural)))
         written += self._protection_copies(record, Stratum.TRAINING, keys)

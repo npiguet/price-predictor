@@ -12,6 +12,7 @@ from effects.domain.corpus_curation import CapHeap, CopyPlan
 from effects.domain.corpus_plan import (
     AllocationNode,
     Cell,
+    CopyCaps,
     FamilyShare,
     GameStrata,
     TrainingSupply,
@@ -170,7 +171,7 @@ def test_the_selection_plan_is_pinned_level_by_level_and_in_order():
 
     plan = plan_selection(
         members, mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
-        ceiling=60, text_cap=6, reuse_cap=2,
+        ceiling=60, caps=CopyCaps(6, 2),
     )
 
     assert [(cell, keys[0].script_file, copies) for (cell, keys), copies
@@ -188,7 +189,7 @@ def test_each_text_s_planned_copies_are_what_its_records_are_written():
     supply, records = _supplied()
     plan = plan_selection(
         members_of(supply, _TEXTS), mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
-        ceiling=60, text_cap=6, reuse_cap=2,
+        ceiling=60, caps=CopyCaps(6, 2),
     )
     written = _written_by_text(plan, records)
     assert plan.text_planned == {klass: dict(texts) for klass, texts in written.items()}

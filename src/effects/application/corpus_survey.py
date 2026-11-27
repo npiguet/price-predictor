@@ -61,13 +61,14 @@ from effects.domain.corpus_plan import (
 )
 from effects.domain.corpus_types import RecordHash, RuleCell
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.effect_targets import derive_targets, unsupervised_kind
+from effects.domain.effect_targets import unsupervised_kind
 from effects.domain.output_list_survey import keywords_named, subtypes_named
 from effects.domain.protection_copies import CopyDraw, protection_copy
 from effects.domain.protection_model import PROTECTION_RULES, rules_offered
 from effects.domain.protection_opportunities import qualify
 from effects.domain.provenance import JOIN_GAP_KINDS, KeyResolution
 from effects.domain.record_quality import QualityDefect, record_refusal
+from effects.domain.record_reading import RecordReading
 from effects.domain.records import (
     CollectionMode,
     EffectRecord,
@@ -202,9 +203,12 @@ class WorkerContext:
         return klass
 
     def cell_of(
-        self, record: EffectRecord, mode_counts: Mapping[str, int] | None = None,
+        self, record: EffectRecord, mode_counts: Mapping[str, int] | None = None, *,
+        reading: RecordReading | None = None,
     ) -> Cell:
-        return Cell.of(record, self.sidecars, self.resolver, mode_counts)
+        if reading is None:
+            return Cell.of(record, self.sidecars, self.resolver, mode_counts)
+        return Cell.read(reading, self.sidecars, self.resolver, mode_counts)
 
     def hash_of(self, record: EffectRecord) -> RecordHash:
         return record_hash(record.record_id, seed=self.read.seed)
@@ -467,12 +471,13 @@ class SurveyConfig:
 RECORD_FLAGS: tuple[str, ...] = ("fork", "interventional", "directed", "aimed", "degraded")
 
 
-def _unsupervised_of(record: EffectRecord) -> Counter[str]:
+def _unsupervised_of(reading: RecordReading) -> Counter[str]:
     """``RecordTargets.unsupervised`` of a kept record; the full derivation only
     where an event names no output column, since the closed-list misses are
     all the cheap read finds otherwise."""
+    record = reading.record
     if any(unsupervised_kind(event) for event in record.payload.all_events()):
-        return derive_targets(record).unsupervised
+        return reading.targets.unsupervised
     return closed_list_misses(record)
 
 
@@ -568,9 +573,10 @@ class _ShardSurveyor:
             self.out.cut.records += 1
             return
         self._note_game_properties(record)
+        reading = RecordReading(record)
         turn_action = record.kind is RecordKind.TURN_ACTION
         klass = None if turn_action else self.context.admit(record, self.out.refusals)
-        found = self._count_tags(record, held=klass is not None)
+        found = self._count_tags(reading, held=klass is not None)
         if turn_action:
             self.out.turn_actions[str(record.subkind)] += 1
             return
@@ -580,8 +586,8 @@ class _ShardSurveyor:
         self.out.flags.update((str(klass), flag) for flag in record_flags(record))
         if self._runtime_only(record):
             self.out.flags[str(klass), "runtime_only"] += 1
-        self.out.unsupervised.update(_unsupervised_of(record))
-        self.pending.append(self._kept(record, klass, found))
+        self.out.unsupervised.update(_unsupervised_of(reading))
+        self.pending.append(self._kept(reading, klass, found))
 
     def _cut(self, record: EffectRecord) -> bool:
         """A record of a game with no game-end marker in the shard."""
@@ -621,10 +627,11 @@ class _ShardSurveyor:
             return False
         return bool(qualifying_observations(record, self.keyword_rows, self.context.resolver))
 
-    def _count_tags(self, record: EffectRecord, *, held: bool) -> TagResult:
-        """Tag ``record`` and count its tags; ``held`` is False for a record
-        no stratum can hold (refused, or a turn action), whose tags are
+    def _count_tags(self, reading: RecordReading, *, held: bool) -> TagResult:
+        """Tag the reading's record and count its tags; ``held`` is False for a
+        record no stratum can hold (refused, or a turn action), whose tags are
         counted under :data:`REFUSED_SOURCE` and no natural source."""
+        record = reading.record
         found = self.context.tags(record)
         counts = self.out.rule_counts
         counts.not_countable |= found.not_countable
@@ -632,31 +639,30 @@ class _ShardSurveyor:
         if found.tags:
             self.counted.append((record.game_id, counts_as_fork(record),
                                  record.aimed_at is not None, found.tags, held))
-            self._note_carried(record, found.tags)
+            self._note_carried(reading, found.tags)
         return found
 
-    def _note_carried(self, record: EffectRecord, tags: tuple[RuleTag, ...]) -> None:
-        """Which of each tagged rule's map outputs ``record`` carries."""
+    def _note_carried(self, reading: RecordReading, tags: tuple[RuleTag, ...]) -> None:
+        """Which of each tagged rule's map outputs the reading's record carries."""
+        record = reading.record
         if record.kind is RecordKind.TURN_ACTION:
             return
         outputs = self.config.read.rule_outputs
-        targets = None
         for tag in tags:
             wanted = outputs.get(tag.rule)
             if not wanted:
                 continue
-            if targets is None:
-                targets = derive_targets(record)
-            for output in carried_outputs(record, tag.outcome, wanted, targets=targets):
+            for output in carried_outputs(record, tag.outcome, wanted, targets=reading.targets):
                 self.out.carried[tag.rule, output] += 1
 
     def _kept(
-        self, record: EffectRecord, klass: SamplingClass, found: TagResult,
+        self, reading: RecordReading, klass: SamplingClass, found: TagResult,
     ) -> _PendingRecord:
         """Count a kept record into the whole-corpus tallies; return it pending."""
+        record = reading.record
         out, context, game = self.out, self.context, record.game_id
         out.games.games.add(game)
-        cell = context.cell_of(record)
+        cell = context.cell_of(record, reading=reading)
         out.mode_counts.update(cell.modes)
         keys = acting_keys(record)
         if keys:

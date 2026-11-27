@@ -34,6 +34,7 @@ from effects.domain.effect_families import (
     legality_modes,
 )
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
+from effects.domain.record_reading import RecordReading
 from effects.domain.records import EffectRecord, LegalityDecision
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import Half, Stratum
@@ -84,16 +85,26 @@ class Cell:
         cls, record: EffectRecord, sidecars: SidecarLookup, resolver: KeywordResolver,
         legality_mode_counts: Mapping[str, int] | None = None,
     ) -> Cell:
-        """The cell a record is selected in. Both passes call this one function.
+        """The cell a record is selected in. Both passes call this one function."""
+        return cls.read(RecordReading(record), sidecars, resolver, legality_mode_counts)
+
+    @classmethod
+    def read(
+        cls, reading: RecordReading, sidecars: SidecarLookup, resolver: KeywordResolver,
+        legality_mode_counts: Mapping[str, int] | None = None,
+    ) -> Cell:
+        """:meth:`of` for a record the caller holds a reading of, whose targets
+        the cell's signature shares with the caller's other reads.
 
         ``random_seat`` is not a component (FR-050). A legality record's family is
         its rarest mode, which only the whole corpus can say, so without
         ``legality_mode_counts`` (the survey) its cell carries the modes for
         :meth:`resolved` to fold later.
         """
+        record = reading.record
         klass = sampling_class(record)
         half = _what_if_half(record, klass)
-        signature = cell_signature(record, klass, sidecars)
+        signature = cell_signature(record, klass, sidecars, reading)
         if klass == SamplingClass.PLAYABILITY_LEGALITY:
             modes = legality_modes(record, sidecars)
             family = "" if modes else FamilySentinel.NONE
@@ -382,7 +393,7 @@ class SelectionPlan:
     def copies(self, cell: Cell, keys: Keys, value: RecordHash) -> int:
         """A record's natural share: the plan of its ``(cell, keys)`` group,
         else its cell's keyless plan, applied to its hash ``value``."""
-        return planned_copies(self.plans, self.keyless, cell, keys, value)
+        return planned_copies(self.plans, self.keyless, (cell, keys), value)
 
 
 _NO_COPIES = CopyPlan()
@@ -390,14 +401,26 @@ _NO_COPIES = CopyPlan()
 
 def planned_copies(
     plans: Mapping[tuple[Cell, Keys], CopyPlan], keyless: Mapping[Cell, CopyPlan],
-    cell: Cell, keys: Keys, value: RecordHash,
+    group: tuple[Cell, Keys], value: RecordHash,
 ) -> int:
     """What :meth:`SelectionPlan.copies` reads, for a caller holding only the
-    two plan tables: the write pass's workers, which receive no family table."""
-    plan = plans.get((cell, keys)) if keys else None
+    two plan tables: the write pass's workers, which receive no family table.
+    ``group`` is the record's ``(cell, keys)``."""
+    cell, keys = group
+    plan = plans.get(group) if keys else None
     if plan is None:
         plan = keyless.get(cell, _NO_COPIES)
     return plan.copies(value)
+
+
+@dataclass(frozen=True, slots=True)
+class CopyCaps:
+    """How often a text and a record may repeat: ``text_cap`` natural copies
+    of one ability text per class (0 for none), ``reuse_cap`` copies of one
+    record."""
+
+    text_cap: int
+    reuse_cap: int
 
 
 def plan_selection(
@@ -405,21 +428,20 @@ def plan_selection(
     *,
     mix: Mapping[str, float],
     ceiling: int,
-    text_cap: int,
-    reuse_cap: int,
+    caps: CopyCaps,
 ) -> SelectionPlan:
     """FR-049 steps 1-4: class budget -> half -> family -> signature -> text.
 
     Raises:
         BuildCorpusError: ``mix`` names no class this corpus has a record of.
     """
-    available = _available(members, text_cap)
+    available = _available(members, caps.text_cap)
     try:
         targets, shortfall = class_targets(available, mix, ceiling=ceiling)
     except ValueError as exc:
         raise BuildCorpusError(str(exc)) from exc
 
-    tree = _allocation_tree(members, text_cap=text_cap, reuse_cap=reuse_cap)
+    tree = _allocation_tree(members, text_cap=caps.text_cap, reuse_cap=caps.reuse_cap)
     # The class level is split by the mixture, not equally.
     for klass, root in tree.children.items():
         root.allocate(targets.get(klass, 0))

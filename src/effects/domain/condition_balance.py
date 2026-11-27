@@ -10,6 +10,7 @@ from enum import StrEnum
 
 from effects.domain.outcome_signature import SIGNATURE_CLASSES, outcome_signature, signature_label
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
+from effects.domain.record_reading import RecordReading
 from effects.domain.records import (
     Candidate,
     EffectRecord,
@@ -208,17 +209,19 @@ def _side(met: bool) -> ConditionSide:
 
 def cell_signature(
     record: EffectRecord, klass: SamplingClass, lines: SidecarLookup | None,
+    reading: RecordReading | None = None,
 ) -> str:
     """The signature part of a record's cell: the outcome signature on the
     classes FR-049 step 2 splits, then whether a turn or step condition held
     (FR-056), so the met and unmet cells are siblings the allocator gives
     equal budgets, a short one repeating up to the reuse cap.
 
-    A record no condition applies to keeps gen-2's label exactly.
+    A record no condition applies to keeps gen-2's label exactly. ``reading``
+    is the record's, where the caller holds one (:func:`outcome_signature`).
     """
     parts = []
     if klass in SIGNATURE_CLASSES:
-        parts.append(signature_label(outcome_signature(record)))
+        parts.append(signature_label(outcome_signature(record, reading)))
     if klass in CONDITION_CLASSES:
         condition = turn_step_condition(record, lines)
         if condition is not None:

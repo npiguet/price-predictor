@@ -30,6 +30,7 @@ from effects.domain.condition_balance import one_sided_conditions
 from effects.domain.corpus_manifest import RuleCuration, rule_curation_fields
 from effects.domain.corpus_plan import (
     BuildCorpusError,
+    CopyCaps,
     GameStrata,
     Keys,
     SelectionPlan,
@@ -151,8 +152,8 @@ def decide(
     placed = PlacedSurvey(survey, strata)
     selection = plan_selection(
         members_of(training_supply(placed), key_text), mix=config.mix(),
-        ceiling=config.training_records, text_cap=config.text_cap,
-        reuse_cap=config.reuse_cap,
+        ceiling=config.training_records,
+        caps=CopyCaps(config.text_cap, config.reuse_cap),
     )
     budgets, validation = BudgetPlanner(
         placed, key_text, config, rules.budgeted).plan(selection)
