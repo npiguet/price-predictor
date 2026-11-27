@@ -347,8 +347,10 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
   restarted: a game has no time bound, so this cuts a game that is merely long. The supervisor
   prints `Killing worker <slot> (PID <pid>), <age>s old: its game has not ended <timeout> past its
   <recycle> recycle time; the game it was playing is cut (no game-end marker: build-corpus drops
-  it)`, the worker counts in `worker_stops.killed`, and its game, having no marker, among the
-  round's `cut_games`.
+  it)`, the worker counts in `worker_stops.killed`, and its game, having no marker, is among the
+  round's `cut_games` when records of it reached the shard: the shard writes in blocks of 256
+  records, and records not yet flushed are lost with the worker, so a game with none flushed leaves
+  nothing to count.
 - At every status line (every 60 s) the supervisor also kills the longest-running worker
   (`taskkill /F /T`), as without the protocol, and restarts it, so a game that crawls past every
   game end a recycle waits for is cut. It passes over a worker whose log holds no startup line
@@ -357,8 +359,8 @@ What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predi
   the workers (a round's end, the run's end, a shutdown, a first Ctrl-C). The overdue check above
   runs first at the same status line. The supervisor prints `Recycled longest-running worker
   <slot> (PID <pid>, age <age>s); the game it was playing is cut (no game-end marker: build-corpus
-  drops it)`, the worker counts in `worker_stops.killed`, and its game among the round's
-  `cut_games`.
+  drops it)`, the worker counts in `worker_stops.killed`, and its game is among the round's
+  `cut_games` when records of it reached the shard, as above.
 - Exit 0 with the stop line is a normal end, never a failure line or a crash. Exit 0 without it,
   or any other code, is a crash: the worker is restarted as before.
 - The pool returns, and a round is counted, only once every worker has exited or been killed;
