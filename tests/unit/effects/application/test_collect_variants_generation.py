@@ -12,6 +12,7 @@ longer matches anything in the holdout.
 from __future__ import annotations
 
 import random
+import re
 
 import pytest
 
@@ -66,11 +67,9 @@ class TestVariantGeneration:
     ):
         """The runtime keys a variant as ``variant-scripts/{sanitized name}.txt``
         and the reader looks for a sidecar at exactly that path, so a filename
-        derived from anything else makes every variant record unjoinable."""
-        from price_predictor.infrastructure.card_filenames import (
-            sanitize_card_name,
-        )
-
+        derived from anything else makes every variant record unjoinable. The
+        name is stated literally (``test_variant_file_names.py`` holds the
+        table the Java side pins too), never as the writer's own expression."""
         source = tmp_path / "cards"
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
@@ -78,9 +77,9 @@ class TestVariantGeneration:
             source, tmp_path / "variants", held_out=frozenset(),
         )
         assert variants
-        assert variants[0].path.name == (
-            f"{sanitize_card_name(variants[0].name)}.txt"
-        )
+        for variant in variants:
+            assert re.fullmatch(r"lightning_bolt_variant_[0-9a-f]{8}\.txt",
+                                variant.path.name), variant.path.name
 
     def test_a_variant_name_survives_sanitizing_without_punctuation(self):
         """A parenthesised suffix reads as a set code on a Forge deck-list line
