@@ -12,11 +12,10 @@ from effects.application.corpus_validation.findings import Thresholds
 from effects.infrastructure.cli import validation_ports
 
 
-def validate_corpus(records, thresholds=Thresholds(), sidecars=None, presence=None, **kwargs):
+def validate_corpus(records, thresholds=Thresholds(), **context_fields):
+    """``context_fields`` are the ``CorpusContext`` fields besides the renderer."""
     _source, renderer = validation_ports()
-    context = _validator.CorpusContext(
-        record_renderer=renderer, sidecars=sidecars, presence=presence, **kwargs,
-    )
+    context = _validator.CorpusContext(record_renderer=renderer, **context_fields)
     return _validator.validate_corpus(records, thresholds, context=context)
 
 
