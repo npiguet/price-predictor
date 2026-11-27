@@ -348,39 +348,54 @@ def _ninjutsu(template: str, details: str) -> str:
     return java_format(template, [cost_text(fields[0]), zone])
 
 
+def _exile_noun(fields: list[str], part_type: str) -> str:
+    """The noun an ``ExileCtrlOrGrave`` part exiles: its own, else its type's."""
+    if len(fields) > 2:
+        return fields[2]
+    if part_type in _CORE_TYPE_NAMES or part_type == "Permanent":
+        return part_type.lower()
+    return part_type
+
+
+def _exile_one(noun: str, part_type: str) -> str:
+    first = f"another {noun}" if part_type == "Artifact" or noun == "permanent" else _article(noun)
+    return f"{first} you control or {_article(noun)} card from "
+
+
+def _exile_several(amount: int, noun: str, nouns: str, other: str) -> str:
+    return (
+        f"the {_numeral(amount)} from among {other}{nouns} you control "
+        f"and/or {noun} cards in "
+    )
+
+
+def _exile_x_min(x_min: int, noun: str, nouns: str, other: str) -> str:
+    if x_min == 1:
+        return (
+            f"one or more {other}{nouns} you control and/or "
+            f"{'' if noun == 'permanent' else noun} cards from "
+        )
+    return (
+        f"{'the ' if x_min > 1 else ''}{_numeral(x_min)} or more from among "
+        f"{other}{nouns} you control and/or cards from "
+    )
+
+
 def _exile_ctrl_or_grave(part: str, x_min: int) -> str:
     """``CostExile.exileMultiZoneCostString(true, xMin)``, Craft's wording of
     an ``ExileCtrlOrGrave`` part."""
     fields = part.partition("<")[2].rstrip(">").split("/", 2)
     amount = int(fields[0]) if fields[0].isdigit() else 0
     part_type = fields[1].replace(".Other", "") if len(fields) > 1 else ""
-    if len(fields) > 2:
-        noun = fields[2]
-    elif part_type in _CORE_TYPE_NAMES or part_type == "Permanent":
-        noun = part_type.lower()
-    else:
-        noun = part_type
+    noun = _exile_noun(fields, part_type)
     nouns = noun if " " in noun else _lang_plural(noun)
-    permanent = noun == "permanent"
-    other = "other " if permanent else ""
+    other = "other " if noun == "permanent" else ""
     if amount == 1:
-        first = f"another {noun}" if part_type == "Artifact" or permanent else _article(noun)
-        text = f"{first} you control or {_article(noun)} card from "
+        text = _exile_one(noun, part_type)
     elif amount > 1:
-        text = (
-            f"the {_numeral(amount)} from among {other}{nouns} you control "
-            f"and/or {noun} cards in "
-        )
-    elif x_min == 1:
-        text = (
-            f"one or more {other}{nouns} you control and/or "
-            f"{'' if permanent else noun} cards from "
-        )
+        text = _exile_several(amount, noun, nouns, other)
     else:
-        text = (
-            f"{'the ' if x_min > 1 else ''}{_numeral(x_min)} or more from among "
-            f"{other}{nouns} you control and/or cards from "
-        )
+        text = _exile_x_min(x_min, noun, nouns, other)
     return f"Exile {text}your graveyard"
 
 
@@ -559,6 +574,22 @@ FORMATTERS: dict[str, Callable[[str, str], str]] = {
     "Affinity": _affinity,
 }
 
+
+def _fill_generic(template: str, details: str) -> str:
+    """An unknown formatter: the raw values, in order."""
+    values = [value for value in details.split(":") if value] if details else []
+    return java_format(template, values)
+
+
+def _fill_with(fill: Callable[[str, str], str], template: str, details: str) -> str:
+    try:
+        return fill(template, details)
+    except (ValueError, IndexError):
+        # A detail shape the mirror does not parse (Forge would throw too):
+        # the generic wording is still a correct reading of the keyword.
+        return template
+
+
 def format_reminder(formatter: str | None, template: str, details: str) -> str:
     """The reminder text one keyword instance reads, specifiers removed.
 
@@ -568,13 +599,5 @@ def format_reminder(formatter: str | None, template: str, details: str) -> str:
     details = details.strip()
     fill = FORMATTERS.get(formatter or "")
     if fill is None:
-        values = [value for value in details.split(":") if value] if details else []
-        filled = java_format(template, values)
-    else:
-        try:
-            filled = fill(template, details)
-        except (ValueError, IndexError):
-            # A detail shape the mirror does not parse (Forge would throw too):
-            # the generic wording is still a correct reading of the keyword.
-            filled = template
-    return strip_specifiers(filled)
+        return strip_specifiers(_fill_generic(template, details))
+    return strip_specifiers(_fill_with(fill, template, details))
