@@ -52,6 +52,9 @@ class ForkIsolationTest {
     /** Every fork record the matches wrote. */
     private final List<String> forkRecords = new ArrayList<>();
 
+    /** Every live record the matches wrote, as written. */
+    private final List<String> liveWritten = new ArrayList<>();
+
     private static Deck deck(Object... cardsAndCounts) {
         Deck deck = new Deck();
         for (int i = 0; i < cardsAndCounts.length; i += 2) {
@@ -64,7 +67,13 @@ class ForkIsolationTest {
         return deck("Mountain", 16, "Lightning Bolt", 24);
     }
 
-    /** Creatures, first and double strikers, burn, tokens, an aura, a fog: what forks reach. */
+    /**
+     * Creatures, first and double strikers, burn, tokens, an aura, a fog, and
+     * the three things a board holds that outlive a resolution: a delayed
+     * trigger (Flickerwisp's return at the end step), a keyword counter and a
+     * lasting effect (Wing It's flying counter and its +2/+2 until end of
+     * turn): what forks reach.
+     */
     private static Deck boros() {
         return boros("Arc Trail");
     }
@@ -76,8 +85,8 @@ class ForkIsolationTest {
      */
     private static Deck boros(String twoOf) {
         return deck("Mountain", 9, "Plains", 8, "Pacifism", 2, "Serra Angel", 2, twoOf, 2,
-                "Shock", 2, "Youthful Knight", 2, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
-                "Healing Salve", 1, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
+                "Wing It", 2, "Youthful Knight", 1, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
+                "Flickerwisp", 2, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
                 "Fencing Ace", 2, "Mogg Fanatic", 1, "Hill Giant", 1);
     }
 
@@ -137,6 +146,7 @@ class ForkIsolationTest {
                         forked++;
                         forkRecords.add(line);
                     } else {
+                        liveWritten.add(line);
                         written.add(WRITTEN_AT.matcher(line).replaceFirst(""));
                     }
                 }
@@ -172,6 +182,7 @@ class ForkIsolationTest {
             live.add(out.toString());
         }
         // Link ids too: a fork's cost and effect halves take them from the same sequence.
+        // So do a delayed trigger's (D<trigger id>), from the counter every game of the JVM shares.
         java.util.Map<String, String> links = new java.util.HashMap<>();
         List<String> relinked = new ArrayList<>();
         for (String line : live) {
@@ -188,7 +199,10 @@ class ForkIsolationTest {
     }
 
     private static final java.util.regex.Pattern LINK_ID =
-            java.util.regex.Pattern.compile("run\\.0-l1\\.\\d+\\.link\\.\\d+");
+            java.util.regex.Pattern.compile("run\\.0-l1\\.\\d+\\.link\\.\\d+|(?<=\")D\\d+(?=\")");
+
+    private static final java.util.regex.Pattern DELAYED_TRIGGER_ID =
+            java.util.regex.Pattern.compile("\"D\\d+\"");
 
     private static final java.util.regex.Pattern RECORD_ID =
             java.util.regex.Pattern.compile("\"record_id\":\"([^\"]+)\"");
@@ -235,6 +249,12 @@ class ForkIsolationTest {
         for (long seed : new long[] {11, 12, 13, 14, 15, 16}) {
             assertForksLeaveTheLiveGame("mixed" + seed, boros("Savannah Lions"), boros("Savannah Lions"), seed);
         }
+        // The boards hold what outlives a resolution: a delayed trigger, a
+        // keyword counter and a lasting effect.
+        assertTrue(liveWritten.stream().anyMatch(r -> DELAYED_TRIGGER_ID.matcher(r).find()), "delayed triggers");
+        assertTrue(liveWritten.stream().anyMatch(r -> r.contains("cardsfolder/w/wing_it.txt")), "Wing It resolved");
+        assertTrue(liveWritten.stream().anyMatch(r -> r.contains("\"Flying\"") && r.contains("counter")),
+                "keyword counters");
         // The matches reach every kind of fork: forced resolutions and protection
         // forks (interventional), probes (a mirror) and directed forks.
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"interventional\":true")), "interventions");
