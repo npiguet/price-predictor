@@ -10,6 +10,7 @@ import math
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from itertools import chain
 
 from effects.domain.check_label import TableRow
 
@@ -88,6 +89,61 @@ class CheckResult:
 
 
 @dataclass(frozen=True, slots=True)
+class EffectMoves:
+    """How much of the right move one gate-2 effect's prediction made.
+
+    ``mean_share`` averages each combat's share, the predicted move over the
+    right one (1 the full move, 0 the keyword ignored, negative the wrong
+    way), over ``combats``; ``standard_error`` is clustered by game and
+    ``quartiles`` are the shares'. A combat whose right move is 0 has no
+    share: ``zero_size`` counts those, and ``zero_size_move`` is the mean
+    ``|m|`` the prediction moved on them anyway.
+    """
+
+    label: str
+    combats: int
+    mean_share: float
+    standard_error: float
+    quartiles: tuple[float, float, float]
+    zero_size: int = 0
+    zero_size_move: float = float("nan")
+
+    def render(self) -> str:
+        """``label 0.35 ± 0.03 (q 0.18/0.39/0.66) over 812, t=0: 14 (mean |m| 0.60)``."""
+        if self.combats:
+            q1, q2, q3 = self.quartiles
+            text = (f"{self.label} {self.mean_share:.2f} ± {self.standard_error:.2f} "
+                    f"(q {q1:.2f}/{q2:.2f}/{q3:.2f}) over {self.combats}")
+        else:
+            text = f"{self.label} no share"
+        if not self.zero_size:
+            return text
+        return f"{text}, t=0: {self.zero_size} (mean |m| {self.zero_size_move:.2f})"
+
+
+@dataclass(frozen=True, slots=True)
+class KeywordMoves:
+    """Gate 2's move report for one keyword: its effects' shares. It routes
+    nothing; the verdict reads the direction alone (decision D11)."""
+
+    effects: tuple[EffectMoves, ...] = ()
+
+    @property
+    def share(self) -> float | None:
+        """The mean of the effects' mean shares, each effect counting once;
+        None when no effect has a combat with a right move other than 0."""
+        shares = [effect.mean_share for effect in self.effects if effect.combats]
+        return sum(shares) / len(shares) if shares else None
+
+    def render(self) -> str:
+        """The report's second line for the keyword, holding no ``n=``: the
+        report scripts read gate 2's lines by it."""
+        share = self.share
+        head = "share none" if share is None else f"share {share:.2f}"
+        return "; ".join([f"moves: {head}", *(effect.render() for effect in self.effects)])
+
+
+@dataclass(frozen=True, slots=True)
 class KeywordVerdict:
     """One damage-step keyword's routing verdict from gate 2. Blocks nothing.
 
@@ -104,6 +160,8 @@ class KeywordVerdict:
     #: Perturbations left out because the strip could not remove the keyword's
     #: statement (it is shared with other keywords).
     unqualified: int = 0
+    #: How much of the right move each effect made; reported, routes nothing.
+    moves: KeywordMoves | None = None
 
     @property
     def passed(self) -> bool:
@@ -239,7 +297,8 @@ class EvaluationReport:
                 f"{name}={value:+.4f}" for name, value in check.values.items()
             ))
         if check.name == CheckName.GATE_2:
-            lines.extend(_keyword_line(verdict) for verdict in self.keyword_verdicts)
+            lines.extend(chain.from_iterable(
+                _keyword_lines(verdict) for verdict in self.keyword_verdicts))
         return "\n".join(lines)
 
     def render(self) -> str:
@@ -248,9 +307,13 @@ class EvaluationReport:
         )
 
 
-def _keyword_line(verdict: KeywordVerdict) -> str:
+def _keyword_lines(verdict: KeywordVerdict) -> list[str]:
+    """A keyword's verdict line, then its moves line when it has one."""
     state = "pass" if verdict.passed else "→ probe"
-    return (
+    lines = [
         f"    {verdict.keyword:<16} {state:<8} "
         f"n={verdict.qualifying_records:<6} {verdict.reason}"
-    )
+    ]
+    if verdict.moves is not None:
+        lines.append(f"      {verdict.moves.render()}")
+    return lines

@@ -189,6 +189,21 @@ def clustered_auc_standard_error(positive_games: Iterable[Hashable],
     return auc_standard_error(len(set(positive_games)), len(set(negative_games)))
 
 
+def clustered_mean_standard_error(values: Iterable[float], games: Iterable[Hashable]) -> float:
+    """The standard error of the mean of ``values``, clustered by game (CR0):
+    ``√(Σ_g (Σ_{i∈g} (x_i − x̄))²) / N``, ``games`` giving each value's game,
+    so the values of one game, which share a deck and a draw, count as one
+    cluster. NaN with no value."""
+    values, games = [float(value) for value in values], list(games)
+    if not values:
+        return float("nan")
+    mean = sum(values) / len(values)
+    by_game: dict[Hashable, float] = defaultdict(float)
+    for game, value in zip(games, values, strict=True):
+        by_game[game] += value - mean
+    return math.sqrt(sum(s * s for s in by_game.values())) / len(values)
+
+
 def grid_standard_error(answers) -> float:
     """A grid's worst-case standard error on the rescaled scale,
     ``(1/C) Σ_c 1/(2√N_c) / B``: ``answers`` hold, per cell, the rule's

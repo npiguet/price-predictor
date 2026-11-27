@@ -213,8 +213,8 @@ def _depth(runnable: _WatchedRunnable) -> int:
 def test_gate_two_scores_its_pairs_through_the_one_forward(run, observations, monkeypatch):
     runnable = _runnable(run, watched=True)
     reads = []
-    score = gate_two.score_observation
-    monkeypatch.setattr(gate_two, "score_observation", lambda *a, **k: (
+    score = gate_two.observation_moves
+    monkeypatch.setattr(gate_two, "observation_moves", lambda *a, **k: (
         reads.append((_depth(runnable), run.model.training, torch.is_grad_enabled())),
         score(*a, **k))[1])
 

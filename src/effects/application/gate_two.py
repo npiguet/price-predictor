@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
+from effects.application.gate_two_moves import MoveTally, PredictedMove
 from effects.application.record_forward import BATCH_RECORDS
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
@@ -98,6 +99,9 @@ class KeywordScore:
     #: Perturbations left unqualified: the carrier's keyword shares an ability
     #: slot with other keywords, so no strip removes its statement.
     unqualified: int = 0
+    #: Each scored effect's predicted move beside its right move: reported,
+    #: never routed.
+    moves: MoveTally = field(default_factory=MoveTally)
     #: The record ids ``qualifying`` has counted, so a record observed once
     #: per carrier counts once.
     counted: set[str] = field(default_factory=set, init=False, repr=False, compare=False)
@@ -169,25 +173,58 @@ def score_observation(
     (infect's creature and player fields are exclusive) or a field outside
     ``active`` is left unscored rather than counted against the keyword.
     """
+    return agreement(observation_moves(row, participant, vectors, active=active))
+
+
+def observation_moves(
+    row: DamageStepKeyword,
+    participant: CombatParticipant,
+    vectors: PairedVectors,
+    *,
+    active: frozenset[str],
+) -> tuple[PredictedMove, ...]:
+    """Every predicted move one perturbation makes, keyword present minus
+    stripped, at each subject of each effect :func:`score_observation`
+    scores, in the row's order: the agreement reads their signs, the move
+    report their sizes."""
+    return tuple(
+        move for effect in row.effects
+        if effect.field in active and effect.observable(participant)
+        for move in _effect_moves(effect, participant, vectors)
+    )
+
+
+def agreement(moves: Iterable[PredictedMove]) -> tuple[bool, dict[str, bool]]:
+    """Whether every move has its effect's sign, and per effect whether all
+    its subjects' moves do; nothing agrees when there is no move."""
     per_effect: dict[str, bool] = {}
-    for effect in row.effects:
-        if effect.field not in active or not effect.observable(participant):
-            continue
-        moved = [
-            _moved(effect, vectors.present[subject], vectors.stripped[subject])
-            for subject in participant.subjects(effect.subject)
-            if subject in vectors.present and subject in vectors.stripped
-        ]
-        if moved:
-            per_effect[effect.label] = all(moved)
+    for move in moves:
+        label = move.effect.label
+        per_effect[label] = per_effect.get(label, True) and _agrees(move.effect, move.predicted)
     return bool(per_effect) and all(per_effect.values()), per_effect
 
 
-def _moved(effect: KeywordEffect, before: torch.Tensor, after: torch.Tensor) -> bool:
-    """Whether one subject's field moved the effect's way, keyword present
+def _effect_moves(
+    effect: KeywordEffect, participant: CombatParticipant, vectors: PairedVectors,
+) -> list[PredictedMove]:
+    """The effect's move at each of its subjects both builds hold."""
+    return [
+        PredictedMove(effect, subject,
+                      _change(effect, vectors.present[subject], vectors.stripped[subject]))
+        for subject in participant.subjects(effect.subject)
+        if subject in vectors.present and subject in vectors.stripped
+    ]
+
+
+def _change(effect: KeywordEffect, before: torch.Tensor, after: torch.Tensor) -> float:
+    """One subject's predicted move on the effect's field, keyword present
     minus stripped."""
     spec = FIELDS_BY_NAME[effect.field]
-    change = read_field(before, spec, effect.category) - read_field(after, spec, effect.category)
+    return read_field(before, spec, effect.category) - read_field(after, spec, effect.category)
+
+
+def _agrees(effect: KeywordEffect, change: float) -> bool:
+    """Whether a move has the effect's sign; no move agrees with neither."""
     return change > 0 if effect.direction > 0 else change < 0
 
 
@@ -296,7 +333,7 @@ class _Tally:
             if participant.carrier.id in surfaces[twin].unremovable:
                 self.scores[row.keyword].refuse()
                 continue
-            agreed, per_effect = score_observation(
+            moves = observation_moves(
                 row, participant,
                 PairedVectors(
                     _subject_vectors(surfaces[offset], outputs[offset], row, participant),
@@ -304,7 +341,9 @@ class _Tally:
                 ),
                 active=self.active,
             )
-            self.scores[row.keyword].add(record.record_id, agreed, per_effect)
+            score = self.scores[row.keyword]
+            score.add(record.record_id, *agreement(moves))
+            score.moves.fold(record, participant, moves)
 
 
 def _subject_vectors(
@@ -334,7 +373,8 @@ def evaluate_keyword(row: DamageStepKeyword, score: KeywordScore) -> KeywordVerd
     Under-sampled routes the same way as wrong: treating untested as passed is
     how a canary stops being one. The per-field agreement is reported but never
     routes; it says *which* field did not move, e.g. a magnitude learned
-    without its consequence.
+    without its consequence. Nor do the moves: how much of the right move each
+    effect made is a report line beside the verdict (decision D11).
     """
     qualifying, observations = score.qualifying, score.observations
     agreement = score.agreeing / observations if observations else 0.0
@@ -357,6 +397,7 @@ def evaluate_keyword(row: DamageStepKeyword, score: KeywordScore) -> KeywordVerd
         row.keyword, qualifying, agreement, routed_to_probe=routed,
         reason=reason + _render_per_field(score.per_field) + _render_unqualified(score),
         observations=observations, unqualified=score.unqualified,
+        moves=score.moves.summary(row),
     )
 
 

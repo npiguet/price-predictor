@@ -24,10 +24,16 @@ def _delta_has_sign(event: Event, direction: int) -> bool:
     return int((event.params or {}).get("delta") or 0) * direction > 0
 
 
-def _died(events: Iterable[Event], subject: str, _direction: int) -> bool:
+def died(events: Iterable[Event], subject: str) -> bool:
+    """Whether ``events`` move ``subject`` from the battlefield to a graveyard
+    or exile: the death a zone-outcome effect reads."""
     return any(e.type is EventType.ZONE_CHANGE and subject in e.subjects
                and (e.params or {}).get("from_zone") == "battlefield"
                and (e.params or {}).get("to_zone") in _DEATH_ZONES for e in events)
+
+
+def _died(events: Iterable[Event], subject: str, _direction: int) -> bool:
+    return died(events, subject)
 
 
 def _of_type(event_type: EventType, signed: bool) -> Callable[[Iterable[Event], str, int], bool]:
