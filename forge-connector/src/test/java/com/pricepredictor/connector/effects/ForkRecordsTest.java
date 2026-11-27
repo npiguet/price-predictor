@@ -797,7 +797,7 @@ class ForkRecordsTest {
         assertFalse(budget.mayProtect());
     }
 
-    // ── directed forks (T090, D5) ───────────────────────────────────────
+    // ── directed forks ───────────────────────────────────────
 
     /**
      * 704.5f's rule, for these tests only: as the end step begins with
@@ -905,7 +905,7 @@ class ForkRecordsTest {
     }
 
     /**
-     * Story 3 acceptance 1 on the registered 704.5f (T094): the active player
+     * Feature 025 story 3 acceptance 1 on the registered 704.5f: the active player
      * holds Disfigure and an untapped Swamp and the opponent's Drudge
      * Skeletons is a 1/1, so as the main phase begins the collector forks,
      * raises the Skeletons' toughness through {@code pt}, plays the fork to

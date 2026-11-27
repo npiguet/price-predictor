@@ -242,8 +242,8 @@ class MatchWorkerMainTest {
     }
 
     /**
-     * FR-025: a match with a random seat writes its progress line and nothing
-     * to either sealed file, even with the sealed corpus wired (spec Story 3
+     * 024 FR-025: a match with a random seat writes its progress line and nothing
+     * to either sealed file, even with the sealed corpus wired (Feature 024 story 3
      * scenario 5). Its effect records were written as the games ran; the
      * outcome of a game one seat played at random says nothing about a deck.
      */

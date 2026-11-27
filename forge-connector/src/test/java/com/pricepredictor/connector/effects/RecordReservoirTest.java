@@ -88,7 +88,7 @@ class RecordReservoirTest {
     /**
      * A slot whose record was never built (its builder threw) leaves the
      * reservoir usable: the next record is held, not an IndexOutOfBounds
-     * for the rest of the game (C2 #13, V2 #17).
+     * for the rest of the game.
      */
     @Test
     void aSlotWhoseRecordNeverCameLeavesTheReservoirUsable() {

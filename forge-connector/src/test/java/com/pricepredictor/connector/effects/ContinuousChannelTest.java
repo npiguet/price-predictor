@@ -107,7 +107,7 @@ class ContinuousChannelTest {
 
     /**
      * A static whose contribution changes on a board alike in ids, names
-     * and P/T writes again (V3 #6): the coalescing key holds what the
+     * and P/T writes again: the coalescing key holds what the
      * static contributes, not the board hash alone.
      */
     @Test
@@ -160,7 +160,7 @@ class ContinuousChannelTest {
 
     /**
      * A static granting only an ability (Cryptolith Rite) is a record, its
-     * contribution naming the granted ability's line (V2 #15).
+     * contribution naming the granted ability's line.
      */
     @Test
     void aStaticGrantingOnlyAnAbilityContributesIt() throws Throwable {
@@ -178,7 +178,7 @@ class ContinuousChannelTest {
 
     /**
      * Humility's "loses all abilities" sets the keyword line outright and
-     * takes Prodigal Sorcerer's ability away, named by its line (V2 #15);
+     * takes Prodigal Sorcerer's ability away, named by its line;
      * the contribution used to say nothing but the base it sets.
      */
     @Test
@@ -199,7 +199,7 @@ class ContinuousChannelTest {
     /**
      * Errantry's AddHiddenKeyword$ is in its contribution, and its record's
      * board, which is the board without it, shows no hidden keyword on the
-     * enchanted creature (V2 #14).
+     * enchanted creature.
      */
     @Test
     void aStaticsHiddenKeywordIsItsContribution() throws Throwable {
@@ -223,7 +223,7 @@ class ContinuousChannelTest {
     /**
      * Archetype of Imagination's board without it shows the opponent's
      * Serra Angel with flying: the can't-have row the static wrote is
-     * left out with it (C2 #6).
+     * left out with it.
      */
     @Test
     void theBoardWithoutACantHaveStaticGivesTheKeywordBack() throws Throwable {

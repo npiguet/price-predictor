@@ -36,7 +36,7 @@ class MaterializeDeckTest {
 
     @Test
     void aConvertedLowercaseNameResolves() {
-        // `collect-coverage` builds its decks from `output/cardsfolder/`,
+        // `collect-coverage` builds its decks from the converted cardsfolder,
         // whose `name:` lines are lowercase. If Forge's lookup were
         // case-sensitive, every coverage deck would be 17 basics -- so this
         // is the assertion that says strict mode is a guard rather than a

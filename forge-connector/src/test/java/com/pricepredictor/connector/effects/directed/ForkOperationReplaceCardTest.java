@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The {@code replace_card} operation changes the card alone (T086): the replacement
+ * The {@code replace_card} operation changes the card alone: the replacement
  * carries the permanent's state, effects, pair, history and designations, and what
  * named the old card names the new one.
  *

@@ -450,7 +450,7 @@ class RewriteContractTest {
     }
 
     /**
-     * The tally counts what reaches the shard (C5 #16): a replacement told
+     * The tally counts what reaches the shard: a replacement told
      * twice in one game, the second record a duplicate of the first, counts
      * once.
      */

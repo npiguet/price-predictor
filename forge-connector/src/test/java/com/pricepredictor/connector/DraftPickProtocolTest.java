@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Pure (Forge-free) tests for the live-pick side-channel protocol in
  * {@link DraftPickProtocol}: request formatting, response parsing into
  * {@link PickResponse}, position validation, held-pack membership, and the
- * abort/abandon outcomes (T009).
+ * abort/abandon outcomes.
  */
 class DraftPickProtocolTest {
 

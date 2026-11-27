@@ -281,7 +281,7 @@ class PriorityCandidatesTest {
     }
 
     /**
-     * Story 2 acceptance 13: a second land after one played is a land-play
+     * Feature 025 story 2 acceptance 13: a second land after one played is a land-play
      * candidate past its limit, and no mana ability is a candidate.
      */
     @Test
@@ -360,7 +360,7 @@ class PriorityCandidatesTest {
     }
 
     /**
-     * Story 2 acceptance 14: the land of the player without priority fails
+     * Feature 025 story 2 acceptance 14: the land of the player without priority fails
      * its timing, whose turn and casting speed both.
      */
     @Test

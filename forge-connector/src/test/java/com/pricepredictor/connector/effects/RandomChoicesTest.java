@@ -316,7 +316,7 @@ class RandomChoicesTest {
 
     /**
      * A clause that divides its amount gets it split over its targets, every
-     * target a share and the shares summing to the amount (V3 #3): Arc
+     * target a share and the shares summing to the amount: Arc
      * Lightning's resolution reads a share per target and threw on a null.
      */
     @Test
@@ -380,7 +380,7 @@ class RandomChoicesTest {
     }
 
     /**
-     * A constraint across a clause's targets is honoured (V3 #4): Cannibalize
+     * A constraint across a clause's targets is honoured: Cannibalize
      * takes two creatures one player controls, never one of each player's.
      */
     @Test
@@ -482,7 +482,7 @@ class RandomChoicesTest {
     // ── X ───────────────────────────────────────────────────────────────
 
     /**
-     * Spec Story 3 scenario 15: with five Mountains and a cost of {X}{R}, X
+     * Feature 024 story 3 scenario 15: with five Mountains and a cost of {X}{R}, X
      * falls uniformly between zero and four — every value reached, none past
      * what the mana can pay.
      */

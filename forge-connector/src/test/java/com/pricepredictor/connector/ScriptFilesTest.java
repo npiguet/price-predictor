@@ -11,7 +11,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Which files under a tree are card scripts (FR-058b, python R1).
+ * Which files under a tree are card scripts (FR-058b).
  *
  * <p>Forge reads every {@code .txt} staged into its custom-cards directory as a
  * card, and a {@code .txt} without a {@code Name:} line builds rules with no

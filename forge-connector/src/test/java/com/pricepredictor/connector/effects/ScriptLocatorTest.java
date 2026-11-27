@@ -24,7 +24,7 @@ class ScriptLocatorTest {
      * {@code PaperToken}. Keyed by name they would name
      * {@code cardsfolder/z/zombie_token.txt}, a file no tree holds, so every
      * Food, Treasure and Zombie on a forked board would reach the model as no
-     * text. The image key survives the copy and names the script stem (FR-150).
+     * text. The image key survives the copy and names the script stem (023 FR-150).
      */
     @Test
     void aCopiedTokenWithNoPaperCardStillKeysIntoTheTokenTree() {

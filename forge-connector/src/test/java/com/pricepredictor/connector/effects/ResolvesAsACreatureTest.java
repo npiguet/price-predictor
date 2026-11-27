@@ -52,7 +52,7 @@ class ResolvesAsACreatureTest {
     /**
      * A permanent spell's own arrival is its root clause's: Forge resolves a
      * creature spell through its {@code PermanentCreature} clause, with the
-     * resolving-clause pointer set (C1 #6, V2 #9).
+     * resolving-clause pointer set.
      */
     @Test
     void aPermanentSpellsArrivalIsItsRootClauses() throws Throwable {

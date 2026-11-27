@@ -266,7 +266,7 @@ class DirectedRulesContractTest {
     }
 
     /**
-     * TC3: the registry is tied to its scenarios by more than ids and labels.
+     * The registry is tied to its scenarios by more than ids and labels.
      * A card a rule class names (the Hill Giant a variant puts in a
      * creature's place, the Lightning Bolt it puts in a library) is one of
      * the cards of the scenarios its registrations name: a rule that drifted

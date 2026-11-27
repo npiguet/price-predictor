@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The random seat's decision points, on scripted boards (spec Story 3
+ * The random seat's decision points, on scripted boards (Feature 025 story 3
  * scenarios 1–5 and 15–18).
  *
  * <p>Each board is a real two-player game with real cards in real zones,
@@ -146,9 +146,9 @@ class RandomSeatControllerTest {
     }
 
     /**
-     * What the seat drew resolves (TC4): Arc Lightning, its 3 damage divided
+     * What the seat drew resolves: Arc Lightning, its 3 damage divided
      * among the targets drawn, deals all of it, where an undivided draw threw
-     * at resolution and lost the match (V3 #3).
+     * at resolution and lost the match.
      */
     @Test
     void aDividedSpellTheSeatDrewResolves() {
@@ -177,7 +177,7 @@ class RandomSeatControllerTest {
     }
 
     /**
-     * The seat never strands a card in the stack zone (V3 #7): Fireball with
+     * The seat never strands a card in the stack zone: Fireball with
      * two Mountains against three creatures costs {1} more per target past
      * the first, which the rules-only affordability does not see. The AI's
      * payment is asked before the card moves, so a draw it cannot pay is
@@ -448,7 +448,7 @@ class RandomSeatControllerTest {
     }
 
     /**
-     * T063: a fork of the game does not act at random. {@code GameCopier}
+     * A fork of the game does not act at random. {@code GameCopier}
      * clones the lobby player, so the fork's player gets a controller of this
      * class too; never attached, it is the ordinary AI.
      */

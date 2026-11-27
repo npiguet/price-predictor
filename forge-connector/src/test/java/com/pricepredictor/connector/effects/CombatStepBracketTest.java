@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A combat record's snapshot is the board as its damage step began (FR-027,
- * story 2's acceptance 6).
+ * Feature 025 story 2's acceptance 6).
  *
  * <p>Played on the real engine, because what is under test is when the
  * snapshot is taken relative to the engine's own steps: the phase event, the

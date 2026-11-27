@@ -27,8 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The {@code add_permanent} operation adds the permanent as asked and silently
- * (T086a), and on a real copy the first state-based check sees an added 0/0 die.
+ * The {@code add_permanent} operation adds the permanent as asked and silently,
+ * and on a real copy the first state-based check sees an added 0/0 die.
  *
  * <p>The board each test edits and how a check reads it: {@link ForkOperationSupport}.
  */

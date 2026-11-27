@@ -113,7 +113,7 @@ class KeywordDefinitionMainTest {
     /**
      * The formatter is the class Forge fills the keyword's template with, read
      * straight off the enum, so the Python expansion can format a value the way
-     * Forge does rather than pasting it raw (FR-018).
+     * Forge does rather than pasting it raw (024 FR-018).
      */
     @Test
     void everyKeywordRecordsHowForgeFormatsItsValues() {

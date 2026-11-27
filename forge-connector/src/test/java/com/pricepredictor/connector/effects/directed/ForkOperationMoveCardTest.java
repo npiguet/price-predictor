@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The {@code move_card} operation moves or replaces a card between zones silently
- * (T086a): no draw, discard or descent is counted and no trigger fires.
+ * The {@code move_card} operation moves or replaces a card between zones silently:
+ * no draw, discard or descent is counted and no trigger fires.
  *
  * <p>The board each test edits and how a check reads it: {@link ForkOperationSupport}.
  */

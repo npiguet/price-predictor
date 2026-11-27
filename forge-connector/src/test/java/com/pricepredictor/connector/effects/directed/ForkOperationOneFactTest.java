@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The {@code pt}, {@code colour_type}, {@code counters}, {@code tap} and {@code life}
- * operations each change exactly their one fact (T086), and a life edit fires no
+ * operations each change exactly their one fact, and a life edit fires no
  * life-gain trigger.
  *
  * <p>The board each test edits and how a check reads it: {@link ForkOperationSupport}.

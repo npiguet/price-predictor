@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The Java half of the relation-family contract pair (T058): reads
+ * The Java half of the relation-family contract pair: reads
  * {@code FAMILIES} in {@code relation_types.py} and compares its spellings, in
  * order, with {@link LinkFamily}'s, so a link's {@code type} is always a
  * family the trunk has a row for, and both sides keep § 10.3's table order.

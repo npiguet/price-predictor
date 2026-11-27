@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A bus {@code attached} names what the attachment now hangs on
  * ({@code attached_to}), a bus {@code unattached} what it left
- * ({@code detached_from}) (C1 #5, V2 #8). A move from one host to another
+ * ({@code detached_from}). A move from one host to another
  * is an {@code unattached}, then an {@code attached}: Forge unattaches first
  * ({@code Card.attachToEntity}).
  */

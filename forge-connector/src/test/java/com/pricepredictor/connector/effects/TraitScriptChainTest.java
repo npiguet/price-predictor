@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The chained script text (FR-001 to FR-003, FR-005a), against the scripts
+ * The chained script text (024 FR-001 to FR-003, FR-005a), against the scripts
  * captured for feature 024 before the converter changed.
  *
  * <p>Every card here is a real Forge script copied into
@@ -122,7 +122,7 @@ class TraitScriptChainTest {
         }
     }
 
-    // ── Story 1, scenario 1: a trigger's Execute and its SubAbility chain ──
+    // ── Feature 024 story 1, scenario 1: a trigger's Execute and its SubAbility chain ──
 
     @Test
     void aTriggersChainFollowsExecuteThenEachSubAbility() {
@@ -154,7 +154,7 @@ class TraitScriptChainTest {
                 "sub_ability_links keep the author's label: attributed_to reads it");
     }
 
-    // ── Story 1, scenarios 2 and 11: a charm's root and option lines ──────
+    // ── Feature 024 story 1, scenarios 2 and 11: a charm's root and option lines ──────
 
     @Test
     void aCharmRootIsItsOwnSegmentWithRenamedChoicesAndNoModeInlined() {
@@ -209,7 +209,7 @@ class TraitScriptChainTest {
         }
     }
 
-    // ── Story 1, scenario 3: a replacement's ReplaceWith and its chain ────
+    // ── Feature 024 story 1, scenario 3: a replacement's ReplaceWith and its chain ────
 
     @Test
     void aReplacementsChainFollowsReplaceWithThenItsSubAbility() {
@@ -233,7 +233,7 @@ class TraitScriptChainTest {
         new Chain(text).hasAll(List.of("ReplaceWith$ SV1", " [SEG] SV1: DB$ Draw")).segments(1);
     }
 
-    // ── Story 1, scenario 12: label names never reach the text ───────────
+    // ── Feature 024 story 1, scenario 12: label names never reach the text ───────────
 
     @Test
     void twoChainsDifferingOnlyInLabelNamesRenderTheSameText() {
@@ -250,7 +250,7 @@ class TraitScriptChainTest {
                 .lacksAll(List.of("DBDraw"));
     }
 
-    // ── FR-003: once per chain, and undefined labels reported ────────────
+    // ── 024 FR-003: once per chain, and undefined labels reported ────────────
 
     @Test
     void anSVarTwoBranchesShareIsEmittedOnceAndTheChainTerminates() {
@@ -403,7 +403,7 @@ class TraitScriptChainTest {
         }
     }
 
-    // ── a keyword rendering one line per trait it generates (WP12 N1) ───
+    // ── a keyword rendering one line per trait it generates ───
 
     /** The keys of the line whose text starts with {@code prefix}. */
     private static List<ProvenanceKey> keysOfLine(Converted converted, String prefix) {
@@ -630,7 +630,7 @@ class TraitScriptChainTest {
         }
     }
 
-    // ── the other chain keys Forge parses (C2 #10, V2 #19) ──────────────
+    // ── the other chain keys Forge parses ──────────────
 
     /**
      * Every parameter Forge parses into an ability of the chain ({@code

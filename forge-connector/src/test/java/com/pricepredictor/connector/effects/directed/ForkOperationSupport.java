@@ -16,8 +16,8 @@ import java.util.Set;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 
 /**
- * Each fork operation changes exactly its one fact (T086), and the three
- * board-membership operations change it silently (T086a, story 3 acceptance
+ * Each fork operation changes exactly its one fact, and the three
+ * board-membership operations change it silently (Feature 025 story 3 acceptance
  * 6): no trigger fires from the edit, and no per-turn count moves.
  *
  * <p>Every check compares the board-only snapshot a record would carry,

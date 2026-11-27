@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An {@code attackers} record is anchored to one attacker (FR-037, story 2's
+ * An {@code attackers} record is anchored to one attacker (FR-037, Feature 025 story 2's
  * acceptance 11): its legal defenders, whether it must attack, and, once the
  * declaration is made, whether declaring the attack tapped it.
  *

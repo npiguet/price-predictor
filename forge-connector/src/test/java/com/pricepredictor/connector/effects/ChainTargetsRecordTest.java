@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A stack item's {@code refs.targets} and {@code refs.targets_at_cast}, read
  * over its whole chain, played through the engine's own resolution with the
- * resolution hook installed (X1 #2, X1 #14, X1 #15).
+ * resolution hook installed.
  */
 @ExtendWith(ForgeExtension.class)
 class ChainTargetsRecordTest {
@@ -83,7 +83,7 @@ class ChainTargetsRecordTest {
 
     /**
      * Each of Arc Trail's damages belongs to the link that targets its
-     * subject (WP4's leftover): Forge deals both from one damage map as the
+     * subject: Forge deals both from one damage map as the
      * chain's last clause (DamageResolve) resolves, so both read its index before.
      */
     @Test

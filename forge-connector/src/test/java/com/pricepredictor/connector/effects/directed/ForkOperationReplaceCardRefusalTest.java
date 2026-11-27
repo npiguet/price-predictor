@@ -96,7 +96,7 @@ class ForkOperationReplaceCardRefusalTest {
     }
 
     /**
-     * C4 #1: the damage the replaced creature carries is lethal to a smaller
+     * The damage the replaced creature carries is lethal to a smaller
      * card, which the fork's first check would put into a graveyard; the edit
      * refuses rather than fork that board. Hill Giant with 2 damage becomes
      * Grizzly Bears with 2 damage.

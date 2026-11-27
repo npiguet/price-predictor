@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The resolved effects a snapshot's {@code floating_effects} lists by
  * timestamp, beyond the layer tables: a resolved control change and a
- * resolved can't-have row (C2 #8).
+ * resolved can't-have row.
  */
 @ExtendWith(ForgeExtension.class)
 class FloatingRowsTest {

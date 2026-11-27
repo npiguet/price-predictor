@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A resolution's {@code conditions_met}: for each conditional clause that
  * resolved, whether its condition held, keyed by the chain index its events'
- * {@code attributed_to} uses (FR-034, story 2 acceptance 9).
+ * {@code attributed_to} uses (FR-034, Feature 025 story 2 acceptance 9).
  *
  * <p>Kami's Flare deals 3 damage to its target and, in its first sub-ability
  * ({@code ConditionPresent$ Creature.YouCtrl+modified}), 2 to the target's
@@ -75,7 +75,7 @@ class ConditionsMetTest {
         return halves.get(0);
     }
 
-    /** Story 2 acceptance 9: a segment whose condition did not hold reads {@code met = false}. */
+    /** Feature 025 story 2 acceptance 9: a segment whose condition did not hold reads {@code met = false}. */
     @Test
     void aConditionThatDidNotHoldIsWrittenUnmet() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);

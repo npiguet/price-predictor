@@ -134,8 +134,8 @@ class ScheduledInterventionsTest {
     /**
      * The fork's copy of a forced line is that line: Chainflinger's second
      * damage ability, forced, is written under its own key and deals its own
-     * two damage, not the first's one (C3 #5: the copier's mapper checks the
-     * counterpart is alike, its API and script line, since WP1).
+     * two damage, not the first's one: the copier's mapper checks that the
+     * counterpart is alike, its API and script line.
      */
     @Test
     void aForcedLineIsWrittenUnderItsOwnKeyAndDoesWhatItSays() throws Throwable {

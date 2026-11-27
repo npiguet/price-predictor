@@ -61,12 +61,12 @@ class RecordDedupTest {
     }
 
     /**
-     * The legality cap keys on the snapshot as well as the payload (FR-028).
+     * The legality cap keys on the snapshot as well as the payload (024 FR-028).
      *
      * <p>The AI's re-asks within one combat still collapse -- the board does
      * not move while it evaluates, so their snapshots render identically --
      * while the same answer on a board that moved is kept, which the
-     * payload-only key of gen-1 dropped as a repeat (spec Story 3 scenario 10).
+     * payload-only key of gen-1 dropped as a repeat (Feature 024 story 3 scenario 10).
      * And one subkind's answer never coalesces with another's.
      */
     @Test

@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class RegisteredRulesCreaturesTest {
 
-    // ── 704.5f, toughness 0 (T094, acceptance 1) ────────────────────────
+    // ── 704.5f, toughness 0 ────────────────────────
 
     /** 704.5f-1's base: A holds Disfigure and an untapped Swamp; B's Drudge Skeletons is a 1/1. */
     private static RuleBoard disfigureBoard(String creature) {

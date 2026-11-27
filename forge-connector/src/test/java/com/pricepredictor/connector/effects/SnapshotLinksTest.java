@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A snapshot's {@code links} (FR-026, FR-050, T059): one case per family of
+ * A snapshot's {@code links} (FR-026, FR-050): one case per family of
  * root § 10.3 the collector writes, each on a board set up the way the
  * engine leaves it, and the remembered-list rule of C8.
  *

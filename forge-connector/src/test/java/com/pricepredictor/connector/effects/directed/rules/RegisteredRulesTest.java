@@ -13,12 +13,12 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The registered directed rules (T094, T095): on a {@code TestBoard} set up
+ * The registered directed rules: on a {@code TestBoard} set up
  * as each rule's scenario sets up its base variant, the precondition binds the
  * scenario's objects, and on a board missing the base it binds nothing; and
  * the fork, copied as a directed fork copies the live game and edited by the
  * rule's variant, differs from its real twin, the live board, by that
- * variant's one fact (story 3, acceptance 3).
+ * variant's one fact (Feature 025 story 3, acceptance 3).
  *
  * <p>The twin comparison reads the board-only snapshot a record would carry,
  * member by member ({@code BoardChanges}), and checks first that the unedited

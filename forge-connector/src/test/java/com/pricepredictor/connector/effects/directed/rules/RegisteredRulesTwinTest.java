@@ -44,7 +44,7 @@ class RegisteredRulesTwinTest {
                 new DirectedRule.Variant("v", new Application(operation, edit)));
     }
 
-    /** TC3: the first check ending the fork's game moves no card, and the twin still sees it. */
+    /** The first check ending the fork's game moves no card, and the twin still sees it. */
     @Test
     void theTwinCatchesAnEditTheFirstCheckLosesAPlayerWith() {
         RuleBoard board = new RuleBoard(PhaseType.MAIN1);

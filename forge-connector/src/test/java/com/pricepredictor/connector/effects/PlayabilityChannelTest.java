@@ -187,7 +187,7 @@ class PlayabilityChannelTest {
 
     /**
      * A blocker Pacifism keeps from blocking at all is forbidden by that
-     * static, named through Forge's {@code cantBlockStatic} (F3 #2): the
+     * static, named through Forge's {@code cantBlockStatic}: the
      * pair-wise lookup finds no static for it.
      */
     @Test
@@ -202,7 +202,7 @@ class PlayabilityChannelTest {
 
     /**
      * A blocker a lure makes block another attacker is kept from blocking
-     * this one by a requirement, not a prohibition (F3 #7): its forbidden
+     * this one by a requirement, not a prohibition: its forbidden
      * entry says {@code required_elsewhere}.
      */
     @Test
@@ -451,7 +451,7 @@ class PlayabilityChannelTest {
 
     /**
      * Every declaration on a board that moved is written, and the same
-     * declaration on an unchanged board is written once (FR-028). A defender
+     * declaration on an unchanged board is written once (024 FR-028). A defender
      * asked about a second time is a new declaration.
      */
     @Test
@@ -476,7 +476,7 @@ class PlayabilityChannelTest {
     }
 
     /**
-     * Spec Story 3 scenario 6 on the hook path: a record whose actor is the
+     * Feature 024 story 3 scenario 6 on the hook path: a record whose actor is the
      * random seat says so.
      */
     @Test

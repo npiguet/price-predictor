@@ -24,8 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Forge's hidden keywords — "target creature can't block this turn", a
  * {@code KW$ HIDDEN} pump — in the effect half that grants one, in the
- * snapshots after it and among the floating effects (V2 #14, X1 #10,
- * C2 #8).
+ * snapshots after it and among the floating effects.
  */
 @ExtendWith(ForgeExtension.class)
 class HiddenKeywordsTest {

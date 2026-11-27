@@ -119,7 +119,7 @@ class StatDifferTest {
 
     // ── keywords, hidden keywords, abilities, control ───────────────────
 
-    /** Keywords gained are listed sorted, the same on every JVM (V2 #16). */
+    /** Keywords gained are listed sorted, the same on every JVM. */
     @Test
     void gainedKeywordsAreSorted() {
         forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
@@ -134,7 +134,7 @@ class StatDifferTest {
         assertEquals(false, event.param(EventParam.REMOVED));
     }
 
-    /** A second instance of a stacking keyword is a keyword gained (C2 #7). */
+    /** A second instance of a stacking keyword is a keyword gained. */
     @Test
     void aSecondInstanceOfAKeywordIsAChange() {
         forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
@@ -150,7 +150,7 @@ class StatDifferTest {
         assertEquals(List.of("bushido:1"), event.param(EventParam.KEYWORDS));
     }
 
-    /** A hidden keyword is a keyword change of its own, flagged hidden (X1 #10). */
+    /** A hidden keyword is a keyword change of its own, flagged hidden. */
     @Test
     void aHiddenKeywordIsAHiddenKeywordChange() {
         forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
@@ -172,7 +172,7 @@ class StatDifferTest {
 
     /**
      * An ability a static grants is an ability change naming its line, and
-     * one taken away an ability change marked removed (C2 #7).
+     * one taken away an ability change marked removed.
      */
     @Test
     void anAbilityGrantedAndTakenAwayIsAnAbilityChange() {
@@ -253,7 +253,7 @@ class StatDifferTest {
         assertTrue(differ.diff(bears).isEmpty(), "measured from the rebaseline");
     }
 
-    /** A control change names the new controller (TC2 #9). */
+    /** A control change names the new controller. */
     @Test
     void aControlChangeNamesTheNewController() {
         forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);

@@ -50,7 +50,7 @@ class BatchConverterTest {
         }
     }
 
-    // ── the converted text must not change (FR-004, SC-001) ─────────────
+    // ── the converted text must not change (024 FR-004, SC-001) ─────────────
 
     private static final Path GOLDEN = Path.of("src/test/resources/golden-024");
 

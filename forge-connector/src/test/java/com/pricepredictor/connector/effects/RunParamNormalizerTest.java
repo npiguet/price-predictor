@@ -36,8 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * mode names, and each mode that moves a life total or a counter count read
  * off a trigger or replacement the engine really runs: its amount signed as
  * the bus signs it (positive a gain, negative a loss), and a face change in
- * an entity's {@code face_state} spelling (V2 #1, V2 #2, C2 #1, C2 #3, C2 #4,
- * X1 #8).
+ * an entity's {@code face_state} spelling.
  */
 @ExtendWith(ForgeExtension.class)
 class RunParamNormalizerTest {
@@ -220,7 +219,7 @@ class RunParamNormalizerTest {
         assertDeltas(rewrite, 3L, 6L);
     }
 
-    /** The case V2 #1 observed reading as a gain: an edited LifeReduced amount. */
+    /** The case that read as a gain: an edited LifeReduced amount. */
     @Test
     void aLifeLossReplacementWritesNegativeDeltas() throws Throwable {
         Game game = game();

@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Real matches played through {@link GamePlayer#playMatch} with effect
- * records on and a shard writer, as a worker plays them (TC4): the game-end
+ * records on and a shard writer, as a worker plays them: the game-end
  * marker each game that ended writes last, the graceful stop at a game end,
  * and a game that throws mid-match. The decks are burn mirrors, so a game
  * lasts a handful of turns.

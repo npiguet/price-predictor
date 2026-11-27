@@ -143,7 +143,7 @@ class TriggerRecordTest {
 
     /**
      * A condition that held is a firing only once Forge runs the trigger
-     * (WP2's {@code onTriggerRun}): an evaluation never run writes nothing,
+     * ({@code onTriggerRun}): an evaluation never run writes nothing,
      * and two runs of one evaluation (Panharmonicon) write one record.
      */
     @Test
@@ -193,7 +193,7 @@ class TriggerRecordTest {
 
     /**
      * Two triggers that key to no printed line keep a reservoir and a
-     * negative cap each (C2 #16): their keys differ, where both were "null".
+     * negative cap each: their keys differ, where both were "null".
      */
     @Test
     void unresolvedLinesAreKeyedApart() {

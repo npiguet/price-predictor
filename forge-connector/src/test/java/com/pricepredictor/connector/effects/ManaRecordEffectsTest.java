@@ -23,9 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A mana record holds what its own mana ability did besides the mana (WP3's
- * verification, for WP7): a pain land's damage to its controller, after the
- * mana; a creature sacrificed for mana, before it. Played through the engine:
+ * A mana record holds what its own mana ability did besides the mana: a pain
+ * land's damage to its controller, after the mana; a creature sacrificed for mana, before it. Played through the engine:
  * the AI pays the ability's cost and resolves it, with the hooks installed.
  */
 @ExtendWith(ForgeExtension.class)

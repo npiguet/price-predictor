@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A creature's {@code damage_dealt} says how the damage was dealt, as
  * {@code damage_type}: marked, turned into -1/-1 counters by wither or
- * infect, or from a deathtouch source (V1 #13).
+ * infect, or from a deathtouch source.
  */
 @ExtendWith(ForgeExtension.class)
 class DamageTypeTest {

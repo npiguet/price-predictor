@@ -224,7 +224,7 @@ class DecisionSampleTest {
         assertEquals(DecisionSample.SPECIAL, cycling.sample());
     }
 
-    // ── land plays (T064a) ──────────────────────────────────────────────
+    // ── land plays ──────────────────────────────────────────────
 
     @Test
     void aLandInHandOnItsOwnersTurnIsPlain() {

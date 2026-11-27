@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The {@code keyword} operation changes the card's lines alone (T086), and refuses
+ * The {@code keyword} operation changes the card's lines alone, and refuses
  * a removal of a keyword the card lacks and a keyword the card cannot have.
  *
  * <p>The board each test edits and how a check reads it: {@link ForkOperationSupport}.

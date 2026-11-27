@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What makes a registered rule's variant come undone between the
- * precondition and the fork (review C4, V3 #9-10): a land left to play,
+ * precondition and the fork: a land left to play,
  * a keyword from an attachment or a resolved effect, a sorcery in the
  * non-active hand, carried damage and counters, a defender left in reach.
  * The boards are the rule families' ({@link RegisteredRulesTest} sets out
@@ -33,10 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class RegisteredRulesUndoneTest {
 
-    // ── what makes a variant come undone (review C4, V3 #9-10) ──────────
+    // ── what makes a variant come undone ──────────
 
     /**
-     * C4 #2: a land in the holder's hand would be played as the turn goes on
+     * A land in the holder's hand would be played as the turn goes on
      * and give back the mana a "one land short" variant takes, so the rule
      * does not bind; with the turn's land drop used it binds again.
      */
@@ -77,7 +77,7 @@ class RegisteredRulesUndoneTest {
     }
 
     /**
-     * C4 #4: a keyword the bound creature has from an Equipment stays on the
+     * A keyword the bound creature has from an Equipment stays on the
      * card {@code replace_card} puts in its place, since the edit relinks the
      * attachment; so does one a resolved effect gave it.
      */
@@ -105,7 +105,7 @@ class RegisteredRulesUndoneTest {
     }
 
     /**
-     * C4 #5: a sorcery in the non-active player's hand cannot be cast this
+     * A sorcery in the non-active player's hand cannot be cast this
      * turn, so the fork would be spent on nothing. An instant can
      * ({@code toughnessZeroBindsTheCreatureTheSpellWouldKill}'s Disfigure,
      * {@code limitedSearchBindsTheLimitingPermanent}'s Vampiric Tutor).
@@ -140,7 +140,7 @@ class RegisteredRulesUndoneTest {
     }
 
     /**
-     * C4 #1, V3 #9 (b): {@code replace_card} carries the permanent's marked
+     * {@code replace_card} carries the permanent's marked
      * damage and counters to the card put in its place, so a smaller card
      * dies of them at the fork's first state-based check.
      */
@@ -160,7 +160,7 @@ class RegisteredRulesUndoneTest {
         assertTrue(SharedKeywords.bind(board.game).isEmpty(), "Hill Giant is a 3/3");
     }
 
-    /** C4 #6: taking the counter away kills a creature whose toughness rests on it. */
+    /** Taking the counter away kills a creature whose toughness rests on it. */
     @Test
     void unleashBindsNothingWhenTheCreatureLivesByItsCounter() {
         RuleBoard board = unleashBoard(named("Rakdos Cackler"), 1);
@@ -169,7 +169,7 @@ class RegisteredRulesUndoneTest {
     }
 
     /**
-     * C4 #8: the defender cut to the most anyone else has must not be left
+     * The defender cut to the most anyone else has must not be left
      * in reach of the attack the fork's point is.
      */
     @Test

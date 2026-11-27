@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * with {@link GameCopier}, and the fork's copy is rendered by the collectors'
  * own {@link SnapshotBuilder}.
  *
- * <p>The assertion is on the keys of the copy's {@code lines} (FR-150): an
+ * <p>The assertion is on the keys of the copy's {@code lines} (023 FR-150): an
  * ability-bearing token in a forked record keyed by its name would name
  * {@code cardsfolder/f/food_token.txt} -- a file that does not exist, so the
  * sidecar join would fail loudly and the record carry no ability text at all.
@@ -94,7 +94,7 @@ class CopiedTokenProvenanceTest {
                 "the fork's lines differ from the board it was forked from");
     }
 
-    /** FR-078 calls the field a token-script id; the printed name collapses distinct scripts. */
+    /** 023 FR-078 calls the field a token-script id; the printed name collapses distinct scripts. */
     @Test
     void theSnapshotNamesTheTokenScriptNotThePrintedName() {
         ForkedBoard board = boardWithFoodTokenAndItsFork();

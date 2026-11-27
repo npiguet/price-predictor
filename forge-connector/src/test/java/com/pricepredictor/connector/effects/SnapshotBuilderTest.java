@@ -136,7 +136,7 @@ class SnapshotBuilderTest {
     // ── a card's lines (FR-021 to FR-023) ───────────────────────────────
 
     /**
-     * Story 2's acceptance 1 to 5 and the face-down case: what a card slot's
+     * Feature 025 story 2's acceptance 1 to 5 and the face-down case: what a card slot's
      * {@code lines} carries, read off the rendered entity.
      */
     @Nested
@@ -338,7 +338,7 @@ class SnapshotBuilderTest {
         /**
          * A decision on an Adventure's spell, the card in hand: the host
          * shows the Adventure's face, the spell the candidate casts, not
-         * the creature the hand holds it as (X1 #3); the hand card itself is
+         * the creature the hand holds it as; the hand card itself is
          * left on its front.
          */
         @Test
@@ -376,7 +376,7 @@ class SnapshotBuilderTest {
                     .findFirst().orElseThrow();
         }
 
-        /** Fire // Ice in hand, its Ice half acting: the host shows Ice (X1 #3). */
+        /** Fire // Ice in hand, its Ice half acting: the host shows Ice. */
         @Test
         void aSplitCardShowsTheHalfItsActingAbilityIsOn() {
             Map<String, Object> entity = handEntityActingThrough(
@@ -385,7 +385,7 @@ class SnapshotBuilderTest {
             assertEquals("hand", entity.get("zone"), entity.toString());
         }
 
-        /** A modal double-faced card acting through its back face shows that face (X1 #3). */
+        /** A modal double-faced card acting through its back face shows that face. */
         @Test
         void aModalDoubleFacedCardShowsTheBackFaceItsAbilityIsOn() {
             Map<String, Object> entity = handEntityActingThrough(
@@ -398,7 +398,7 @@ class SnapshotBuilderTest {
         /**
          * A Clone of a transformed Delver copies its face up, Insectile
          * Aberration: the copy's Flying keys to the Aberration's face of the
-         * Delver's file, not to the Clone's own line (V2 #4 edge).
+         * Delver's file, not to the Clone's own line.
          */
         @Test
         void aCopyOfATransformedCardKeysToTheFaceItCopied() {
@@ -421,7 +421,7 @@ class SnapshotBuilderTest {
 
         /**
          * A Clone's {@code copy_source} is the creature it copied, never the
-         * Clone itself (C2 #11, V2 #18).
+         * Clone itself.
          */
         @Test
         void aClonesCopySourceIsWhatItCopied() {
@@ -441,7 +441,7 @@ class SnapshotBuilderTest {
          * Phantasmal Image's copy keeps the copied creature's lines keyed to
          * it, and the trigger the copy effect adds ({@code AddTriggers$}) keys
          * to the Image's own line that made the copy, never to a trigger
-         * index of the Image's file, which prints none (X1 #6, C2 #2).
+         * index of the Image's file, which prints none.
          */
         @Test
         void aCopyEffectsAddedTriggerKeysToTheLineThatCopied() {
@@ -622,7 +622,7 @@ class SnapshotBuilderTest {
         }
     }
 
-    // ── player and global facts (FR-024, T054) ──────────────────────────
+    // ── player and global facts (FR-024) ──────────────────────────
 
     @Nested
     @ExtendWith(ForgeExtension.class)
@@ -840,7 +840,7 @@ class SnapshotBuilderTest {
         }
     }
 
-    // ── card facts (FR-024, T055) ───────────────────────────────────────
+    // ── card facts (FR-024) ───────────────────────────────────────
 
     @Nested
     @ExtendWith(ForgeExtension.class)
@@ -848,7 +848,7 @@ class SnapshotBuilderTest {
 
         /**
          * A phased-out permanent is still on the battlefield and in the
-         * snapshot, marked phased out (C2 #12, V2 #18).
+         * snapshot, marked phased out.
          */
         @Test
         void aPhasedOutPermanentIsAnEntity() {
@@ -1040,7 +1040,7 @@ class SnapshotBuilderTest {
         }
     }
 
-    // ── entities beyond the tiers (FR-024, T057) ────────────────────────
+    // ── entities beyond the tiers (FR-024) ────────────────────────
 
     @Nested
     @ExtendWith(ForgeExtension.class)
@@ -1067,7 +1067,7 @@ class SnapshotBuilderTest {
          * Rendering a library card as it was in the library builds it from
          * its printing once per card: a snapshot taken again parses nothing,
          * so Forge's trait id counter, which every parsed ability advances,
-         * moves no further (C2 #14).
+         * moves no further.
          */
         @Test
         void aLibraryCardIsBuiltFromItsPrintingOnce() {

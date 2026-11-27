@@ -32,7 +32,7 @@ class DeckMaterializerTest {
 
     @Test
     void failThrowsNamingWhatMissedAndWhy() {
-        // A coverage or variant deck's names come from output/cardsfolder/
+        // A coverage or variant deck's names come from the converted cardsfolder
         // and from VariantRegistry, not from Forge. A name Forge misses is
         // dropped, the deck materializes as 17 basics, a game plays, a
         // progress line is appended, records are written -- and the card the

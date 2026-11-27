@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A damage replacement's buffered ability (WP2's hooks, for WP7): its rewrite
+ * A damage replacement's buffered ability: its rewrite
  * record names it in {@code buffered}, never in {@code replaced_by}, waits for
  * its run, and takes the events published between
  * {@code onBufferedAbilityStarting} and {@code onBufferedAbilityFinished};

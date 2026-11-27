@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The Java half of the fork-operation contract pair (T017): reads the
+ * The Java half of the fork-operation contract pair: reads the
  * reader's {@code ForkOperation} in {@code fork_operation.py} and compares its
  * spellings, in order, with this enum's. {@code test_fork_operation.py} reads
  * this side's source the other way.

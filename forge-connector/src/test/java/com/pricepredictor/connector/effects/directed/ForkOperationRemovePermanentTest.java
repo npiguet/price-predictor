@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The {@code remove_permanent} operation takes the permanent alone and silently
- * (T086a): no dies or leaves trigger fires; its twin removal the way the game
+ * The {@code remove_permanent} operation takes the permanent alone and silently:
+ * no dies or leaves trigger fires; its twin removal the way the game
  * does fires.
  *
  * <p>The board each test edits and how a check reads it: {@link ForkOperationSupport}.

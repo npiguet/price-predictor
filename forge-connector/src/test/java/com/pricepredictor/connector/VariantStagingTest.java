@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A variant tree stays stageable after its sidecar pass (FR-058b, python R1).
+ * A variant tree stays stageable after its sidecar pass (FR-058b).
  *
  * <p>The sidecar pass stages the tree into Forge's custom-cards directory,
  * initializes Forge, and writes the loadable list into the tree. The next run

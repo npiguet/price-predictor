@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * When a directed fork is taken and for which rule (FR-010a, FR-012,
- * FR-013; story 3 acceptance 4).
+ * FR-013; Feature 025 story 3 acceptance 4).
  *
  * <p>The order and budget tests take the forks through a stand-in that only
  * notes which rule it was handed; the score-check test takes a real one.

@@ -110,7 +110,7 @@ class ModalResolutionTest {
                 clones.stream().map(EventAttribution::attributedTo).toList());
     }
 
-    /** Spec Story 3 scenario 13: one mode chosen twice gives two clones under one option. */
+    /** Feature 024 story 3 scenario 13: one mode chosen twice gives two clones under one option. */
     @Test
     void aRepeatedModeIsTwoClonesOfOneOption() {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
@@ -124,7 +124,7 @@ class ModalResolutionTest {
     // ── the halves ──────────────────────────────────────────────────────
 
     /**
-     * Spec Story 3 scenario 12: a "choose two" charm cast with modes 1 and 3
+     * Feature 024 story 3 scenario 12: a "choose two" charm cast with modes 1 and 3
      * writes one cost record through the root line and two effect halves
      * through the option lines, each carrying only its own mode's events, a
      * snapshot taken just before its mode resolved, and all three one link.
@@ -215,7 +215,7 @@ class ModalResolutionTest {
     }
 
     /**
-     * Spec Story 3 scenario 14: a degraded worker has no clause hook, so no
+     * Feature 024 story 3 scenario 14: a degraded worker has no clause hook, so no
      * mode ever opens and the one effect half acts through the root line with
      * every chosen mode's events (FR-029e). Disabling the hook is exactly
      * what degraded means here: the bracket is driven without it.

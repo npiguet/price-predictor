@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * What the {@code DirectedForkPlayedForward*Test} classes share: one
- * registered rule played forward (review TC3's "real fix"): a live game set
+ * registered rule played forward: a live game set
  * up as the rule's base, recorded by a {@code GameRecording} that takes the
  * rule's directed fork at the boundary ({@code DirectedFork.take}), the live
  * turn played out and the fork played to its end; the fork's records then

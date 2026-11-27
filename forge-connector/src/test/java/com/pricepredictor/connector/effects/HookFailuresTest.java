@@ -16,8 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * What a failing hook call or bus subscriber loses is counted (C1 #2, V2
- * #20): a subscriber's exception, which Guava's {@code EventBus} logs and
+ * What a failing hook call or bus subscriber loses is counted: a subscriber's exception, which Guava's {@code EventBus} logs and
  * swallows, and a hook call short of the arguments its listener reads, which
  * is answered with nothing.
  */

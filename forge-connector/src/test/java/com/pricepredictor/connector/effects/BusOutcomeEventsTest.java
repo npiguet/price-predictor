@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The outcomes a resolution or combat record reads off the bus besides the
- * moves themselves (C1 #15, V2 #3): a permanent destroyed, a permanent
+ * moves themselves: a permanent destroyed, a permanent
  * sacrificed, a card turning face up, a player losing the game. Each was
  * written only on a trigger's or a replacement's record, from its run
  * parameters, and never on the record of what did it.
