@@ -1165,8 +1165,9 @@ and that the reporting half never enters the control score.
 - **FR-054**: `build-corpus` MUST take a rule's share within each sampling class as the class budget
   divided by the number of budgeted rules tagged on the class's records, and add copies of a rule's records
   beyond their natural share, the copies gen-2's class, family and signature budgets give, until the
-  rule's written records reach its share, through the gen-2 water-filling allocator, bounded by the
-  reuse cap and `--text-cap`, the text cap counting the natural copies of every record of the text in
+  rule's written records reach its share, in rounds of at most one added copy per record over every
+  tagged record of the class, fork records included, in seeded order, each copy going to the record's
+  rule furthest below its half, bounded by the reuse cap and `--text-cap`, the text cap counting the natural copies of every record of the text in
   the class, tagged or not. Added copies come on top of the class budget. A budgeted rule is one
   the rules-to-fields map marks `trained`. A tagged rule with any other verdict gets no share and
   no added copy, and no added copy is drawn for it; its records are still counted per polarity and
@@ -1209,11 +1210,13 @@ and that the reporting half never enters the control score.
   MUST replace the single variant round and `--variant-volume`. The untargeted round MUST generate
   one variant of every eligible source script (single-faced, not held out under `build-corpus`'s
   holdout, perturbable) and play rounds of `--decks-per-round` matches, each variant weighted by the
-  games it lacks, until every variant has `--variant-games` (default 2) games or has retired after
-  `--no-progress-rounds` (default 3) rounds without a new game. A variant's games are the distinct
+  games it lacks, until every variant has `--variant-games` (default 2) games or has retired. A
+  variant retires after `--no-progress-rounds` (default 3) consecutive rounds whose games showed it
+  and gave it no new game; a variant written into decks that no game of the round showed retires
+  after three times as many such rounds. A variant's games are the distinct
   games holding a record whose acting key or decision candidate's key names its script file, in
-  this run's shards and in those of each run `--continues` names. Its records carry
-  `aimed_at = []`.
+  this run's shards and in those of each run `--continues` names. Its records carry `aimed_at`
+  listing the run's `--directed-fork-rules` (`[]` when it names none).
 - **FR-058b**: A variant MUST be named `<card> Variant <h>`, `h` the first eight hex digits of the
   SHA-256 of its perturbed script; an existing file of that name MUST be reused, never rewritten.
   Every variant of either round MUST be written to the variant tree with its sidecar before any deck
@@ -1293,7 +1296,8 @@ and that the reporting half never enters the control score.
   (random-seat ones, which write no outcome row, included) and its random-seat match errors when
   deciding that a run collected nothing.
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
-  stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
+  stratum MUST admit a game naming a held-out card, random-seat games included, only while it resolves
+  a held-out text and every held-out text it resolves is under `--card-disjoint-text-cap`. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
   whose candidate's key is unjoinable MUST be refused as `unjoinable-key`. A `turn_action` record
   MUST NOT be written to the training or either validation stratum; the manifest counts the
@@ -1310,8 +1314,7 @@ and that the reporting half never enters the control score.
   sample, the freeze's standard errors) MUST multiply by it; a reader taking each record once
   MUST NOT.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, four sources), per class
-  and rule the records available (distinct tagged records, fork records left out: a report figure no budget decision reads), share, written (every copy, fork copies included) and shortfall, each split
-  by polarity and by the same sources, for the training stratum and for each validation stratum, the one-sided conditions
+  and rule, by polarity, a row of the records available (distinct tagged records, fork records left out: a report figure no budget decision reads), written (every copy, fork copies included), added (the copies the budgets drew) and drawn (those drawn for this rule), each split by the same sources, and the share and shortfall, which are not split by source (the share is null on `other` and on an unbudgeted rule), for the training stratum and for each validation stratum, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
   and keyword lists of FR-052/FR-053; per class, the kept records collected as forks,
   interventions, directed forks, aimed or degraded, and the resolutions acting only through
