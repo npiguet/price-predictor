@@ -16,6 +16,7 @@ import static com.pricepredictor.connector.effects.SnapshotReading.entityIn;
 import static com.pricepredictor.connector.effects.SnapshotReading.idsIn;
 import static com.pricepredictor.connector.effects.SnapshotReading.line;
 import static com.pricepredictor.connector.effects.SnapshotReading.linesOf;
+import static com.pricepredictor.connector.effects.SnapshotReading.valuesOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -40,9 +41,8 @@ class SnapshotBeyondTheTiersTest {
         String state = new SnapshotBuilder(board.game).ofBoard().render();
         Map<String, Object> entity = entityIn(state, top);
 
-        assertEquals("library_card", entity.get("role"));
-        assertEquals("library", entity.get("zone"));
-        assertEquals(0L, entity.get("order_rank"));
+        assertEquals(List.of("library_card", "library", 0L),
+                valuesOf(entity, "role", "zone", "order_rank"));
         assertFalse(idsIn(state).contains(Refs.of(bottom)), state);
     }
 
@@ -82,9 +82,8 @@ class SnapshotBeyondTheTiersTest {
                 new EffectEvent(EventType.ZONE_CHANGE).subject(Refs.of(second)))).render();
 
         Map<String, Object> entity = entityIn(state, second);
-        assertEquals("library_card", entity.get("role"));
-        assertEquals("library", entity.get("zone"));
-        assertEquals(position, entity.get("order_rank"));
+        assertEquals(List.of("library_card", "library", position),
+                valuesOf(entity, "role", "zone", "order_rank"));
         assertTrue(position > 0, "not the top, which the snapshot already holds");
         assertEquals(before.render(), before.withEventCards(List.of()).render());
     }
