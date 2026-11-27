@@ -40,6 +40,16 @@ class CastabilityMainTest {
             "a noncreature permanent is castable;                        Sol Ring;             CASTABLE",
             "a basic land is uncastable;                                 Forest;               UNCASTABLE",
             "a nonbasic land is uncastable;                              Wasteland;            UNCASTABLE",
+            // Multi-face cards: the faces' scripts sit in one file, so a verdict for the
+            // card name and one for a back-face name must both come from the right face.
+            "a split card is castable;                                   Fire // Ice;         CASTABLE",
+            "a split card's second half is castable by its own name;     Ice;                  CASTABLE",
+            "an Adventure creature is castable;                          Bonecrusher Giant;    CASTABLE",
+            "an Adventure half is castable by its own name;              Stomp;                CASTABLE",
+            "a land-land modal card is uncastable;                       Branchloft Pathway;   UNCASTABLE",
+            "a land-land modal card's back face is uncastable;           Boulderloft Pathway;  UNCASTABLE",
+            "a Room is castable;                                         Funeral Room;         CASTABLE",
+            "a Room's second door is castable by its own name;           Awakening Hall;       CASTABLE",
     })
     void theEngineJudgesEachKindOfCard(String ignoredCase, String name, CastabilityMain.Verdict expected) {
         assertEquals(expected, verdict(name));

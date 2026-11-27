@@ -40,6 +40,33 @@ class HoldoutCardsTest {
     }
 
     @Test
+    void aSplitCardIsHeldOutUnderItsWholeNameOnly() {
+        // The converted tree lowercases; Forge names a split card "Fire // Ice".
+        HoldoutCards holdout = HoldoutCards.of(List.of("fire // ice"));
+
+        assertTrue(holdout.contains("Fire // Ice"));
+        assertFalse(holdout.contains("Fire"), "a half's name is not the card's name");
+        assertFalse(holdout.contains("Ice"));
+    }
+
+    @Test
+    void anAccentedNameMatchesItsLowercasedSpelling() {
+        HoldoutCards holdout = HoldoutCards.of(List.of("lim-dûl's cohort"));
+
+        assertTrue(holdout.contains("Lim-Dûl's Cohort"));
+        assertFalse(holdout.contains("Lim-Dul's Cohort"), "folding never strips an accent");
+    }
+
+    @Test
+    void anAPrefixedNameKeepsItsPrefixAndIsADifferentCardFromTheOriginal() {
+        // Forge's rebalanced script is "A-Alrund's Epiphany", a card of its own.
+        HoldoutCards holdout = HoldoutCards.of(List.of("a-alrund's epiphany"));
+
+        assertTrue(holdout.contains("A-Alrund's Epiphany"));
+        assertFalse(holdout.contains("Alrund's Epiphany"));
+    }
+
+    @Test
     void anUnsetPropertyIsAFullStrengthRun() {
         assertSame(HoldoutCards.NONE, HoldoutCards.fromSystemProperty());
     }
