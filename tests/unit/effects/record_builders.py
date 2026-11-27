@@ -118,35 +118,71 @@ def lines_of(printed=(), granted=()) -> tuple[CardLine, ...]:
     )
 
 
+def _resolution_payload(moment):
+    if moment is Moment.ACTIVATION:
+        # The cost half: ``{events, costs}``, its outcome on the effect half.
+        return ActivationPayload(costs=Costs(), events=())
+    return ResolutionPayload(conditions_met=(), outcome=ResolutionOutcome.RESOLVED)
+
+
+def _attackers_payload():
+    # Attackers records are one per creature, each anchored.
+    return PlayabilityAttackersPayload(anchor_attacker="E1")
+
+
+def _blockers_payload():
+    return PlayabilityBlockersPayload(anchor_attacker="E1", must_block=())
+
+
+_PLAYABILITY_PAYLOADS = {
+    PlayabilitySubkind.DECISION: PlayabilityDecisionPayload,
+    PlayabilitySubkind.ATTACKERS: _attackers_payload,
+    PlayabilitySubkind.BLOCKERS: _blockers_payload,
+}
+
+
+def _turn_action_payload(subkind):
+    if subkind is TurnActionSubkind.GAME_END:
+        return TurnActionPayload(records_withheld=0)
+    return TurnActionPayload()
+
+
+def _trigger_payload():
+    return TriggerPayload(event=_EVENT, fired=True)
+
+
+def _rewrite_payload():
+    return RewritePayload(incoming=_EVENT, outgoing=_EVENT)
+
+
+#: The default payload of each kind no discriminator selects one for.
+_KIND_PAYLOADS = {
+    RecordKind.COMBAT: CombatPayload,
+    RecordKind.CONTINUOUS: ContinuousPayload,
+    RecordKind.TRIGGER: _trigger_payload,
+    RecordKind.REWRITE: _rewrite_payload,
+}
+
+
 def _default_payload(kind: RecordKind, moment, subkind):
     if kind is RecordKind.RESOLUTION:
-        if moment is Moment.ACTIVATION:
-            # The cost half: ``{events, costs}``, its outcome on the effect half.
-            return ActivationPayload(costs=Costs(), events=())
-        return ResolutionPayload(conditions_met=(), outcome=ResolutionOutcome.RESOLVED)
+        return _resolution_payload(moment)
     if kind is RecordKind.PLAYABILITY:
-        return {
-            PlayabilitySubkind.DECISION: PlayabilityDecisionPayload,
-            # Attackers records are one per creature, each anchored.
-            PlayabilitySubkind.ATTACKERS: lambda: PlayabilityAttackersPayload(
-                anchor_attacker="E1",
-            ),
-            PlayabilitySubkind.BLOCKERS: lambda: PlayabilityBlockersPayload(
-                anchor_attacker="E1", must_block=(),
-            ),
-        }[subkind]()
+        return _PLAYABILITY_PAYLOADS[subkind]()
     if kind is RecordKind.TURN_ACTION:
-        if subkind is TurnActionSubkind.GAME_END:
-            return TurnActionPayload(records_withheld=0)
-        return TurnActionPayload()
-    return {
-        RecordKind.COMBAT: CombatPayload,
-        RecordKind.CONTINUOUS: ContinuousPayload,
-        RecordKind.TRIGGER: lambda: TriggerPayload(event=_EVENT, fired=True),
-        RecordKind.REWRITE: lambda: RewritePayload(
-            incoming=_EVENT, outgoing=_EVENT,
-        ),
-    }[kind]()
+        return _turn_action_payload(subkind)
+    return _KIND_PAYLOADS[kind]()
+
+
+def _superseded(payload: ResolutionPayload) -> bool:
+    """Whether an effect half lacks its conditions, or its outcome unwritten."""
+    return payload.conditions_met is None or (
+        payload.outcome is None and not payload.outcome_written)
+
+
+def _completed_outcome(payload: ResolutionPayload):
+    """The half's outcome, ``resolved`` where none was written."""
+    return payload.outcome or (None if payload.outcome_written else ResolutionOutcome.RESOLVED)
 
 
 def gen3_payload(payload):
@@ -155,14 +191,26 @@ def gen3_payload(payload):
     half already so, as given."""
     from dataclasses import replace
 
-    if isinstance(payload, ResolutionPayload) and (
-            payload.conditions_met is None
-            or (payload.outcome is None and not payload.outcome_written)):
+    if isinstance(payload, ResolutionPayload) and _superseded(payload):
         return replace(
             payload, conditions_met=payload.conditions_met or (),
-            outcome=payload.outcome or (
-                None if payload.outcome_written else ResolutionOutcome.RESOLVED))
+            outcome=_completed_outcome(payload))
     return payload
+
+
+def _discriminators(kind: RecordKind, moment, subkind) -> dict:
+    """The ``moment`` and ``subkind`` members of a record of ``kind``: its own
+    discriminator defaulted, each one that is set. A discriminator on the wrong
+    kind is forwarded as given, so a test can still build the record the
+    envelope check is meant to refuse."""
+    if kind is RecordKind.RESOLUTION:
+        moment = moment or Moment.RESOLUTION
+    elif kind is RecordKind.PLAYABILITY:
+        subkind = subkind or PlayabilitySubkind.DECISION
+    elif kind is RecordKind.TURN_ACTION:
+        subkind = subkind or TurnActionSubkind.DRAW
+    members = {"moment": moment, "subkind": subkind}
+    return {name: value for name, value in members.items() if value is not None}
 
 
 def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> EffectRecord:
@@ -180,22 +228,12 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
         "game_id": game_id, "kind": kind, "actor_player": "P0",
         "state": make_snapshot(), "generation": 3,
     }
-    moment = overrides.pop("moment", None)
-    subkind = overrides.pop("subkind", None)
-    if kind is RecordKind.RESOLUTION:
-        moment = moment or Moment.RESOLUTION
-    elif kind is RecordKind.PLAYABILITY:
-        subkind = subkind or PlayabilitySubkind.DECISION
-    elif kind is RecordKind.TURN_ACTION:
-        subkind = subkind or TurnActionSubkind.DRAW
-    # A discriminator on the wrong kind is forwarded as given, so a test can
-    # still build the record the envelope check is meant to refuse.
-    if moment is not None:
-        defaults["moment"] = moment
-    if subkind is not None:
-        defaults["subkind"] = subkind
+    discriminators = _discriminators(
+        kind, overrides.pop("moment", None), overrides.pop("subkind", None))
+    defaults.update(discriminators)
     if "payload" not in overrides:
-        defaults["payload"] = _default_payload(kind, moment, subkind)
+        defaults["payload"] = _default_payload(
+            kind, discriminators.get("moment"), discriminators.get("subkind"))
     else:
         overrides["payload"] = gen3_payload(overrides["payload"])
     defaults.update(overrides)
