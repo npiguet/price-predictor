@@ -107,6 +107,33 @@ class TestRelations:
         assert named == {e1, e2, e4}
         assert e3 not in named and e5 not in named
 
+    def test_same_names_relate_on_the_battlefield_the_stack_and_in_hand_only(self):
+        """A pair relates when both cards are in those zones; a copy counts by
+        the zone it last had; a chooser relates to its name in every zone."""
+        from effects.domain.state_snapshot import CardChoices
+
+        record = _gen3_record((
+            _gen3_entity("E1", name="Plains", zone="battlefield"),
+            _gen3_entity("E2", name="Plains", zone="hand"),
+            _gen3_entity("E3", name="Island", zone="graveyard"),
+            _gen3_entity("E4", name="Island", zone="graveyard"),
+            _gen3_entity("E5", name="Swamp", zone="graveyard"),
+            _gen3_entity("E6", name="Swamp", zone="stack"),
+            _gen3_entity("L7", name="Forest", zone="battlefield", role="last_known"),
+            _gen3_entity("E8", name="Forest", zone="hand"),
+            _gen3_entity("E9", name="Cranial Extraction", zone="stack",
+                         chosen=CardChoices(names=("Island",))),
+        ))
+        surface = _build(record)
+        e = {n: _subject_slot(surface, n) for n in
+             ("E1", "E2", "E3", "E4", "E5", "E6", "L7", "E8", "E9")}
+        assert _linked(surface, SlotLink(e["E1"], e["E2"], "has_the_same_name"))
+        assert not _linked(surface, SlotLink(e["E3"], e["E4"], "has_the_same_name"))
+        assert not _linked(surface, SlotLink(e["E5"], e["E6"], "has_the_same_name"))
+        assert _linked(surface, SlotLink(e["L7"], e["E8"], "has_the_same_name"))
+        assert _linked(surface, SlotLink(e["E9"], e["E3"], "has_the_same_name"))
+        assert _linked(surface, SlotLink(e["E9"], e["E4"], "has_the_same_name"))
+
     def test_the_act_slot_targets_by_index_and_reads_its_source(self):
         record = _gen3_record(
             (_gen3_entity("E1"), _gen3_entity("E2")),

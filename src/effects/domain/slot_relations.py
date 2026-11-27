@@ -21,7 +21,13 @@ from effects.domain.state_snapshot import (
     EntityState,
     FaceState,
     LineRef,
+    Zone,
 )
+
+#: The zones whose same-named cards relate to each other: the cards a game
+#: acts with (a card slot reads the same ``EntityState.zone``). A last-known
+#: copy counts by the zone it last had.
+SAME_NAME_ZONES = frozenset({Zone.BATTLEFIELD, Zone.STACK, Zone.HAND})
 
 # ── relations ─────────────────────────────────────────────────────────────
 
@@ -52,8 +58,9 @@ class SlotRelations:
     reader builds four families itself: ``line_of`` (each ability slot to its
     card), ``line_of_the_same_card`` (each pair of one card's ability slots),
     ``mode_of`` (a charm's mode slots to their root) and ``has_the_same_name``
-    (each pair of cards whose names match but a last-known copy and its own
-    card, and a card that chose a name to each card of that name). The rest
+    (each pair of cards on the battlefield, on the stack or in a hand whose
+    names match but a last-known copy and its own card, and a card that chose
+    a name to each card of that name in any zone). The rest
     are the record's ``links``. ``[ACT]`` reads ``targets`` to the cards and
     players the acting ability targets itself and ``source_of`` from its
     source, as the target and source flags do (root spec § 10.4): no
@@ -71,7 +78,10 @@ class SlotRelations:
         #: A player's or card's id to its slot.
         self.subjects: dict[str, int] = {}
         self._lines: dict[tuple[str, ProvenanceKey], int] = {}
+        #: A name's card slots in every zone (a chooser's links), and those
+        #: in the :data:`SAME_NAME_ZONES` (the pairs).
         self._named: dict[str, list[int]] = {}
+        self._named_in_play: dict[str, list[int]] = {}
         self._chosen_names: list[tuple[int, tuple[str, ...]]] = []
         #: A last-known copy's slot to its card's id (``L<id>`` to ``E<id>``).
         self._copies: dict[int, str] = {}
@@ -117,7 +127,10 @@ class SlotRelations:
         its name, the names it chose, and whether it is a last-known copy."""
         # A face-down card's name would be its real face's: it has none here.
         if entity.name and entity.face_state != FaceState.FACE_DOWN:
-            self._named.setdefault(name_key(entity.name), []).append(start)
+            key = name_key(entity.name)
+            self._named.setdefault(key, []).append(start)
+            if entity.zone in SAME_NAME_ZONES:
+                self._named_in_play.setdefault(key, []).append(start)
         if entity.chosen is not None and entity.chosen.names:
             self._chosen_names.append((start, entity.chosen.names))
         if entity.is_last_known and entity.id.startswith("L"):
@@ -149,7 +162,7 @@ class SlotRelations:
 
     def _name_relations(self) -> None:
         apart = self._copy_pairs()
-        for rows in self._named.values():
+        for rows in self._named_in_play.values():
             self._pairs(rows, "has_the_same_name", apart)
         for chooser, names in self._chosen_names:
             for name in names:

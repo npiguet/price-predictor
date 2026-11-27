@@ -107,8 +107,9 @@ def test_a_last_known_copy_has_no_same_name_relation_with_its_card(records):
 
 
 def test_two_cards_of_one_name_keep_their_relation(records):
-    """Only the copy and its own card lose it: the card and another card of
-    its name are still related."""
+    """Only the copy and its own card lose it: the copy, which last had the
+    battlefield, and a namesake in a hand are still related. The card itself
+    is in the graveyard now, so it relates to no namesake in a hand."""
     record = records[_HEARTSTABBER]
     card = record.state.entity("E7")
     namesake = replace(card, id="E9999", zone="hand")
@@ -116,7 +117,5 @@ def test_two_cards_of_one_name_keep_their_relation(records):
         record.state, entities=(*record.state.entities, namesake)))
     surface = SurfaceBuilder(_Lines(), e_dim=E_DIM, rng=random.Random(0)).build(board)
     same_name = relation_type("has_the_same_name")
-    assert (_card_slot(surface, "E7"), _card_slot(surface, "E9999"), same_name) \
-        in surface.relations
-    assert (_card_slot(surface, "L7"), _card_slot(surface, "E9999"), same_name) \
-        in surface.relations
+    assert (_card_slot(surface, "E7"), _card_slot(surface, "E9999"), same_name) \n        not in surface.relations
+    assert (_card_slot(surface, "L7"), _card_slot(surface, "E9999"), same_name) \n        in surface.relations
