@@ -691,7 +691,7 @@ This section replaces the base spec's single variant round and its `--variant-vo
 
 | round | variants | `aimed_at` | the round ends when |
 |---|---|---|---|
-| `untargeted` | one of every eligible source script | `[]` | every variant has `--variant-games` games or has retired |
+| `untargeted` | one of every eligible source script | the run's `--directed-fork-rules`, `[]` when it names none | every variant has `--variant-games` games or has retired |
 | `steered` | aimed at the short (rule, polarity) pairs of a `rule-counts` file | the rules of the game's two decks | no short pair is left that has not retired |
 
 Both rounds
