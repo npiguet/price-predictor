@@ -168,13 +168,22 @@ class _Run:
         self.started.append(proc)
         return proc
 
-    def run(self, *, after: float | None = None, action=None, seconds: float = 30.0) -> float:
+    def run(self, *, after: float | None = None, action=None, seconds: float = 30.0,
+            once_started: bool = False) -> float:
         """``pool.run()`` on the main thread (it installs signal handlers);
         ``action`` (default: ask the pool to shut down) after ``after``
-        seconds; a watchdog kills everything after ``seconds``. How long it took."""
+        seconds, counted from the start of the run or, with ``once_started``,
+        from the moment every worker has written its startup line (a loaded
+        machine starts them late, and a stop before then kills them while
+        they start Forge); a watchdog kills everything after ``seconds``.
+        How long it took."""
         timers = []
         if after is not None:
-            timers.append(threading.Timer(after, action or self.pool.request_shutdown))
+            fire = action or self.pool.request_shutdown
+            if once_started:
+                timers.append(threading.Timer(0, self._fire_once_started, (after, fire, seconds)))
+            else:
+                timers.append(threading.Timer(after, fire))
         timers.append(threading.Timer(seconds, self._watchdog))
         for timer in timers:
             timer.start()
@@ -186,6 +195,22 @@ class _Run:
                 timer.cancel()
             self.logs.close_all()
         return time.monotonic() - began
+
+    def _fire_once_started(self, after: float, action, patience: float) -> None:
+        """Wait (at most ``patience`` seconds) until every slot's log holds the
+        startup line, then ``action`` ``after`` seconds later."""
+        deadline = time.monotonic() + patience
+        while not self._all_started() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(after)
+        action()
+
+    def _all_started(self) -> bool:
+        return all(self._has_started(slot) for slot in range(self.pool._worker_count))
+
+    def _has_started(self, slot: int) -> bool:
+        path = self.logs.path_for(slot)
+        return path.exists() and STARTUP_LINE in path.read_text(encoding="utf-8", errors="replace")
 
     def _watchdog(self) -> None:
         self.pool.request_shutdown()
@@ -250,7 +275,7 @@ class TestAGracefulStop:
         stop still under way when ``run`` returned would be a kill."""
         run = runs(tmp_path, settings=_settings(), game_seconds=1.5)
 
-        elapsed = run.run(after=0.5)
+        elapsed = run.run(after=0.5, once_started=True)
 
         assert elapsed >= 1.4, "it returned before the game in progress ended"
         assert all(proc.poll() is not None for proc in run.started)
@@ -284,7 +309,7 @@ class TestTheTimeout:
     def test_a_worker_that_does_not_stop_is_killed_and_reported(self, tmp_path, runs, capsys):
         run = runs(tmp_path, settings=_settings(timeout=0.5), behaviour="ignore", game_seconds=0.1)
 
-        elapsed = run.run(after=0.5)
+        elapsed = run.run(after=0.5, once_started=True)
 
         assert elapsed < 8
         assert all(proc.poll() not in (None, 0) for proc in run.started)
@@ -301,7 +326,7 @@ class TestTheTimeout:
             time.sleep(0.5)
             run.pool._handle_signal(signal.SIGINT, None)
 
-        elapsed = run.run(after=0.3, action=interrupt_twice)
+        elapsed = run.run(after=0.3, action=interrupt_twice, once_started=True)
 
         assert elapsed < 10
         assert run.pool.interrupted
@@ -359,7 +384,7 @@ class TestTheRecycleOfTheLongestRunningWorker:
         run = runs(tmp_path, settings=_settings(timeout=60), shape=PoolShape(status_interval=1),
                    game_seconds=2.5)
 
-        run.run(after=0.5)
+        run.run(after=0.5, once_started=True)
 
         assert killed_process_trees == []
         stops = run.pool.stops
@@ -454,7 +479,8 @@ class TestCtrlC:
         each ends at its game's end, a stop, never a crash or a kill."""
         run = runs(tmp_path, settings=_settings(timeout=60), game_seconds=1.0)
 
-        elapsed = run.run(after=0.5, action=lambda: run.pool._handle_signal(signal.SIGINT, None))
+        elapsed = run.run(after=0.5, once_started=True,
+                          action=lambda: run.pool._handle_signal(signal.SIGINT, None))
 
         assert elapsed < 10
         assert run.pool.interrupted
@@ -476,7 +502,7 @@ class TestCtrlC:
             time.sleep(0.3)
             die.touch()
 
-        run.run(after=0.5, action=stop_then_crash)
+        run.run(after=0.5, action=stop_then_crash, once_started=True)
 
         stops = run.pool.stops
         assert (stops.ended_otherwise, stops.crashed, stops.killed) == (1, 0, 0)
