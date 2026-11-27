@@ -38,17 +38,20 @@ class PrintingData:
             raise ValueError(
                 f"rarity must be one of {sorted(VALID_RARITIES)}, got '{self.rarity}'"
             )
+        self._check_counts()
+        for fmt in self.legalities:
+            if fmt not in RECOGNIZED_FORMATS:
+                raise ValueError(
+                    f"legality '{fmt}' not in RECOGNIZED_FORMATS"
+                )
+
+    def _check_counts(self) -> None:
         if self.printings_count < 1:
             raise ValueError(f"printings_count must be >= 1, got {self.printings_count}")
         if self.cheapest_printing_year < 1993:
             raise ValueError(
                 f"cheapest_printing_year must be >= 1993, got {self.cheapest_printing_year}"
             )
-        for fmt in self.legalities:
-            if fmt not in RECOGNIZED_FORMATS:
-                raise ValueError(
-                    f"legality '{fmt}' not in RECOGNIZED_FORMATS"
-                )
 
     @classmethod
     def defaults(cls) -> PrintingData:
@@ -76,6 +79,65 @@ _PHYREXIAN = {c + "P" for c in COLORS}
 
 # Two-or-colored hybrid (e.g., W2, U2, R2)
 _TWO_HYBRID = {c + "2" for c in COLORS}
+
+
+class _ShardTally:
+    """The running totals of one mana cost while its shards are read in order."""
+
+    def __init__(self) -> None:
+        self.total_cmc = 0.0
+        self.generic = 0
+        self.colorless = 0
+        self.color_counts = {"W": 0, "U": 0, "B": 0, "R": 0, "G": 0}
+        self.has_x = False
+        self.has_hybrid = False
+        self.has_phyrexian = False
+
+    def add(self, shard: str) -> None:
+        upper = shard.upper()
+        if upper == "X":
+            self.has_x = True  # X contributes 0 to CMC
+        elif upper in COLORS:
+            self.color_counts[upper] += 1
+            self.total_cmc += 1
+        elif upper in ("C", "S"):
+            # C is colorless mana, distinct from generic; S is snow, no color
+            self.colorless += int(upper == "C")
+            self.total_cmc += 1
+        elif not self._add_mixed(upper):
+            self._add_generic(shard)
+
+    def _add_mixed(self, upper: str) -> bool:
+        """Count a hybrid or Phyrexian shard; False when ``upper`` is neither."""
+        if upper in _HYBRID_PAIRS:
+            self.has_hybrid = True
+            self.total_cmc += 1
+            # Each color is tracked as present (1) for the multi-hot encoding
+            for c in upper:
+                self._mark_present(c)
+        elif upper in _PHYREXIAN:
+            self.has_phyrexian = True
+            self.total_cmc += 1
+            self._mark_present(upper[0])
+        elif upper in _TWO_HYBRID:
+            self.has_hybrid = True
+            self.total_cmc += 2
+            self._mark_present(upper[0])
+        else:
+            return False
+        return True
+
+    def _mark_present(self, color: str) -> None:
+        if color in COLORS:
+            self.color_counts[color] = max(self.color_counts[color], 1)
+
+    def _add_generic(self, shard: str) -> None:
+        try:
+            value = int(shard)
+        except ValueError:
+            return  # Unknown shard: skipped silently
+        self.generic += value
+        self.total_cmc += value
 
 
 @dataclass(frozen=True)
@@ -108,73 +170,23 @@ class ManaCost:
         if not stripped or stripped == "no cost":
             return None
 
-        shards = stripped.split()
-
-        total_cmc = 0.0
-        generic = 0
-        colorless = 0
-        color_counts = {"W": 0, "U": 0, "B": 0, "R": 0, "G": 0}
-        has_x = False
-        has_hybrid = False
-        has_phyrexian = False
-
-        for shard in shards:
-            upper = shard.upper()
-
-            if upper == "X":
-                has_x = True
-                # X contributes 0 to CMC
-            elif upper in COLORS:
-                color_counts[upper] += 1
-                total_cmc += 1
-            elif upper == "C":
-                # Colorless mana — distinct from generic
-                colorless += 1
-                total_cmc += 1
-            elif upper == "S":
-                # Snow mana — no color
-                total_cmc += 1
-            elif upper in _HYBRID_PAIRS:
-                has_hybrid = True
-                total_cmc += 1
-                # Each color gets 0.5 for counting purposes
-                # but we track as present (1) for the multi-hot encoding
-                for c in upper:
-                    if c in COLORS:
-                        color_counts[c] = max(color_counts[c], 1)
-            elif upper in _PHYREXIAN:
-                has_phyrexian = True
-                total_cmc += 1
-                color_char = upper[0]
-                color_counts[color_char] = max(color_counts[color_char], 1)
-            elif upper in _TWO_HYBRID:
-                has_hybrid = True
-                total_cmc += 2
-                color_char = upper[0]
-                color_counts[color_char] = max(color_counts[color_char], 1)
-            else:
-                # Try to parse as a generic mana number
-                try:
-                    value = int(shard)
-                    generic += value
-                    total_cmc += value
-                except ValueError:
-                    # Unknown shard — skip silently
-                    pass
-
+        tally = _ShardTally()
+        for shard in stripped.split():
+            tally.add(shard)
+        color_counts = tally.color_counts
         colors_present = sum(1 for v in color_counts.values() if v > 0)
 
         return ManaCost(
-            total_mana_value=total_cmc,
-            generic_mana=generic,
-            colorless_mana=colorless,
+            total_mana_value=tally.total_cmc,
+            generic_mana=tally.generic,
+            colorless_mana=tally.colorless,
             w=color_counts["W"],
             u=color_counts["U"],
             b=color_counts["B"],
             r=color_counts["R"],
             g=color_counts["G"],
             color_count=colors_present,
-            has_x=has_x,
-            has_hybrid=has_hybrid,
-            has_phyrexian=has_phyrexian,
+            has_x=tally.has_x,
+            has_hybrid=tally.has_hybrid,
+            has_phyrexian=tally.has_phyrexian,
         )
