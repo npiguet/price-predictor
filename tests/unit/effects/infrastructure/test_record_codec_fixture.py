@@ -31,19 +31,33 @@ from tests.unit.effects.builders import (
 )
 
 
+def _counters_free(counters):
+    return {normalize_counter_type(n): c for n, c in counters.items()}
+
+
+def _spelling_free_member(owner, k, v):
+    """One member of the dict ``owner``, less the spellings the reader normalizes."""
+    if k == "granted_temporary":
+        return None
+    if k == "counter_type":
+        return normalize_counter_type(v)
+    if k == "counters" and isinstance(v, dict):
+        return _counters_free(v)
+    return _entity_keywords_free(owner, k, v)
+
+
+def _entity_keywords_free(owner, k, v):
+    if k == "keywords" and "entity" in owner:
+        return [normalize_keyword(x) for x in v]
+    return _spelling_free(v)
+
+
 def _spelling_free(value):
     """A record's JSON less the spellings the reader normalizes by design: an
     entity's overlay keywords, every counter type and a contribution's
     keywords (gen-3 writes a keyword's instance, ``ward:1``)."""
     if isinstance(value, dict):
-        return {k: (None if k == "granted_temporary"
-                    else normalize_counter_type(v) if k == "counter_type"
-                    else {normalize_counter_type(n): c for n, c in v.items()}
-                    if k == "counters" and isinstance(v, dict)
-                    else [normalize_keyword(x) for x in v]
-                    if k == "keywords" and "entity" in value
-                    else _spelling_free(v))
-                for k, v in value.items()}
+        return {k: _spelling_free_member(value, k, v) for k, v in value.items()}
     if isinstance(value, list):
         return [_spelling_free(v) for v in value]
     return value

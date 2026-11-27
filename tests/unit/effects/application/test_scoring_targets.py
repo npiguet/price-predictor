@@ -32,6 +32,12 @@ def _targets(corpus, records):
     return prepare(list(records[:_SCORED]))
 
 
+def _same_dataclass(left, right) -> bool:
+    return type(left) is type(right) and all(
+        _same(getattr(left, part.name), getattr(right, part.name)) for part in fields(left)
+    )
+
+
 def _same(left, right) -> bool:
     """Equal tensors, or equal targets dataclasses or tuples of them."""
     if left is None or right is None:
@@ -39,10 +45,7 @@ def _same(left, right) -> bool:
     if isinstance(left, torch.Tensor):
         return torch.equal(left, right)
     if is_dataclass(left):
-        return type(left) is type(right) and all(
-            _same(getattr(left, part.name), getattr(right, part.name))
-            for part in fields(left)
-        )
+        return _same_dataclass(left, right)
     return len(left) == len(right) and all(_same(a, b) for a, b in zip(left, right))
 
 

@@ -65,23 +65,37 @@ def test_an_absent_declaration_s_fires_side_names_the_acting_clause_s_targets(
     assert found.outcome == record.state.refs.targets
 
 
+def _card_zone_changes(record) -> list:
+    """The record's ``zone_change`` events whose subjects are all cards."""
+    return [e for e in record.payload.events if e.type.value == "zone_change"
+            and e.subjects and all(_is_card(record, s) for s in e.subjects)]
+
+
+def _has_named_card_zone_change(record) -> bool:
+    return any(
+        e.type.value == "zone_change" and outcome_entities(record, [e])
+        and all(_is_card(record, s) for s in e.subjects)
+        for e in record.payload.events)
+
+
+def _acting_resolution_with_card_zone_change(by_kind, sidecars):
+    return next(r for r in by_kind("resolution")
+                if r.moment.value == "resolution" and r.mode.value == "patched"
+                and acting_api(r, sidecars) is not None
+                and _has_named_card_zone_change(r))
+
+
 def test_a_qualified_near_miss_names_where_the_events_that_missed_fell(
         by_kind, gen3_sidecars):
     """A card's ``zone_change`` read for ``subject_is_token``: the event happened and
     fails the qualifier, so the near miss names where it fell (a qualified
     near miss needs an event of the declared type; without one it is no near miss)."""
-    record = next(r for r in by_kind("resolution")
-                  if r.moment.value == "resolution" and r.mode.value == "patched"
-                  and acting_api(r, gen3_sidecars) is not None
-                  and any(e.type.value == "zone_change" and outcome_entities(r, [e])
-                          and all(_is_card(r, s) for s in e.subjects) for e in r.payload.events))
+    record = _acting_resolution_with_card_zone_change(by_kind, gen3_sidecars)
     params = {"event": "zone_change", "api": acting_api(record, gen3_sidecars),
               "subject_is_token": True}
     found = OUTCOME.match(record, gen3_sidecars, params)
     assert found.polarity is DOES_NOT_FIRE
-    missed = [e for e in record.payload.events if e.type.value == "zone_change"
-              and e.subjects and all(_is_card(record, s) for s in e.subjects)]
-    assert found.outcome == outcome_entities(record, missed)
+    assert found.outcome == outcome_entities(record, _card_zone_changes(record))
 
 
 def test_a_qualified_declaration_finds_no_near_miss_on_a_record_without_its_event(

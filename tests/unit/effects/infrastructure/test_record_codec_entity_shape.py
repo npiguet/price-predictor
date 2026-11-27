@@ -66,13 +66,26 @@ def _reader_spellings(value):
     return value
 
 
+def _overlay_spelling(overlay):
+    return {**overlay, "keywords": [normalize_keyword(x) for x in overlay["keywords"]]}
+
+
+def _counters_spelling(counters):
+    return {normalize_counter_type(name): count for name, count in counters.items()}
+
+
+#: Per member name, the value type the reader normalizes and how.
+_READER_REWRITES = {
+    "granted_temporary": (dict, _overlay_spelling),
+    "counter_type": (str, normalize_counter_type),
+    "counters": (dict, _counters_spelling),
+}
+
+
 def _member_reader_spelling(k, v):
-    if k == "granted_temporary" and isinstance(v, dict):
-        return {**v, "keywords": [normalize_keyword(x) for x in v["keywords"]]}
-    if k == "counter_type" and isinstance(v, str):
-        return normalize_counter_type(v)
-    if k == "counters" and isinstance(v, dict):
-        return {normalize_counter_type(name): count for name, count in v.items()}
+    value_type, rewrite = _READER_REWRITES.get(k, (None, None))
+    if value_type is not None and isinstance(v, value_type):
+        return rewrite(v)
     return _reader_spellings(v)
 
 
