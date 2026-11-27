@@ -222,8 +222,9 @@ def main() -> None:
             texts += [set_act_cost(stripped[r], line_i, a, effect) for a in arms(g, pips)]
         S = pl.score_texts(texts).reshape(len(idx), 2)
         for head, M in (("score_play", S.sp), ("played_rate", S.pr)):
-            tap_rows.append(pl.contrast_row(M[:, 1] - M[:, 0], off=S.off,
-                                            contrast=label, head=head))
+            tap_rows.append(pl.contrast_row(
+                pl.ArmDelta(M[:, 1] - M[:, 0], off=S.off),
+                lead={"contrast": label, "head": head}))
     pl.write_table(tap_rows, "c10_tap_contrasts.csv")
 
     # (iv) label-side same-text families

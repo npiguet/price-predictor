@@ -107,7 +107,8 @@ def main() -> None:
             "when CARDNAME dies,", f"when CARDNAME {when},", 1))
 
     S = pl.score_arms(dsel, [None, "enters", "attacks"], retimed)
-    pl.write_table(pl.contrasts(S, ["dies -> enters", "dies -> attacks"]), "c6_timing.csv")
+    pl.write_table(pl.contrasts(S, pl.ContrastPlan(["dies -> enters", "dies -> attacks"])),
+                   "c6_timing.csv")
 
 
 if __name__ == "__main__":

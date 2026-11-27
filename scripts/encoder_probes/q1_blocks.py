@@ -62,10 +62,11 @@ def main() -> None:
     # ── (a) per-block ridge, plus the full 512 baseline ──────────────────
     rows = []
     for name, (y, keep) in targets.items():
-        full = pl.honest_ridge(emb, y, is_train, is_val, keep)
+        full = pl.honest_ridge(emb, y, pl.HonestSplit(is_train, is_val, keep))
         row = {"target": name, "n_val": full["n_val"], "full512": full["val_r2"]}
         for k, block in enumerate(blocks(emb)):
-            row[f"b{k}"] = pl.honest_ridge(block, y, is_train, is_val, keep)["val_r2"]
+            split = pl.HonestSplit(is_train, is_val, keep)
+            row[f"b{k}"] = pl.honest_ridge(block, y, split)["val_r2"]
         rows.append(row)
         print("block-probe", name, {k: round(v, 3) for k, v in row.items()
                                     if k.startswith(("b", "f"))}, flush=True)

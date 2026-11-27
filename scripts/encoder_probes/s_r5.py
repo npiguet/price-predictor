@@ -23,8 +23,8 @@ def ridge_vs_gbm(fr: S.ProbeFrame) -> dict:
     rows = []
     for c, lab in zip(S.COLORS, colour_labels(fr)):
         tr, va = lab.have & fr.train, lab.have & fr.val
-        r2_ridge, alpha, _, _ = pl.ridge_fit_eval(emb[tr], lab.y[tr], emb[va], lab.y[va],
-                                                  lab.w[tr])
+        r2_ridge, alpha, _, _ = pl.ridge_fit_eval(
+            pl.RidgeSplit(emb[tr], lab.y[tr], emb[va], lab.y[va], lab.w[tr]))
         g = S.gbm(400, 0.06, 0.15)
         g.fit(emb[tr], lab.y[tr], sample_weight=lab.w[tr])
         r2_gb = pl._r2(lab.y[va], g.predict(emb[va]), lab.w[va])
@@ -35,8 +35,8 @@ def ridge_vs_gbm(fr: S.ProbeFrame) -> dict:
     for head in ("score_play", "played_rate"):
         lab = fr.label(head)
         tr, va = lab.have & fr.train, lab.have & fr.val
-        r2_ridge, _, _, _ = pl.ridge_fit_eval(emb[tr], lab.y[tr], emb[va], lab.y[va],
-                                              lab.w[tr])
+        r2_ridge, _, _, _ = pl.ridge_fit_eval(
+            pl.RidgeSplit(emb[tr], lab.y[tr], emb[va], lab.y[va], lab.w[tr]))
         g = S.gbm(400, 0.06, 0.15)
         g.fit(emb[tr], lab.y[tr], sample_weight=lab.w[tr])
         ref.append([head, f"{r2_ridge:.4f}",
@@ -124,9 +124,10 @@ def identity_share(fr: S.ProbeFrame, own, labs, pips, n_colors) -> dict:
         b2 = wls(X_id2[tr], y[tr], w[tr]).beta
         r2_id2 = pl._r2(y[va], X_id2[va] @ b2, w[va])
         # embedding ridge, and embedding ridge on the identity-residual
-        r2_emb, _, _, _ = pl.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
+        r2_emb, _, _, _ = pl.ridge_fit_eval(pl.RidgeSplit(emb[tr], y[tr], emb[va], y[va], w[tr]))
         resid = y - X_id2 @ b2
-        r2_res, _, _, _ = pl.ridge_fit_eval(emb[tr], resid[tr], emb[va], resid[va], w[tr])
+        r2_res, _, _, _ = pl.ridge_fit_eval(
+            pl.RidgeSplit(emb[tr], resid[tr], emb[va], resid[va], w[tr]))
         rows_d2.append([c, f"{r2_id:.4f}", f"{r2_id2:.4f}", f"{r2_emb:.4f}", f"{r2_res:.4f}"])
     return {"d_identity_readoff": rows_d1, "d_identity_share": rows_d2}
 

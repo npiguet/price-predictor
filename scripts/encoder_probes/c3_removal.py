@@ -109,9 +109,11 @@ def main() -> None:
     AU = pl.score_arms(abase, AURA_TEMPLATES, lambda r, tmpl: cc.replace_in_line(
         stripped[r], ss[r], f"static: {tmpl}"))
     atab = pd.DataFrame(pl.contrasts(
-        AU, AURA_TEMPLATES, cols=range(len(AURA_TEMPLATES)),
-        ref=AURA_TEMPLATES.index("enchanted creature gets +2/+2."), field="aura_text",
-        key="vs_plus2_sp", pr_key="vs_plus2_pr")).sort_values("vs_plus2_sp", ascending=False)
+        AU, pl.ContrastPlan(
+            AURA_TEMPLATES, cols=range(len(AURA_TEMPLATES)),
+            ref=AURA_TEMPLATES.index("enchanted creature gets +2/+2."), field="aura_text",
+            style=pl.ContrastStyle(key="vs_plus2_sp", pr_key="vs_plus2_pr"))
+    )).sort_values("vs_plus2_sp", ascending=False)
     pl.write_table(atab, "c3_aura.csv")
 
     out["ladder_spread_sd"] = float(tab["value_sp"].max() - tab["value_sp"].min())

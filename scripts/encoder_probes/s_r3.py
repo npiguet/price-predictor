@@ -119,8 +119,8 @@ def ridge_on_difference(fr: S.ProbeFrame, diff_lab: np.ndarray, play: pl.Label,
     rows = []
     for floor, tag in ((0, "all"), (200, "n≥200"), (800, "n≥800")):
         trm, vam = tr & (n_in >= floor), va & (n_in >= floor)
-        r2, alpha, coef, b = pl.ridge_fit_eval(
-            emb[trm], diff_lab[trm], emb[vam], diff_lab[vam], w_both[trm])
+        r2, alpha, coef, b = pl.ridge_fit_eval(pl.RidgeSplit(
+            emb[trm], diff_lab[trm], emb[vam], diff_lab[vam], w_both[trm]))
         pred = emb[vam] @ coef + b
         rows.append([tag, int(trm.sum()), int(vam.sum()), alpha, r2,
                      wcorr(pred, diff_lab[vam])])
@@ -130,7 +130,8 @@ def ridge_on_difference(fr: S.ProbeFrame, diff_lab: np.ndarray, play: pl.Label,
         rows.append([tag + " (shuffled target)", int(trm.sum()), int(vam.sum()), alpha,
                      pl._r2(diff_lab[vam], emb[vam] @ coef2 + b2),
                      wcorr(emb[vam] @ coef2 + b2, diff_lab[vam])])
-    r2p, _, _, _ = pl.ridge_fit_eval(emb[tr], play.y[tr], emb[va], play.y[va], play.w[tr])
+    r2p, _, _, _ = pl.ridge_fit_eval(
+        pl.RidgeSplit(emb[tr], play.y[tr], emb[va], play.y[va], play.w[tr]))
     return {"c_ridge_on_difference": rows, "c_reference_score_play_val_r2": r2p}
 
 

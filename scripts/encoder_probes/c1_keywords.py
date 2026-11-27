@@ -170,8 +170,9 @@ def main() -> None:
         if len(sel) == 0:
             continue
         del_rows.append(pl.contrast_row(
-            base_sp[sel] - D.sp[sel], base_pr[sel] - D.pr[sel], D.off[sel],
-            key="premium_sp", pr_key="premium_pr", n_boot=1500, keyword=k))
+            pl.ArmDelta(base_sp[sel] - D.sp[sel], base_pr[sel] - D.pr[sel], D.off[sel]),
+            pl.ContrastStyle(key="premium_sp", pr_key="premium_pr", n_boot=1500),
+            {"keyword": k}))
     dele = pd.DataFrame(del_rows).sort_values("premium_sp", ascending=False)
     pl.write_table(dele, "c1_delete.csv")
 

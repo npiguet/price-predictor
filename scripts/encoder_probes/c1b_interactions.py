@@ -127,8 +127,8 @@ def main() -> None:
     labels = {"deathtouch": "deathtouch (vs control)", "trample": "trample (vs control)",
               "both": "both (vs control)",
               "interaction": "interaction (joint - sum of singles)"}
-    pl.write_table([pl.contrast_row(v, term=labels[k]) for k, v in terms(Q.sp).items()],
-                   "c1b_dt_trample.csv")
+    pl.write_table([pl.contrast_row(pl.ArmDelta(v), lead={"term": labels[k]})
+                    for k, v in terms(Q.sp).items()], "c1b_dt_trample.csv")
     out["dt_trample_off_manifold"] = float(Q.off.mean())
     out["dt_trample_pr"] = {k: float(v.mean()) for k, v in terms(Q.pr).items()}
 

@@ -27,8 +27,9 @@ import json
 import pickle
 import sys
 from dataclasses import dataclass, fields
+from dataclasses import field as dataclass_field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -203,25 +204,43 @@ def ridge_fit(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None):
     return alpha, cv_r2, coef, b
 
 
-def ridge_fit_eval(X_tr, y_tr, X_te, y_te, w_tr=None):
+@dataclass(frozen=True)
+class RidgeSplit:
+    """A train part and a test part of one ridge fit; ``w_tr`` weights the train rows."""
+
+    X_tr: np.ndarray
+    y_tr: np.ndarray
+    X_te: np.ndarray
+    y_te: np.ndarray
+    w_tr: np.ndarray | None = None
+
+
+def ridge_fit_eval(split: RidgeSplit):
     """Ridge fitted on the train part; returns ``(r2_te, alpha, coef, b)``."""
-    alpha, _, coef, b = ridge_fit(X_tr, y_tr, w_tr)
-    return _r2(y_te, X_te @ coef + b), alpha, coef, b
+    alpha, _, coef, b = ridge_fit(split.X_tr, split.y_tr, split.w_tr)
+    return _r2(split.y_te, split.X_te @ coef + b), alpha, coef, b
 
 
-def honest_ridge(
-    X: np.ndarray, y: np.ndarray, is_train: np.ndarray, is_val: np.ndarray,
-    keep: np.ndarray | None = None,
-) -> dict:
+@dataclass(frozen=True)
+class HonestSplit:
+    """The encoder's train and val masks over the rows, and the rows ``keep``
+    admits (all of them when ``None``)."""
+
+    is_train: np.ndarray
+    is_val: np.ndarray
+    keep: np.ndarray | None = None
+
+
+def honest_ridge(X: np.ndarray, y: np.ndarray, split: HonestSplit) -> dict:
     """Unweighted ridge fitted on the encoder's train split, scored on its val split.
 
     Comparable to the p0 honest/unweighted table; ``val_r2`` is the number
     to report.
     """
-    keep = np.ones(len(y), dtype=bool) if keep is None else keep
+    keep = np.ones(len(y), dtype=bool) if split.keep is None else split.keep
     good = keep & np.isfinite(y)
-    tr = good & is_train
-    va = good & is_val
+    tr = good & split.is_train
+    va = good & split.is_val
     alpha, cv_r2, coef, b = ridge_fit(X[tr], y[tr])
     pred_va = X[va] @ coef + b
     return {
@@ -341,20 +360,39 @@ def mean_ci(delta: np.ndarray, key: str = "mean_sd", n_boot: int = 4000) -> dict
     return {key: float(np.mean(delta)), "ci_lo": lo, "ci_hi": hi}
 
 
-def contrast_row(delta: np.ndarray, pr_delta: np.ndarray | None = None,
-                 off: np.ndarray | None = None, *, key: str = "mean_sd",
-                 pr_key: str = "delta_pr", n_boot: int = 4000, **lead) -> dict:
+@dataclass(frozen=True)
+class ArmDelta:
+    """A paired arm-minus-arm difference per base card: the headline ``delta``,
+    the played_rate shift ``pr_delta`` and the edited arm's off-manifold mask ``off``."""
+
+    delta: np.ndarray
+    pr_delta: np.ndarray | None = None
+    off: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class ContrastStyle:
+    """The column names of a result row and the bootstrap size of its interval."""
+
+    key: str = "mean_sd"
+    pr_key: str = "delta_pr"
+    n_boot: int = 4000
+
+
+def contrast_row(arm: ArmDelta, style: ContrastStyle = ContrastStyle(),
+                 lead: Mapping[str, object] | None = None) -> dict:
     """One paired arm-minus-arm result row over the base cards.
 
-    ``lead`` names the contrast; ``pr_delta`` and ``off`` (the edited arm's
-    off-manifold mask) add the played_rate shift and the off-manifold share.
+    ``lead`` names the contrast; ``arm.pr_delta`` and ``arm.off`` add the
+    played_rate shift and the off-manifold share.
     """
-    row = {**lead, "n": len(delta), **mean_ci(delta, key, n_boot),
+    delta = arm.delta
+    row = {**(lead or {}), "n": len(delta), **mean_ci(delta, style.key, style.n_boot),
            "frac_pos": float((delta > 0).mean())}
-    if pr_delta is not None:
-        row[pr_key] = float(pr_delta.mean())
-    if off is not None:
-        row["off_manifold"] = float(np.mean(off))
+    if arm.pr_delta is not None:
+        row[style.pr_key] = float(arm.pr_delta.mean())
+    if arm.off is not None:
+        row["off_manifold"] = float(np.mean(arm.off))
     return row
 
 
@@ -365,17 +403,30 @@ def score_arms(bases: Sequence[int], arms: Sequence, edit) -> Scored:
         len(bases), len(arms))
 
 
-def contrasts(S: Scored, labels: Sequence, *, cols: Sequence[int] | None = None,
-              ref: int = 0, field: str = "contrast", **options) -> list[dict]:
-    """One :func:`contrast_row` per arm column against the ``ref`` column.
+@dataclass(frozen=True)
+class ContrastPlan:
+    """Which arm columns :func:`contrasts` reads against which reference column.
 
     ``cols`` defaults to the columns after the first, one per label; each row
-    names its arm under ``field``, after any extra lead columns in ``options``.
+    names its arm under ``field``, after any extra ``lead`` columns.
     """
-    cols = range(1, len(labels) + 1) if cols is None else cols
-    return [contrast_row(S.sp[:, c] - S.sp[:, ref], S.pr[:, c] - S.pr[:, ref],
-                         S.off[:, c], **options, **{field: label})
-            for c, label in zip(cols, labels)]
+
+    labels: Sequence
+    cols: Sequence[int] | None = None
+    ref: int = 0
+    field: str = "contrast"
+    style: ContrastStyle = ContrastStyle()
+    lead: Mapping[str, object] = dataclass_field(default_factory=dict)
+
+
+def contrasts(S: Scored, plan: ContrastPlan) -> list[dict]:
+    """One :func:`contrast_row` per arm column against the ``plan.ref`` column."""
+    cols = range(1, len(plan.labels) + 1) if plan.cols is None else plan.cols
+    ref = plan.ref
+    return [contrast_row(ArmDelta(S.sp[:, c] - S.sp[:, ref], S.pr[:, c] - S.pr[:, ref],
+                                  S.off[:, c]),
+                         plan.style, {**plan.lead, plan.field: label})
+            for c, label in zip(cols, plan.labels)]
 
 
 def write_table(tab: pd.DataFrame | Sequence[dict], name: str) -> None:

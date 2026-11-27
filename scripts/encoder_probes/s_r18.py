@@ -108,7 +108,7 @@ def same_split(fr: S.ProbeFrame) -> dict:
                 b = wls(Xa[tr], y[tr], w[tr]).beta
                 p_tr, p_va = Xa[tr] @ b, Xa[va] @ b
             else:
-                _, _, coef, b0 = pl.ridge_fit_eval(X[tr], y[tr], X[va], y[va], w[tr])
+                _, _, coef, b0 = pl.ridge_fit_eval(pl.RidgeSplit(X[tr], y[tr], X[va], y[va], w[tr]))
                 p_tr, p_va = X[tr] @ coef + b0, X[va] @ coef + b0
             rows.append([head, vname, int(tr.sum()), int(va.sum()),
                          f"{pl._r2(y[tr], p_tr, w[tr]):.4f}",

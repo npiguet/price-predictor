@@ -113,7 +113,7 @@ def main() -> None:
             return cc.replace_in_line(stripped[r], i, "types: " + " ".join(new_words))
 
         S = pl.score_arms(cc.sample_rows(mask, 400, rng), [False, True], swapped)
-        tr_rows.extend(pl.contrasts(S, [label]))
+        tr_rows.extend(pl.contrasts(S, pl.ContrastPlan([label])))
 
     is_art, is_ench = pl.flag(j, "is_artifact"), pl.flag(j, "is_enchantment")
     one_line = C.n_abilities == 1
@@ -135,8 +135,9 @@ def main() -> None:
                                          "replacement: CARDNAME enters untapped."),
             lambda r: cc.drop_line(stripped[r], tap_i[r])]
     L = pl.score_arms(sel, arms, lambda r, arm: arm(r))
-    pl.write_table(pl.contrasts(L, ["tapped -> untapped (token sub)",
-                                    "delete the enters-tapped line"]), "c5_taplands.csv")
+    pl.write_table(pl.contrasts(L, pl.ContrastPlan(
+        ["tapped -> untapped (token sub)", "delete the enters-tapped line"])),
+        "c5_taplands.csv")
 
     pl.write_summary(out, "c5_summary.json")
 

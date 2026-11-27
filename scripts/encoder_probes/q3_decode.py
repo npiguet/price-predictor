@@ -55,7 +55,7 @@ def main() -> None:
         keep = np.isfinite(y)
         if gate == "creature":
             keep &= creature
-        r = pl.honest_ridge(emb, y, is_train, is_val, keep)
+        r = pl.honest_ridge(emb, y, pl.HonestSplit(is_train, is_val, keep))
         fits[col] = r
         va = r["val_mask"]
         rows.append({
@@ -68,7 +68,7 @@ def main() -> None:
 
     for col, label in BIN_TARGETS:
         y = pd.to_numeric(join[col], errors="coerce").fillna(0).to_numpy(float)
-        r = pl.honest_ridge(emb, y, is_train, is_val, np.isfinite(y))
+        r = pl.honest_ridge(emb, y, pl.HonestSplit(is_train, is_val, np.isfinite(y)))
         va = r["val_mask"]
         rows.append({
             "target": label, "kind": "AUC", "n_val": r["n_val"],
@@ -100,7 +100,7 @@ def main() -> None:
     # ── the {X} question: decode MV from a no-X, MV<=7 fit ───────────────
     has_x = pd.to_numeric(join["has_x"], errors="coerce").fillna(0).to_numpy(float) > 0
     fit_keep = np.isfinite(mv) & (~has_x) & (mv <= 7)
-    r_nox = pl.honest_ridge(emb, mv, is_train, is_val, fit_keep)
+    r_nox = pl.honest_ridge(emb, mv, pl.HonestSplit(is_train, is_val, fit_keep))
     coef, b = r_nox["coef"], r_nox["intercept"]
     decoded = emb @ coef + b
     x_val = has_x & is_val & np.isfinite(mv)

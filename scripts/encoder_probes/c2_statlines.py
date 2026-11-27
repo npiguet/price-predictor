@@ -73,7 +73,7 @@ def main() -> None:
                 "P-1/T+1 vs base (-2 in P-T)": M[:, 2] - M[:, 0],
                 "gradient per point of P-T": (M[:, 1] - M[:, 2]) / 4.0}
 
-    pl.write_table([pl.contrast_row(v, contrast=name)
+    pl.write_table([pl.contrast_row(pl.ArmDelta(v), lead={"contrast": name})
                     for name, v in pt_contrasts(A.sp).items()], "c2_pt_asymmetry.csv")
     pr = list(pt_contrasts(A.pr).values())
     out["pt_asymmetry_pr"] = {"up": float(pr[0].mean()), "down": float(pr[1].mean()),
@@ -116,8 +116,8 @@ def main() -> None:
     xr = cc.sample_rows(has_x & ~C.is_creature, 250, rng)
     X = pl.score_arms(xr, [None, "{3}", "", "{1}", "{6}"], lambda r, rep: costed(
         r, None if rep is None else cost[r].replace("{X}", rep, 1) or "{0}"))
-    xrows = pl.contrasts(X, ["{X} -> {1}", "{X} -> {3}", "{X} -> {6}", "{X} deleted"],
-                         cols=[3, 1, 4, 2])
+    xrows = pl.contrasts(X, pl.ContrastPlan(
+        ["{X} -> {1}", "{X} -> {3}", "{X} -> {6}", "{X} deleted"], cols=[3, 1, 4, 2]))
 
     # reverse: a generic pip -> {X} on non-X spells
     plain = cc.sample_rows(~has_x & ~C.is_creature
@@ -125,7 +125,7 @@ def main() -> None:
                            250, rng)
     X2 = pl.score_arms(plain, [False, True], lambda r, to_x: costed(
         r, re.sub(r"^\{[1-9]\}", "{X}", cost[r]) if to_x else None))
-    xrows += pl.contrasts(X2, ["generic pip -> {X} (non-X spells)"])
+    xrows += pl.contrasts(X2, pl.ContrastPlan(["generic pip -> {X} (non-X spells)"]))
     pl.write_table(xrows, "c2_x_cost.csv")
 
     # (iv) pip substitutions
@@ -135,7 +135,7 @@ def main() -> None:
         if mask.sum() < 30:
             continue
         P = pl.score_arms(cc.sample_rows(mask, 400, rng), [None, *arms], costed)
-        pip_rows += pl.contrasts(P, arms, field="arm", base=base_cost)
+        pip_rows += pl.contrasts(P, pl.ContrastPlan(arms, field="arm", lead={"base": base_cost}))
     pl.write_table(pip_rows, "c2_pips.csv")
 
     pl.write_summary(out, "c2_summary.json")
