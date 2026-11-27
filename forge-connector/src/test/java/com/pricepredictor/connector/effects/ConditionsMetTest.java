@@ -191,7 +191,7 @@ class ConditionsMetTest {
         SpellAbility flare = flareAt(game, caster, giant);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
-        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, game, caps, 5L, flare, WHY);
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, new ShardRun.ForkRun(game, caps, 5L, flare), WHY);
 
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> halves = fork.records();

@@ -301,7 +301,7 @@ class ForkRecordsTest {
         SpellAbility spell = disfigure.getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, game, forkCaps().interventions(1).probes(0).build(), 1L, spell);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, new ShardRun.ForkRun(game, forkCaps().interventions(1).probes(0).build(), 1L, spell));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
 
         List<String> records = fork.records();
@@ -330,7 +330,7 @@ class ForkRecordsTest {
         SpellAbility spell = blaze.getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, game, forkCaps().interventions(1).probes(0).build(), 9L, spell);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, new ShardRun.ForkRun(game, forkCaps().interventions(1).probes(0).build(), 9L, spell));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
 
         List<String> records = fork.records();
@@ -365,8 +365,7 @@ class ForkRecordsTest {
         String observedHalf = observedHalves.get(0);
 
         Game forkedGame = pyroclasmBoard();
-        ShardRun.Fork fork = ShardRun.forked(tempDir.resolve("forked"), forkedGame,
-                forkCaps().interventions(1).probes(0).build(), 1L, firstSpellInHand(forkedGame));
+        ShardRun.Fork fork = ShardRun.forked(tempDir.resolve("forked"), new ShardRun.ForkRun(forkedGame, forkCaps().interventions(1).probes(0).build(), 1L, firstSpellInHand(forkedGame)));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
         List<String> forced = fork.records();
         assertEquals(1, forced.size(), forced.toString());
@@ -589,7 +588,7 @@ class ForkRecordsTest {
     /** The one forced record. */
     private String forcedRecord(Game game, SpellAbility spell, long seed) throws IOException {
         ShardRun.Fork fork = ShardRun.forked(
-                tempDir.resolve("fork-" + seed), game, forkCaps().interventions(1).probes(0).build(), seed, spell);
+                tempDir.resolve("fork-" + seed), new ShardRun.ForkRun(game, forkCaps().interventions(1).probes(0).build(), seed, spell));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());

@@ -56,7 +56,7 @@ class UnpaidCostRefusalTest {
         long thrown = HookFailures.counts().getOrDefault("fork intervention body", 0L);
 
         ShardRun.Fork fork = ShardRun.forked(
-                tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, ninjutsu);
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().interventions(1).probes(0).build(), 1L, ninjutsu));
 
         assertEquals(thrown, HookFailures.counts().getOrDefault("fork intervention body", 0L),
                 "the forced body threw: " + HookFailures.counts());
@@ -92,7 +92,7 @@ class UnpaidCostRefusalTest {
             assertTrue(InterventionFork.readsAnUnpaidCost(line), line + " reads what its cost paid");
 
             ShardRun.Fork fork = ShardRun.forked(
-                    tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line);
+                    tempDir, new ShardRun.ForkRun(game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line));
 
             assertFalse(fork.wrote(), "nothing is written for a refused line");
             assertEquals(refused + 1, ForkRefusals.counts().getOrDefault(reason, 0L),
@@ -130,8 +130,7 @@ class UnpaidCostRefusalTest {
         long thrown = HookFailures.counts().getOrDefault("fork intervention body", 0L);
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line,
-                "to tell a forced line that resolved and did nothing from one that never resolved");
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line), "to tell a forced line that resolved and did nothing from one that never resolved");
 
         assertEquals(thrown, HookFailures.counts().getOrDefault("fork intervention body", 0L),
                 "the forced body threw: " + HookFailures.counts());

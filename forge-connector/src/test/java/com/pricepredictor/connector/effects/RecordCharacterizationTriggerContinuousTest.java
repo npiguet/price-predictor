@@ -76,7 +76,7 @@ class RecordCharacterizationTriggerContinuousTest extends RecordCharacterization
         board.game.getTriggerHandler().resetActiveTriggers();
 
         List<String> records = ShardRun.readShard(ShardRun.recordedWithClauseHook(
-                tempDir, board.game, CAPS, "for the trigger hook", () -> {
+                tempDir, new ShardRun.Hooked(board.game, CAPS, "for the trigger hook"), () -> {
                     board.opponent.loseLife(3, false, false, null);
                     forge.game.GameEntityCounterTable table = new forge.game.GameEntityCounterTable();
                     hoplite.addCounter(forge.game.card.CounterType.getType("P1P1"), 1, board.you, table);

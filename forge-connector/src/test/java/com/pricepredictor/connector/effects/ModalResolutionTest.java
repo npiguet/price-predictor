@@ -291,7 +291,7 @@ class ModalResolutionTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 5L, charm, STOCK_FORK);
+                tempDir, new ShardRun.ForkRun(game, caps, 5L, charm), STOCK_FORK);
 
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> records = fork.records();
@@ -317,9 +317,7 @@ class ModalResolutionTest {
     void aForkedCharmsHalvesCarryTheObservedHalvesStates() throws Throwable {
         Game forkedGame = confluenceBoard();
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir.resolve("forked"), forkedGame,
-                TestCaps.caps().manaCap(2000).probes(0).build(), 5L,
-                confluenceIn(forkedGame), STOCK_FORK);
+                tempDir.resolve("forked"), new ShardRun.ForkRun(forkedGame, TestCaps.caps().manaCap(2000).probes(0).build(), 5L, confluenceIn(forkedGame)), STOCK_FORK);
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> forced = fork.records();
         int[] options = forced.stream().mapToInt(r -> optionOf(r).intValue()).toArray();
@@ -356,8 +354,7 @@ class ModalResolutionTest {
         TestBoard.inPlay(game, game.getPlayers().get(0), "Double Vision");
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, TestCaps.caps().manaCap(2000).probes(0).build(), 5L,
-                confluenceIn(game), STOCK_FORK);
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().manaCap(2000).probes(0).build(), 5L, confluenceIn(game)), STOCK_FORK);
 
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> forced = fork.records();
@@ -383,8 +380,7 @@ class ModalResolutionTest {
         Player caster = game.getPlayers().get(0);
         Card command = TestBoard.inHand(game, caster, "Kolaghan's Command");
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, TestCaps.caps().manaCap(2000).probes(0).build(), 7L,
-                TestBoard.charmOf(command, caster), STOCK_FORK);
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().manaCap(2000).probes(0).build(), 7L, TestBoard.charmOf(command, caster)), STOCK_FORK);
         assertTrue(fork.wrote(), "the forced resolution observed something");
 
         for (String half : fork.records()) {
@@ -610,7 +606,7 @@ class ModalResolutionTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 5L, creatureSpell, STOCK_FORK);
+                tempDir, new ShardRun.ForkRun(game, caps, 5L, creatureSpell), STOCK_FORK);
 
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> records = fork.records();

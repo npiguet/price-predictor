@@ -436,7 +436,7 @@ class MidResolutionCastTest {
         expertise.setActivatingPlayer(caster);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps, 5L, expertise);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, new ShardRun.ForkRun(game, caps, 5L, expertise));
 
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> records = fork.records();

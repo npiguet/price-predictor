@@ -84,7 +84,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
         CollectionCaps caps = TestCaps.caps().everyDecision()
                 .interventions(1).probes(0).build();
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, board.game, caps, 1L, pyroclasm);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, new ShardRun.ForkRun(board.game, caps, 1L, pyroclasm));
         assertTrue(fork.wrote(), "the fork observed nothing");
 
         Characterization.assertMatches(
@@ -111,7 +111,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
                 .interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, board.game, caps, 1L, alarm, "to hear the outcome hook");
+                tempDir, new ShardRun.ForkRun(board.game, caps, 1L, alarm), "to hear the outcome hook");
         assertTrue(fork.wrote(), "the fork observed nothing");
         String record = fork.records().get(0);
         assertTrue(record.contains("\"copy_dropped\":{\"remembered\":1}"), record);
@@ -146,8 +146,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
             }
             CollectionCaps caps = TestCaps.caps().everyDecision().interventions(1).probes(0).build();
             ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                    tempDir.resolve(forced.replace(' ', '-')), board.game, caps, 1L, ability,
-                    "to read the resolution hook's fizzle");
+                    tempDir.resolve(forced.replace(' ', '-')), new ShardRun.ForkRun(board.game, caps, 1L, ability), "to read the resolution hook's fizzle");
             assertTrue(fork.wrote(), forced + ": the fork wrote nothing");
             records.addAll(fork.records());
         }
@@ -176,7 +175,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
         CollectionCaps caps = TestCaps.caps().everyDecision().interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, ritual, "to hear the confirm hook");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, ritual), "to hear the confirm hook");
         assertTrue(fork.wrote(), "the fork wrote nothing");
         assertTrue(fork.records().get(0).contains("\"outcome\":\"declined\""), fork.records().toString());
 
@@ -199,7 +198,7 @@ class RecordCharacterizationForkTest extends RecordCharacterizationSupport {
                 .probeKeywords("trample").build();
 
         RecordShardWriter writer = ShardRun.recordedWithClauseHook(
-                tempDir, board.game, caps, "to hear the outcome hook", () -> {
+                tempDir, new ShardRun.Hooked(board.game, caps, "to hear the outcome hook"), () -> {
                     TestBoard.enterStep(board.game, PhaseType.COMBAT_DAMAGE);
                     assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
                     combat.dealAssignedDamage();

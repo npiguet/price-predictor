@@ -43,8 +43,7 @@ class ForcedMandatoryChoiceTest {
         SpellAbility terrain = TestBoard.spellOf(TestBoard.inHand(game, holder, "Phantasmal Terrain"), holder);
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, terrain,
-                "to record the forced Aura's resolution");
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().interventions(1).probes(0).build(), 1L, terrain), "to record the forced Aura's resolution");
 
         assertTrue(fork.wrote(), "the forced Aura is written: " + ForkRefusals.counts());
         List<String> records = ShardRun.readShard(fork.shard());

@@ -52,9 +52,7 @@ class ProbeBranchTest {
     private Pair probed(Board board, String keyword) throws Throwable {
         CollectionCaps caps = TestCaps.caps().everyDecision().interventions(0).probes(4)
                 .probeKeywords(keyword).build();
-        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game(), caps,
-                "to probe a damage step",
-                () -> board.game().getPhaseHandler().devAdvanceToPhase(PhaseType.COMBAT_END));
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(board.game(), caps, "to probe a damage step"), () -> board.game().getPhaseHandler().devAdvanceToPhase(PhaseType.COMBAT_END));
         List<String> combats = ShardRun.readShard(writer.path()).stream()
                 .filter(line -> line.contains("\"kind\":\"combat\"")).toList();
         List<String> branches = combats.stream()

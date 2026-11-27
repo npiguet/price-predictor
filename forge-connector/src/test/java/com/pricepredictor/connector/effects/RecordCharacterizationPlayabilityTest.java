@@ -54,8 +54,7 @@ class RecordCharacterizationPlayabilityTest extends RecordCharacterizationSuppor
         SpellAbility bolt = board.spell(board.hand("Lightning Bolt", you), you);
 
         List<String> records = ShardRun.records(
-                tempDir, board.game, CAPS, Refs.of(opponent),
-                (bracket, collectors) -> {
+                tempDir, new ShardRun.ByHand(board.game, CAPS, Refs.of(opponent)), (bracket, collectors) -> {
             collectors.playability().recordDecision(
                     you, bolt, DecisionCandidate.read(bolt, you).orElseThrow());
 

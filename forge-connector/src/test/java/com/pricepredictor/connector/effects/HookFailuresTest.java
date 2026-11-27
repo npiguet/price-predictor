@@ -44,7 +44,7 @@ class HookFailuresTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         String key = "subscriber HookFailuresTest$ThrowingSubscriber.onPhase";
         CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
-        ShardRun.recordedWithClauseHook(tempDir, game, noForks, "to record a game", () -> {
+        ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(game, noForks, "to record a game"), () -> {
             long before = HookFailures.counts().getOrDefault(key, 0L);
             game.subscribeToEvents(new ThrowingSubscriber());
             for (int phase = 0; phase < 3; phase++) {

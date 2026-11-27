@@ -82,7 +82,7 @@ class ForkKindRecordsTest {
         SpellAbility pyroclasm = board.spell(board.hand("Pyroclasm", board.you), board.you);
         CollectionCaps caps = TestCaps.caps().everyDecision().interventions(1).probes(0).build();
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, board.game, caps, 1L, pyroclasm);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, new ShardRun.ForkRun(board.game, caps, 1L, pyroclasm));
 
         assertTrue(fork.wrote(), "the fork observed nothing");
         for (String record : fork.records()) {

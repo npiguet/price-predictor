@@ -45,7 +45,7 @@ class FizzledSpellTest {
         CollectionCaps counting = TestCaps.caps().interventions(0).probes(0)
                 .countDroppedEvents().build();
         RecordShardWriter writer = ShardRun.recordedWithClauseHook(
-                tempDir, game, counting, WHY, body);
+                tempDir, new ShardRun.Hooked(game, counting, WHY), body);
         Path counts = GameRecording.droppedEventsFile(writer);
         return new Run(ShardRun.readShard(writer.path()),
                 Files.exists(counts) ? Files.readAllLines(counts) : List.of());

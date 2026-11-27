@@ -57,7 +57,7 @@ class ForkHookEventsTest {
     /** Every record the game's recording wrote, under {@code caps}, while {@code body} ran. */
     private List<String> recorded(Game game, CollectionCaps caps, String why, ShardRun.Played body)
             throws Throwable {
-        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, game, caps, why, body);
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(game, caps, why), body);
         return Files.exists(writer.path()) ? ShardRun.readShard(writer.path()) : List.of();
     }
 
@@ -132,7 +132,7 @@ class ForkHookEventsTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, bestow, "to read the resolution hook's fizzle");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, bestow), "to read the resolution hook's fizzle");
 
         assertTrue(fork.wrote(), "the forced bestow wrote nothing");
         List<String> records = fork.records();
@@ -160,7 +160,7 @@ class ForkHookEventsTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, blade.getFirstSpellAbility(), "to read the resolution hook's fizzle");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, blade.getFirstSpellAbility()), "to read the resolution hook's fizzle");
 
         assertTrue(fork.wrote(), "the fizzled forced spell wrote nothing");
         List<String> records = fork.records();
@@ -194,7 +194,7 @@ class ForkHookEventsTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, destroy, "to read the resolution hook's fizzle");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, destroy), "to read the resolution hook's fizzle");
 
         assertEmptyHalfWritten(fork, "fizzled", "the fizzled forced ability wrote nothing");
     }
@@ -215,7 +215,7 @@ class ForkHookEventsTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, exile, "to read the resolution hook");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, exile), "to read the resolution hook");
 
         assertEmptyHalfWritten(fork, "resolved", "the forced ability that did nothing wrote nothing");
     }

@@ -93,7 +93,7 @@ class GameRetentionTest {
         int held = LibraryCapture.gamesHeld();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, spell, WHY);
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().interventions(1).probes(0).build(), 1L, spell), WHY);
 
         assertTrue(fork.wrote(), "the fork forced Divination");
         assertTrue(rendersALibraryCard(fork.records()), "the fork's draws render library cards");
@@ -156,8 +156,7 @@ class GameRetentionTest {
         SpellAbility spell = TestBoard.inHand(game, caster, "Divination").getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
 
-        ShardRun.recordedWithClauseHook(tempDir, game, TestCaps.caps().interventions(0).probes(0).build(), WHY,
-                () -> ClauseNotes.of(game).clauseResolving(game, spell));
+        ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(game, TestCaps.caps().interventions(0).probes(0).build(), WHY), () -> ClauseNotes.of(game).clauseResolving(game, spell));
 
         assertFalse(ClauseNotes.holds(game), "the closed recording's game holds no note");
         return new WeakReference<>(game);

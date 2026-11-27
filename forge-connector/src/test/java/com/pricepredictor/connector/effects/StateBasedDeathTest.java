@@ -421,7 +421,7 @@ class StateBasedDeathTest {
 
         // A seed whose draw chooses the creature mode and ends on the opponent mode.
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, charm, "to split a fork's modes");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, charm), "to split a fork's modes");
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
         List<String> halves = fork.records();
         assertTrue(halves.size() >= 2, halves.toString());
@@ -645,8 +645,7 @@ class StateBasedDeathTest {
                 .countDroppedEvents().build();
 
         RecordShardWriter writer = ShardRun.recordedWithClauseHook(
-                tempDir, duel.game(), counting, "for the state-based loop's signals",
-                () -> shrinkToDeath(duel, elves));
+                tempDir, new ShardRun.Hooked(duel.game(), counting, "for the state-based loop's signals"), () -> shrinkToDeath(duel, elves));
 
         Path counts = GameRecording.droppedEventsFile(writer);
         assertEquals(writer.path().getParent(), counts.getParent());
@@ -663,8 +662,7 @@ class StateBasedDeathTest {
         CollectionCaps silent = TestCaps.caps().interventions(0).probes(0).build();
 
         RecordShardWriter writer = ShardRun.recordedWithClauseHook(
-                tempDir, duel.game(), silent, "for the state-based loop's signals",
-                () -> shrinkToDeath(duel, elves));
+                tempDir, new ShardRun.Hooked(duel.game(), silent, "for the state-based loop's signals"), () -> shrinkToDeath(duel, elves));
 
         assertFalse(Files.exists(GameRecording.droppedEventsFile(writer)));
     }
@@ -827,8 +825,7 @@ class StateBasedDeathTest {
         Card slashCard = TestBoard.inHand(duel.game(), duel.caster(), "Flame Slash");
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
-        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, duel.game(), caps, 1L,
-                spellOf(slashCard, duel.caster()), "for the fork's own resolution");
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, new ShardRun.ForkRun(duel.game(), caps, 1L, spellOf(slashCard, duel.caster())), "for the fork's own resolution");
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());

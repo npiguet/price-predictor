@@ -70,7 +70,7 @@ class ScheduledInterventionsTest {
     private List<String> forced(Game game, int interventions, ShardRun.Played body) throws Throwable {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(interventions).probes(0).build();
         RecordShardWriter writer = ShardRun.recordedWithClauseHook(
-                tempDir, game, caps, "to force a line as a worker does", body);
+                tempDir, new ShardRun.Hooked(game, caps, "to force a line as a worker does"), body);
         if (!Files.exists(writer.path())) {
             return List.of();
         }
@@ -146,7 +146,7 @@ class ScheduledInterventionsTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 1L, second, "to force a line through the hooks");
+                tempDir, new ShardRun.ForkRun(game, caps, 1L, second), "to force a line through the hooks");
 
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());

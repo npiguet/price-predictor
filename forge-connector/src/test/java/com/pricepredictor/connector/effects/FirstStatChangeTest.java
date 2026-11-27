@@ -79,7 +79,7 @@ class FirstStatChangeTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         String shard = String.join("\n",
-                ShardRun.forked(tempDir, game, caps, 1L, growth).records());
+                ShardRun.forked(tempDir, new ShardRun.ForkRun(game, caps, 1L, growth)).records());
         assertTrue(shard.contains("\"interventional\":true"), "no fork was written: " + shard);
         assertTrue(shard.contains(pumpOf(bears)), shard);
     }

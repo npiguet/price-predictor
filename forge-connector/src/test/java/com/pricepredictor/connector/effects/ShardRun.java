@@ -78,11 +78,15 @@ final class ShardRun {
     }
 
     /** A game recorded under the hooks, the caps it is recorded under, and why a test needs the hooks. */
-    private record Hooked(Game game, CollectionCaps caps, String why) {
+    record Hooked(Game game, CollectionCaps caps, String why) {
     }
 
     /** A game whose two collectors a test drives by hand, and the match's random seat, if any. */
-    private record ByHand(Game game, CollectionCaps caps, String randomSeatPlayerId) {
+    record ByHand(Game game, CollectionCaps caps, String randomSeatPlayerId) {
+    }
+
+    /** A game to fork once, the caps and seed the fork runs under, and the ability it is forced to resolve. */
+    record ForkRun(Game game, CollectionCaps caps, long seed, SpellAbility ability) {
     }
 
     /** A forced resolution: whether it wrote a record, and the shard it wrote to. */
@@ -121,14 +125,12 @@ final class ShardRun {
     /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
     static List<String> recordsWithRandomSeat(
             Path dir, Game game, String randomSeatPlayerId, Body body) throws Throwable {
-        return records(dir, game, TestCaps.unprobed(), randomSeatPlayerId, body);
+        return records(dir, new ByHand(game, TestCaps.unprobed(), randomSeatPlayerId), body);
     }
 
-    /** The same, under caps of the test's choosing. */
-    static List<String> records(
-            Path dir, Game game, CollectionCaps caps, String randomSeatPlayerId, Body body)
-            throws Throwable {
-        return readShard(shardOf(dir, new ByHand(game, caps, randomSeatPlayerId), body));
+    /** The same, under the caps and random seat {@code run} names. */
+    static List<String> records(Path dir, ByHand run, Body body) throws Throwable {
+        return readShard(shardOf(dir, run, body));
     }
 
     private static Path shardOf(Path dir, ByHand run, Body body) throws Throwable {
@@ -181,9 +183,9 @@ final class ShardRun {
      * The same under caps of the test's choosing, returning the closed writer
      * unread, for a test about the shard or the files beside it.
      */
-    static RecordShardWriter recordedWithClauseHook(
-            Path dir, Game game, CollectionCaps caps, String why, Played body) throws Throwable {
-        return recorded(dir, new Hooked(game, caps, why), recording -> body.run());
+    static RecordShardWriter recordedWithClauseHook(Path dir, Hooked run, Played body)
+            throws Throwable {
+        return recorded(dir, run, recording -> body.run());
     }
 
     private static RecordShardWriter recorded(Path dir, Hooked run, Recorded body)
@@ -236,10 +238,8 @@ final class ShardRun {
      * hook installed: the game's recording is never opened, so the fork's
      * collectors hear its bus alone.
      */
-    static Fork forked(Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability) {
-        return forkedUnder(dir, game, caps,
-                live -> new InterventionFork(game, live, new ForkBudget(caps), seed)
-                        .intervene(ability, 1, holderOf(game, ability)));
+    static Fork forked(Path dir, ForkRun run) {
+        return forkedUnder(dir, run, live -> intervene(run, live));
     }
 
     /**
@@ -250,24 +250,26 @@ final class ShardRun {
      *
      * @param why what the test needs the clause hook for, shown when it skips
      */
-    static Fork forkedWithClauseHook(
-            Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability,
-            String why) {
+    static Fork forkedWithClauseHook(Path dir, ForkRun run, String why) {
         assumeClauseHook(why);
-        return forkedUnder(dir, game, caps, live -> {
+        return forkedUnder(dir, run, live -> {
             live.open();
-            return new InterventionFork(game, live, new ForkBudget(caps), seed)
-                        .intervene(ability, 1, holderOf(game, ability));
+            return intervene(run, live);
         });
+    }
+
+    private static boolean intervene(ForkRun run, GameRecording live) {
+        return new InterventionFork(run.game(), live, new ForkBudget(run.caps()), run.seed())
+                .intervene(run.ability(), 1, holderOf(run.game(), run.ability()));
     }
 
     /** Run {@code force} under the game's recording, and the shard it wrote to. */
     private static Fork forkedUnder(
-            Path dir, Game game, CollectionCaps caps, java.util.function.Predicate<GameRecording> force) {
+            Path dir, ForkRun run, java.util.function.Predicate<GameRecording> force) {
         RecordShardWriter writer = writer(dir);
         boolean wrote;
         try (GameRecording live = new GameRecording(
-                GameRecordingRequest.of(game, writer, GAME_ID, caps)
+                GameRecordingRequest.of(run.game(), writer, GAME_ID, run.caps())
                         .seeded(SEED))) {
             wrote = force.test(live);
         } finally {

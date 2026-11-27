@@ -717,7 +717,7 @@ class StackItemBracketTest {
         CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         List<String> records = ShardRun.forkedWithClauseHook(
-                tempDir, game, caps, 5L, bolt, "for the fork's own resolution").records();
+                tempDir, new ShardRun.ForkRun(game, caps, 5L, bolt), "for the fork's own resolution").records();
 
         assertEquals(1, records.size(), records.toString());
         assertEquals(List.of(), eventsOn(records.get(0), maro, "pt_change"),

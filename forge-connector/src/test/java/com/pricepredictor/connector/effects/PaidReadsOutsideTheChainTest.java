@@ -49,7 +49,7 @@ class PaidReadsOutsideTheChainTest {
         assertTrue(InterventionFork.readsAnUnpaidCost(line), line + " reads what its cost paid");
 
         ShardRun.Fork fork = ShardRun.forked(
-                tempDir, game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line);
+                tempDir, new ShardRun.ForkRun(game, TestCaps.caps().interventions(1).probes(0).build(), 1L, line));
 
         assertFalse(fork.wrote(), "nothing is written for a refused line");
         assertEquals(refused + 1, ForkRefusals.counts().getOrDefault(REASON, 0L), ForkRefusals.counts().toString());

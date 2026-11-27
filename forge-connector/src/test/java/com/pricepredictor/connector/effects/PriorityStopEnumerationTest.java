@@ -71,8 +71,7 @@ class PriorityStopEnumerationTest {
     /** What {@code body} wrote with every hook installed; none when it wrote nothing. */
     private List<String> recorded(Game game, ShardRun.Played body) throws Throwable {
         CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
-        Path shard = ShardRun.recordedWithClauseHook(tempDir, game, noForks,
-                "the trigger hook reports the enumeration's evaluations", body).path();
+        Path shard = ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(game, noForks, "the trigger hook reports the enumeration's evaluations"), body).path();
         return Files.exists(shard) ? ShardRun.readShard(shard) : List.of();
     }
 

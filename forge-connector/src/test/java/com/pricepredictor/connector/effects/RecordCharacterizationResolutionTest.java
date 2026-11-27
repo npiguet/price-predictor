@@ -55,8 +55,7 @@ class RecordCharacterizationResolutionTest extends RecordCharacterizationSupport
         Card ogre = board.battlefield("Gray Ogre", opponent);
         Card wall = board.battlefield("Wall of Wood", you);
 
-        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game, CAPS,
-                "for the resolution hook's targets as cast", () -> {
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(board.game, CAPS, "for the resolution hook's targets as cast"), () -> {
             SpellAbility helix = board.spell(
                     board.game.getAction().moveToStack(board.card("Lightning Helix", you), null),
                     you);
@@ -131,8 +130,7 @@ class RecordCharacterizationResolutionTest extends RecordCharacterizationSupport
         Card delver = board.battlefield("Delver of Secrets", you);
         delver.setState(forge.card.CardStateName.Backside, true);
 
-        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game, CAPS,
-                "for the resolution hook", () -> {
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(board.game, CAPS, "for the resolution hook"), () -> {
             board.cast(board.card("Graceful Reprieve", you), you, bears);
             board.game.getStack().resolveStack();
             TestBoard.cast(board.game, board.card("Lightning Bolt", you), you, opponent);
@@ -184,8 +182,7 @@ class RecordCharacterizationResolutionTest extends RecordCharacterizationSupport
         game.setDayTime(false);
 
         forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
-        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, game, CAPS,
-                "for the hooks a worker installs", () -> {
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, new ShardRun.Hooked(game, CAPS, "for the hooks a worker installs"), () -> {
             for (int step = 0; step < 100
                     && !(phases.is(PhaseType.MAIN1) && phases.getPlayerTurn() == next); step++) {
                 phases.mainLoopStep();

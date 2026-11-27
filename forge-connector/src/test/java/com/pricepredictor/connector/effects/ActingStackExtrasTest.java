@@ -333,7 +333,7 @@ class ActingStackExtrasTest {
         spell.setActivatingPlayer(caster);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
-        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, game, caps, 1L, spell, WHY);
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir, new ShardRun.ForkRun(game, caps, 1L, spell), WHY);
 
         String half = RecordPicks.only(fork.records(), "resolution", "cardsfolder/a/arc_lightning.txt");
         Map<String, Object> extras = extrasOf(half, arcLightning);

@@ -128,7 +128,7 @@ class ForcedAndLiveHalvesTest {
         Game game = play.board().apply(declining);
         SpellAbility spell = play.pick().apply(game);
         CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
-        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir.resolve("fork" + runs.incrementAndGet()), game, caps, 1L, spell, WHY);
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(tempDir.resolve("fork" + runs.incrementAndGet()), new ShardRun.ForkRun(game, caps, 1L, spell), WHY);
         assertTrue(fork.wrote(), "the forced play wrote nothing");
         return fork.records();
     }

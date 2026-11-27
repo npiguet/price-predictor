@@ -223,7 +223,7 @@ class ManaRecordEffectsTest {
 
         CollectionCaps oneEach = TestCaps.caps().manaCap(1).interventions(0).probes(0).build();
         List<String> records = ShardRun.readShard(ShardRun.recordedWithClauseHook(
-                tempDir, game, oneEach, WHY, () -> {
+                tempDir, new ShardRun.Hooked(game, oneEach, WHY), () -> {
             assertTrue(ComputerUtil.playNoStack(you, devotion, game, false), "green");
             nykthos.untap();
             forests.forEach(Card::untap);
