@@ -59,7 +59,7 @@ Rules to respect when running or changing `evaluate-effect-model`, a gate, the k
 - The rung-3 `legal_target` readouts read the `target_legal` field, because the gate trains on no decision record.
 - A line counts as held out only when every card carrying it is held out.
 - The observed-mana label sums each `mana_produced` event's `mana_by_color`. An empty map is unreadable mana and counts for nothing.
-- Every rung-3 head read is gated through `HeadReading`, except the ladder's `damage_taken`, read as the amount alone because every one of its items took damage.
+- A rung-3 read of a gated field (`affected`, `dies`, `pt_until_end_of_turn`) goes through `HeadReading`, scaled by the gate's answer. Three reads are ungated (`probe_readouts.READOUTS`): `damage_taken`, read as the amount alone because every one of its items took damage; the legality fields (`may_block`, `legal_target`, `target_legal`, `may_attack`), which train wherever present, gate or no gate; and the verdict columns (`affordable`, `fires`, `can_play`, `timing`, the failed checks), which are not entity fields.
 
 ## Selection set
 
