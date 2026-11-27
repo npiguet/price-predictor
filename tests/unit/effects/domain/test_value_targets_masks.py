@@ -168,3 +168,39 @@ def test_a_line_with_a_script_states_its_cost_as_before():
 
 def test_value_line_of_a_keyword_fragment_is_a_keyword_line_with_no_script():
     assert ValueLine.of("kicker 2", None) == ValueLine("kicker 2", None, True)
+
+
+#: Contact Other Plane: a d20 table, draw 2 / scry 2 then draw 2 / scry 3 then draw 3.
+_CONTACT_OTHER_PLANE = (
+    "ResultSubAbilities$ 1-9:SV1,10-19:SV2,20:SV3 | SP$ RollDice | Sides$ 20 | "
+    "SpellDescription$ Roll a d20. [SEG] SV1: DB$ Draw | NumCards$ 2 [SEG] SV2: DB$ Scry | "
+    "ScryNum$ 2 | SubAbility$ SV1 [SEG] SV3: DB$ Scry | ScryNum$ 3 | SubAbility$ SV4 "
+    "[SEG] SV4: DB$ Draw | NumCards$ 3"
+)
+#: Cosmos Elixir's trigger: draw a card, otherwise gain 2 life.
+_COSMOS_ELIXIR = (
+    "Execute$ SV1 | Mode$ Phase | Phase$ End of Turn | TriggerZones$ Battlefield | "
+    "ValidPlayer$ You [SEG] SV1: BranchConditionSVar$ X | BranchConditionSVarCompare$ GTY | "
+    "DB$ Branch | FalseSubAbility$ SV2 | TrueSubAbility$ SV3 [SEG] SV2: DB$ GainLife | "
+    "Defined$ You | LifeAmount$ 2 [SEG] SV3: DB$ Draw | Defined$ You | NumCards$ 1"
+)
+
+
+def test_a_die_roll_tables_rows_are_not_summed():
+    """Contact Other Plane stated 5 cards drawn; the rolls draw 2, 2 or 3."""
+    assert _script(_CONTACT_OTHER_PLANE)["cards_drawn"] is None
+
+
+def test_a_branchs_arms_are_not_summed():
+    """Cosmos Elixir stated 1 card drawn unconditionally."""
+    assert _script(_COSMOS_ELIXIR)["cards_drawn"] is None
+
+
+@pytest.mark.parametrize("keys", [
+    "Highest$ SV1 | NotLowest$ SV2", "Lowest$ SV1 | Highest$ SV2",
+    "GuessWrong$ SV1 | GuessCorrect$ SV2", "DB$ TwoPiles | ChosenPile$ SV1 | UnchosenPile$ SV2",
+    "OtherwiseSubAbility$ SV1 | WinSubAbility$ SV2",
+])
+def test_each_exclusive_branch_key_masks_the_amounts_it_names(keys):
+    arms = "[SEG] SV1: DB$ Draw | NumCards$ 2 [SEG] SV2: DB$ Draw | NumCards$ 3"
+    assert _script(f"SP$ ChooseNumber | {keys} {arms}")["cards_drawn"] is None

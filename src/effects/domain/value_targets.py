@@ -12,8 +12,9 @@ two lines share is two rows). The masking rules:
   not the trigger's): the line states its own amounts, and what it grants is
   left out, not masked, since the head predicts what a line does.
 - **A chooser anywhere in the chain masks the amounts** (which option runs is
-  not the script's to say), and **a coin flip's branches mask what they
-  state** (one of them runs).
+  not the script's to say), and **an exclusive branch's segments mask
+  what they state** (a coin flip's, a die-roll table's rows, a ``Branch``'s arms:
+  one of them runs, the dice or the board decide which).
 - **A hybrid cost masks its mana targets** (``RW`` is one symbol of either
   colour, which a colour count cannot state).
 - **A target is masked where the script states no fixed value** (``NumDmg$ X``
@@ -105,8 +106,16 @@ _COST_GROUP_RE = re.compile(r"<[^>]*>")
 #: or a colour (``2W``), or with a colour or life (``WP``): one symbol,
 #: whichever is paid, which the cost's mana targets cannot state.
 _HYBRID_SHARD = re.compile(r"2[WUBRG]|[WUBRG][WUBRGP]")
-#: The parameters naming the segments one outcome of a coin flip runs.
-_COIN_KEYS = frozenset({"HeadsSubAbility", "TailsSubAbility", "WinSubAbility", "LoseSubAbility"})
+#: The parameters naming the segments one outcome of an exclusive branch runs:
+#: a coin flip's (or a clash's) outcomes, a die-roll table's rows
+#: (``ResultSubAbilities$ 1-9:SV1,10-20:SV2``), a ``Branch``'s two arms, a
+#: ``ChooseNumber``'s results and guesses, and a ``TwoPiles``'s two piles.
+_BRANCH_KEYS = frozenset({
+    "HeadsSubAbility", "TailsSubAbility", "WinSubAbility", "LoseSubAbility",
+    "OtherwiseSubAbility", "ResultSubAbilities", "TrueSubAbility", "FalseSubAbility",
+    "Highest", "Lowest", "NotLowest", "GuessCorrect", "GuessWrong", "ChosenPile",
+    "UnchosenPile",
+})
 #: The keys that name a trait the line gives away. ``Trigger$`` on a static
 #: (an exert's "when you do, +1/+0") and ``PreventionSubAbility$`` (what a
 #: shield does when it prevents) name what the root's own effect does.
@@ -185,9 +194,10 @@ def value_targets(script: str | None, *, keyword: bool = False) -> ValueTargets:
 
     A line with no script and a keyword line state nothing, so every target is
     masked. A chooser at any depth (a charm, a ``GenericChoice``) masks the
-    amounts, which option runs being the player's; a coin flip's branches mask
-    the amounts they state, one of them running and the sum of both stating
-    neither.
+    amounts, which option runs being the player's; an exclusive branch's segments
+    (coin, die-roll table, ``Branch``, ``ChooseNumber`` results, guesses, piles)
+    mask the amounts they state, one of them running and the sum of all stating
+    none.
     """
     amounts = _Amounts()
     if script is None or keyword:
@@ -216,9 +226,9 @@ def _holds_chooser(parsed: list[dict[str, str]], performed: list[int]) -> bool:
 def _read_chain(
     parts: list[str], parsed: list[dict[str, str]], performed: list[int], amounts: _Amounts,
 ) -> None:
-    """Each segment's amounts into ``amounts``; a coin flip's branches mask
-    what they state instead, and a segment the root grants adds nothing."""
-    branches = _reached(parsed, _labels(parts), _COIN_KEYS)
+    """Each segment's amounts into ``amounts``; an exclusive branch's segments
+    mask what they state instead, and a segment the root grants adds nothing."""
+    branches = _reached(parsed, _labels(parts), _BRANCH_KEYS)
     for index in performed:
         if index not in branches:
             _read_amounts(parsed[index], amounts)
@@ -266,7 +276,10 @@ def _named(found: dict[str, str], keys: Iterable[str], labels: dict[str, int]) -
     """The indices of the segments the ``keys`` parameters of ``found`` name;
     a value may list several (``SV3,SV4``)."""
     values = (value for key, value in found.items() if key in keys)
-    return [labels[label] for value in values for label in _LISTING.split(value) if label in labels]
+    return [
+        labels[label] for value in values for item in _LISTING.split(value)
+        if (label := item.rpartition(":")[2]) in labels
+    ]
 
 
 def _read_amounts(found: dict[str, str], amounts: _Amounts) -> None:
