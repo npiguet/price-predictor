@@ -165,6 +165,13 @@ final class RewriteChannel implements EventRouter.EventTap {
      * changed, each written now or, when the replacement set an ability
      * aside, held until that ability runs.
      *
+     * <p>Every replacement writes a record, including one that declined. A
+     * substitution leaves the run parameters untouched and so looks like a
+     * replacement that did nothing; the call's outcome is what tells the two
+     * apart. A {@code not_replaced} record is this channel's negative, as a
+     * non-fired evaluation is the trigger channel's: it teaches when a
+     * replacement applies, not only what it does once it has.
+     *
      * @param board the board read at {@code onReplacing}, or null to read it now
      */
     private void replaced(Reported reported, Snapshot board) {
