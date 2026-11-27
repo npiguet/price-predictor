@@ -24,7 +24,7 @@ What a reader or writer of effect records has to know that no single source file
 
 ## Envelope
 
-The envelope is frozen within a generation: a later capability makes new `kind` values reachable and adds members, and never redefines a field. `tests/unit/effects/domain/test_schema_compatibility.py` enforces the four compatibility rules; there is no version stamp.
+The envelope is frozen within a generation: a later capability makes new `kind` values reachable and adds members, and never redefines a field. `tests/unit/effects/domain/test_schema_compatibility.py` enforces the four compatibility rules. The one version member is `generation` (§ Generations); no other member versions the envelope.
 
 Which members the envelope, each snapshot block, each kind's payload, a contribution, a candidate and an event carry, and which of them the writer puts on every instance (`always`) rather than only `when` a condition holds, is one table, `domain/gen3_members.py`, read off the Java writer. The gen-3 decode reads every `always` member by index and defaults none (§ Generations). A member the writer adds or drops changes that table in the same change: `tests/unit/effects/application/test_gen3_members.py` fails on a fixture member the table lacks and on an `always` member a fixture instance lacks, and `tests/unit/effects/infrastructure/test_record_codec_required_members.py` on an `always` member the decode reads as optional.
 
