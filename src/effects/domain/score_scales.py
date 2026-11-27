@@ -33,8 +33,12 @@ before any model has scored an item; each is on the rescaled scale:
 - an explained deviance: the loss ratio, clustered by game
   (:func:`loss_ratio_standard_error`).
 
-A component averages its m items equally, so its standard error is
-``√(Σ SEᵢ²) / m`` (:func:`component_standard_error`).
+A component averages its m items equally unless its items group (the grid
+component's variants, into the grid they are of): then it is the mean of its
+groups' means, as :func:`grouped_mean` scores it. Its standard error is
+``√(Σ SEᵢ²) / m`` for equal items (:func:`component_standard_error`) and
+``√(Σ_g (Σ_{i∈g} SEᵢ²) / m_g²) / G`` for G groups of m_g items
+(:func:`grouped_standard_error`), the items' errors taken as independent.
 
 Torch-free, and free of scikit-learn: ``build-corpus`` and the freeze import
 it, and the probe scripts score through it so a probe and a control score
@@ -245,3 +249,17 @@ def component_standard_error(errors: Sequence[float]) -> float:
     if not errors:
         return math.inf
     return math.sqrt(sum(e * e for e in errors)) / len(errors)
+
+
+def grouped_standard_error(errors: Mapping[str, float], group: Callable[[str], str]) -> float:
+    """The standard error of :func:`grouped_mean` over items whose standard
+    errors are ``errors``, taken as independent: each group's mean has
+    ``√(Σ_{i∈g} SEᵢ²) / m_g``, and the mean of the G groups has
+    ``√(Σ_g SE_g²) / G``. Infinite with no item."""
+    by_group: dict[str, list[float]] = defaultdict(list)
+    for name, error in errors.items():
+        by_group[group(name)].append(error)
+    if not by_group:
+        return math.inf
+    return math.sqrt(sum(component_standard_error(group_errors) ** 2
+                         for group_errors in by_group.values())) / len(by_group)

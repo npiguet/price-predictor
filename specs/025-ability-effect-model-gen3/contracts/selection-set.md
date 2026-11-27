@@ -57,7 +57,9 @@ selected against the one on disk); writing the same set again leaves the file as
    `no fires row observes it`; a rule with none left is left out, reason `no output whose targets
    differ between the polarities`. A kept rule's standard error counts the rows a kept output
    reads.
-5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05` and every grid cell non-empty; otherwise exit 1
+5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05`, the grid component's with the weights the score gives
+   it (`√(Σ_g (Σ_{i∈g} SEᵢ²) / m_g²) / G` over its G grids, `m_g` the items of grid g:
+   `score_scales.grouped_standard_error`, `ITEM_GROUPS`), and every grid cell non-empty; otherwise exit 1
    naming stratum, half and component.
 6. Write the file.
 

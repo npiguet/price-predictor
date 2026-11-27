@@ -75,6 +75,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from effects.application.control_items import ITEM_GROUPS
 from effects.application.stratum_records import (
     StratumReader,
     shard_copies,
@@ -97,6 +98,7 @@ from effects.domain.score_scales import (
     clustered_auc_standard_error,
     component_standard_error,
     grid_standard_error,
+    grouped_standard_error,
     loss_ratio_standard_error,
 )
 from effects.domain.seeded_draw import keyed_hash
@@ -587,10 +589,13 @@ class _Assembly:
         self._leave_out(where, component, item, _above(error, self.limits))
         return False
 
-    def _check(self, where: _HalfId, component: str, errors: Sequence[float],
-               *, mode: str | None = None) -> None:
-        """Refuse a component above its precision target (FR-068b)."""
-        combined = component_standard_error(errors)
+    def _check(self, where: _HalfId, component: str,
+               errors: Sequence[float] | Mapping[str, float], *, mode: str | None = None) -> None:
+        """Refuse a component above its precision target (FR-068b): its items
+        weighed as the score weighs them, a mapping of errors by item name
+        grouped by ``ITEM_GROUPS``, a sequence equally."""
+        combined = (grouped_standard_error(errors, ITEM_GROUPS.get(component, str))
+                    if isinstance(errors, Mapping) else component_standard_error(errors))
         if combined <= self.limits.max_component_error:
             return
         under = f" under the {mode} rule mask" if mode else ""
@@ -696,11 +701,11 @@ class _Assembly:
     # ── grids ──
 
     def grids(self, where: _HalfId, found: _Half, sources: Sequence[GridSource]) -> None:
-        errors, kept = [], {}
+        errors, kept = {}, {}
         for grid in sources:
             frozen = self._grid(where, grid, found.grids.get(grid.name, {}))
             if frozen is not None:
-                errors.append(frozen[1])
+                errors[grid.name] = frozen[1]
                 kept[grid.name] = frozen[0]
         self.frozen_grids[where.stratum][where.half] = kept
         self._check(where, GRIDS, errors)
