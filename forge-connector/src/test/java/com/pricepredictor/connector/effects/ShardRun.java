@@ -71,6 +71,20 @@ final class ShardRun {
         void run() throws Throwable;
     }
 
+    /** The same, reading the recording as it plays: what reached no record so far. */
+    @FunctionalInterface
+    interface Recorded {
+        void run(GameRecording recording) throws Throwable;
+    }
+
+    /** A game recorded under the hooks, the caps it is recorded under, and why a test needs the hooks. */
+    private record Hooked(Game game, CollectionCaps caps, String why) {
+    }
+
+    /** A game whose two collectors a test drives by hand, and the match's random seat, if any. */
+    private record ByHand(Game game, CollectionCaps caps, String randomSeatPlayerId) {
+    }
+
     /** A forced resolution: whether it wrote a record, and the shard it wrote to. */
     record Fork(boolean wrote, Path shard) {
 
@@ -101,7 +115,7 @@ final class ShardRun {
     }
 
     static Path shardOf(Path dir, Game game, CollectionCaps caps, Body body) throws Throwable {
-        return shardOf(dir, game, caps, null, body);
+        return shardOf(dir, new ByHand(game, caps, null), body);
     }
 
     /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
@@ -114,20 +128,19 @@ final class ShardRun {
     static List<String> records(
             Path dir, Game game, CollectionCaps caps, String randomSeatPlayerId, Body body)
             throws Throwable {
-        return readShard(shardOf(dir, game, caps, randomSeatPlayerId, body));
+        return readShard(shardOf(dir, new ByHand(game, caps, randomSeatPlayerId), body));
     }
 
-    private static Path shardOf(
-            Path dir, Game game, CollectionCaps caps, String randomSeatPlayerId, Body body)
-            throws Throwable {
+    private static Path shardOf(Path dir, ByHand run, Body body) throws Throwable {
         RecordShardWriter writer = writer(dir);
+        Game game = run.game();
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    game, TestCollectors.context(writer, GAME_ID, run.randomSeatPlayerId()),
                     recordId -> { });
             try (Channels collectors = Channels.of(game, new Channels.Setup(
-                    TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
-                    caps, SEED, bracket))) {
+                    TestCollectors.context(writer, GAME_ID, run.randomSeatPlayerId()),
+                    run.caps(), SEED, bracket))) {
                 body.run(bracket, collectors);
             }
         } finally {
@@ -147,8 +160,21 @@ final class ShardRun {
      */
     static List<String> recordsWithClauseHook(Path dir, Game game, String why, Played body)
             throws Throwable {
+        return hooked(dir, game, why, recording -> body.run());
+    }
+
+    /**
+     * The same, the body handed the game's recording: the hooked form of
+     * {@link #observed}, for a test that reads what the bracket counted as
+     * reaching no record ({@link GameRecording#droppedEvents}) as it plays.
+     * The game ends as a worker's does, with the bus's game-finished event.
+     *
+     * @param why what the test needs the clause hook for, shown when it skips
+     */
+    static List<String> hooked(Path dir, Game game, String why, Recorded body)
+            throws Throwable {
         CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
-        return readShard(recordedWithClauseHook(dir, game, noForks, why, body).path());
+        return readShard(recorded(dir, new Hooked(game, noForks, why), body).path());
     }
 
     /**
@@ -157,14 +183,19 @@ final class ShardRun {
      */
     static RecordShardWriter recordedWithClauseHook(
             Path dir, Game game, CollectionCaps caps, String why, Played body) throws Throwable {
-        assumeClauseHook(why);
+        return recorded(dir, new Hooked(game, caps, why), recording -> body.run());
+    }
+
+    private static RecordShardWriter recorded(Path dir, Hooked run, Recorded body)
+            throws Throwable {
+        assumeClauseHook(run.why());
         RecordShardWriter writer = writer(dir);
         try (GameRecording recording =
                 new GameRecording(
-                        GameRecordingRequest.of(game, writer, GAME_ID, caps)
+                        GameRecordingRequest.of(run.game(), writer, GAME_ID, run.caps())
                                 .seeded(SEED))) {
             recording.open();
-            body.run();
+            body.run(recording);
         } finally {
             writer.close();
         }
@@ -176,7 +207,8 @@ final class ShardRun {
     /**
      * Run {@code body} with the bracket subscribed to the game's bus and no
      * patched collector at all: what a worker on a stock checkout records.
-     * Nothing skips it.
+     * Nothing skips it. A worker on the patched checkout records as {@link
+     * #hooked} does.
      */
     static List<String> observed(Path dir, Game game, Observed body) throws Throwable {
         RecordShardWriter writer = writer(dir);
