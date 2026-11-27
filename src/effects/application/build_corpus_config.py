@@ -81,8 +81,11 @@ class BuildCorpusConfig:
     )})
     game_disjoint_share: float = field(default=0.01, metadata={"help": (
         "A game naming no held-out card enters the game-disjoint stratum when "
-        "crc32(game_id) mod 1e6 / 1e6 is below this, so a rebuild over a grown "
-        "corpus keeps every game it placed (default: %(default)s)"
+        "crc32(game_id) mod 1e6 / 1e6 is below this: the draw depends on the "
+        "game id alone, so a rebuild over a grown corpus draws the same games "
+        "again, and placement then promotes further games from just above the "
+        "share where a rule cell is short, which a grown corpus can change "
+        "(default: %(default)s)"
     )})
     game_disjoint_keyword_share: float = field(default=0.15, metadata={"help": (
         "The threshold instead for a game holding a qualifying combat for one "
