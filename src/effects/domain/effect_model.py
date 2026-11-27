@@ -111,13 +111,13 @@ class RelationTrunk(nn.Module):
     stock layers, so the parameter names a run reports stay as they were.
     """
 
-    def __init__(self, d_model: int, n_heads: int, ff_dim: int, dropout: float,
-                 n_layers: int, *, relation_types: int, relation_values: bool) -> None:
+    def __init__(self, config: EffectModelConfig) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
-            RelationEncoderLayer(d_model, n_heads, ff_dim, dropout,
-                                 relation_types=relation_types, relation_values=relation_values)
-            for _ in range(n_layers))
+            RelationEncoderLayer(config.d_model, config.n_heads, config.ff_dim, config.dropout,
+                                 relation_types=config.relation_types,
+                                 relation_values=config.relation_values)
+            for _ in range(config.n_layers))
 
     def forward(self, hidden: torch.Tensor, src_key_padding_mask: torch.Tensor,
                 relations: torch.Tensor | None = None) -> torch.Tensor:
@@ -165,10 +165,7 @@ class EffectModel(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position, d)
         self.dropout = nn.Dropout(config.dropout)
 
-        self.trunk = RelationTrunk(
-            d, config.n_heads, config.ff_dim, config.dropout, config.n_layers,
-            relation_types=config.relation_types, relation_values=config.relation_values,
-        )
+        self.trunk = RelationTrunk(config)
         self.norm = nn.LayerNorm(d)
 
         # ── shipped heads ──
