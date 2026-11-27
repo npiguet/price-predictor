@@ -326,13 +326,14 @@ class TestEpochShares:
     def test_every_record_gets_a_bucket_and_a_family(self, records, tmp_path):
         preparer = _fixture_preparer(tmp_path)
         texts = preparer._texts(records)
-        labels = preparer._shard_plan(records, texts, preparer._games(records, texts)).labels
-        assert set(labels) == {r.record_id for r in records}
-        buckets = {bucket for bucket, _ in labels.values()}
-        assert buckets <= {*RARITY_BUCKETS, NO_TEXT_BUCKET}
-        assert NO_TEXT_BUCKET in buckets  # combat and legality have no text
+        plan = preparer._shard_plan(records, texts, preparer._games(records, texts))
+        assert set(plan.buckets) == {r.record_id for r in records}
+        assert set(plan.buckets.values()) <= {*RARITY_BUCKETS, NO_TEXT_BUCKET}
+        assert NO_TEXT_BUCKET in plan.buckets.values()  # combat and legality have no text
         combat = next(r for r in records if r.kind is RecordKind.COMBAT)
-        assert labels[combat.record_id][0] == NO_TEXT_BUCKET
+        assert plan.buckets[combat.record_id] == NO_TEXT_BUCKET
+        buckets, families = plan.shares(records)
+        assert sum(buckets.values()) == sum(families.values()) == len(records)
 
     def test_a_texts_bucket_reads_the_corpus_wide_table(self, records, tmp_path):
         preparer = _fixture_preparer(tmp_path)
@@ -342,8 +343,8 @@ class TestEpochShares:
         )
         preparer.rarity = {preparer.resolver.acting_text(record): 50}
         texts = preparer._texts([record])
-        labels = preparer._shard_plan([record], texts, preparer._games([record], texts)).labels
-        assert labels[record.record_id][0] == "20+"
+        plan = preparer._shard_plan([record], texts, preparer._games([record], texts))
+        assert plan.buckets[record.record_id] == "20+"
 
 
 def _built_run(monkeypatch, **config):
