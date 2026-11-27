@@ -31,10 +31,6 @@ class DistribSummary:
     cmc_hist: list[float]  # 5 bins: CMC<=2, 3, 4, 5, 6+
 
 
-def _feat(emb: np.ndarray, slot: int) -> float:
-    return float(emb[-FEATURE_COUNT + slot])
-
-
 _COLOR_START = -FEATURE_COUNT + COLOR_FLAGS.start
 _COLOR_STOP = -FEATURE_COUNT + COLOR_FLAGS.stop
 
