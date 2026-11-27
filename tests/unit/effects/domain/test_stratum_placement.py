@@ -94,6 +94,15 @@ def test_a_rule_whose_records_cannot_fill_every_half_is_named():
     assert all("704.5f" not in rules for by_half in named.values() for rules in by_half.values())
 
 
+def _half_of(strata, game_id):
+    """The half a validation game was placed in; None outside the halves."""
+    for by_half in strata.halves.values():
+        for half, games in by_half.items():
+            if game_id in games:
+                return half
+    return None
+
+
 def test_a_random_seat_game_naming_a_held_out_card_is_card_disjoint():
     """FR-059 (T182): the card-disjoint stratum keeps every game naming a
     held-out card, random-seat games included; the random seat casts held-out
@@ -103,7 +112,7 @@ def test_a_random_seat_game_naming_a_held_out_card_is_card_disjoint():
         replace(census(alternating("704.5f")), random_seat=frozenset(seat_held)), rule())
     for game in seat_held:
         assert strata.stratum_of(game) is Stratum.CARD_DISJOINT
-        assert strata.half_of(game) is not None
+        assert _half_of(strata, game) is not None
 
 
 def test_the_game_disjoint_stratum_keeps_only_forge_ai_games():
@@ -115,7 +124,7 @@ def test_the_game_disjoint_stratum_keeps_only_forge_ai_games():
     assert not set(seat_drawn) & strata.game_disjoint
     for game in seat_drawn:
         assert strata.stratum_of(game) is Stratum.TRAINING
-        assert strata.half_of(game) is None
+        assert _half_of(strata, game) is None
 
 
 def test_a_short_cell_promotes_a_pool_game_and_never_one_outside_the_pool():

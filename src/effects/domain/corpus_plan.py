@@ -564,11 +564,3 @@ class GameStrata:
         if game_id in self.game_disjoint:
             return Stratum.GAME_DISJOINT
         return Stratum.TRAINING
-
-    def half_of(self, game_id: str) -> Half | None:
-        """The half a validation game was placed in; None outside the halves."""
-        for by_half in self.halves.values():
-            for half, games in by_half.items():
-                if game_id in games:
-                    return half
-        return None

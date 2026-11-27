@@ -94,32 +94,6 @@ class CapHeap:
         return len(self._heap.entries)
 
 
-class KeyedCapHeap[T]:
-    """The ``cap`` smallest hashes seen, each carrying an item.
-
-    Among equal hashes the larger ``tiebreak`` is kept; it must never tie, or
-    two equal hashes would compare the items.
-    """
-
-    __slots__ = ("_heap",)
-
-    def __init__(self, cap: int) -> None:
-        self._heap = _BoundedHeap(cap)
-
-    def offer(self, value: int, item: T, tiebreak: tuple) -> None:
-        self._heap.push((-value, tiebreak, item))
-
-    def merge(self, other: KeyedCapHeap[T]) -> None:
-        self._heap.merge(other._heap)
-
-    def items(self) -> list[T]:
-        """The retained items, smallest hash first."""
-        return [item for _, _, item in sorted(self._heap.entries, reverse=True)]
-
-    def __len__(self) -> int:
-        return len(self._heap.entries)
-
-
 def class_targets(
     available: Mapping[str, int],
     mix: Mapping[str, float],
