@@ -667,7 +667,7 @@ the checkpoint's `input_layout` is not `gen-3`. It scores the reporting halves o
 found by the corpus digest under `--reports-dir`, under the
 checkpoint's recorded `--rule-mask`, `--stratum-weight` and `--deviance-floor`, and prints per stratum
 `reporting-half <stratum>` (components and score) with each component's items (the deviance items
-also summed up by head), `rule-tests <stratum> reporting` per rule, and `reporting-half control` beside the checkpoint's `best_control_score`;
+also summed up by head), `rule-tests <stratum> reporting` per rule, and `reporting-half control` beside the checkpoint's `control_score` (the score of the epoch whose weights the file holds);
 without a set it prints that the reporting half is skipped.
 
 Each check prints when it is made, the three gates first, and the last line is the verdict, which names only gates 1 and 3 (gate 2 routes and never enters it):

@@ -318,7 +318,7 @@ collected corpus (the present lists come from pilot collections). Each count fie
 | Field | Rule |
 |---|---|
 | `state` | averaged tensors of encoder, model and identity table |
-| `start_step` | the run's training step count, in batches, when the average began: the first optimizer step at or past warmup's end, or an epoch's end at or past it when no optimizer step has begun the average |
+| `start_step` | the run's training step count, in batches, when the average began: the first optimizer step at or past the average's start (`Curriculum.average_start`), or an epoch's end at or past it when no optimizer step has begun the average |
 | `rate` | `grad_accum / (steps_per_epoch × ema_epochs)` |
 
 ### EffectCheckpoint (extended)
@@ -339,7 +339,7 @@ digest or a missing digest is refused (M1).
 
 ### resume.pt (extended)
 
-Adds `weight_average` (`state`, None while warmup lasts, and `start_step`), `loss_denominators`,
+Adds `weight_average` (`state`, None until the average starts, and `start_step`), `loss_denominators`,
 `best_control_score`; the stopper's state names its measure (`control_score`), and a resume file whose
 stopper kept the loss is refused.
 

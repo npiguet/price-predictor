@@ -111,7 +111,8 @@ class EffectCheckpoint:
     loss_denominators: dict[str, Any] = field(default_factory=dict)
     # Gen-3 (data-model.md § EffectCheckpoint). The relation types and their
     # target indices are in ``training_settings`` (``layout_settings``), and
-    # the weights saved are the averaged ones once warmup has ended.
+    # the weights saved are the averaged ones once the average has started
+    # (``training_schedule.Curriculum.average_start``).
     #: The best control score of the run (FR-069): the score of the epoch
     #: whose weights these are; None until a control score exists.
     best_control_score: float | None = None
@@ -119,7 +120,7 @@ class EffectCheckpoint:
     #: that epoch had none. Equals ``best_control_score`` in a best checkpoint.
     control_score: float | None = None
     #: Whether the weights are the averaged ones; False for an epoch that
-    #: ended before warmup did, saved with the raw weights.
+    #: ended before the average's start, saved with the raw weights.
     averaged: bool = True
     #: The corpus manifest's rule-map digest (FR-060a).
     rule_map_digest: str = ""
