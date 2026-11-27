@@ -8,17 +8,24 @@ call these wrappers, which pass the same ones.
 from __future__ import annotations
 
 from effects.application import validate_corpus as _validator
+from effects.application.corpus_validation.findings import Thresholds
 from effects.infrastructure.cli import validation_ports
 
 
-def validate_corpus(records, *args, **kwargs):
+def validate_corpus(records, thresholds=Thresholds(), sidecars=None, presence=None, **kwargs):
     _source, renderer = validation_ports()
-    return _validator.validate_corpus(records, *args, record_renderer=renderer, **kwargs)
+    context = _validator.CorpusContext(
+        record_renderer=renderer, sidecars=sidecars, presence=presence, **kwargs,
+    )
+    return _validator.validate_corpus(records, thresholds, context=context)
 
 
 def validate_directory(root, **kwargs):
     source, renderer = validation_ports()
-    return _validator.validate_directory(root, source=source, record_renderer=renderer, **kwargs)
+    return _validator.validate_directory(
+        root, ports=_validator.CorpusPorts(source, renderer),
+        options=_validator.DirectoryOptions(**kwargs),
+    )
 
 
 class ShardDamage(_validator.ShardDamage):

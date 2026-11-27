@@ -75,13 +75,25 @@ class DirectoryReport:
     findings: Findings
 
 
+@dataclass(frozen=True, slots=True)
+class CorpusPorts:
+    """The two ports the command passes: its shard reader and record renderer."""
+
+    source: ShardSource
+    record_renderer: RecordRenderer
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryOptions:
+    """What a directory read is told: the window, the verdict floors, the sidecars."""
+
+    limit: int = 0
+    thresholds: Thresholds = Thresholds()
+    sidecars: SidecarLookup | None = None
+
+
 def validate_directory(
-    root: Path, *,
-    source: ShardSource,
-    record_renderer: RecordRenderer,
-    limit: int = 0,
-    thresholds: Thresholds = Thresholds(),
-    sidecars: SidecarLookup | None = None,
+    root: Path, *, ports: CorpusPorts, options: DirectoryOptions = DirectoryOptions(),
 ) -> DirectoryReport:
     """Every invariant over the first ``limit`` records under ``root`` (0
     reading all), the shards listed once; raises ``NoShardsError`` on a
@@ -92,17 +104,22 @@ def validate_directory(
     measured; the other shards are read on. What the read met
     without stopping, values outside the wire's closed lists and damaged last
     members (``shard_io.DecodeTally``), is reported as watched figures.
-    ``source`` and ``record_renderer`` are the ports the command passes
-    (:mod:`effects.application.corpus_validation.ports`).
+    ``ports`` holds the ``source`` and ``record_renderer`` the command passes
+    (:mod:`effects.application.corpus_validation.ports`); ``options`` holds the
+    ``limit``, ``thresholds`` and ``sidecars``.
     """
+    source, limit = ports.source, options.limit
     shards = source.require_shards(root)
     source.require_generation(shard.path(root) for shard in shards)
     presence = FieldPresence()
     damage = ShardDamage(source)
     findings = validate_corpus(
-        damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
-        playability_rate=playability_rate_of(root), window_cut=bool(limit),
-        record_renderer=record_renderer,
+        damage.read(root, shards, limit, presence.observe), options.thresholds,
+        context=CorpusContext(
+            record_renderer=ports.record_renderer, sidecars=options.sidecars,
+            presence=presence, playability_rate=playability_rate_of(root),
+            window_cut=bool(limit),
+        ),
     )
     findings.extend(damage.findings())
     return DirectoryReport(len(shards), findings)
@@ -177,27 +194,37 @@ def playability_rate_of(root: Path) -> float | None:
     return min(rates) if rates else None
 
 
+@dataclass(frozen=True, slots=True)
+class CorpusContext:
+    """What the checks read besides the records themselves."""
+
+    record_renderer: RecordRenderer
+    sidecars: SidecarLookup | None = None
+    presence: FieldPresence | None = None
+    playability_rate: float | None = None
+    window_cut: bool = False
+
+
 def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds = Thresholds(),
-    sidecars: SidecarLookup | None = None,
-    presence: FieldPresence | None = None,
     *,
-    record_renderer: RecordRenderer,
-    playability_rate: float | None = None,
-    window_cut: bool = False,
+    context: CorpusContext,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
-    ``sidecars`` of ``None`` reports the key-join checks as unchecked rather
-    than as holding. ``presence`` is the per-shard member tally
+    ``context`` carries what follows. ``sidecars`` of ``None`` reports the key-join checks as
+    unchecked rather than as holding. ``presence`` is the per-shard member tally
     ``shard_io.read_window`` fills from the raw lines (FR-033, root § 8.13),
     since a parsed record cannot say whether a field was on the wire.
     ``window_cut`` says ``--limit`` ended the read, so a record the window
     does not hold may exist. ``record_renderer`` renders a record as the
     writer does, for the exact-duplicate check.
     """
-    checks = _checks(sidecars, record_renderer, playability_rate, window_cut)
+    presence = context.presence
+    checks = _checks(
+        context.sidecars, context.record_renderer, context.playability_rate, context.window_cut,
+    )
     for record in records:
         for check in checks:
             check.add(record)

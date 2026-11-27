@@ -47,13 +47,20 @@ def _validate_corpus_parser(subparsers) -> None:
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.validate_corpus import validate_directory
+    from effects.application.validate_corpus import (
+        CorpusPorts,
+        DirectoryOptions,
+        validate_directory,
+    )
 
     root = args.effect_records
     source, record_renderer = validation_ports()
     report = validate_directory(
-        root, source=source, record_renderer=record_renderer, limit=args.limit,
-        thresholds=config_from_args(Thresholds, args), sidecars=_sidecars_for_validation(args),
+        root, ports=CorpusPorts(source, record_renderer),
+        options=DirectoryOptions(
+            limit=args.limit, thresholds=config_from_args(Thresholds, args),
+            sidecars=_sidecars_for_validation(args),
+        ),
     )
     findings = report.findings
     window = f" (first {args.limit} records)" if args.limit else ""
