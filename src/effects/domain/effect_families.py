@@ -1,27 +1,28 @@
-"""Which rules category a record belongs to (FR-047, FR-047a, FR-048).
+"""Which rules category a record belongs to (024 FR-047, 024 FR-047a, 024 FR-048).
 
-Curation balances its budget across these families (FR-049). A family is a
-pure function of the record and its sidecars, so the survey and write passes
-agree without coordinating:
+Curation balances its budget across these families (024 FR-049). A family
+depends only on the record, its sidecars and, for an attackers or blockers
+record, the manifest's ``legality_mode_counts``; the survey and write passes
+both read that table, so they agree without coordinating:
 
 ==============  ===========================================================
 kind            family
 ==============  ===========================================================
 resolution      the acting line's ``script_api_type`` (a mode's own on an
-                ``option`` line, FR-005a)
+                ``option`` line, 024 FR-005a)
 trigger         ``Mode$`` of the trigger line's root segment, ``(no-mode)``
                 when the script names none
 continuous      the acting static line's ``script_api_type`` (its ``Mode$``)
 rewrite         ``Event$`` of the replacement line's root segment
 combat          the sorted set of damage-step keywords on the participants,
                 ``none`` when they carry none
-playability     FR-047a: the responsible static's ``Mode$``, else the first
+playability     024 FR-047a: the responsible static's ``Mode$``, else the first
                 failing verdict bit (``decision``), or the rarest single
                 static mode across ``forbidden`` (``attackers``/``blockers``)
 ==============  ===========================================================
 
 Whatever the kind, a record acting through a keyword line belongs to that
-keyword's family (FR-048): a ward trigger and a ward resolution both teach ward.
+keyword's family (024 FR-048): a ward trigger and a ward resolution both teach ward.
 Combat and playability records are the exception, their families read first:
 neither acts through a line. A record of the other kinds whose acting key no
 sidecar line answers for is ``(no-text)``, as is a rewrite line naming no
@@ -62,7 +63,7 @@ class FamilySentinel(StrEnum):
     NO_MODE = "(no-mode)"
     #: An acting key no sidecar line answers for; the build keeps the record.
     NO_TEXT = "(no-text)"
-    #: The ``decision`` families of FR-047a, in verdict-bit order.
+    #: The ``decision`` families of 024 FR-047a, in verdict-bit order.
     CANNOT_PLAY = "cannot-play"
     UNAFFORDABLE = "unaffordable"
     NO_LEGAL_TARGET = "no-legal-target"
@@ -86,7 +87,7 @@ def static_mode(keys: Iterable[ProvenanceKey], sidecars: SidecarLookup) -> str |
 
 
 def candidate_family(candidate: Candidate, sidecars: SidecarLookup) -> str:
-    """One ``decision`` candidate's family (FR-047a): the responsible static's
+    """One ``decision`` candidate's family (024 FR-047a): the responsible static's
     mode, else the first false verdict bit, else ``none``."""
     if candidate.responsible_static:
         mode = static_mode(candidate.responsible_static, sidecars)
