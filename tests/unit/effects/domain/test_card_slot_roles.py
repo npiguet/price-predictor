@@ -117,5 +117,7 @@ def test_two_cards_of_one_name_keep_their_relation(records):
         record.state, entities=(*record.state.entities, namesake)))
     surface = SurfaceBuilder(_Lines(), e_dim=E_DIM, rng=random.Random(0)).build(board)
     same_name = relation_type("has_the_same_name")
-    assert (_card_slot(surface, "E7"), _card_slot(surface, "E9999"), same_name) \n        not in surface.relations
-    assert (_card_slot(surface, "L7"), _card_slot(surface, "E9999"), same_name) \n        in surface.relations
+    assert (_card_slot(surface, "E7"), _card_slot(surface, "E9999"), same_name) \
+        not in surface.relations
+    assert (_card_slot(surface, "L7"), _card_slot(surface, "E9999"), same_name) \
+        in surface.relations
