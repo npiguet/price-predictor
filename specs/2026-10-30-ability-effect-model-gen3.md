@@ -853,6 +853,11 @@ places:
   - player slot: whether the player is its subject, its defender and its cause.
 - The pending event's `cause` is the ref of the object that caused it, so it reads as a
   bit on that object's slot, as the source does.
+- On an effect half the acting source reads no costs paid: its cast flag, mana colours, mana
+  amounts, cast-from zone and mana rider are all zero, because a forced resolution's source
+  paid nothing and any value would tell a forced half from a live one. An outcome that
+  depends on the mana spent (converge, adamant, "if mana was spent" checks) is therefore
+  not readable from an effect half. Every other card reads its costs paid.
 - A face-down card's slot reads its real face's types, colours, mana value, printed power
   and toughness and number of subtypes, in a part of its own, and its subtypes through the
   subtype table as above; every other card reads zeros
