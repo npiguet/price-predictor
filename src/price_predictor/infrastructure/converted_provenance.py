@@ -1,5 +1,5 @@
 """The conversion record on disk: written by ``convert``, read by every
-collecting command (finding 11.3; the rule in
+collecting command (the rule in
 :mod:`price_predictor.domain.converted_provenance`).
 
 ``convert`` keeps its record in the ``run.json`` of its run directory, the

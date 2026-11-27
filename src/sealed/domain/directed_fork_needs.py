@@ -1,5 +1,5 @@
 """What each listed directed-fork rule still needs within a ``match-outcomes``
-run, and the probability that follows (D8, finding 6.1).
+run, and the probability that follows.
 
 A rule's registered variants all make one side (``fires`` or
 ``does_not_fire``), so each fork it keeps adds a game to that side. The

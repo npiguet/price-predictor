@@ -114,13 +114,12 @@ class WorkerLogFiles:
                 # itself fails -- so this is not worth degrading over; fall
                 # through to reopen below.
                 pass
-            # Dropped before rotation is attempted, not after (final-fix-
-            # 3.md item 5): a handle this method has already closed must
-            # never be handed back out of ``_open`` on some later call, which
-            # is what a raise between here and the reassignment below used to
-            # risk -- close() succeeding (or failing; see above) is what
-            # makes the handle unusable, not whether the rename that follows
-            # does.
+            # Dropped before rotation is attempted, not after: a handle this
+            # method has already closed must never be handed back out of
+            # ``_open`` on some later call, which a raise between here and the
+            # reassignment below would allow -- close() succeeding (or
+            # failing; see above) is what makes the handle unusable, not
+            # whether the rename that follows does.
             del self._open[worker_id]
             try:
                 rotated = path.with_name(path.name + ".1")

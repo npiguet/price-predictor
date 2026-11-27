@@ -1,4 +1,4 @@
-"""The status line a Forge worker prints, read back (findings 11.1, 16.4).
+"""The status line a Forge worker prints, read back (16.4).
 
 A match worker prints ``WorkerStatus.LINE`` and one JSON object at start-up
 and after each match whose counts changed (``contracts/cli.md`` § Match
@@ -212,7 +212,7 @@ def render_fork_refusals(document: dict[str, int]) -> str:
     return ", ".join(f"{n} {key}" for key, n in document.items())
 
 
-# ── The engine a run's workers link (finding 11.1) ──────────────────────
+# ── The engine a run's workers link ──────────────────────
 
 #: ``AttributionMode.PATCHED``: the engine carries the effect-record hooks.
 PATCHED = "patched"

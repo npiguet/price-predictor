@@ -35,7 +35,7 @@ from sealed.domain.collection_caps import (
 
 def positive_int(text: str) -> int:
     """An integer of at least 1: a cap, a round of no decks, a target of no
-    records or no rounds before retiring is no run (V4 #9)."""
+    records or no rounds before retiring is no run."""
     value = int(text)
     if value < 1:
         raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")

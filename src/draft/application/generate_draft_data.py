@@ -13,7 +13,7 @@ Follows ``sealed/application/match_outcomes.py`` (run-id + crash-restart +
 status loop), additionally consuming worker stdout (which the match supervisor
 discards). Collaborators (deck labeler, worker launcher) are injectable so the
 sentinel parsing, record assembly, and restart loop are unit-testable without a
-live JVM (T010, T011, T014).
+live JVM.
 """
 
 from __future__ import annotations

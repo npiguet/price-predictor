@@ -1,4 +1,4 @@
-"""The conversion a converted tree comes from (finding 11.3).
+"""The conversion a converted tree comes from.
 
 An effect record names its abilities by provenance keys, which join against
 the sidecars of the converted tree the collection played over, by trait

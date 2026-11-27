@@ -611,8 +611,7 @@ class ForgeWorkerPool:
         holding a slot indefinitely, and about one game in 400 crawls (Forge's
         AI taking seconds per decision on a huge board, the game lasting 8 to
         20 minutes). Recycling the oldest one each status interval bounds how
-        long any single match can occupy a worker. Introduced in commit
-        eda4505.
+        long any single match can occupy a worker.
 
         Under the stop protocol the kill cuts the game the worker plays (no
         game-end marker: ``build-corpus`` drops it), the worker counts as

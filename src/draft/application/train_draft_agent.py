@@ -9,7 +9,7 @@ standardized leave-one-out pod-relative reward of every non-failed seat
 Follows the ``train_picker`` / ``train_scorer`` / ``train_encoder`` scaffolding
 (warmup-then-constant LR, per-group max-norm clip, resume/bootstrap guard,
 best-by-val + ``latest.pt``, early stop) without extracting a shared trainer —
-see research §Third-instance check (and the T035 follow-up).
+see research §Third-instance check.
 
 This module holds the config and the use case; the run's start is in
 ``imitation_training_setup`` and its epochs in ``imitation_training_loop``.

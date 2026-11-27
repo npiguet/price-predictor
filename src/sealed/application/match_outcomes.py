@@ -202,7 +202,7 @@ class MatchOutcomeSupervisor:
     def steer_directed_forks(self, needs: DirectedForkNeeds | None) -> None:
         """Recompute each rule of ``needs`` at every log scan from the forks
         the workers kept, and start every later worker with the result, as
-        ``collect-variants`` does between its rounds (finding 6.1); None
+        ``collect-variants`` does between its rounds; None
         leaves every worker the caps' probabilities."""
         if needs is None:
             return

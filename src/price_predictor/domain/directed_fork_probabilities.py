@@ -1,5 +1,5 @@
 """How much a rule needs a directed fork: its probability from the records
-each of its two sides (``fires``, ``does_not_fire``) already has (D8).
+each of its two sides (``fires``, ``does_not_fire``) already has.
 
 One formula for every tool that steers directed forks: ``effects
 collect-variants``, which counts the forks of its own run's records, and

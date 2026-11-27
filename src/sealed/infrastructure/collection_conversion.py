@@ -1,5 +1,4 @@
-"""``match-outcomes --effect-records``: the conversion its records join against
-(finding 11.3).
+"""``match-outcomes --effect-records``: the conversion its records join against.
 
 An effect record names its abilities by provenance keys that join against a
 converted tree's sidecars, so a collection names that tree, ``--cards-folder``,

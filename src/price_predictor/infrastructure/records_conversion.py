@@ -1,4 +1,4 @@
-"""The conversions a records directory was collected against (finding 11.3).
+"""The conversions a records directory was collected against.
 
 Each collecting command keeps the conversion it ran against in its ``run.json``
 (``record_conversion``). A directory holds one conversion: a collection into

@@ -74,7 +74,7 @@ _HYBRID_PAIRS = {
 # Phyrexian mana (e.g., WP, UP, BP, RP, GP)
 _PHYREXIAN = {c + "P" for c in COLORS}
 
-# Two-or-colored hybrid (e.g., W2, U2, B2, R2, G2)
+# Two-or-colored hybrid (e.g., W2, U2, R2)
 _TWO_HYBRID = {c + "2" for c in COLORS}
 
 
