@@ -22,6 +22,7 @@ import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
+import static com.pricepredictor.connector.effects.RecordBoard.entity;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -232,14 +233,4 @@ class SuppressedConditionTest {
         return !keys.isEmpty() && namesStatic(keys.get(0), script, index);
     }
 
-    private static Map<String, Object> entity(String record, Card card) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        for (Object entity : (List<?>) state.get("entities")) {
-            Map<String, Object> map = asMap(entity);
-            if (Refs.of(card).equals(map.get("id"))) {
-                return map;
-            }
-        }
-        throw new AssertionError("no " + Refs.of(card) + " in " + record);
-    }
 }

@@ -29,6 +29,9 @@ import static com.pricepredictor.connector.effects.RecordAbilities.linkOf;
 import static com.pricepredictor.connector.effects.RecordPicks.only;
 import static com.pricepredictor.connector.effects.RecordAbilities.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
+import static com.pricepredictor.connector.effects.RecordBoard.entitiesWithId;
+import static com.pricepredictor.connector.effects.RecordBoard.entity;
+import static com.pricepredictor.connector.effects.RecordBoard.player;
 import static com.pricepredictor.connector.effects.RecordEvents.payload;
 import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static com.pricepredictor.connector.effects.RecordAbilities.scriptOf;
@@ -62,30 +65,6 @@ class RecordMomentsTest {
     Path tempDir;
 
     // ── reading records ─────────────────────────────────────────────────
-
-    /** The entity {@code ref} in a record's state. */
-    private static Map<String, Object> entity(String record, String ref) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        for (Object entity : (List<?>) state.get("entities")) {
-            Map<String, Object> map = asMap(entity);
-            if (ref.equals(map.get("id"))) {
-                return map;
-            }
-        }
-        throw new AssertionError("no " + ref + " in " + record);
-    }
-
-    /** The player {@code ref} in a record's state. */
-    private static Map<String, Object> player(String record, String ref) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        for (Object player : (List<?>) state.get("players")) {
-            Map<String, Object> map = asMap(player);
-            if (ref.equals(map.get("id"))) {
-                return map;
-            }
-        }
-        throw new AssertionError("no " + ref + " in " + record);
-    }
 
     private static String ref(Card card) {
         return "E" + card.getId();
@@ -681,13 +660,6 @@ class RecordMomentsTest {
     }
 
     // ── B7: a host that left the battlefield is its card where it is now ─
-
-    /** The entities of a record written under {@code ref}. */
-    private static List<Map<String, Object>> entitiesWithId(String record, String ref) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        return ((List<?>) state.get("entities")).stream().map(RecordLines::asMap)
-                .filter(entity -> ref.equals(entity.get("id"))).toList();
-    }
 
     /**
      * A Lightning Bolt kills Doomed Dissenter: its dies trigger's records,

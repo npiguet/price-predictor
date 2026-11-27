@@ -8,7 +8,6 @@ import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.event.Event;
 import forge.game.phase.PhaseType;
-import forge.game.player.Player;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +24,8 @@ import java.util.Objects;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
+import static com.pricepredictor.connector.effects.RecordBoard.entity;
+import static com.pricepredictor.connector.effects.RecordBoard.player;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -293,23 +294,4 @@ class SuppressedProductionTest {
         return asMap(player.get("untapped_production"));
     }
 
-    private static Map<String, Object> player(String record, Player player) {
-        return member(record, "players", Refs.of(player));
-    }
-
-    private static Map<String, Object> entity(String record, Card card) {
-        return member(record, "entities", Refs.of(card));
-    }
-
-    /** The member of the record's state list {@code list} whose id is {@code ref}. */
-    private static Map<String, Object> member(String record, String list, String ref) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        for (Object each : (List<?>) state.get(list)) {
-            Map<String, Object> map = asMap(each);
-            if (ref.equals(map.get("id"))) {
-                return map;
-            }
-        }
-        throw new AssertionError("no " + ref + " in " + record);
-    }
 }

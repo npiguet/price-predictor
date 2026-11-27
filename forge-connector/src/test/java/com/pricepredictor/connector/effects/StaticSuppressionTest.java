@@ -20,6 +20,8 @@ import java.util.TreeSet;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
+import static com.pricepredictor.connector.effects.RecordBoard.entity;
+import static com.pricepredictor.connector.effects.RecordBoard.player;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -379,17 +381,6 @@ class StaticSuppressionTest {
         return asMap(player.get("untapped_production"));
     }
 
-    private static Map<String, Object> player(String record, forge.game.player.Player player) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        for (Object each : (List<?>) state.get("players")) {
-            Map<String, Object> map = asMap(each);
-            if (Refs.of(player).equals(map.get("id"))) {
-                return map;
-            }
-        }
-        throw new AssertionError("no " + Refs.of(player) + " in " + record);
-    }
-
     /** The key of {@code card}'s printed keyword {@code name}, as {@link #lineKeys} spells it. */
     private static String keywordKey(Card card, String name) {
         for (forge.game.keyword.KeywordInterface keyword
@@ -464,17 +455,6 @@ class StaticSuppressionTest {
         }
         assertEquals(1, found.size(), "continuous records of " + script + ": " + records);
         return found.get(0);
-    }
-
-    private static Map<String, Object> entity(String record, String ref) {
-        Map<String, Object> state = asMap(parse(record).get("state"));
-        for (Object entity : (List<?>) state.get("entities")) {
-            Map<String, Object> map = asMap(entity);
-            if (ref.equals(map.get("id"))) {
-                return map;
-            }
-        }
-        throw new AssertionError("no " + ref + " in " + record);
     }
 
     private static Map<String, Object> contributionTo(String record, Card card) {
