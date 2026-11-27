@@ -36,10 +36,15 @@ class KeywordTable:
 
 
 def read_keyword_table(path: Path | None) -> KeywordTable | None:
-    """The table at ``path``, its bytes read once; None without a path or a
-    file there, which leaves the overlay keywords alone and checks no line."""
-    if path is None or not Path(path).exists():
+    """The table at ``path``, its bytes read once; None for no path, which
+    leaves the overlay keywords alone and checks no line. A path with no file
+    there is refused naming it: a typo is never read as "no table", whose
+    manifest digest would be ``""`` and which the trainer then accepts any
+    keyword file for."""
+    if path is None:
         return None
+    if not Path(path).is_file():
+        raise FileNotFoundError(f"There is no keyword definitions file at {path}.")
     from effects.infrastructure.tokenizer_loading import parse_keyword_definitions
 
     raw = Path(path).read_bytes()

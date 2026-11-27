@@ -144,6 +144,15 @@ def test_a_display_name_match_on_a_non_keyword_line_fails_the_build(tmp_path, a_
         a_corpus.build(tmp_path / "out", rules=_BUDGET_FREE_RULES, keyword_definitions=definitions)
 
 
+def test_a_keyword_definitions_path_with_no_file_is_refused_naming_it(tmp_path, a_corpus):
+    """A typo is not "no table": its manifest digest would be empty and the
+    trainer would then accept any keyword file."""
+    missing = tmp_path / "no-such-keywords.json"
+    with pytest.raises(FileNotFoundError, match="no-such-keywords.json"):
+        a_corpus.build(tmp_path / "out", keyword_definitions=missing)
+    assert not (tmp_path / "out" / "manifest.json").exists()
+
+
 def test_a_gen1_shard_among_gen3_ones_is_refused_naming_it(tmp_path, a_corpus):
     """FR-033: before any record is read."""
     import gzip

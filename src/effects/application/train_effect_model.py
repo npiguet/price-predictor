@@ -104,11 +104,7 @@ def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
     count below one fails minutes in (or writes nothing), a negative
     ``--lr-scale`` ascends, a ``--curriculum-epoch`` past ``--epochs``
     never trains the sparse group, and a negative re-warm has no ramp."""
-    for name in ("grad_accum", "batch_size", "steps_per_epoch", "epochs"):
-        if getattr(config, name) < 1:
-            raise ValueError(
-                f"--{name.replace('_', '-')} must be at least 1, got {getattr(config, name)}."
-            )
+    _require_counts(config)
     if not config.lr_scale >= 0:
         raise ValueError(
             f"--lr-scale must not be negative, got {config.lr_scale}: a negative "
@@ -116,6 +112,22 @@ def require_runnable_schedule(config: TrainEffectModelConfig) -> None:
         )
     _require_whole_accumulations(config)
     _require_runnable_curriculum(config)
+
+
+def _require_counts(config: TrainEffectModelConfig) -> None:
+    """The counts a run trains nothing with below one, and the two that may be
+    zero (no lethality copies, no early stop) but not negative."""
+    for name in ("grad_accum", "batch_size", "steps_per_epoch", "epochs",
+                 "shards_per_epoch", "e_dim"):
+        if getattr(config, name) < 1:
+            raise ValueError(
+                f"--{name.replace('_', '-')} must be at least 1, got {getattr(config, name)}."
+            )
+    for name in ("lethality_copies", "patience"):
+        if getattr(config, name) < 0:
+            raise ValueError(
+                f"--{name.replace('_', '-')} must not be negative, got {getattr(config, name)}."
+            )
 
 
 def _require_whole_accumulations(config: TrainEffectModelConfig) -> None:

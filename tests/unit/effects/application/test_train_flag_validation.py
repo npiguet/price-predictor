@@ -12,6 +12,8 @@ from effects.application.train_effect_model import TrainEffectModelConfig
     ("grad_accum", 0), ("batch_size", 0), ("steps_per_epoch", 0), ("epochs", 0),
     ("grad_accum", -1), ("lr_scale", -0.5), ("lr_scale", float("nan")),
     ("curriculum_epoch", 41), ("curriculum_rewarm_steps", -1),
+    ("shards_per_epoch", 0), ("shards_per_epoch", -3), ("e_dim", 0),
+    ("lethality_copies", -1), ("patience", -1),
 ])
 def test_a_flag_the_run_cannot_train_with_is_refused_by_name(flag, value):
     with pytest.raises(ValueError, match=flag.replace("_", "-")):
