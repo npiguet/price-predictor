@@ -9,6 +9,7 @@ import forge.game.staticability.StaticAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -43,17 +44,24 @@ class SnapshotLinesTest {
 
         List<Map<String, Object>> lines = linesOf(board, guile);
 
-        assertEquals(List.of("trigger", "static", "replacement"), kinds(lines));
-        for (Map<String, Object> line : lines) {
-            Map<String, Object> key = onlyKey(line);
-            assertEquals("cardsfolder/g/guile.txt", key.get("script_file"), line.toString());
-            assertEquals(line.get("kind"), key.get("trait_kind"), line.toString());
-            assertEquals(0L, key.get("index_within_kind"), line.toString());
-            assertEquals(false, line.get("granted"), line.toString());
-        }
+        assertEquals(List.of(
+                        List.of("trigger", "cardsfolder/g/guile.txt", "trigger", 0L, false),
+                        List.of("static", "cardsfolder/g/guile.txt", "static", 0L, false),
+                        List.of("replacement", "cardsfolder/g/guile.txt", "replacement", 0L, false)),
+                lines.stream().map(SnapshotLinesTest::kindKeyAndGrant).toList());
         assertEquals(true, line(lines, "static").get("active"));
         assertFalse(line(lines, "trigger").containsKey("active"),
                 "active is a static's: " + lines);
+    }
+
+    /**
+     * A line's kind, its one key's script file, trait kind and index, and
+     * whether it is granted.
+     */
+    private static List<Object> kindKeyAndGrant(Map<String, Object> line) {
+        Map<String, Object> key = onlyKey(line);
+        return Arrays.asList(line.get("kind"), key.get("script_file"), key.get("trait_kind"),
+                key.get("index_within_kind"), line.get("granted"));
     }
 
     /** A static whose condition does not hold says so: no threshold, no flying. */
