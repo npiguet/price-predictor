@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static com.pricepredictor.connector.FaceAbilities.abilitiesOfType;
 import static com.pricepredictor.connector.FaceAbilities.rendered;
@@ -21,34 +22,38 @@ class RulesParserLayoutsTest {
     void battleCardWithDefense() {
         MultiCard result = cards.convertFromFile("i/invasion_of_kamigawa_rooftop_saboteurs.txt");
         assertEquals("transform", result.layout());
-        assertEquals(2, result.faces().size());
+        assertEquals(List.of(
+                        new FaceStats("invasion of kamigawa", "4", null),
+                        new FaceStats("rooftop saboteurs", null, "2/3")),
+                result.faces().stream().map(FaceStats::of).toList());
 
-        CardFace front = result.faces().get(0);
-        assertEquals("invasion of kamigawa", front.name());
-        assertEquals("4", front.defense());
-        assertNull(front.powerToughness());
-        assertTrue(rendered(front).contains("defense: 4"));
+        assertTrue(rendered(result.faces().get(0)).contains("defense: 4"));
+    }
 
-        CardFace back = result.faces().get(1);
-        assertEquals("rooftop saboteurs", back.name());
-        assertNull(back.defense());
-        assertEquals("2/3", back.powerToughness());
+    /** A face's name and the numbers printed beside it: a battle's defense, a creature's power and toughness. */
+    private record FaceStats(String name, String defense, String powerToughness) {
+
+        static FaceStats of(CardFace face) {
+            return new FaceStats(face.name(), face.defense(), face.powerToughness());
+        }
     }
 
     @Test
     void layoutDetection() {
-        assertEquals("transform", cards.convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",
-                "AlternateMode:DoubleFaced", "Oracle:", "ALTERNATE",
-                "Name:B", "Types:Creature Werewolf", "PT:2/2", "Oracle:").layout());
-        assertEquals("split", cards.convert("Name:Fire", "ManaCost:1 R", "Types:Instant",
-                "AlternateMode:Split", "Oracle:", "ALTERNATE",
-                "Name:Ice", "ManaCost:1 U", "Types:Instant", "Oracle:").layout());
-        assertEquals("adventure", cards.convert("Name:Bonecrusher Giant", "ManaCost:2 R", "Types:Creature Giant",
-                "PT:4/3", "AlternateMode:Adventure", "Oracle:", "ALTERNATE",
-                "Name:Stomp", "ManaCost:1 R", "Types:Instant Adventure", "Oracle:").layout());
-        assertEquals("meld", cards.convert("Name:The Mightstone and Weakstone", "ManaCost:5",
-                "Types:Legendary Artifact Powerstone",
-                "MeldPair:Urza, Lord Protector", "AlternateMode:Meld", "Oracle:").layout());
+        assertEquals(List.of("transform", "split", "adventure", "meld"), Stream.of(
+                cards.convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",
+                        "AlternateMode:DoubleFaced", "Oracle:", "ALTERNATE",
+                        "Name:B", "Types:Creature Werewolf", "PT:2/2", "Oracle:"),
+                cards.convert("Name:Fire", "ManaCost:1 R", "Types:Instant",
+                        "AlternateMode:Split", "Oracle:", "ALTERNATE",
+                        "Name:Ice", "ManaCost:1 U", "Types:Instant", "Oracle:"),
+                cards.convert("Name:Bonecrusher Giant", "ManaCost:2 R", "Types:Creature Giant",
+                        "PT:4/3", "AlternateMode:Adventure", "Oracle:", "ALTERNATE",
+                        "Name:Stomp", "ManaCost:1 R", "Types:Instant Adventure", "Oracle:"),
+                cards.convert("Name:The Mightstone and Weakstone", "ManaCost:5",
+                        "Types:Legendary Artifact Powerstone",
+                        "MeldPair:Urza, Lord Protector", "AlternateMode:Meld", "Oracle:"))
+                .map(MultiCard::layout).toList());
     }
 
     /**
@@ -148,10 +153,9 @@ class RulesParserLayoutsTest {
 
     @Test
     void joinWithOrUsesTheSerialCommaFromThreeItems() {
-        assertEquals("a", FaceParser.joinWithOr(List.of("a")));
-        assertEquals("a or b", FaceParser.joinWithOr(List.of("a", "b")));
-        assertEquals("a, b, or c", FaceParser.joinWithOr(List.of("a", "b", "c")));
-        assertEquals("a, b, c, or d", FaceParser.joinWithOr(List.of("a", "b", "c", "d")));
+        assertEquals(List.of("a", "a or b", "a, b, or c", "a, b, c, or d"),
+                Stream.of(List.of("a"), List.of("a", "b"), List.of("a", "b", "c"), List.of("a", "b", "c", "d"))
+                        .map(FaceParser::joinWithOr).toList());
     }
 
     @ParameterizedTest
@@ -171,8 +175,17 @@ class RulesParserLayoutsTest {
         // NOT Stomp's spell ability ("damage can't be prevented this turn").
         MultiCard result = cards.convertFromFile("b/bonecrusher_giant_stomp.txt");
         assertEquals("adventure", result.layout());
-        CardFace main = result.faces().get(0);
-        assertEquals("bonecrusher giant", main.name());
+        assertEquals(List.of("bonecrusher giant", "stomp"),
+                result.faces().stream().map(CardFace::name).toList());
+        assertMainFaceLeavesTheAdventureOut(result.faces().get(0));
+        // Adventure face should have the spell
+        CardFace adventure = result.faces().get(1);
+        assertFalse(abilitiesOfType(adventure, AbilityType.SPELL).isEmpty(),
+                "Adventure face should have its spell: " + adventure.abilities());
+    }
+
+    /** The main face holds its own triggered ability, and neither the adventure's spell nor its effect. */
+    private static void assertMainFaceLeavesTheAdventureOut(CardFace main) {
         // Main face should have the triggered ability
         assertFalse(abilitiesOfType(main, AbilityType.TRIGGERED).isEmpty(),
                 "Main face should have its triggered ability: " + main.abilities());
@@ -182,11 +195,6 @@ class RulesParserLayoutsTest {
         assertFalse(main.abilities().stream()
                         .anyMatch(a -> a.descriptionText().contains("damage can't be prevented")),
                 "Stomp's effect must not leak onto main face: " + main.abilities());
-        // Adventure face should have the spell
-        CardFace adventure = result.faces().get(1);
-        assertEquals("stomp", adventure.name());
-        assertFalse(abilitiesOfType(adventure, AbilityType.SPELL).isEmpty(),
-                "Adventure face should have its spell: " + adventure.abilities());
     }
 
     @Test
