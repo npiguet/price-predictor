@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING
 from effects.application.parallel_map import run_parallel
 from effects.application.rule_counts import RuleCounts
 from effects.domain.closed_list_misses import closed_list_misses
-from effects.domain.condition_balance import CONDITION_CLASSES, condition_key, turn_step_condition
+from effects.domain.condition_balance import CONDITION_CLASSES, condition_key, read_condition
 from effects.domain.corpus_curation import game_hash, record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import (
@@ -670,7 +670,7 @@ class _ShardSurveyor:
         held_text = context.held_out_text(keys)
         if held_text is not None and record.kind is RecordKind.RESOLUTION:
             out.games.held_out_text_games.setdefault(held_text, set()).add(game)
-        self._note_lists(record, klass)
+        self._note_lists(reading, klass)
         protection = self._protection(record)
         return _PendingRecord(
             game=game, klass=klass, cell=cell, keys=keys,
@@ -687,11 +687,11 @@ class _ShardSurveyor:
             protection_hash=context.protection_hash_of(record) if protection else 0,
         )
 
-    def _note_lists(self, record: EffectRecord, klass: SamplingClass) -> None:
+    def _note_lists(self, reading: RecordReading, klass: SamplingClass) -> None:
         """The condition counts and the closed lists (FR-052, FR-053, FR-056)."""
-        out = self.out
+        out, record = self.out, reading.record
         if klass in CONDITION_CLASSES:
-            condition = turn_step_condition(record, self.context.sidecars)
+            condition = read_condition(reading, self.context.sidecars)
             if condition is not None:
                 out.condition_counts[condition_key(klass, condition)] += 1
         out.subtypes |= subtypes_named(record)

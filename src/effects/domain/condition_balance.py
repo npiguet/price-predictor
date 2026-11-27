@@ -95,6 +95,14 @@ def turn_step_condition(
     return _decision_condition(record, lines)
 
 
+def read_condition(
+    reading: RecordReading, lines: SidecarLookup | None,
+) -> TurnStepCondition | None:
+    """:func:`turn_step_condition` of ``reading``'s record, asked of the
+    sidecars once however many reads of the record want it."""
+    return reading.condition(lambda: turn_step_condition(reading.record, lines))
+
+
 def _decision_condition(
     record: EffectRecord, lines: SidecarLookup,
 ) -> TurnStepCondition | None:
@@ -220,10 +228,11 @@ def cell_signature(
     is the record's, where the caller holds one (:func:`outcome_signature`).
     """
     parts = []
+    reading = RecordReading.or_new(record, reading)
     if klass in SIGNATURE_CLASSES:
         parts.append(signature_label(outcome_signature(record, reading)))
     if klass in CONDITION_CLASSES:
-        condition = turn_step_condition(record, lines)
+        condition = read_condition(reading, lines)
         if condition is not None:
             parts.append(condition.label)
     return "|".join(parts)
