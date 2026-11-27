@@ -162,7 +162,7 @@ the live record holding the outcome that the marker requires.
 - Payload `{"events": [], "records_withheld": n}`: `records_withheld` the records of the game the
   cap kept out of the shard (`0` for none).
 - `actor_player` the player whose turn the game ended in, else the first registered player;
-  `state` the board at the game's end.
+  `state` the board at the game's end, whose `players` list the players still in the game (`Game.getPlayers()`): a player who lost has no entry and writes no link from its cards.
 - Readers treat a game whose `game_id` has no marker in its shard as cut: its records are
   incomplete (no fired-trigger or mana records, possibly a missing tail).
 
@@ -276,7 +276,7 @@ it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `ge
 | `chosen` | object, each member only when set: `colors` (list), `type`, `type2`, `number`, `player` (ref), `cards` (refs), `names` (list), `direction`, `mode`, `even_odd`, `sector`, `stored_rolls` (list); `{}` when none |
 | `costs_paid` | `{mana: {W, U, B, R, G, C}, cast_from: zone or null, mana_rider: bool}` for the spell the card is or was cast as (its spell on the stack, or a permanent's cast spell); `null` when not cast. `mana_rider`: some mana spent carried a rider (can't be countered, adds a counter or a keyword, triggers when spent) |
 | `history` | `{entered_this_turn, attacked_this_turn, blocked_this_turn, loyalty_activated}`, bools |
-| `order_rank` | int, 0 first: battlefield by timestamp (oldest 0, across both players); stack from the top; library from the top; graveyard, hand and exile in Forge's zone order (earliest put there 0); `null` in the command zone or outside a zone |
+| `order_rank` | int, 0 first: battlefield by timestamp (oldest 0, across both players); stack from the top; library from the top; graveyard, hand and exile in Forge's zone order (earliest put there 0); `null` in the command zone, outside a zone, and for a spell being cast that is in the stack zone and not yet a stack item |
 
 ### A player's facts
 
@@ -300,8 +300,8 @@ Effect cards come first, then timestamps in ascending order. A timestamped row n
 covers is not listed. A note is taken at each live clause's `ON_CLAUSE_RESOLVING` and closed at
 its `ON_CLAUSE_RESOLVED`; a fork's snapshot reads the live game's notes for every timestamp at or
 before the copy, and the notes of its own clauses (a played-forward fork's) after it. `duration` buckets
-`Duration$`: `Permanent` is `permanent`; `UntilHostLeavesPlay`, `UntilLoseControlOfHost`,
-`AsLongAs…`, `…Untaps`, `UntilUnattached` and `UntilFacedown` are `until_leaves`; everything else
+`Duration$`: `Permanent` and `Perpetual` are `permanent`; `UntilHostLeavesPlay`, `UntilLoseControlOfHost`,
+`AsLongAs…`, `…Untaps`, `UntilUnattached`, `UntilFacedown` and `UntilAnimatedFaceup` are `until_leaves`; everything else
 is `end_of_turn`, including an absent `Duration$` and any `…OrEOT` or `…OrEndOfCombat`. A
 `GainControl` clause with no `Duration$` lasts as its `LoseControl$` says: `EOT`
 `end_of_turn`, an object's change (`LeavesPlay`, `LoseControl`, `Untap`, …) `until_leaves`, none
@@ -355,7 +355,7 @@ lists (`getGainControlTargets`, `getDamageHistory`) may still hold it.
 | `targets` | a stack object's line (the acting ability's too, before it is on the stack) | each target: a card or player; a spell by its card; an ability by its line | each clause's targets, each ref once |
 | `source_of` | the stack object's host card | its line | the stack object's host |
 | `triggered_by` | a triggered ability's line on the stack | each card or player among its triggering objects | `getTriggeringObjects` |
-| `affects` | a static line, a command-zone effect card's included; a timestamped floating effect `F<ts>` | each permanent it applies to, and each player (`StaticEffect.getAffectedPlayers`); an `F<ts>` reaches cards only | the static's `affected`; the floating effect's `affected` |
+| `affects` | a static line, a command-zone effect card's included; a timestamped floating effect `F<ts>` | each permanent it applies to, and each player (`StaticEffect.getAffectedPlayers`); an `F<ts>` reaches cards only | the static's `affected`, except a static a keyword built (Devoid, Changeling), which has no `affected` and links from its keyword's key with `built`; the floating effect's `affected` |
 | `created_by` | a command-zone effect card or emblem; `F<ts>`; `D<id>` | the line that made it, else the effect's source card | `getEffectSourceAbility`, `getEffectSource`; the clause note; the delayed trigger's own key |
 | `pending_on` | `D<id>` | each card or player it holds | `getTriggerRemembered` |
 | `linked_by_text` | the line that exiled the object (`getExiledSA`), else the card | each exiled, imprinted, until-leaves or lasting remembered card or player | `getExiledCards`, `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered` |
