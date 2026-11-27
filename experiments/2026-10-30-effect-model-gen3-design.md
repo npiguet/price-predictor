@@ -994,6 +994,49 @@ agent, so the control score weighs the two evenly by default.
   learning rate and keep the last epoch, as gen-2's runs B64 and B128 suggest works. It avoids a
   poor measure instead of replacing it with a better one.
 
+### Gate 2 reports how much of the right move each damage-step keyword produces
+
+**Gate 2 also measures how far a prediction moves when a keyword is removed, against the move the
+keyword's rule gives.** Gate 2 is the evaluation's check that the model learned the eight
+damage-step keywords: first strike, double strike, deathtouch, lifelink, trample, indestructible,
+wither and infect. It reads each real combat of the game-disjoint games twice: once as it
+happened, and once with one of those keywords removed from one creature. It counts how often the
+prediction moves the way the keyword's rule says. A count of directions passes a model that moves
+the right way by a small fraction of the right amount. Gen-3 therefore also reports, per keyword,
+the share of the right move the model makes.
+
+**The right move comes from the record's own events.** A combat record holds each damage event
+with its source, after prevention. Removing lifelink from a creature that dealt 2 damage should
+lower its controller's predicted life gain by 2. Removing trample should take away the damage that
+reached the defending player. Removing deathtouch, first strike or indestructible should move the
+predicted chance of a death all the way to or from certain. Two other sources are not taken:
+- The board's numbers alone, as the combat grid reads them, give a move the record contradicts
+  where a prevention effect that is not a permanent stopped the damage, or where a trampler's
+  controller assigned all its damage to the blockers.
+- The probe forks give Forge's own outcome without the keyword. They exist only for the combats
+  the collector chose to probe, and a fork plays both damage steps where gate 2 reads the
+  first-strike step alone, so they cannot size first or double strike.
+
+**Each combat scores the share of its right move, and the shares are averaged.** The share is the
+predicted move divided by the right move: 1 is the full move, 0 means the keyword is ignored, and a
+negative share is a move the wrong way. Every combat counts once, as in the count of directions.
+Each effect reports its mean share, a standard error clustered by game and its quartiles, and a
+keyword's share is the mean of its effects' shares. A combat whose right move is 0, such as a hit
+prevented in full, has no share. It is counted apart, with how far the prediction moved anyway. A
+ratio pooled over all combats is not taken, because it weighs a 7-power lifelinker seven times a
+1-power one. An error scaled as the grids' scores are is not taken either, because it cannot tell
+an overshoot from an undershoot.
+
+**The share is a report line and decides nothing.** Gate 2's verdict still counts directions
+alone, and the control score does not read the share. Making the share a control-score item needs
+gate 2's combats frozen into the selection set, the fixed records the control score is computed
+on, and one more forward pass each epoch. It is left to gen-4.
+
+**A separate check compares the model's move with Forge's on the probed combats.** A probe fork
+and its real combat differ only in the keyword, so the difference between their outcomes is the
+move Forge made. The check reports how far the model's move is from Forge's on each keyword the
+forks can measure.
+
 ### The training loss puts every output field on one scale, with amount distributions that fit
 
 **Each field's loss is divided by the loss of its constant prediction.** After the division, a
