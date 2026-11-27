@@ -1460,6 +1460,7 @@ Gate 1 keeps the base spec's three margins and thresholds, read as follows.
 | board-abilities ablation | gen-2's board-abilities ablation, on gen-3 checkpoints |
 | ability-slot noise | the gen-2 ablation that replaces the card blocks' ability-slot `e` with noise |
 | target legality | the target-legality probe reads `target_legal` |
+| gate 2's moves | each gate-2 observation's predicted move per effect, keyword present minus stripped, over its right move: the damage the carrier dealt the subject in the record's events after prevention (lifelink: everything it dealt), or 1 where the record shows the death the keyword causes or the survival it keeps and 0 otherwise, signed by the effect's direction; per effect the mean share, its standard error clustered by game and its quartiles, the combats whose right move is 0 counted apart with their mean absolute predicted move; per keyword the mean of its effects' mean shares; a report line beside each keyword's verdict, which routes nothing |
 
 A run with `--relation-values off` is scored on the anthem probe and the combat grids
 beside a run with the value tables on.
