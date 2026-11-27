@@ -482,7 +482,9 @@ def _scored_positions(cache: StratumCache) -> np.ndarray:
 
 def _record_values(records: list[list[int]], values: np.ndarray) -> list[float]:
     """Each record's reading, the mean over its entities' readings (not
-    finite when any is: :func:`rule_item` scores that at the floor)."""
+    finite when any is: :func:`rule_item` scores that at the floor). Every
+    position held is one a read fills: an entity read nowhere was left out
+    at startup (``control_stratum._drop_unread``)."""
     return [float(values[positions].mean()) for positions in records if positions]
 
 

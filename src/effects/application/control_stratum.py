@@ -83,6 +83,13 @@ class _ProbeItem:
     labels: list[float] = field(default_factory=list)
     positions: list[int] = field(default_factory=list)
 
+    def keep(self, filled: set[int]) -> None:
+        """The rows at the positions in ``filled``, with their labels."""
+        kept = [(label, at) for label, at in zip(self.labels, self.positions, strict=True)
+                if at in filled]
+        self.labels = [label for label, _ in kept]
+        self.positions = [at for _, at in kept]
+
 
 @dataclass
 class GridItem:
@@ -97,6 +104,15 @@ class GridItem:
     def add(self, cell: int, position: int, answer: float) -> None:
         self.cells[cell].append(position)
         self.answers[cell].append(answer)
+
+    def keep(self, filled: set[int]) -> None:
+        """Each cell's records at the positions in ``filled``, with their answers."""
+        for index, (positions, answers) in enumerate(zip(self.cells, self.answers,
+                                                         strict=True)):
+            kept = [(at, answer) for at, answer in zip(positions, answers, strict=True)
+                    if at in filled]
+            self.cells[index] = [at for at, _ in kept]
+            self.answers[index] = [answer for _, answer in kept]
 
 
 @dataclass
@@ -172,10 +188,11 @@ class StratumPlan:
 
 def prepare_stratum(selection: SelectionSet, stratum: str, read: StratumReader,
                     plan: StratumPlan) -> StratumCache:
-    """One stratum's half prepared in three steps: what each record is read
+    """One stratum's half prepared in four steps: what each record is read
     for, collected (:func:`_collect_asks`); the half read once
-    (:class:`_HalfReading`); each rule's outputs settled and every component
-    checked (:func:`_settle_and_check`)."""
+    (:class:`_HalfReading`); every item narrowed to the value positions a
+    read fills (:func:`_drop_unread`); each rule's outputs settled and every
+    component checked (:func:`_settle_and_check`)."""
     scope = plan.scope
     cache = StratumCache(stratum, half=scope.half, components=tuple(scope.components))
     frozen = _FrozenHalf.of(selection, stratum, scope)
@@ -186,6 +203,7 @@ def prepare_stratum(selection: SelectionSet, stratum: str, read: StratumReader,
     reading = _HalfReading(cache, asks, plan)
     reading.read(selection_records(read, games=frozen.games, records=asks.records(),
                                    copies=frozen.copies()))
+    _drop_unread(cache)
     _settle_and_check(cache, selection, plan)
     return cache
 
@@ -434,6 +452,36 @@ class _HalfReading:
             logger.info("Control score, %s %s: %d rule-test read(s) at an entity where the "
                         "record defines no target for the output, read nowhere.",
                         cache.stratum, cache.half, plain.untargeted)
+
+
+# ── leave out what no read fills ──
+
+
+def _drop_unread(cache: StratumCache) -> None:
+    """Every item's value positions narrowed to those a chunk's read fills.
+
+    A request the record cannot place (no slot) or a rule test cannot read
+    (no target for the output there) fills nothing, and its position would
+    stay NaN, which the items score at the floor as a non-finite reading.
+    Left out here, a record reads at its other entities, as the freeze
+    counts it (``rule_output_targets.RecordIndicators.of``), a record read
+    at none is left out of its rule, and a probe row or grid cell read is
+    left out with its label or answer: every NaN an item then meets is one a
+    forward wrote.
+    """
+    filled = {int(position) for chunk in cache.chunks for position in chunk.positions}
+    for item in (*cache.probes.values(), *cache.grids.values()):
+        item.keep(filled)
+    for outputs in cache.rules.values():
+        for reading in outputs.values():
+            reading.fires[:] = _filled_records(reading.fires, filled)
+            reading.does_not[:] = _filled_records(reading.does_not, filled)
+
+
+def _filled_records(records: list[list[int]], filled: set[int]) -> list[list[int]]:
+    """Each record's filled positions; a record with none left out."""
+    kept = ([position for position in record if position in filled] for record in records)
+    return [record for record in kept if record]
 
 
 # ── settle and check ──
