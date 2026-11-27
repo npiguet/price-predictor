@@ -85,7 +85,7 @@ record Channels(
     void close(boolean countGame) {
         RuntimeException failed = null;
         // Each in its own try, so one that throws costs its own records and
-        // not the others' (V3 #5); the first failure is thrown once all ran,
+        // not the others'; the first failure is thrown once all ran,
         // and the game then gets no end marker.
         for (Runnable step : List.<Runnable>of(
                 // A declaration of attackers the game ended before it was made.

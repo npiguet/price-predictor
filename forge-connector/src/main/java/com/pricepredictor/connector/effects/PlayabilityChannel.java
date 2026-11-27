@@ -179,7 +179,7 @@ public final class PlayabilityChannel {
      * what-if attackers record exists (FR-037). A blockers record is stamped
      * {@code what_if=false}.
      *
-     * <p>Deduplicated on payload and snapshot (FR-028): a board on which
+     * <p>Deduplicated on payload and snapshot (024 FR-028): a board on which
      * nothing moved between two declarations answers the same question the
      * same way, and two records that would be byte-identical carry one
      * observation once.
@@ -217,7 +217,7 @@ public final class PlayabilityChannel {
      * What the engine asks about one attacker coming at the defending
      * player: who could block it, who may, and how many it takes.
      *
-     * @param decider the defending player the engine names (FR-030a) —
+     * @param decider the defending player the engine names (024 FR-030a) —
      *                gen-1 wrote the attacking player here, and a gen-2 shard
      *                is what tells a reader which meaning it holds
      */
@@ -299,7 +299,7 @@ public final class PlayabilityChannel {
 
     private void emitLegality(
             EffectRecord record, Player decider, RecordState state, String payload) {
-        // Keyed on the snapshot as well as the payload (FR-028): the same
+        // Keyed on the snapshot as well as the payload (024 FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
         context.emitDistinct(record

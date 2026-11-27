@@ -25,12 +25,12 @@ import java.util.Random;
  * <p>Two callers, one implementation. An interventional fork forces an ability
  * the AI never chose and wants what the effect <b>does</b> rather than what the
  * AI thinks is good, so it draws at random; the random seat makes the same
- * draws for a play it picked at random, with no {@code P} gate (FR-022c). Both
- * need {@code MinCharmNum}, repeated modes and Pawprint honoured (FR-022c,
- * FR-029f), so one implementation serves both.
+ * draws for a play it picked at random, with no {@code P} gate (024 FR-022c). Both
+ * need {@code MinCharmNum}, repeated modes and Pawprint honoured (024 FR-022c,
+ * 024 FR-029f), so one implementation serves both.
  *
  * <p>Every draw is uniform over the legal elements, element by element
- * (FR-022b): a target count between the clause's minimum and maximum, then that
+ * (024 FR-022b): a target count between the clause's minimum and maximum, then that
  * many distinct candidates; a mode count between the charm's minimum and
  * maximum, then that many modes, repeating only where the charm allows it; an
  * X between the smallest legal value and the most the payer's mana can reach.
@@ -41,7 +41,7 @@ import java.util.Random;
  */
 public final class RandomChoices {
 
-    /** Redraws before a caller gives up on a decision (FR-022b, FR-022c). */
+    /** Redraws before a caller gives up on a decision (024 FR-022b, FR-022c). */
     public static final int MAX_DRAWS = 20;
 
     /** X values above this are never drawn, which is also the engine's own ceiling. */
@@ -155,7 +155,7 @@ public final class RandomChoices {
 
     /**
      * A Pawprint charm: one mode at a time, uniformly among those whose
-     * pawprint cost still fits, until nothing fits (FR-022c).
+     * pawprint cost still fits, until nothing fits (024 FR-022c).
      */
     private List<AbilitySub> drawPawprintModes(
             SpellAbility charm, List<AbilitySub> options, boolean repeat) {
@@ -238,7 +238,7 @@ public final class RandomChoices {
 
     /**
      * One clause's targets: a count uniform in [min, max], then that many
-     * distinct legal candidates (FR-022b), and a divided amount split among
+     * distinct legal candidates (024 FR-022b), and a divided amount split among
      * them. The candidates are {@link TargetingClauses#candidatesOf}'s, so a
      * clause that targets a spell takes the spell on the stack, never its
      * card.
@@ -248,10 +248,9 @@ public final class RandomChoices {
      * ({@code SpellAbility.canTarget}), which is where Forge reads the
      * constraints across a clause's targets: different or the same
      * controllers, different names or mana values, a total mana value or
-     * power (V3 #4). A clause that "divides as you choose" gets its amount
+     * power. A clause that "divides as you choose" gets its amount
      * split at random over its targets, each at least one while the amount
-     * lasts ({@link #divide}); without it the resolution reads a null share
-     * (V3 #3).
+     * lasts ({@link #divide}); without it the resolution reads a null share.
      */
     public boolean chooseTargetsFor(SpellAbility clause) {
         // clearTargets also sets the amount a divided clause splits.
@@ -338,7 +337,7 @@ public final class RandomChoices {
 
     /**
      * Announce an X, uniform between the smallest legal value and the most the
-     * payer's available mana can reach (FR-022c).
+     * payer's available mana can reach (024 FR-022c).
      *
      * <p>Left alone where the ability has no X or already has one: the engine
      * asks the controller only for an unannounced X, and an announced one is

@@ -99,7 +99,7 @@ final class LiveGame {
      * game.
      *
      * <p>A null host means "not live": the real resolution path always has a
-     * host card ({@code AbilityUtils.resolveApiAbilityUnobserved} dereferences
+     * host card ({@code AbilityUtils.resolveClause} dereferences
      * it unconditionally), so this only picks the safer default for a state
      * that should not occur.
      *
@@ -345,7 +345,7 @@ final class LiveGame {
      * <p>A triggered or replacement ability belongs to its host's controller,
      * which is often not whoever's turn it is: a death trigger fires on the
      * opponent's turn as often as on its own. Forge decides it the same way —
-     * {@code TriggerHandler.runSingleTriggerUnobserved} defaults the controller to
+     * {@code TriggerHandler.runSingleTriggerInternal} defaults the controller to
      * the host card's.
      */
     String controllerOf(Card source) {

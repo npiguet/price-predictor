@@ -21,7 +21,7 @@ import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 
 /**
- * The {@link RandomSeatController}'s attack and block draws (FR-022b), once
+ * The {@link RandomSeatController}'s attack and block draws (024 FR-022b), once
  * the seat has drawn to declare at random.
  *
  * <p>Each declaration is drawn until the engine accepts it, at most

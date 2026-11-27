@@ -44,18 +44,16 @@ public final class EffectRecord {
      */
     private ForkKind forkKind;
     /**
-     * Whether {@code actor_player} is the match's random seat (FR-030).
+     * Whether {@code actor_player} is the match's random seat (024 FR-030).
      *
      * <p>Collection metadata, like the three flags above it: it says how the
      * decision behind this record was made, never what the board was, and the
-     * reader keeps it out of the model. Written on every record, so a shard
-     * that carries it on one record carries it on all — that presence is what
-     * names a gen-2 shard to a reader (FR-033).
+     * reader keeps it out of the model. Written on every record (024 FR-033).
      */
     private boolean randomSeat;
     /**
      * Real decision or what-if query, on the two legality subkinds only
-     * (FR-031): {@code false} is a declaration the engine acted on, {@code
+     * (024 FR-031): {@code false} is a declaration the engine acted on, {@code
      * true} an answer the AI computed while weighing a combat and discarded.
      * The collector reports legality at the declaration itself and so writes
      * only {@code false}; {@code true} is read from shards collected inside
@@ -135,7 +133,7 @@ public final class EffectRecord {
      * Joins a cost half to its effect halves; absent where there is no partner.
      *
      * <p>One effect half ordinarily, and one per chosen mode of a modal
-     * resolution on a patched worker (FR-029d), all carrying the cost half's
+     * resolution on a patched worker (024 FR-029d), all carrying the cost half's
      * id — the link widened from a pair to a fan without changing its type
      * or spelling.
      */

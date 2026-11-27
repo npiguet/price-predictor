@@ -34,7 +34,7 @@ final class PodDraft {
         this.setCode = setCode;
         this.draftId = draftId;
         this.packSize = packSize;
-        // One AI seat per pod position; agents sampled per draft (FR-006).
+        // One AI seat per pod position; agents sampled per draft (021 FR-006).
         List<LimitedPlayerAI> players = new ArrayList<>(PodGeometry.POD_SIZE);
         List<String> agents = new ArrayList<>(PodGeometry.POD_SIZE);
         for (int s = 0; s < PodGeometry.POD_SIZE; s++) {

@@ -22,7 +22,6 @@ import java.util.function.Consumer;
 
 /**
  * Headless IGuiBase stub — satisfies the interface without any UI.
- * Adapted from the jumpstart-tierlist reference implementation.
  */
 public class GuiHeadless implements IGuiBase {
 

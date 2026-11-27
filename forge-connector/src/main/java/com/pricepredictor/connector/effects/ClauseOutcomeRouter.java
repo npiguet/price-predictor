@@ -106,10 +106,10 @@ final class ClauseOutcomeRouter {
     private void clauseResolving(SpellAbility clause, Function<ApiType, ApiEvents.Rule<?>> rules) {
         clauseObservations.get().push(ApiEvents.observe(clause, rules));
         // A chosen mode's first clause is where a modal resolution is
-        // cut into per-mode halves (FR-029a): the live bracket opens
+        // cut into per-mode halves (024 FR-029a): the live bracket opens
         // the next half here; a forced resolution's fork-bound recording
         // hears its own fork's clauses. "Resolving" of the
-        // first clause is the one moment FR-029b's snapshot has to be taken.
+        // first clause is the one moment 024 FR-029b's snapshot has to be taken.
         if (live.owns(clause)) {
             // The timestamp a floating effect's rows will carry is drawn
             // while this clause runs; the note is their only join to a line.

@@ -35,38 +35,17 @@ final class EventBuffer {
      * one damage to the same blocker render two identical {@code damage_dealt}
      * events, and collapsing them would turn two damage into one.
      *
-     * <p><b>{@code REGENERATED} does not actually fit the "in-or-out state"
-     * reasoning above, unlike its neighbours here.</b> {@code destroyed} and
-     * {@code sacrificed} are one-shot by construction — the object changes
-     * zones and stops being the same object — and {@code tapped} has a real
-     * re-fire guard ({@code Card.tap} returns false when already tapped).
-     * Regeneration has neither: {@code RegenerationEffect.resolve()} is a
-     * shield being <i>consumed</i>, not the ability granting one, and shields
-     * are granted separately, one independent command-zone
-     * {@code ReplacementEffect} per activation ({@code
-     * RegenerateEffect.createRegenerationEffect}) — two activations on one
-     * creature make two shields, each able to fire its own event. The engine
-     * itself treats repeated regeneration as a real, distinguishable fact:
-     * {@code Card.regeneratedThisTurn} is an incrementing counter, exposed to
-     * card scripts as {@code RegeneratedThisTurn} X-math. So this dedup
-     * <i>can</i>, in principle, drop a genuine second occurrence rather than
-     * only a duplicate publication of the first.
-     *
-     * <p>It stays anyway, for reasons that hold regardless of that fact
-     * rather than because a repeat is impossible: a combat bracket is one per
-     * damage step — first strike and the regular step are different brackets,
-     * flushed at the phase boundary ({@code BusBracketCollector.onPhase}) — so the textbook
-     * "regenerate through first strike, then again in the regular step" lands
-     * in two brackets and is never compared. And a second destroy check
-     * driven by a separately-resolving ability changes {@code attributed_to}
-     * (stamped in {@code BusBracketCollector.fileOutcome}), which breaks the
-     * rendered-line equality {@link #file} dedups on; and two regenerations
-     * with any other transition of the creature between them are both kept. Nobody has
-     * constructed, or ruled out, a same-bracket same-attribution double from
-     * reasoning about the code alone — that is an open question static
-     * analysis cannot settle, and one a corpus run can: look for brackets that
-     * contain a {@code regenerated} event and check whether any single card
-     * carries two.
+     * <p>{@code REGENERATED} is in the set though a second regeneration can
+     * be genuine: each activation grants its own shield, and each shield
+     * consumed fires its own event. The dedup drops it only within one
+     * bracket, for the same subjects and the same attribution, with no other
+     * transition of the creature between: a combat bracket is one per damage
+     * step, flushed at the phase boundary, so a regeneration in the first
+     * strike step and another in the regular step are never compared, and a
+     * second destroy check driven by a separately-resolving ability changes
+     * {@code attributed_to} (stamped when {@code
+     * BusBracketCollector.fileOutcome} files the event), which breaks the
+     * rendered-line equality {@link #file} dedups on.
      */
     static final Set<EventType> IDEMPOTENT_EVENTS = EnumSet.of(
             EventType.ZONE_CHANGE, EventType.TAPPED, EventType.UNTAPPED,

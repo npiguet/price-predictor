@@ -364,7 +364,7 @@ public class MatchGenerator {
      *
      * <p>A sealed self-play deck's names came out of Forge in the first place,
      * so a miss there is only logged. A coverage or variant deck's names come
-     * from {@code output/cardsfolder/} and from {@code VariantRegistry}: a name
+     * from the converted cardsfolder and from {@code VariantRegistry}: a name
      * Forge misses is dropped, the deck materializes as 17 basic lands, a game
      * plays, a progress line is appended, effect records are written — and the
      * card the round exists to reach never enters a game, then retires as

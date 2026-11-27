@@ -266,7 +266,7 @@ final class BusEvents {
      * <p>Empty on a draw: {@code winningPlayerName} is null whenever {@code
      * GameOutcome.getWinningLobbyPlayer()} is, and a {@code player_won} with no
      * winner would be a false record -- {@code game_drawn} is the type for
-     * that outcome, and it is not this task's scope.
+     * that outcome.
      *
      * <p>No {@link #causeOf} counterpart, the same as {@link #regenerated} and
      * {@link #libraryShuffled}: the record carries only the winner, because

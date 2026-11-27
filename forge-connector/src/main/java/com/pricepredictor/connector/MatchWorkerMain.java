@@ -53,8 +53,8 @@ import java.util.TreeMap;
  *       {@code -Deffect.random.seat.probability=<P>} — in a share {@code F} of
  *       matches, one seat chosen per match is a {@link RandomSeatController}
  *       that draws uniformly from the legal options with probability {@code P}
- *       at each decision point (FR-021). Such a match writes effect records
- *       and its progress line, never a sealed row (FR-025). Read with the
+ *       at each decision point (024 FR-021). Such a match writes effect records
+ *       and its progress line, never a sealed row (024 FR-025). Read with the
  *       other {@code effect.*} caps; echoed at startup when the share is
  *       above zero.</li>
  *   <li>{@code -Deffect.count.dropped.events=true} — after each game, append
@@ -431,7 +431,7 @@ public class MatchWorkerMain {
             MatchGenerationResult result,
             Optional<SealedCorpus> sealedCorpus,
             Optional<ProgressWriter> progress) {
-        // Records-only per match (FR-025), beside the per-worker mode an
+        // Records-only per match (024 FR-025), beside the per-worker mode an
         // absent corpus expresses: a random-seat match had one seat playing
         // at random, so its outcome says nothing about either deck and
         // neither sealed file may take a row from it. Its effect records

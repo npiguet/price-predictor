@@ -48,7 +48,7 @@ public class BatchConverter {
      *
      * <p>Stage four's variant tree is the sidecar-only case. A variant has no
      * oracle text — nobody printed the card — so converting it to prose would
-     * put text in the corpus no card has (FR-056). The sidecar is still needed,
+     * put text in the corpus no card has (023 FR-056). The sidecar is still needed,
      * and must come from this parser rather than a reimplementation: a
      * provenance key's {@code index_within_kind} is the trait's position in
      * Forge's own runtime trait list, so only the parser that builds that list
@@ -159,7 +159,7 @@ public class BatchConverter {
      * What one tree's conversion produced.
      *
      * @param missingSVars every chain reference to an SVar the script never
-     *                     defines (FR-003): the segment was left out of the
+     *                     defines (024 FR-003): the segment was left out of the
      *                     sidecar's {@code script_text}, and the operator is
      *                     told once, as a block, rather than per card
      */

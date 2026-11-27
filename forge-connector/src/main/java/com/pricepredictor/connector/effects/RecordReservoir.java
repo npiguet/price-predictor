@@ -9,7 +9,7 @@ import java.util.Random;
 
 /**
  * The records of one kind one game keeps, a fixed number per key: the mana
- * records, {@code --mana-cap} per mana ability (FR-037), and the fired
+ * records, {@code --mana-cap} per mana ability (023 FR-037), and the fired
  * trigger records, {@link TriggerNegativeSampler#POSITIVES_PER_LINE} per
  * acting line.
  *

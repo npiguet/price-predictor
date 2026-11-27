@@ -13,7 +13,7 @@ import java.util.Set;
  * generated the perturbed scripts and before it plays them. Separate from
  * {@link ConvertMain} because it writes sidecars <em>only</em>: a variant has no
  * oracle text, so converting it to prose would put text in the corpus that no
- * card has (FR-056).
+ * card has (023 FR-056).
  *
  * <p>The sidecar has to come from this parser rather than from the Python
  * generator. A provenance key's {@code index_within_kind} is the trait's

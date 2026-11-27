@@ -93,7 +93,7 @@ final class ContinuousChannel {
         // Keyed on what the static contributes as well as on the board: the
         // board hash reads ids, names and P/T only, so a boundary where the
         // same static grants another keyword, type, colour or control on an
-        // otherwise alike board is a record of its own (V3 #6).
+        // otherwise alike board is a record of its own.
         if (!allowContinuousRecord(String.valueOf(staticId), boardHash + "|" + Long.toHexString(
                 Hashing.murmur3_128().hashUnencodedChars(rendered).asLong()))) {
             return;

@@ -37,7 +37,7 @@ import java.util.function.Consumer;
  * Casts or activates a play with a cost decision the caller supplies.
  *
  * <p><b>Why this is a copy of {@code ComputerUtil.handlePlayingSpellAbility}
- * rather than a call to it.</b> The random seat (FR-022c) draws its
+ * rather than a call to it.</b> The random seat (024 FR-022c) draws its
  * additional-cost choices — what to sacrifice, discard, exile or tap —
  * uniformly from the legal objects, and the engine's method hard-codes
  * {@code new AiCostDecision(ai, sa, false)} at the one line that decides
@@ -52,7 +52,7 @@ import java.util.function.Consumer;
  * anything but the cost decision would be a different game.
  *
  * <p>Mana payment stays the AI's: {@link RandomCostDecision} leaves
- * {@code CostPartMana} to its superclass, as FR-022c and FR-023 require.
+ * {@code CostPartMana} to its superclass, as 024 FR-022c and FR-023 require.
  */
 public final class RandomSpellPlayer {
 
@@ -202,7 +202,7 @@ public final class RandomSpellPlayer {
 
     /**
      * The AI's cost decision with its four object-choosing parts drawn at
-     * random: that many distinct legal objects, uniformly (FR-022c).
+     * random: that many distinct legal objects, uniformly (024 FR-022c).
      *
      * <p>Each override computes the legal list the way the cost part's own
      * {@code canPay} does and draws from it; a part whose type carries a rule

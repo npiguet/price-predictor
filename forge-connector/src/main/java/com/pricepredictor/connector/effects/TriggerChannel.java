@@ -156,7 +156,7 @@ final class TriggerChannel {
      * provenance key, or, for a trigger that keys to no printed line (an
      * Aura's or Equipment's granted trigger, an effect card's, a delayed or
      * keyword trigger), its reason, host card, mode and parameters, so
-     * unrelated unresolved triggers do not share one reservoir (C2 #16).
+     * unrelated unresolved triggers do not share one reservoir.
      */
     static String lineKey(Object trait, ProvenanceKey.Resolved line, String mode) {
         if (line.key() != null) {
@@ -210,7 +210,7 @@ final class TriggerChannel {
             return;
         }
         // A slot past the records held is a free place, whatever an earlier
-        // build that threw left unfilled (C2 #13).
+        // build that threw left unfilled.
         boolean fills = slot >= positives.held(firing.key());
         positives.hold(firing.key(), slot, firing.record());
         if (fills) {

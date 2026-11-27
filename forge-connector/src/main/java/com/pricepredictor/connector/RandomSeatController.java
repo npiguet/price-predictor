@@ -33,7 +33,7 @@ import java.util.function.Supplier;
 /**
  * The random seat: a Forge AI that, with probability {@code P} at each of
  * four decision points, draws uniformly from the legal options instead
- * (FR-022).
+ * (024 FR-022).
  *
  * <p>Every gen-1 outcome is one Forge chose, so the model never saw what
  * happens when an ability is aimed at a target Forge would not pick or a
@@ -47,7 +47,7 @@ import java.util.function.Supplier;
  * {@link #playChosenSpellAbility}, {@link #declareAttackers} and
  * {@link #declareBlockers}, plus {@link #chooseTargetsFor} for the clauses
  * whose targeting the engine asks for on its own. Everything else — land drops, mana payment, mulligans, what a
- * resolving effect asks its controller — is the AI's (FR-023), but for a
+ * resolving effect asks its controller — is the AI's (024 FR-023), but for a
  * mandatory single choice the AI declines, which the seat draws among the
  * options offered ({@link MandatoryChoiceAi}, finding 5.5). The nearest
  * relative is {@code InterventionFork}, which draws the same choices for an
@@ -176,9 +176,9 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
     }
 
     /**
-     * Every priority is a decision point with its own draw (FR-022a).
+     * Every priority is a decision point with its own draw (024 FR-022a).
      *
-     * <p>Land first (FR-022d): while a land drop is open and a land is
+     * <p>Land first (024 FR-022d): while a land drop is open and a land is
      * playable, no draw is made and the AI decides the priority, which keeps
      * land drops the AI's without the seat having to understand land choice.
      * Then the draw. On success the seat picks uniformly among what is
@@ -211,7 +211,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
 
     /**
      * Whether the AI should decide this priority because a land could be
-     * played (FR-022d): the drop is unused this turn, it is a main phase with
+     * played (024 FR-022d): the drop is unused this turn, it is a main phase with
      * an empty stack, and a land in hand may be played — all of which
      * {@code getAvailableLandsToPlay} already checks.
      */
@@ -234,7 +234,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
     }
 
     /**
-     * What the rules let this seat play now (FR-022a): the candidates of this
+     * What the rules let this seat play now (024 FR-022a): the candidates of this
      * priority stop whose {@link com.pricepredictor.connector.effects.PlayabilityVerdict}
      * says they can be played, paid for and aimed — the stop the decision
      * records were written of when the run records, so the seat plays only
@@ -283,13 +283,13 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
      * Cast or activate the chosen play.
      *
      * <p>A play the random draw picked makes every choice at random with no
-     * further gate (FR-022c): modes, targets and X are drawn before the cast,
+     * further gate (024 FR-022c): modes, targets and X are drawn before the cast,
      * redrawn up to {@link RandomChoices#MAX_DRAWS} times when a draw leaves
      * a clause short of targets, and the additional costs are drawn as the
      * cast pays them. A play that cannot be completed is abandoned and the
      * draw repeats over the remaining candidates; when none remains the seat
      * passes at its next priority. A play the AI chose keeps the AI's own
-     * choices, with its targets alone under their own draw (FR-022).
+     * choices, with its targets alone under their own draw (024 FR-022).
      */
     @Override
     public boolean playChosenSpellAbility(SpellAbility sa) {
@@ -344,7 +344,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
             // sacrifices can leave it short. Asked before the card moves to
             // the stack, so a play the AI would fail to pay is a draw to
             // repeat (an X drawn lower may fit), never a card left in the
-            // stack zone (V3 #7).
+            // stack zone.
             if (!affordableByTheAi(sa)) {
                 continue;
             }
@@ -421,7 +421,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
     }
 
     /**
-     * Redraw the targets of a play the AI chose (FR-022), keeping the AI's
+     * Redraw the targets of a play the AI chose (024 FR-022), keeping the AI's
      * where the draw cannot complete.
      */
     private void redrawTargets(SpellAbility sa) {
@@ -450,7 +450,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
      * chain itself and calls this per targeting clause, so drawing the rest
      * here would be redrawn the moment it reached them. Most of the AI's
      * triggers never come here — {@code PlayerControllerAi.playTrigger}
-     * targets them inside {@code doTrigger} — and stay the AI's: FR-022's
+     * targets them inside {@code doTrigger} — and stay the AI's: 024 FR-022's
      * target decision point is the targets of a play.
      */
     @Override
@@ -473,7 +473,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
     }
 
     /**
-     * Attacks drawn at random when the live seat draws to (FR-022b,
+     * Attacks drawn at random when the live seat draws to (024 FR-022b,
      * {@link RandomCombatDeclarations#declareAttackers}), else the AI's; a
      * forced attack is added after either.
      */
@@ -514,7 +514,7 @@ public final class RandomSeatController extends MandatoryChoiceAi implements For
     }
 
     /**
-     * Blocks drawn at random when the live seat draws to (FR-022b,
+     * Blocks drawn at random when the live seat draws to (024 FR-022b,
      * {@link RandomCombatDeclarations#declareBlockers}), else the AI's.
      */
     @Override

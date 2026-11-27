@@ -9,7 +9,7 @@ import java.util.Random;
 /**
  * One random play decision of the {@link RandomSeatController}, from the
  * draw at a priority to the play that completes or the pass owed when none
- * does (FR-022c).
+ * does (024 FR-022c).
  *
  * <p>The decision spans two engine calls, which is why it is state rather
  * than a local: {@link RandomSeatController#chooseSpellAbilityToPlay} draws a

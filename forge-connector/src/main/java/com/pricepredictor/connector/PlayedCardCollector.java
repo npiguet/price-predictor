@@ -33,7 +33,7 @@ import java.util.Optional;
  * <ul>
  *   <li>{@code controller == owner} (drops stolen cards).</li>
  *   <li>{@code !isToken()}.</li>
- *   <li>{@code !isBasicLand()} on the current state (FR-004a).</li>
+ *   <li>{@code !isBasicLand()} on the current state (023 FR-004a).</li>
  *   <li>{@code gamePieceType == CARD} — drops emblems / "X's effect"
  *       trackers (e.g. The Ring, Monarch), dungeons (e.g. Undercity),
  *       copied spells, schemes, planes, and any other non-deck game
@@ -45,8 +45,8 @@ import java.util.Optional;
  * <p>Cards are bucketed by the owner's lobby player name, mapped to its
  * {@link Side}.
  *
- * <p>The collector is created fresh per game; flicker / re-enter effects
- * collapse to set membership.
+ * <p>The collector is created fresh per game; a flicker or re-enter effect
+ * records the card again, and {@code CardsPlayedRow} deduplicates.
  */
 public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
 
@@ -87,13 +87,11 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         // such cast event, so it stays unrecorded — matching the rule that
         // a card "is played" only when its identity actually shows up.
         //
-        // TODO (face-up reveal): when an externally-manifested card later
-        // turns face-up, no event we currently subscribe to fires for the
-        // affected card with its real identity. To capture that the card
-        // was eventually played we'd need to subscribe to
-        // GameEventCardStatsChanged and detect the face-down -> face-up
-        // transition. Skipped for now — most manifested 2/2s die face-down,
-        // so the missed-signal volume should be small.
+        // An externally-manifested card that later turns face-up stays
+        // unrecorded: no event subscribed to here fires for it with its real
+        // identity, and catching it would take a GameEventCardStatsChanged
+        // subscription detecting the face-down to face-up transition. Most
+        // manifested 2/2s die face-down, so the missed volume is small.
         CardView card = event.card();
         if (card != null && card.isFaceDown()) {
             return super.visit(event);

@@ -50,6 +50,12 @@ public final class KeywordEdit {
                 null, List.of(keyword), false, game.getNextTimestamp(), null);
     }
 
+    /** A refusal's reason: the card cannot have the keyword an edit adds. */
+    public static final String CANNOT_HAVE = "keyword the card cannot have";
+
+    /** A refusal's reason: the card carries no keyword an edit removes. */
+    public static final String CARRIES_NONE = "keyword the card does not carry";
+
     /**
      * Give {@code card} the keyword, spelled as a card script spells it
      * ({@code Flying}, {@code Ward:2}).
@@ -59,12 +65,6 @@ public final class KeywordEdit {
      *         tagged with an edit that did not happen would describe a board
      *         nobody built, so the fork refuses, counted as a refusal
      */
-    /** A refusal's reason: the card cannot have the keyword an edit adds. */
-    public static final String CANNOT_HAVE = "keyword the card cannot have";
-
-    /** A refusal's reason: the card carries no keyword an edit removes. */
-    public static final String CARRIES_NONE = "keyword the card does not carry";
-
     public static void add(Game game, Card card, String keyword) {
         card.addChangedCardKeywords(
                 List.of(keyword), null, false, game.getNextTimestamp(), null);

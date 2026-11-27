@@ -14,8 +14,8 @@ import java.util.List;
  * {@link SealedCorpus}).
  *
  * <p>{@code randomSeat} marks a match one of whose seats was the random seat
- * (FR-021). Such a match is effect records only: the worker writes its
- * progress line and neither sealed row (FR-025), because one seat played at
+ * (024 FR-021). Such a match is effect records only: the worker writes its
+ * progress line and neither sealed row (024 FR-025), because one seat played at
  * random and the outcome says nothing about either deck. The rows are still
  * carried, built the same way, so the result is one shape whatever the
  * seats; the row-count check is relaxed for it alone, since nothing reads

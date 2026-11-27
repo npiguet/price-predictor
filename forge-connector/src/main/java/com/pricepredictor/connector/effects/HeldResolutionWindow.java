@@ -165,7 +165,7 @@ final class HeldResolutionWindow {
      * none and is written now. Nothing after the move joins them.
      * They are split as a resolved item's are: one root half, or on a
      * patched worker one per chosen mode of a modal item, through the mode's
-     * option line, under the cost half's link (FR-029a, FR-029c). A declined
+     * option line, under the cost half's link (024 FR-029a, FR-029c). A declined
      * half keeps the conditions Forge decided on its way; a fizzled one
      * decided none.
      *
@@ -212,7 +212,7 @@ final class HeldResolutionWindow {
 
     /**
      * One half per mode of a resolution, in order, each through the mode's own
-     * option line (FR-029a, FR-029d).
+     * option line (024 FR-029a, FR-029d).
      *
      * <p>Modes, X and the named card are set while the ability resolves, so
      * the block that carries them is re-read here and paired with the board

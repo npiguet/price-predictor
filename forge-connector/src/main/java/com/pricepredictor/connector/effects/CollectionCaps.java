@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The caps and budgets every collecting supervisor shares (FR-028).
+ * The caps and budgets every collecting supervisor shares (023 FR-028).
  *
  * @param playabilityRate stage 1 of decision sampling (FR-033b): the share of
  *                enumerated decision candidates evaluated
@@ -145,10 +145,10 @@ public record CollectionCaps(
                 // --probe-keywords sends it, none.
                 WorkerProperties.presentListProperty(PROBE_KEYWORDS)
                         .orElse(defaults.probeKeywords()),
-                // The random seat's two knobs (FR-021). A share of matches
+                // The random seat's two knobs (024 FR-021). A share of matches
                 // and a per-decision P: both are drawn in the JVM, so the
                 // supervisor can only name them. The Python side refuses a
-                // share without a P before any worker starts (FR-026); a
+                // share without a P before any worker starts (024 FR-026); a
                 // worker reads what it is given and defaults the rest.
                 NumericProperties.doubleProperty(
                         new DoubleSetting(RANDOM_SEAT_SHARE,

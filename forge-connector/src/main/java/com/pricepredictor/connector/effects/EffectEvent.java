@@ -113,7 +113,8 @@ public final class EffectEvent {
     }
 
     /**
-     * The sub-ability link this outcome came from, or null for the root line.
+     * The sub-ability link this outcome came from: a hop count from the root
+     * line, {@link EventAttribution#ROOT} for the root line itself.
      *
      * <p>An event attributed to a link the sidecar does not map falls back to
      * the root line rather than being dropped, so attribution is never lossy.

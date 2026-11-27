@@ -297,7 +297,7 @@ final class RewriteChannel implements EventRouter.EventTap {
 
     /**
      * Count a record in the worker's tally when it reached the shard of a
-     * live game, never a fork's (C5 #16): one the cap withheld is not in the
+     * live game, never a fork's: one the cap withheld is not in the
      * shard, so it is not in the tally.
      */
     private void count(Rewrite rewrite, boolean reachedTheShard) {

@@ -127,7 +127,7 @@ final class ManaChannel implements EventRouter.EventTap {
     private void otherPayment(Callback callback, SpellAbility ability) {
         if (live.owns(ability) && callback == Callback.ON_COSTS_PAID) {
             // The payment the mana went to is over: no triggered mana of
-            // the last activation comes after it (V3 #15).
+            // the last activation comes after it.
             finishBuilding();
         }
     }
@@ -148,7 +148,7 @@ final class ManaChannel implements EventRouter.EventTap {
         finishBuilding();
         // No stat re-read here: a mana record holds no stat change, and a
         // re-read would take the enclosing cast's unpublished changes out of
-        // its cost half whether or not this activation is kept (V3 #15).
+        // its cost half whether or not this activation is kept.
         pending.put(ability, new Activation(live.snapshots().ofBoard().state()));
     }
 

@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * A modal resolution's chosen modes, split at each mode's first clause
- * (FR-029a).
+ * (024 FR-029a).
  *
  * <p>The events a mode produced are its own and nothing else's: everything
  * filed between its first clause and the next mode's, or the end of the
@@ -15,7 +15,7 @@ import java.util.List;
  *
  * <p>One split for the live bracket and for a forced resolution, so an
  * observed and a forced resolution of the same charm divide their events the
- * same way (FR-029f).
+ * same way (024 FR-029f).
  *
  * <p>Owned by the one resolution it splits, so no other resolution ever sees
  * it. That matters for a mode that casts a spell (Tetsuo, Imperial Champion's
@@ -33,7 +33,7 @@ final class ModeSplit {
      * @param option the mode's {@code Choices$} position, or null for a mode
      *               nothing could place, whose half keeps the root key
      * @param state  the board at the mode's first clause, so a later mode's
-     *               board shows the earlier modes' effects (FR-029b)
+     *               board shows the earlier modes' effects (024 FR-029b)
      */
     record Mode(Integer option, Snapshot state) {
     }

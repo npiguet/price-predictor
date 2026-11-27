@@ -10,9 +10,9 @@ import java.nio.file.StandardOpenOption;
 /**
  * Appends one line per call to a file shared by concurrent workers.
  *
- * <p>Each call opens the file, writes the line, and closes it, so every line
- * is flushed whole and workers appending to the same file do not corrupt one
- * another's lines. The file's parent directory is created once, up front.
+ * <p>Each call opens the file, writes the line, and closes it, so a line is
+ * flushed whole and workers appending to the same file do not corrupt one
+ * another's lines, as long as a line fits the writer's 8,192-character buffer. The file's parent directory is created once, up front.
  * Lines end with the platform's line separator, which every Python reader
  * handles through universal newlines.
  */

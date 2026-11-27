@@ -10,7 +10,7 @@ import com.pricepredictor.connector.WireNamed;
  * {@code Moment} in {@code records.py} is the other half of this vocabulary.
  */
 public enum Moment implements WireNamed {
-    /** The cost half: what was paid, and what became of the spell. */
+    /** The cost half: what was paid, and the plays and choices that came with it. */
     ACTIVATION("activation"),
     /** The effect half: what the resolution did. */
     RESOLUTION("resolution");

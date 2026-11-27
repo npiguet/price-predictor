@@ -236,7 +236,7 @@ public final class RecordShardWriter implements AutoCloseable {
      * Append one record line past {@code --max-records-per-game}: a game's
      * end-of-game records (the reservoirs' trigger and mana records, the
      * game-end marker), each kept by a per-key bound of its own, are written
-     * last and so would be the first a cap withheld (V3 #5).
+     * last and so would be the first a cap withheld.
      */
     public synchronized void writeUncapped(ShardLine line) {
         requireWritable();

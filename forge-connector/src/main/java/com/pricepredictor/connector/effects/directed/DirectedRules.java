@@ -70,7 +70,7 @@ public final class DirectedRules {
      * scenarios, its board precondition and its variants. Rules sharing a
      * board, a binding and an edit are one registration: the three meld
      * rules ({@link Meld}), Aura swap's two ({@link AuraSwap}). Together they
-     * cover the ten operations (story 3, acceptance 3).
+     * cover the ten operations (Feature 025 story 3, acceptance 3).
      */
     private static final DirectedRules REGISTERED = of(
             VirtuousRole.rule(),

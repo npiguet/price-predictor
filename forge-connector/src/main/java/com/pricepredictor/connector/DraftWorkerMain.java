@@ -49,13 +49,13 @@ import java.util.UUID;
  * <p>System properties:
  * <ul>
  *   <li>{@code -Ddraft.agent.mix=<label:weight,...>} — required; each seat draws
- *       its agent independently per draft (FR-006).</li>
+ *       its agent independently per draft (021 FR-006).</li>
  *   <li>{@code -Ddraft.set=<CODE>} — optional; restrict every draft to one set,
  *       recorded under its edition's code when named by an alias.
- *       When absent, a random sealed-legal set is chosen per draft (FR-009).</li>
+ *       When absent, a random sealed-legal set is chosen per draft (021 FR-009).</li>
  *   <li>{@code -Ddraft.external.agents=<label,...>} — optional; the mix labels
  *       routed through the pick side-channel. Absent/empty ⇒ byte-for-byte
- *       gen-1 behavior (no pick requests are ever emitted, SC-004).</li>
+ *       gen-1 behavior (no pick requests are ever emitted, 021 SC-004).</li>
  *   <li>{@code -Ddraft.required.agent=<label>} — optional; after the per-seat
  *       mix draw, if no seat carries this label one uniformly-chosen seat is
  *       overwritten with it. Guarantees every played pod carries at least one

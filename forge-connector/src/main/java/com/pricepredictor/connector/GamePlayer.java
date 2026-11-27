@@ -96,9 +96,9 @@ public class GamePlayer {
     /**
      * Full match outcome returned by {@link #playMatch}.
      *
-     * @param randomSeat whether one seat was the random seat (FR-021), in
+     * @param randomSeat whether one seat was the random seat (024 FR-021), in
      *                   which case the match is effect records only and
-     *                   neither sealed corpus may take a row from it (FR-025)
+     *                   neither sealed corpus may take a row from it (024 FR-025)
      */
     public record PlayedMatch(List<GameOutcome> games, int durationSeconds, boolean randomSeat) {
 
@@ -167,7 +167,7 @@ public class GamePlayer {
 
     /**
      * The two AI-controlled seats a match registers, one of them possibly the
-     * random seat (FR-021).
+     * random seat (024 FR-021).
      *
      * <p>Both {@link LobbyPlayerAi} instances are built with a null
      * {@code Set<AIOption>}, which matters beyond style: {@code AiController}
@@ -218,7 +218,7 @@ public class GamePlayer {
 
     /**
      * Which seat this match gives to the random seat, if any, drawn per
-     * match: the share decides whether, a coin decides which (FR-021).
+     * match: the share decides whether, a coin decides which (024 FR-021).
      */
     static Optional<Side> drawRandomSeat(
             CollectionCaps caps, java.util.Random matchRandom) {
@@ -419,7 +419,7 @@ public class GamePlayer {
      * Live from here. A fork's clone of this seat plays as the ordinary AI
      * unless the fork is played on, which attaches it (attachForkSeats).
      * Without a recording the seat plays at random and reports nothing --
-     * FR-026 keeps that combination out of a run.
+     * 024 FR-026 keeps that combination out of a run.
      */
     private static void attachSeat(
             Optional<RandomSeatController> seat, forge.game.Game game, GameRecording recording) {

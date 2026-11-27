@@ -183,12 +183,7 @@ final class ApiEvents {
      * <p>Catching here and always returning an observation keeps that push
      * unconditional: a memo that failed reads back as a {@code null} memo,
      * exactly as a memo-less rule's does, which is what keeps the deque
-     * balanced. The alternative -- skip this push, and have the matching pop
-     * skip too -- was rejected: nothing about the failure is visible at
-     * {@code onClauseResolved} time except by consulting a second piece of
-     * state kept in lockstep with this one, and that second state would
-     * itself have to be pushed unconditionally to stay balanced, which is
-     * this design again with extra steps.
+     * balanced.
      *
      * @param rules the rule for each API, {@link #ruleFor} outside a test
      */

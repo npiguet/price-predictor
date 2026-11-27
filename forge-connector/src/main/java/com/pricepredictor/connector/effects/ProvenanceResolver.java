@@ -74,7 +74,7 @@ public final class ProvenanceResolver {
      *
      * <p>A clause resolving inside a chosen mode of a charm keys to the
      * charm's line <em>plus</em> that mode's {@code Choices$} position
-     * (FR-029a): the chain climbs to the root as for any sub-ability, and the
+     * (024 FR-029a): the chain climbs to the root as for any sub-ability, and the
      * option is read off the clause before the climb, because the root knows
      * nothing of which clone is resolving. A mode {@link CharmModes} cannot
      * place keeps the root key.

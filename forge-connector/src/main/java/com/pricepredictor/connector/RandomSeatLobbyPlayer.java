@@ -7,7 +7,7 @@ import forge.game.player.Player;
 import java.util.Random;
 
 /**
- * The lobby seat that installs a {@link RandomSeatController} (FR-024).
+ * The lobby seat that installs a {@link RandomSeatController} (024 FR-024).
  *
  * <p>{@code LobbyPlayerAi.createControllerFor} is private, but
  * {@code createIngamePlayer} is public and not final and
@@ -31,7 +31,7 @@ public final class RandomSeatLobbyPlayer extends LobbyPlayerAi {
 
     /**
      * @param probability {@code P}, the chance of a random draw at each
-     *                    decision point (FR-022)
+     *                    decision point (024 FR-022)
      * @param seeds       the match's seeded source; each game's controller
      *                    draws its own seed from it, so the games of one
      *                    match do not repeat one another's draws

@@ -18,13 +18,16 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Stage-one collection: the public event bus plus a bracket around resolution.
+ * The collection every worker runs: the public event bus plus a bracket around
+ * resolution.
  *
- * <p>No patched Forge. Events arriving on the bus are attributed to whatever the
- * stack says is resolving — correct for the common case of one thing resolving
- * at a time, and approximate where two resolve together. Every record it writes
- * is stamped {@code degraded} so a corpus never claims more precision than it
- * has.
+ * <p>Events arriving on the bus are attributed to whatever the stack says is
+ * resolving — correct for the common case of one thing resolving at a time,
+ * and approximate where two resolve together. A worker without the patched
+ * Forge ({@link AttributionMode#DEGRADED}) stamps every record it writes
+ * {@code degraded} so a corpus never claims more precision than it has; with
+ * the patch, the attribution hooks name the clause behind each event and the
+ * records say {@code patched}.
  *
  * <p>The brackets are delimited by the bus itself: a cast opens one, a
  * resolution closes it. There is one per stack item ({@link StackBrackets}), so
@@ -265,8 +268,8 @@ public final class BusBracketCollector extends BusEventReader {
      * <p>A modal item that fizzled as a whole resolves none of its clauses,
      * so no mode's first clause will cut its halves: each chosen mode's half
      * opens and closes here, on the board read now, and stays empty
-     * (FR-029c). A degraded worker, never told this moment, keeps its one
-     * root half (FR-029e).
+     * (024 FR-029c). A degraded worker, never told this moment, keeps its one
+     * root half (024 FR-029e).
      *
      * @param fizzled whether Forge found no legal target left, in which case
      *                none of the item's clauses will run
@@ -829,11 +832,11 @@ public final class BusBracketCollector extends BusEventReader {
 
     /**
      * A chosen mode's first clause is resolving: close the previous mode's
-     * half and open this one's, with a snapshot taken now (FR-029a, FR-029b).
+     * half and open this one's, with a snapshot taken now (024 FR-029a, FR-029b).
      *
      * <p>Called by the clause hook, which is to say only on a patched worker:
      * a degraded one never reaches here and writes the one root half it
-     * always wrote, with every mode's events in it (FR-029e). The clause's
+     * always wrote, with every mode's events in it (024 FR-029e). The clause's
      * host is checked against the open bracket's because the hook is a JVM
      * static that sees every resolution in the process: a mode of some other
      * charm — a copy resolving on a fork — must not cut this one. Nor does a
@@ -841,8 +844,8 @@ public final class BusBracketCollector extends BusEventReader {
      * ability's or a special action's, which {@code MagicStack.add} resolves
      * in place.
      *
-     * <p>Events filed before the first mode's clause, between the cast and
-     * the resolution, fall into the first mode's half rather than vanishing:
+     * <p>Events filed before the first mode's clause begins fall into the
+     * first mode's half rather than vanishing:
      * the bracket's buffer is not cleared when the first mode opens.
      *
      * @param option the mode's {@code Choices$} position, or null for a mode

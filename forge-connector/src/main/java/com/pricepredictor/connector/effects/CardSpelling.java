@@ -92,7 +92,7 @@ final class CardSpelling {
     }
 
     /**
-     * The token's script stem — what FR-078 means by a token-script id — or
+     * The token's script stem — what 023 FR-078 means by a token-script id — or
      * the printed name when no script can be named (an engine-built token with
      * no image key), so a token is never reported as a non-token.
      */

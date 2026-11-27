@@ -18,8 +18,8 @@ import java.util.Map;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
- * Acts as a router: each face goes to a {@link FaceParser}, which delegates to
- * the variant Ability implementations in the ability sub-package.
+ * Each face goes to a {@link FaceParser}, which delegates to the variant
+ * Ability implementations in the ability sub-package.
  */
 public class RulesParser {
 

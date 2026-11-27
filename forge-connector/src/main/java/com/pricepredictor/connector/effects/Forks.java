@@ -45,13 +45,12 @@ final class Forks {
     }
 
     /**
-     * Marks this thread as running one of the two forks -- an
-     * {@link InterventionFork#intervene interventional resolution} or a
-     * {@link DamageStepProbe#probe damage-step probe} -- for {@code
-     * LiveGame.ownsNullAbilityOutcome()}.
+     * Marks this thread as running a fork (an intervention, a damage-step
+     * probe, a protection fork or a directed fork, {@link ForkKind}) for
+     * {@code LiveGame.ownsNullAbilityOutcome()}.
      *
-     * <p>It covers both methods' <em>entire</em> bodies, not just the forced
-     * resolution or {@code probe}'s {@code Combat.dealAssignedDamage}: the
+     * <p>It covers the fork's <em>entire</em> span, not just the forced
+     * resolution or {@code Combat.dealAssignedDamage}: the
      * resolving-clause pointer is null for every segment of a fork outside
      * {@code AbilityUtils.resolve} -- the copy, the score check and
      * {@link #mappedAbility}, {@code InterventionFork.forceResolution}'s mode,
@@ -63,13 +62,13 @@ final class Forks {
      * it first, with the pointer behind it as a second, independent signal.
      *
      * <p>Saved and restored rather than set and cleared, as {@code
-     * AbilityUtils}' {@code EFFECT_RECORD_SUB_ABILITY} is: correct without
-     * relying on the two methods never nesting.
+     * AbilityUtils}' {@code RESOLVING_CLAUSE} is: correct without
+     * relying on forks never nesting.
      */
     private static final ThreadLocal<Boolean> FORK_RUNNING =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
 
-    /** Whether an intervention or a probe is running on this thread. */
+    /** Whether a fork is running on this thread. */
     static boolean isForkRunningOnThisThread() {
         return FORK_RUNNING.get();
     }
@@ -432,7 +431,7 @@ final class Forks {
             Game[] forked = {null};
             try {
                 // The whole span is the fork, not just its run: see FORK_RUNNING
-                // for what a narrower scope left uncovered.
+                // for the segments a narrower scope would leave uncovered.
                 return asFork(() -> isolated(SeedStreams.nextForkStream(live), () -> {
                     spend.run();
                     Optional<VerifiedFork> verified = copyAndVerify(kind, live, perspective);
