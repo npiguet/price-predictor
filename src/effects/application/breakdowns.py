@@ -35,7 +35,8 @@ class RecordResult:
 
     ``game_id`` is what a text the rarity table never counted is bucketed by.
     ``losses`` holds :data:`TOTAL` and every field the record supervised; an
-    unsupervised field is absent rather than zero. ``keywords`` is every
+    unsupervised field is absent rather than zero, and a record that supervised
+    nothing holds no :data:`TOTAL` either. ``keywords`` is every
     keyword on the acting line or the board, in the gate's spelling
     (``first_strike``).
     """

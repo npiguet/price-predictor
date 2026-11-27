@@ -64,7 +64,9 @@ def _record_losses(row: int, chunk: _ChunkOutputs) -> dict[str, float]:
     so the breakdowns cannot drift from what training minimized. A field with
     no supervised entity is left out rather than reported as zero, the gate
     included: a record that scores no gate entity (a playability record) has no
-    ``gate`` key."""
+    ``gate`` key. A record that supervises no term at all has no ``total``
+    either, so a breakdown's total mean and count read only records that train
+    something."""
     rows = slice(row, row + 1)
     alone = chunk.targets.select(rows)
     _total, parts = per_entity_loss(
@@ -76,7 +78,8 @@ def _record_losses(row: int, chunk: _ChunkOutputs) -> dict[str, float]:
     losses = parts.as_dict()
     if not bool(alone.gate_scored.any()):
         del losses[GATE_TERM]
-    losses[TOTAL] = sum(losses.values())
+    if losses:
+        losses[TOTAL] = sum(losses.values())
     return losses
 
 

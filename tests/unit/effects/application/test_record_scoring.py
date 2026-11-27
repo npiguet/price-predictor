@@ -70,8 +70,9 @@ class TestPerRecordLosses:
         assert set(losses) == {"gate", TOTAL}
 
     def test_a_record_that_trains_no_gate_has_no_gate_key(self):
-        """A playability record scores no gate: its result names none, so no
-        breakdown's gate mean counts a zero it never trained."""
+        """A playability record with no supervised field scores no gate: its
+        result names no term and no total, so no breakdown mean or count reads
+        a zero it never trained."""
         import torch
 
         from effects.application.breakdowns import TOTAL
@@ -95,7 +96,8 @@ class TestPerRecordLosses:
         trained = _record_losses(
             1, _ChunkOutputs(outputs, targets, PER_ENTITY_FIELDS, dispersion),
         )
-        assert "gate" not in playability and playability[TOTAL] == 0.0
+        assert playability == {}
+        assert TOTAL not in playability
         assert "gate" in trained
 
     def test_every_term_equals_the_masked_sum_over_that_record(self):

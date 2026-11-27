@@ -85,6 +85,22 @@ class TestPerText:
         assert bd.field_means(rows).means["zone_outcome"] == pytest.approx(2.0)
         assert bd.field_means(rows).counts["zone_outcome"] == 1
 
+    def test_a_record_that_supervises_nothing_moves_no_mean_or_count(self):
+        """Such a record carries no losses at all (``record_scoring``), so the
+        group's total mean and record count read the records that train."""
+        trained = [_row(total=3.0), _row(text="u", total=5.0)]
+        silent = [RecordResult(game_id="g1", text="t", losses={}) for _ in range(4)]
+        for group in (bd.overall(trained), bd.overall([*trained, *silent])):
+            assert group.per_record.means[bd.TOTAL] == pytest.approx(4.0)
+            assert group.per_record.records == 2
+            assert group.per_text.means[bd.TOTAL] == pytest.approx(4.0)
+            assert group.per_text.records == 2
+
+    def test_a_group_of_records_that_supervise_nothing_has_no_total(self):
+        group = bd.overall([RecordResult(game_id="g1", text="t", losses={})])
+        assert bd.TOTAL not in group.per_record.means
+        assert group.per_record.records == 0
+
     def test_records_with_no_text_are_left_out_of_the_per_text_mean(self):
         rows = [_row(text=None, total=9.0), _row(text="x", total=1.0)]
         assert bd.overall(rows).per_text.means[bd.TOTAL] == pytest.approx(1.0)
