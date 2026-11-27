@@ -38,6 +38,7 @@ from tests.unit.effects.application.gate_two_support import (
     _creature,
     _printed_board,
 )
+from tests.unit.effects.damage_step_boards import CreatureTraits
 
 # ── decoding one head into one number ────────────────────────────────────
 
@@ -191,7 +192,7 @@ class TestScoreObservation:
         """Infect's two halves are exclusive: an unblocked attacker poisons a
         player and damages no creature, so the creature fields have nothing to
         say and must not be counted as disagreements."""
-        attacker = _creature("A", 2, 2, combat=CombatStatus(attacking="P1"))
+        attacker = _creature("A", 2, 2, CreatureTraits(combat=CombatStatus(attacking="P1")))
         record = _combat_record(attacker)
         participant = _participant(record, "A")
         base = {"A": torch.zeros(PER_ENTITY_WIDTH), "P1": _player(poison=2.0, life=0.0)}
@@ -221,7 +222,7 @@ class TestScoreObservation:
 
     def test_a_row_with_no_applicable_effect_scores_nothing(self):
         """A 0-power carrier deals no damage, so lifelink moves nothing."""
-        attacker = _creature("A", 0, 4, combat=CombatStatus(attacking="P1"))
+        attacker = _creature("A", 0, 4, CreatureTraits(combat=CombatStatus(attacking="P1")))
         record = _combat_record(attacker)
         participant = _participant(record, "A")
         vectors = {"P0": torch.zeros(PER_ENTITY_WIDTH)}
@@ -250,12 +251,14 @@ def _overlay_keywords(entity) -> set[str]:
 
 def _blocked_pair(*, keywords: tuple[str, ...] = ()):
     attacker = _creature(
-        "A", 2, 2, keywords=keywords,
-        combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                            became_blocked=True),
+        "A", 2, 2, CreatureTraits(
+            keywords=keywords,
+            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
+                                became_blocked=True),
+        ),
     )
     blocker = _creature(
-        "B0", 2, 5, controller="P1", combat=CombatStatus(blocking=("A",)),
+        "B0", 2, 5, CreatureTraits(controller="P1", combat=CombatStatus(blocking=("A",))),
     )
     return attacker, blocker
 

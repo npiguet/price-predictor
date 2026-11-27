@@ -40,6 +40,7 @@ from tests.unit.effects.application.gate_two_support import (
     _NoEncoder,
     _printed_board,
 )
+from tests.unit.effects.damage_step_boards import CreatureTraits
 
 # ── the whole scorer, against a model that reacts to the strip ───────────
 
@@ -195,14 +196,18 @@ def _two_first_strikers() -> EffectRecord:
     creatures = []
     for index in range(2):
         creatures.append(_creature(
-            f"A{index}", 2, 2, printed=(_FIRST_STRIKE,),
-            combat=CombatStatus(
-                attacking="P1", blocked_by=(f"B{index}",), became_blocked=True,
+            f"A{index}", 2, 2, CreatureTraits(
+                printed=(_FIRST_STRIKE,),
+                combat=CombatStatus(
+                    attacking="P1", blocked_by=(f"B{index}",), became_blocked=True,
+                ),
             ),
         ))
         creatures.append(_creature(
-            f"B{index}", 2, 2, controller="P1", printed=(_OTHER,),
-            combat=CombatStatus(blocking=(f"A{index}",)),
+            f"B{index}", 2, 2, CreatureTraits(
+                controller="P1", printed=(_OTHER,),
+                combat=CombatStatus(blocking=(f"A{index}",)),
+            ),
         ))
     return _combat_record(*creatures, substep="first_strike")
 

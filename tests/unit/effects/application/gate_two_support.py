@@ -7,7 +7,6 @@ answers for, built through a real batcher whose ``e`` comes from a free table.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
 
 import torch
 
@@ -16,7 +15,6 @@ from effects.domain.baselines import BaselineMasks
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import CombatPayload, EffectRecord, RecordKind
 from effects.domain.state_snapshot import (
-    CardLine,
     CombatStatus,
     EntityState,
     PlayerState,
@@ -76,14 +74,12 @@ class _Sidecars:
         raise KeyError(f"{script_file}: no sidecar, so no charm options")
 
 
-def _active_statics(lines: tuple[CardLine, ...]) -> tuple[CardLine, ...]:
-    """``lines`` as gen-3 writes them: a static line carries ``active``."""
-    return tuple(replace(line, active=True) if line.kind == "static" else line
-                 for line in lines)
-
-
-def _creature(entity_id: str, power: int, toughness: int, **traits: Any) -> EntityState:
-    return creature(entity_id, power, toughness, CreatureTraits(active_statics=True, **traits))
+def _creature(
+    entity_id: str, power: int, toughness: int, traits: CreatureTraits = CreatureTraits(),
+) -> EntityState:
+    """A battlefield creature as ``traits`` describe it, its static lines marked
+    active as gen-3 writes them."""
+    return creature(entity_id, power, toughness, replace(traits, active_statics=True))
 
 
 def _combat_record(
@@ -115,12 +111,15 @@ def _printed_board(
     row reads: the attacker's 2 damage lands on the 2/2 blocker and kills it.
     """
     attacker = _creature(
-        "A", 2, 2, printed=(_FIRST_STRIKE, _PUMP),
-        combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+        "A", 2, 2, CreatureTraits(
+            printed=(_FIRST_STRIKE, _PUMP),
+            combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+        ),
     )
     blocker = _creature(
-        "B0", 2, 2, controller="P1", printed=(_OTHER,),
-        combat=CombatStatus(blocking=("A",)),
+        "B0", 2, 2, CreatureTraits(
+            controller="P1", printed=(_OTHER,), combat=CombatStatus(blocking=("A",)),
+        ),
     )
     return _combat_record(attacker, blocker, game=game, substep=substep)
 

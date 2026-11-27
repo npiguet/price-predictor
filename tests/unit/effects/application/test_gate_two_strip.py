@@ -32,18 +32,22 @@ from tests.unit.effects.application.gate_two_support import (
     _printed_board,
 )
 from tests.unit.effects.batch_builders import slots_of_kind
+from tests.unit.effects.damage_step_boards import CreatureTraits
 from tests.unit.effects.record_builders import make_entity, make_record
 
 
 def _overlay_board(game: str = "g1") -> EffectRecord:
     """The attacker was granted first strike until end of turn."""
     attacker = _creature(
-        "A", 2, 2, keywords=("first_strike",),
-        combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+        "A", 2, 2, CreatureTraits(
+            keywords=("first_strike",),
+            combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+        ),
     )
     blocker = _creature(
-        "B0", 2, 2, controller="P1", printed=(_OTHER,),
-        combat=CombatStatus(blocking=("A",)),
+        "B0", 2, 2, CreatureTraits(
+            controller="P1", printed=(_OTHER,), combat=CombatStatus(blocking=("A",)),
+        ),
     )
     return _combat_record(attacker, blocker, game=game, substep="first_strike")
 
@@ -53,29 +57,30 @@ def _rows(batcher: SurfaceBatcher, records) -> dict[str, int]:
     return {text: row for row, text in enumerate(sorted(texts))}
 
 
+def _strip_pair(record: EffectRecord, keyword: str):
+    """``record``'s surface as built and with ``A`` stripped of ``keyword``,
+    one batcher building both, and that batcher's rows."""
+    batcher = _batcher()
+    rows = _rows(batcher, [record])
+    base = batcher.surface_builder(rows).build(record)
+    stripped = batcher.surface_builder(rows).build(record, {"A": frozenset({keyword})})
+    return base, stripped, rows
+
+
 # ── the perturbation ─────────────────────────────────────────────────────
 
 
 class TestStrippingTheAbilityChannel:
     def test_the_keywords_own_ability_slot_is_dropped(self):
         record = _printed_board()
-        batcher = _batcher()
-        rows = _rows(batcher, [record])
-        base = batcher.surface_builder(rows).build(record)
-        stripped = batcher.surface_builder(rows).build(
-            record, {"A": frozenset({"first_strike"})},
-        )
+        base, stripped, _ = _strip_pair(record, "first_strike")
         assert _ability_count(base, "A") == 2
         assert _ability_count(stripped, "A") == 1
 
     def test_the_entitys_other_lines_survive(self):
         """Only the keyword line goes; the activated ability is untouched."""
         record = _printed_board()
-        batcher = _batcher()
-        rows = _rows(batcher, [record])
-        stripped = batcher.surface_builder(rows).build(
-            record, {"A": frozenset({"first_strike"})},
-        )
+        _, stripped, rows = _strip_pair(record, "first_strike")
         kept = [
             slot.e_row for slot in slots_of_kind(stripped, SlotKind.ABILITY)
             if slot.entity_id == "A"
@@ -84,31 +89,18 @@ class TestStrippingTheAbilityChannel:
 
     def test_another_entitys_lines_are_intact(self):
         record = _printed_board()
-        batcher = _batcher()
-        rows = _rows(batcher, [record])
-        stripped = batcher.surface_builder(rows).build(
-            record, {"A": frozenset({"first_strike"})},
-        )
+        _, stripped, _ = _strip_pair(record, "first_strike")
         assert _ability_count(stripped, "B0") == 1
 
     def test_stripping_a_keyword_the_entity_does_not_carry_changes_nothing(self):
         record = _printed_board()
-        batcher = _batcher()
-        rows = _rows(batcher, [record])
-        base = batcher.surface_builder(rows).build(record)
-        stripped = batcher.surface_builder(rows).build(
-            record, {"A": frozenset({"lifelink"})},
-        )
+        base, stripped, _ = _strip_pair(record, "lifelink")
         assert base.slots == stripped.slots
 
     def test_the_slot_is_dropped_rather_than_zeroed(self):
         """A zero token would still say "this creature has an ability here"."""
         record = _printed_board()
-        batcher = _batcher()
-        rows = _rows(batcher, [record])
-        stripped = batcher.surface_builder(rows).build(
-            record, {"A": frozenset({"first_strike"})},
-        )
+        _, stripped, _ = _strip_pair(record, "first_strike")
         assert all(
             slot.e_vector != (0.0,) * 4
             for slot in slots_of_kind(stripped, SlotKind.ABILITY)
@@ -124,12 +116,7 @@ class TestStrippingTheOverlayChannel:
 
     def test_the_granted_keyword_bit_is_cleared(self):
         record = _overlay_board()
-        batcher = _batcher()
-        rows = _rows(batcher, [record])
-        base = batcher.surface_builder(rows).build(record)
-        stripped = batcher.surface_builder(rows).build(
-            record, {"A": frozenset({"first_strike"})},
-        )
+        base, stripped, _ = _strip_pair(record, "first_strike")
         assert self._overlay_bit(base, "A") == 1.0
         assert self._overlay_bit(stripped, "A") == 0.0
 
@@ -139,8 +126,10 @@ def _gen3_board() -> EffectRecord:
     Equipment's static, with its keyword list and flag; the pump line beside
     them. The blocker prints nothing relevant."""
     attacker = replace(_creature(
-        "A", 2, 2, keywords=("first_strike",),
-        combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+        "A", 2, 2, CreatureTraits(
+            keywords=("first_strike",),
+            combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+        ),
     ), lines=(
         CardLine(keys=(_FIRST_STRIKE,), kind="keyword", granted=False,
                  fragment="First Strike"),
@@ -149,7 +138,7 @@ def _gen3_board() -> EffectRecord:
                  fragment="First Strike"),
     ))
     blocker = replace(_creature(
-        "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
+        "B0", 2, 2, CreatureTraits(controller="P1", combat=CombatStatus(blocking=("A",))),
     ), lines=(CardLine(keys=(_OTHER,), kind="keyword", granted=False, fragment="Trample"),))
     return _combat_record(attacker, blocker, substep="first_strike")
 
