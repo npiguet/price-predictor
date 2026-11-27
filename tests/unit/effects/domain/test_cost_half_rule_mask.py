@@ -91,7 +91,7 @@ def _added_copy(record, tag):
 class TestACostHalfsTagNamesWhoPaid:
     def test_the_paid_entities_are_those_its_targets_train_at(self):
         halves = _cost_halves()
-        assert len(halves) == 46 + 7
+        assert len(halves) == 46 + 9
         for record in halves:
             assert set(paid_entities(record)) >= set(_scored(record)), record.record_id
 
