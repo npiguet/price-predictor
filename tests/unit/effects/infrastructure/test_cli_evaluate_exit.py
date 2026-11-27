@@ -100,7 +100,8 @@ def _stub_everything_but_the_geometry(monkeypatch) -> None:
         "run_gate_three": lambda cached, root: gate(CheckName.GATE_3, CheckStatus.PASS),
         "_gate_one": lambda context, variants: gate(CheckName.GATE_1, CheckStatus.PASS),
         "run_gate_two": lambda context: SimpleNamespace(
-            verdicts=[], check=gate(CheckName.GATE_2, CheckStatus.REPORTED)),
+            verdicts=[], check=gate(CheckName.GATE_2, CheckStatus.REPORTED),
+            probe_diff=[gate(CheckName.PROBE_DIFF, CheckStatus.REPORTED)]),
         "run_breakdowns": lambda context: [],
         "run_reporting_half": lambda context: [],
         "check_ward": lambda cached: gate(CheckName.WARD_CANARY, CheckStatus.REPORTED),
@@ -131,6 +132,8 @@ def test_a_umap_check_that_raises_leaves_the_gate_lines_printed_and_exits_zero(
     for gate in ("gate-1", "gate-2", "gate-3"):
         assert any(line.startswith("[") and f"] {gate}:" in line for line in lines)
     assert "[skip] umap: RuntimeError: numba could not compile" in lines
+    gate_two = next(index for index, line in enumerate(lines) if "] gate-2:" in line)
+    assert lines[gate_two + 1] == "[----] probe-diff: detail"
     assert lines[-1] == "SHIPS"
     assert sum("] gate-3:" in line for line in lines) == 1
 

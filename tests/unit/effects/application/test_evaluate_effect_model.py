@@ -7,7 +7,7 @@ from effects.domain.evaluation_report import CheckName, CheckStatus, EvaluationR
 
 
 class TestUnimplementedChecks:
-    """FR-116 names three checks that were never built.
+    """FR-116 named three checks that were never built; two still are.
 
     The corpus holds forks and mana records, so a line blaming missing records
     would send an operator looking for data that is already there.
@@ -15,8 +15,7 @@ class TestUnimplementedChecks:
 
     def test_each_reports_not_implemented_and_blocks_nothing(self):
         for name in (
-            CheckName.MATCHED_REAL_VS_FORK, CheckName.PROBE_DIFF,
-            CheckName.ROLE_POLARITY,
+            CheckName.MATCHED_REAL_VS_FORK, CheckName.ROLE_POLARITY,
         ):
             result = not_implemented(name)
             assert result.status is CheckStatus.NOT_IMPLEMENTED
@@ -25,8 +24,8 @@ class TestUnimplementedChecks:
 
     def test_the_report_marks_them_apart_from_a_skip(self):
         report = EvaluationReport()
-        report.add(not_implemented(CheckName.PROBE_DIFF))
-        assert report.render().startswith("[todo] probe-diff: not implemented")
+        report.add(not_implemented(CheckName.ROLE_POLARITY))
+        assert report.render().startswith("[todo] role-polarity: not implemented")
 
 
 # ── the reporting half ───────────────────────────────────────────
@@ -155,7 +154,7 @@ def test_every_unbuilt_reported_check_of_the_base_spec_is_a_todo_line():
 
     assert {check.status for check in checks} == {CheckStatus.NOT_IMPLEMENTED}
     assert {check.name for check in checks} == {
-        "matched-real-vs-fork", "probe-diff", "role-polarity",
+        "matched-real-vs-fork", "role-polarity",
         "scaling-calibration", "identity-game-disjoint", "state-only-floor",
         "taxonomy-comparison held-out-prediction",
         "taxonomy-comparison decodability",
@@ -170,7 +169,7 @@ def test_a_check_the_code_builds_is_not_listed_as_unbuilt():
     from effects.application.unbuilt_checks import NOT_IMPLEMENTED_CHECKS
 
     for built in ("ward-canary", "nearest-neighbour", "umap", "decodability",
-                  "zero-shot-keyword", "comparison"):
+                  "zero-shot-keyword", "comparison", "probe-diff"):
         assert built not in NOT_IMPLEMENTED_CHECKS
 
 
@@ -193,6 +192,6 @@ def test_a_reported_check_that_raises_becomes_a_skip_naming_it_and_the_exception
 def test_a_reported_check_that_returns_is_passed_through_as_a_list():
     from effects.application.evaluate_effect_model import attempt
 
-    one = not_implemented(CheckName.PROBE_DIFF)
+    one = not_implemented(CheckName.ROLE_POLARITY)
     assert attempt("a", lambda: one) == [one]
     assert attempt("a", lambda: [one, one]) == [one, one]

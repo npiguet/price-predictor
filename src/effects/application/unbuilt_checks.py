@@ -18,10 +18,6 @@ NOT_IMPLEMENTED_CHECKS: dict[str, str] = {
         "it would compare each fork's observed outcome with the real record "
         "it mirrors"
     ),
-    CheckName.PROBE_DIFF: (
-        "it would re-run gate 2's canary over real and probe-fork combat "
-        "pairs joined by mirror_of, for probed keywords only"
-    ),
     CheckName.ROLE_POLARITY: (
         "it would compare the predicted mana-pool sign for {R} in cost "
         "position against effect position"

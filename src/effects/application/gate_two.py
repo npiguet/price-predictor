@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import torch
 
 from effects.application.gate_two_moves import MoveTally, PredictedMove
+from effects.application.probe_diff import ProbeJoin
 from effects.application.record_forward import BATCH_RECORDS
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
@@ -230,22 +231,26 @@ def _agrees(effect: KeywordEffect, change: float) -> bool:
 
 def score_keywords(
     records, rows: tuple[DamageStepKeyword, ...], runnable: Runnable,
+    probes: ProbeJoin | None = None,
 ) -> dict[str, KeywordScore]:
     """Run every qualifying perturbation and tally the eight rows.
 
     ``records`` is consumed as a stream; only a chunk's worth is ever held.
     Every read is taken inside the forward's ``running()``, so the modules
     stay in evaluation mode, with no gradient and the scorers' autocast,
-    until the last one.
+    until the last one. ``probes``, when given, is handed every probe fork
+    and every scored observation, for the probe diff.
     """
     resolver = runnable.keyword_resolver()
     tally = _Tally(
         {row.keyword: KeywordScore() for row in rows},
         active=frozenset(spec.name for spec in runnable.fields),
+        probes=probes if probes is not None else ProbeJoin(),
     )
     progress = _Progress()
     forward = runnable.forward()
-    observations = _qualifying(records, rows, resolver, progress)
+    observations = _qualifying(
+        _handing_forks(distinct_records(records), tally.probes), rows, resolver, progress)
     with forward.running():
         for chunk in batched(observations, BATCH_OBSERVATIONS):
             chunk = list(chunk)
@@ -269,18 +274,29 @@ class _Progress:
         )
 
 
+def _handing_forks(
+    records: Iterable[EffectRecord], probes: ProbeJoin,
+) -> Iterator[EffectRecord]:
+    """``records`` unchanged, each probe fork also handed to ``probes`` as it
+    passes."""
+    for record in records:
+        if record.is_probe:
+            probes.fork(record)
+        yield record
+
+
 def _qualifying(
     records, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
     progress: _Progress,
 ) -> Iterator[Observation]:
-    """Every qualifying observation, read lazily.
+    """Every qualifying observation, read lazily from distinct ``records``.
 
     A fork never qualifies: it re-runs a real board the population already
     holds, so it would count that combat twice toward the threshold. Nor does
-    a record's repeated row: a curated stratum repeats one for every added
-    copy, and each record is observed once (FR-068a).
+    a record's repeated row, which the caller drops: a curated stratum repeats
+    one for every added copy, and each record is observed once (FR-068a).
     """
-    for record in distinct_records(records):
+    for record in records:
         progress.read += 1
         if progress.read % PROGRESS_EVERY_RECORDS == 0:
             progress.log()
@@ -319,6 +335,7 @@ class _Tally:
 
     scores: dict[str, KeywordScore]
     active: frozenset[str]
+    probes: ProbeJoin = field(default_factory=ProbeJoin)
 
     def fold(self, chunk: list[Observation], paired: RecordChunk) -> None:
         """Score one paired chunk and fold it into :attr:`scores`.
@@ -344,6 +361,7 @@ class _Tally:
             score = self.scores[row.keyword]
             score.add(record.record_id, *agreement(moves))
             score.moves.fold(record, participant, moves)
+            self.probes.observe(record, row, participant, moves)
 
 
 def _subject_vectors(
@@ -453,10 +471,12 @@ def gate_two_records(provenance, *, shards: Sequence[Path]) -> Iterator:
 
 
 class GateTwoOutcome(NamedTuple):
-    """Gate 2's report line and the per-keyword verdicts it summarizes."""
+    """Gate 2's report line, the per-keyword verdicts it summarizes, and the
+    probe diff's lines, read in the same pass."""
 
     check: CheckResult
     verdicts: list[KeywordVerdict]
+    probe_diff: list[CheckResult]
 
 
 def run_gate_two(
@@ -464,31 +484,35 @@ def run_gate_two(
     rows: tuple[DamageStepKeyword, ...] = DAMAGE_STEP_KEYWORDS,
 ) -> GateTwoOutcome:
     """Score the checkpoint's game-disjoint combats, route each keyword, and
-    report the routing (FR-119 – FR-122)."""
+    report the routing (FR-119 – FR-122), with the probe diff the same pass
+    joins (FR-116)."""
     logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
+    probes = ProbeJoin()
     verdicts = keyword_verdicts(
         gate_two_records(
             context.main.provenance, shards=context.shards[str(Stratum.GAME_DISJOINT)]),
-        context.main_runnable, rows,
+        context.main_runnable, rows, probes,
     )
-    return GateTwoOutcome(evaluate_gate_two(verdicts), verdicts)
+    return GateTwoOutcome(evaluate_gate_two(verdicts), verdicts, probes.checks(rows))
 
 
 def keyword_verdicts(
     records: Iterable,
     load: Callable[[list], Runnable],
     rows: tuple[DamageStepKeyword, ...] = DAMAGE_STEP_KEYWORDS,
+    probes: ProbeJoin | None = None,
 ) -> list[KeywordVerdict]:
     """Score the eight keywords over ``records`` and route each one.
 
     ``load`` turns a few records into the checkpoint ready to run, its batcher
     measured from them. Nothing is loaded when there is no combat record:
-    every keyword is then under-sampled at n=0.
+    every keyword is then under-sampled at n=0. ``probes`` is handed on to
+    :func:`score_keywords`.
     """
     records = iter(records)
     head = list(islice(records, SLOT_WIDTH_SAMPLE))
     if not head:
         scores = {row.keyword: KeywordScore() for row in rows}
     else:
-        scores = score_keywords(chain(head, records), rows, load(head))
+        scores = score_keywords(chain(head, records), rows, load(head), probes)
     return [evaluate_keyword(row, scores[row.keyword]) for row in rows]

@@ -86,8 +86,14 @@ class MoveTally:
         for move in moves:
             right = right_move(move.effect, participant, move.subject, events)
             by_label.setdefault(move.effect.label, []).append((move.predicted, right))
+        self.add(record.game_id, by_label)
+
+    def add(self, game: str, by_label: dict[str, list[tuple[float, float]]]) -> None:
+        """Fold in one combat of ``game``: each effect label's ``(m, t)`` at
+        every subject it is read at, ``t`` whatever right move the caller sets
+        beside the prediction."""
         for label, pairs in by_label.items():
-            self.per_effect.setdefault(label, EffectMoveTally()).fold(record.game_id, pairs)
+            self.per_effect.setdefault(label, EffectMoveTally()).fold(game, pairs)
 
     def summary(self, row: DamageStepKeyword) -> KeywordMoves:
         """The keyword's report, its effects in the row's order."""

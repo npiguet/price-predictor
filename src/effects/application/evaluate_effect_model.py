@@ -137,6 +137,7 @@ def run(
     gate_two = run_gate_two(context)
     report.keyword_verdicts = gate_two.verdicts
     report.add(gate_two.check)
+    report.extend(gate_two.probe_diff)
 
     logger.info("breakdowns: scoring both validation strata")
     report.extend(attempt(CheckName.BREAKDOWNS, lambda: run_breakdowns(context)))

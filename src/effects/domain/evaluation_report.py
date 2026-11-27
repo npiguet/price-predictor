@@ -108,8 +108,9 @@ class EffectMoves:
     zero_size: int = 0
     zero_size_move: float = float("nan")
 
-    def render(self) -> str:
-        """``label 0.35 ± 0.03 (q 0.18/0.39/0.66) over 812, t=0: 14 (mean |m| 0.60)``."""
+    def render(self, size: str = "t") -> str:
+        """``label 0.35 ± 0.03 (q 0.18/0.39/0.66) over 812, t=0: 14 (mean |m| 0.60)``;
+        ``size`` names the move the share is taken over."""
         if self.combats:
             q1, q2, q3 = self.quartiles
             text = (f"{self.label} {self.mean_share:.2f} ± {self.standard_error:.2f} "
@@ -118,7 +119,7 @@ class EffectMoves:
             text = f"{self.label} no share"
         if not self.zero_size:
             return text
-        return f"{text}, t=0: {self.zero_size} (mean |m| {self.zero_size_move:.2f})"
+        return f"{text}, {size}=0: {self.zero_size} (mean |m| {self.zero_size_move:.2f})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,9 +139,14 @@ class KeywordMoves:
     def render(self) -> str:
         """The report's second line for the keyword, holding no ``n=``: the
         report scripts read gate 2's lines by it."""
+        return f"moves: {self.figures()}"
+
+    def figures(self, size: str = "t") -> str:
+        """``share 0.43; <each effect>``, ``size`` naming the move each share
+        is taken over."""
         share = self.share
         head = "share none" if share is None else f"share {share:.2f}"
-        return "; ".join([f"moves: {head}", *(effect.render() for effect in self.effects)])
+        return "; ".join([head, *(effect.render(size) for effect in self.effects)])
 
 
 @dataclass(frozen=True, slots=True)
