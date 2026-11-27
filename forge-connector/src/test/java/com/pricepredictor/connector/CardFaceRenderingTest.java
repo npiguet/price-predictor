@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.pricepredictor.connector.AbilityRendering.lineOf;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** How a card face, a multi-face card and an ability line render as converted text. */
@@ -58,24 +59,25 @@ class CardFaceRenderingTest {
 
     @Test
     void actionNumbersFormattedCorrectly() {
-        Ability activated = new TextAbility(AbilityType.ACTIVATED, "{T}: add {G}.");
-        assertEquals("activated[1]: {T}: add {G}.", activated.formatLine(1));
+        CardFace card = new CardFace(
+                "test card", "{G}", "creature", "1/1", null, null, null,
+                List.of(new TextAbility(AbilityType.ACTIVATED, "{T}: add {G}."),
+                        new TextAbility(AbilityType.ACTIVATED, "kicker {2}")));
+        List<String> lines = card.renderLines(0).stream().map(RenderedLine::text).toList();
 
-        Ability keywordActive = new TextAbility(AbilityType.ACTIVATED, "kicker {2}");
-        assertEquals("activated[2]: kicker {2}", keywordActive.formatLine(2));
+        assertTrue(lines.contains("activated[1]: {T}: add {G}."), lines.toString());
+        assertTrue(lines.contains("activated[2]: kicker {2}"), lines.toString());
     }
 
-    /** Handed an action number all the same, a non-actionable type still prints none. */
+    /** A non-actionable type still prints no action number, whatever the counter has reached. */
     @Test
     void nonActionableTypesHaveNoBrackets() {
-        Ability staticAbility = new TextAbility(AbilityType.STATIC, "flying");
-        assertEquals("static: flying", staticAbility.formatLine(1));
-
-        Ability triggered = new TextAbility(AbilityType.TRIGGERED, "when this enters, gain 3 life.");
-        assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine(1));
-
-        Ability staticLine = new TextAbility(AbilityType.STATIC, "creatures you control get +1/+1.");
-        assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine(2));
+        assertEquals("static: flying",
+                lineOf(new TextAbility(AbilityType.STATIC, "flying")));
+        assertEquals("triggered: when this enters, gain 3 life.",
+                lineOf(new TextAbility(AbilityType.TRIGGERED, "when this enters, gain 3 life.")));
+        assertEquals("static: creatures you control get +1/+1.",
+                lineOf(new TextAbility(AbilityType.STATIC, "creatures you control get +1/+1.")));
     }
 
     @Test

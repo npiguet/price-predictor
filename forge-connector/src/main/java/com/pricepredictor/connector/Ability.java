@@ -21,10 +21,6 @@ public interface Ability {
      */
     default int costLength() { return 0; }
 
-    default String formatLine(Integer actionNumber) {
-        return linePrefix(actionNumber) + descriptionText();
-    }
-
     /** The {@code kind[n]: } a line of this ability opens with, separator included. */
     default String linePrefix(Integer actionNumber) {
         String prefix = type().getOutputPrefix();

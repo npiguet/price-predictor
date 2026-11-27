@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.pricepredictor.connector.AbilityRendering.lineOf;
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(ForgeExtension.class)
@@ -44,18 +45,6 @@ class RulesParserTest {
     /** The converted text of one face, as BatchConverter writes it. */
     private static String rendered(CardFace face) {
         return RenderedLine.join(face.renderLines(0));
-    }
-
-    /**
-     * The first line the converter writes for one ability, rendered the way a
-     * face renders it: through {@link Ability#appendBlock}, which numbers an
-     * actionable ability from a fresh counter (so {@code spell[1]: }) and
-     * folds line breaks as {@code BatchConverter}'s file does.
-     */
-    private static String lineOf(Ability ability) {
-        List<RenderedLine> lines = new ArrayList<>();
-        ability.appendBlock(new ActionCounter(0), 0, lines);
-        return lines.get(0).text();
     }
 
     private CardFace face(String relativePath) {

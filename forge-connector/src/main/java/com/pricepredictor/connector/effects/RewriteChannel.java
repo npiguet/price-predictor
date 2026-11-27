@@ -330,52 +330,6 @@ final class RewriteChannel implements EventRouter.EventTap {
         return open.board();
     }
 
-    /**
-     * One replacement's record, built from the effect the hook hands over.
-     *
-     * <p>Package-private rather than inlined into the handler: what the record
-     * says about the acting line is the part worth testing, and a dynamic proxy
-     * over an interface that only exists on a patched checkout is not a thing a
-     * unit test can call.
-     *
-     * <p>The host is taken as delivered, deliberately not re-resolved through
-     * {@code game.getCardState(host)} the way {@code executeReplacementUnobserved}
-     * does: that answers an alternate-state card, and the entity id in
-     * {@code state.entities} is the one this object carries.
-     *
-     * <p><b>Every replacement writes a record, including the ones that declined.</b>
-     * A substitution leaves the map untouched and so looks exactly like a
-     * replacement that did nothing. The result argument is what tells those
-     * apart, so no rewrite record is uninformative: a {@code not_replaced} is
-     * this channel's negative, the same role a non-fired evaluation plays on
-     * the trigger channel, and it is what teaches when a replacement applies
-     * rather than only what it does when it has.
-     *
-     * @param result     Forge's {@code ReplacementResult}, or null where the
-     *                   replacement threw or the listener predates the argument
-     * @param replacedBy the {@code ReplaceWith$} ability that stood in for the
-     *                   event, or null where none ran
-     */
-    EffectRecord record(
-            Object trait, Object before, Object after, Object result,
-            Object replacedBy) {
-        return record(trait, before, after, result, replacedBy, null);
-    }
-
-    /**
-     * The same, on the board read before the replacement ran.
-     *
-     * @param state the board read at {@code onReplacing}, or null to read it now
-     */
-    EffectRecord record(
-            Object trait, Object before, Object after, Object result,
-            Object replacedBy, RecordState state) {
-        Rewrite rewrite = rewrite(
-                new Reported(trait, before, after, result, replacedBy, null), null);
-        return shell(trait, rewrite.incoming(), state)
-                .payload(RecordPayloads.rewritePayload(rewritten(rewrite), null));
-    }
-
     /** What the rewrite says of the replacement itself. */
     private static RecordPayloads.Rewritten rewritten(Rewrite rewrite) {
         return new RecordPayloads.Rewritten(
