@@ -1,9 +1,10 @@
 """The emittable-events table read against the connector's sources.
 
 Each source set of ``emittable_events`` is the event types its Java shapers
-name (``EventType.X``), so a shaper that starts or stops building a type fails
-here rather than leaving a declaration reading every record of a kind as the
-event's absence.
+build (``new EffectEvent(EventType.X)``, or a rule or row factory given the
+type), so a shaper that starts or stops building a type fails here rather than
+leaving a declaration reading every record of a kind as the event's absence.
+A type a shaper only compares (``event.type() == EventType.X``) is not built.
 """
 
 from __future__ import annotations
@@ -42,6 +43,21 @@ _API_RULE_FAMILIES = (
 )
 
 
+#: A type handed to what builds an event: the event's constructor, a rule or a
+#: run-parameter row, a type change, or ``Optional.of``, as the type itself or either
+#: arm of a ``flag ? EventType.A : EventType.B`` choosing it.
+_BUILT = re.compile(
+    r"(?:new\s+EffectEvent|Rule\s*\.\s*(?:one|each|shaped)|ModeRow\s*\.\s*of"
+    r"|new\s+SetChange|Optional\s*\.\s*of)"
+    r"\(\s*(?:[\w.]+(?:\(\))?\s*\?\s*)?EventType\.([A-Z_]+)\b"
+    r"(?:\s*:\s*EventType\.([A-Z_]+))?"
+)
+
+
+def _built_in(source: str) -> set[EventType]:
+    return {EventType[name] for match in _BUILT.finditer(source) for name in match.groups() if name}
+
+
 def _named(*files: str) -> set[EventType]:
     found: set[EventType] = set()
     for name in files:
@@ -49,7 +65,7 @@ def _named(*files: str) -> set[EventType]:
         if not path.exists():
             pytest.skip(f"no connector source at {path}")
         source = re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
-        found |= {EventType[m] for m in re.findall(r"EventType\.([A-Z_]+)\b", source)}
+        found |= _built_in(source)
     return found
 
 
@@ -60,6 +76,19 @@ def _outcome_hook_types() -> set[EventType]:
     source = path.read_text(encoding="utf-8")
     body = source.split("KNOWN_OUTCOME_TYPES = EnumSet.of(", 1)[1].split(");", 1)[0]
     return {EventType[m] for m in re.findall(r"EventType\.([A-Z_]+)", body)}
+
+
+def test_a_type_a_shaper_only_compares_is_not_one_it_builds():
+    source = """
+        if (event.type() == EventType.CARD_DRAWN) { }
+        return new EffectEvent(EventType.DAMAGE_DEALT).subject(x);
+        new EffectEvent(
+                event.tapped() ? EventType.TAPPED : EventType.UNTAPPED);
+        Rule.one(EventType.CHOICE_MADE, event -> event);
+    """
+    assert _built_in(source) == {
+        EventType.DAMAGE_DEALT, EventType.TAPPED, EventType.UNTAPPED, EventType.CHOICE_MADE,
+    }
 
 
 def test_the_bus_set_is_what_the_bus_shapers_build():
