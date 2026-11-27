@@ -7,8 +7,9 @@ respond: each record's share of training is fixed when the corpus is built. Gen-
 that draws more of the records a weak field needs, from the whole corpus, with the mechanism and the
 controller still to choose. It also takes up what gen-3 leaves to a later generation: the model sees
 both players' hidden information, no output says which library cards a player knows, three outcome
-fields learn only from the times they happened, an ability Forge builds anew on a copy reaches the
-model with no text, and keyword reminder text comes from a hand-written copy of Forge's formatting.
+fields learn only from the times they happened, checkpoint selection does not see how far a keyword
+moves a prediction, an ability Forge builds anew on a copy reaches the model with no text, and
+keyword reminder text comes from a hand-written copy of Forge's formatting.
 Nothing has run.
 
 ## Background
@@ -69,6 +70,20 @@ some occurrences of these three:
 A silent 0 on these fields would teach the model that the outcome did not happen in records where it
 did. The collector fix is planned for the end of gen-3's implementation, but the gen-3 records
 collected before it keep the gaps.
+
+### Checkpoint selection never sees how far a keyword moves a prediction
+
+**Gen-3 measures how far each damage-step keyword moves a prediction, and only reports it.** Gen-3's
+gate 2 reads each real combat of the game-disjoint games twice, once as it happened and once with
+one keyword removed from one creature, and counts how often the prediction moves the way the
+keyword's rule says. Beside that count, gen-3 reports the share of the right move the model
+makes. The right move comes from the record's own events: removing lifelink from a creature that
+dealt 2 damage should lower its controller's predicted life gain by 2. The share is a report line
+and changes no verdict.
+
+**The control score, which picks the checkpoint, does not read the share.** A checkpoint whose
+model moves the right way by a fraction of the right amount is chosen as readily as one that
+makes the whole move.
 
 ### An ability Forge builds anew on a copy reaches the model with no text
 
@@ -185,6 +200,16 @@ shuffle clears it.
 half in a corpus whose records all come from the collector that writes every occurrence of their
 events.** A corpus that still holds records from before that fix keeps the three fields without a
 silent value.
+
+### The control score reads the keywords' move shares
+
+**Gen-4's control score scores how much of the right move each damage-step keyword produces.**
+The combats gate 2 reads are frozen into the selection set for each half of both validation
+strata, as the control score's other items are. Their stripped twins are prepared with the
+host-side inputs, so each epoch's scoring runs one more forward pass for them. The share enters
+the control score as an item of its own or inside the grid component, which changes the count of
+equally weighted components. Every selection set is frozen again, so checkpoints chosen under
+gen-3's control score do not compare with gen-4's.
 
 ### An ability built anew on a copy keys into the original card's file
 
