@@ -18,6 +18,7 @@ from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.file_builders import write_validation_samples
 from tests.unit.effects.training_builders import (
+    LoopCorpus,
     StubLosses,
     make_training_loop,
     stub_below_the_loop,
@@ -67,7 +68,9 @@ def run(tmp_path, make_record, monkeypatch):
         # real ones.
         prefetch_workers=0,
     )
-    loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
+    loop = make_training_loop(
+        config, LoopCorpus(training_shards=[shard], validation_samples=samples),
+    )
     loop.losses = StubLosses(device_loss)
     stub_validator(loop, validate)
     return loop.execute(), events, resets, model
@@ -143,7 +146,7 @@ def test_empty_validation_samples_are_refused_before_a_model_is_built(tmp_path, 
     samples = write_validation_samples(tmp_path, [])
     loop = make_training_loop(
         TrainEffectModelConfig.unpathed(corpus=str(tmp_path), prefetch_workers=0),
-        validation_samples=samples,
+        LoopCorpus(validation_samples=samples),
     )
     monkeypatch.setattr(training_loop, "build_run", lambda *a, **k: pytest.fail("built"))
     with pytest.raises(EmptyHoldoutError, match="card-disjoint stratum holds no records"):
@@ -177,7 +180,9 @@ def test_the_best_control_score_epoch_is_the_one_checkpoint_and_patience_counts_
         shards_per_epoch=1, batch_size=2, seed=7, model_output=out, prefetch_workers=0,
         patience=2,
     )
-    loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
+    loop = make_training_loop(
+        config, LoopCorpus(training_shards=[shard], validation_samples=samples),
+    )
     loop.losses = StubLosses(lambda prepared: model.p.sum())
     stub_validator(loop, controls=[0.2, 0.5, 0.3, 0.1, 0.9])
 
@@ -212,7 +217,9 @@ def test_a_run_with_no_best_epoch_logs_an_error_and_exits_1(
         shards_per_epoch=1, batch_size=2, seed=7, model_output=tmp_path / "out",
         prefetch_workers=0,
     )
-    loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
+    loop = make_training_loop(
+        config, LoopCorpus(training_shards=[shard], validation_samples=samples),
+    )
     loop.losses = StubLosses(lambda prepared: model.p.sum())
     stub_validator(loop, controls=[float("nan"), float("nan")])
 

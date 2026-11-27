@@ -12,7 +12,7 @@ from effects.domain.input_layout import SlotKind
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.state_snapshot import Refs
 from effects.domain.surface_builder import SurfaceBuilder
-from tests.unit.effects.batch_builders import slots_of_kind
+from tests.unit.effects.batch_builders import BatcherSettings, slots_of_kind
 from tests.unit.effects.domain.effect_head_input_support import (
     _ANTHEM,
     _BOLT,
@@ -189,10 +189,10 @@ class TestOptionRows:
             def prose_for(self, key):
                 return None
 
-        batcher = make_batcher(
+        batcher = make_batcher(BatcherSettings(
             tokenizer=None, sidecars=_Sidecars(), masks=BaselineMasks(),
             surface="script", e_dim=E_DIM, widths={}, device=torch.device("cpu"),
-        )
+        ))
         assert batcher.options_for(self._CHARM) == modes
         assert batcher.options_for(modes[0]) == ()
 
@@ -244,10 +244,10 @@ class TestAKeywordOfSeveralLines:
         from effects.domain.baselines import BaselineMasks
         from tests.unit.effects.batch_builders import make_batcher
 
-        batcher = make_batcher(
+        batcher = make_batcher(BatcherSettings(
             tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
             surface="script", e_dim=E_DIM, widths={}, device=torch.device("cpu"),
-        )
+        ))
         chapters = [line.script_text for line in sidecars.get(self._SAGA).lines
                     if line.line_kind == "chapter"]
         staged = batcher.batch_texts([record])

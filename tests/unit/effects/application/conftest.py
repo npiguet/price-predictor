@@ -18,7 +18,7 @@ from effects.infrastructure.vocabulary_file import save_vocabulary
 from tests.unit.effects.application.build_corpus_support import CorpusFixture, _write_corpus
 from tests.unit.effects.application.geometry_checks_support import SourceRows, _write_source
 from tests.unit.effects.application.training_run_support import TrainingRunner
-from tests.unit.effects.batch_builders import make_batcher
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
     FIXTURE_TRAINING_SHARDS,
@@ -69,10 +69,10 @@ def _write_vocabulary(root, records):
     definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
         surface="script", e_dim=16, widths={}, device=torch.device("cpu"),
-    )
+    ))
     texts = [*batcher.batch_texts(records)]
     texts += [d.reminder_template for d in definitions.values() if d.reminder_template]
     vocab = dict(base)

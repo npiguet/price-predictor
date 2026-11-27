@@ -19,7 +19,7 @@ from tests.unit.effects.application.surface_batching_support import (
     _ACT,
     _Sidecars,
 )
-from tests.unit.effects.batch_builders import make_batcher
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
 from tests.unit.effects.record_builders import lines_of, make_record, make_snapshot
 
 # ── the prose surface (FR-069) ───────────────────────────────────────────
@@ -36,11 +36,11 @@ def test_a_prose_text_is_encoded_with_its_lines_role_spans():
         script_text="AB$ Draw | Cost$ T",
         role_spans=(RoleSpan(0, 4, "cost"), RoleSpan(5, len(prose), "effect")), prose_offset=0,
     )
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
         sidecars=_Sidecars(), masks=BaselineMasks(), surface="prose", e_dim=4,
         widths={}, device=torch.device("cpu"),
-    )
+    ))
     (encoded,) = batcher.stage({prose: line}).prepared
     assert encoded.role_ids[1] == role_index("cost")
     assert encoded.role_ids[-1] == role_index("effect")
@@ -89,10 +89,10 @@ def _flying_batcher(**settings):
             reminder_template="cant be blocked except by creatures with flying or reach",
         )},
     )
-    return make_batcher(
+    return make_batcher(BatcherSettings(
         tokenizer=tokenizer, sidecars=_Sidecars(), masks=settings.pop("masks", BaselineMasks()),
         surface="prose", e_dim=4, device=torch.device("cpu"), **settings,
-    )
+    ))
 
 
 def _resolution(entities) -> EffectRecord:
@@ -162,10 +162,10 @@ def test_a_floating_effects_card_reads_its_source_lines_text():
         if raw["record_id"].endswith(".0-mwqvqdyrb9c0.37"))
     floating, = command_zone_entities(record)
     sidecars = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
-    )
+    ))
     source = batcher.text_of(floating.lines[0].keys[0])
     texts = batcher.batch_texts([record])
     assert source is not None and source in texts

@@ -11,7 +11,7 @@ import pytest
 from effects.application.collect_coverage import CollectCoverageConfig
 from tests.unit.effects.application.collect_coverage_support import _convert_acting_line
 from tests.unit.effects.domain.test_coverage import _record
-from tests.unit.effects.file_builders import write_plain_shard
+from tests.unit.effects.file_builders import PlainShard, write_plain_shard
 from tests.unit.effects.record_builders import make_entity
 
 
@@ -155,7 +155,9 @@ class TestARoundEndsInItsReport:
             played.append(pool)
             record = _record([make_entity("E1", "aa")], source="E1")
             run_id = pool._spawn_worker.func.__self__.run_id
-            write_plain_shard(tmp_path / "records", f"r{len(played)}", [record], run_id=run_id)
+            write_plain_shard(
+                tmp_path / "records", f"r{len(played)}", [record], PlainShard(run_id=run_id),
+            )
 
         code = self._run(tmp_path, caplog, pool_run)
 
@@ -182,8 +184,8 @@ class TestARoundEndsInItsReport:
             _convert_acting_line(tmp_path / "cardsfolder")
             record = _record([make_entity("E1", "aa")], source="E1")
             run_id = pool._spawn_worker.func.__self__.run_id
-            write_plain_shard(tmp_path / "records", "r1", [record], run_id=run_id,
-                              ended=ended)
+            write_plain_shard(tmp_path / "records", "r1", [record],
+                              PlainShard(run_id=run_id, ended=ended))
 
         code = run_recorded(
             tmp_path / "records", lambda: self._run(tmp_path, caplog, pool_run),

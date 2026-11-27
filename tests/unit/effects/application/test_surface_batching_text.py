@@ -15,7 +15,7 @@ from tests.unit.effects.application.surface_batching_support import (
     _batcher,
     _Sidecars,
 )
-from tests.unit.effects.batch_builders import make_batcher
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
 
 # ── the MLM pass (FR-060b) ───────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ def _mlm_lines(lengths, *, number: float | None = None) -> list:
 
 
 def _mlm_batcher() -> SurfaceBatcher:
-    return make_batcher(tokenizer=_MaskTokens(), sidecars=_Sidecars())
+    return make_batcher(BatcherSettings(tokenizer=_MaskTokens(), sidecars=_Sidecars()))
 
 
 def _mlm_inputs(lines) -> dict:
@@ -115,11 +115,11 @@ def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
             reminder_template="cant be blocked except by creatures with flying or reach",
         )},
     )
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=tokenizer, sidecars=_Sidecars(), masks=BaselineMasks(),
         surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
         withhold_keyword="Flying",
-    )
+    ))
     (line,) = batcher.stage({"flying": None}).prepared
     ids = {word: index for index, word in enumerate(words)}
     # [CLS], then the reminder text in place of the bare token.
@@ -146,11 +146,11 @@ def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
             ),
         },
     )
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=tokenizer, sidecars=_Sidecars(), masks=BaselineMasks(),
         surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
         withhold_keyword="Flying", keyword_expand_p=1.0,
-    )
+    ))
     flying = words.index("flying")
     texts = {"flying": None, "reach": None, "creatures with flying": None}
     for line in batcher.stage(texts).prepared:
@@ -183,11 +183,11 @@ def test_the_identity_batch_reads_each_texts_own_row():
 
     texts = ["creatures you control get +1/+1", "deals 3 damage to any target"]
     table = IdentityTable(texts, e_dim=4)
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=None, sidecars=_Sidecars(), masks=BaselineMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
         identity_table=table,
-    )
+    ))
     rows, matrix = batcher.encode_texts({text: None for text in texts}, encoder=None)
     for text, row in rows.items():
         assert torch.equal(matrix[row], table(table.rows([text]))[0])

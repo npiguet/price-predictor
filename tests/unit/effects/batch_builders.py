@@ -2,16 +2,34 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from tests.unit.effects.file_builders import write_vocabulary
 
+if TYPE_CHECKING:
+    import torch
 
-def make_preparer(
-    directory, *, seed: int = 0, api_types=(), param_keys=(), rarity=None, **config,
-):
+    from effects.domain.baselines import BaselineMasks
+
+
+@dataclass(frozen=True)
+class PreparerOptions:
+    """What :func:`make_preparer` hands the preparer besides its config."""
+
+    seed: int = 0
+    api_types: Sequence[str] = ()
+    param_keys: Sequence[str] = ()
+    #: The rarity table; None for an empty one.
+    rarity: Mapping[str, int] | None = None
+
+
+def make_preparer(directory, options: PreparerOptions = PreparerOptions(), **config):
     """A ``StepPreparer`` over a vocabulary of the specials alone, for tests
-    about how it builds batchers rather than about what they read."""
+    about how it builds batchers rather than about what they read; ``config``
+    overrides ``TrainEffectModelConfig`` fields."""
     from effects.application.step_preparation import PreparerSettings, StepPreparer
     from effects.application.train_effect_model import TrainEffectModelConfig
     from effects.domain.split import CorpusSplit
@@ -25,19 +43,37 @@ def make_preparer(
     )
     settings.update(config)
     return StepPreparer(PreparerSettings(
-        config=TrainEffectModelConfig.unpathed(**settings), seed=seed, split=CorpusSplit(),
-        rarity={} if rarity is None else rarity, api_types=tuple(api_types),
-        param_keys=tuple(param_keys), heads=frozenset(),
+        config=TrainEffectModelConfig.unpathed(**settings), seed=options.seed,
+        split=CorpusSplit(), rarity={} if options.rarity is None else options.rarity,
+        api_types=tuple(options.api_types), param_keys=tuple(options.param_keys),
+        heads=frozenset(),
     ))
 
 
-def make_batcher(
-    *, tokenizer=None, sidecars=None, masks=None, surface: str = "script",
-    e_dim: int = 4, widths=None, device=None, withhold_keyword=None,
-    keyword_expand_p: float = 0.0, context_dropout: float = 0.0, rng=None,
-    identity_table=None, noise=None, truncations=None,
-    resolver=None,
-):
+@dataclass(frozen=True, kw_only=True)
+class BatcherSettings:
+    """Everything :func:`make_batcher` builds a ``SurfaceBatcher`` from, each
+    defaulted: no masks are ``BaselineMasks()``, no widths ``{}``, no device
+    the CPU, and no resolver a ``KeyResolver`` over ``sidecars``."""
+
+    tokenizer: object = None
+    sidecars: object = None
+    masks: BaselineMasks | None = None
+    surface: str = "script"
+    e_dim: int = 4
+    widths: Mapping[str, int] | None = None
+    device: torch.device | None = None
+    withhold_keyword: str | None = None
+    keyword_expand_p: float = 0.0
+    context_dropout: float = 0.0
+    rng: object = None
+    identity_table: object = None
+    noise: object = None
+    truncations: object = None
+    resolver: object = None
+
+
+def make_batcher(settings: BatcherSettings = BatcherSettings()):
     """A ``SurfaceBatcher`` and its collaborators from one flat set of settings."""
     import torch
 
@@ -52,18 +88,21 @@ def make_batcher(
     from effects.application.text_staging import TextStager
     from effects.domain.baselines import BaselineMasks
 
-    masks = masks or BaselineMasks()
+    masks = settings.masks or BaselineMasks()
     stager = TextStager(
-        tokenizer=tokenizer, surface=surface, withhold_keyword=withhold_keyword,
-        keyword_expand_p=keyword_expand_p, truncations=truncations,
+        tokenizer=settings.tokenizer, surface=settings.surface,
+        withhold_keyword=settings.withhold_keyword,
+        keyword_expand_p=settings.keyword_expand_p, truncations=settings.truncations,
     )
+    resolver = settings.resolver or KeyResolver(settings.sidecars, settings.surface)
     return SurfaceBatcher(
-        text=TextResolution(resolver or KeyResolver(sidecars, surface), stager),
-        spec=SurfaceSpec(e_dim, widths or {}, masks),
+        text=TextResolution(resolver, stager),
+        spec=SurfaceSpec(settings.e_dim, settings.widths or {}, masks),
         materializer=Materializer(
-            device or torch.device("cpu"), masks, identity_table, noise,
+            settings.device or torch.device("cpu"), masks, settings.identity_table,
+            settings.noise,
         ),
-        draws=StepDraws(context_dropout, rng),
+        draws=StepDraws(settings.context_dropout, settings.rng),
     )
 
 

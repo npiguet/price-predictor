@@ -10,7 +10,7 @@ import pytest
 from effects.application.collect_coverage import CollectCoverageConfig
 from tests.unit.effects.application.collect_coverage_support import _two_cards
 from tests.unit.effects.domain.test_coverage import _record
-from tests.unit.effects.file_builders import write_plain_shard
+from tests.unit.effects.file_builders import PlainShard, write_plain_shard
 from tests.unit.effects.record_builders import make_entity
 
 
@@ -113,7 +113,7 @@ class TestWhatTheRunItselfPlayedAndWrote:
             played.append(1)
             record = _record([make_entity("E9", "zz")], source="E9")
             write_plain_shard(
-                tmp_path / "records", f"r{len(played)}", [record], run_id="other-run",
+                tmp_path / "records", f"r{len(played)}", [record], PlainShard(run_id="other-run"),
             )
 
         fake_supervisor.play_round.side_effect = other_run_writes
@@ -129,7 +129,7 @@ class TestWhatTheRunItselfPlayedAndWrote:
 
         def own_run_writes(*_args, **_kwargs):
             record = _record([make_entity("E1", "aa")], source="E1")
-            write_plain_shard(tmp_path / "records", "a", [record], run_id="this-run")
+            write_plain_shard(tmp_path / "records", "a", [record], PlainShard(run_id="this-run"))
 
         fake_supervisor.play_round.side_effect = own_run_writes
         with patch.object(collect_coverage, "consult_castability", return_value={}):

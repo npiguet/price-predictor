@@ -4,6 +4,10 @@ stood in for, and a short real run over the gen-3 fixture."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
     FIXTURE_TRAINING_SEED,
@@ -13,16 +17,23 @@ from tests.unit.effects.builders import (
 from tests.unit.effects.selection_builders import control_score_of
 
 
-def make_training_loop(
-    config, *, training_shards=(), validation_samples=None, selection=None, **facts,
-):
+@dataclass(frozen=True)
+class LoopCorpus:
+    """The corpus files :func:`make_training_loop` hands its loop."""
+
+    training_shards: Iterable[Path] = ()
+    #: Each validation stratum's sample shard; None for none.
+    validation_samples: Mapping[str, Path] | None = None
+    #: The control score's ``FrozenSelection`` (:func:`fixture_selection`); a
+    #: loop without one runs only under :func:`stub_validator`.
+    selection: object = None
+
+
+def make_training_loop(config, corpus: LoopCorpus = LoopCorpus(), **facts):
     """A ``TrainingLoop`` over ``config`` and a corpus described by ``facts``.
 
     ``facts`` override ``CorpusFacts`` fields; by default the fixture holdout
     rule (20 permille, at most 8 carriers) and an empty rarity table.
-    ``selection`` is the control score's ``FrozenSelection``
-    (:func:`fixture_selection`); a loop without one runs only under
-    :func:`stub_validator`.
     """
     from effects.application.train_effect_model import CorpusFacts
     from effects.application.training_loop import CorpusInputs, TrainingLoop
@@ -33,9 +44,9 @@ def make_training_loop(
         facts=CorpusFacts(**{
             "holdout": HoldoutRule(), "rarity": {}, **facts,
         }),
-        training_shards=list(training_shards),
-        validation_samples=validation_samples or {},
-        selection=selection,
+        training_shards=list(corpus.training_shards),
+        validation_samples=corpus.validation_samples or {},
+        selection=corpus.selection,
         tokenizer_hashes=tokenizer_hashes(config.tokenizer_files),
     ))
 

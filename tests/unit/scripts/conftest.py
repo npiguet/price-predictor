@@ -57,16 +57,17 @@ def probe_model(records, sidecars):
     from effects.domain.input_layout import SlotKind
     from effects.domain.slot_widths import layout_widths
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-    from tests.unit.effects.batch_builders import make_batcher
+    from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
     from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS
 
     definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
     widths = layout_widths()
-    probe = make_batcher(tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
-                         surface="script", e_dim=E_DIM, widths=widths,
-                         device=torch.device("cpu"))
+    probe = make_batcher(BatcherSettings(
+        tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
+        surface="script", e_dim=E_DIM, widths=widths, device=torch.device("cpu"),
+    ))
     vocab = dict(base)
     texts = [*probe.batch_texts(records)]
     texts += [d.reminder_template for d in definitions.values() if d.reminder_template]
@@ -74,9 +75,10 @@ def probe_model(records, sidecars):
         for token in bare.tokenize(text):
             vocab.setdefault(token.text, len(vocab))
     tokenizer = AbilityTokenizer(vocab, definitions, surface="script")
-    batcher = make_batcher(tokenizer=tokenizer, sidecars=sidecars,
-                           masks=baseline_masks("full"), surface="script", e_dim=E_DIM,
-                           widths=widths, device=torch.device("cpu"))
+    batcher = make_batcher(BatcherSettings(
+        tokenizer=tokenizer, sidecars=sidecars, masks=baseline_masks("full"),
+        surface="script", e_dim=E_DIM, widths=widths, device=torch.device("cpu"),
+    ))
     torch.manual_seed(0)
     encoder = AbilityEncoder(AbilityEncoderConfig(
         vocab_size=len(vocab), e_dim=E_DIM, d_model=16, n_layers=1)).eval()

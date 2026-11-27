@@ -48,7 +48,7 @@ from effects.domain.records import (
     events_of,
 )
 from effects.domain.value_targets import ValueLine
-from tests.unit.effects.batch_builders import make_preparer
+from tests.unit.effects.batch_builders import PreparerOptions, make_preparer
 from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, curated_fixture_records
 from tests.unit.effects.training_builders import make_cpu_training_loop
 
@@ -233,9 +233,9 @@ class TestTheHeadTerms:
     def test_every_head_contributes_on_a_mixed_batch(self, monkeypatch, records, tmp_path):
         """Spec Story 5 scenario 9: decision, cost half, trigger, effect half."""
         losses = make_cpu_training_loop(monkeypatch).losses
-        preparer = make_preparer(
-            tmp_path, api_types=["DealDamage", "Draw", "Pump"], param_keys=list("ABCDE"),
-        )
+        preparer = make_preparer(tmp_path, PreparerOptions(
+            api_types=["DealDamage", "Draw", "Pump"], param_keys=list("ABCDE"),
+        ))
         batch = _kinds(records)
         model = _model()
         hidden = torch.randn(len(batch), 6, 8)
@@ -251,7 +251,7 @@ class TestTheHeadTerms:
     def test_zero_weights_compute_neither_auxiliary(self, monkeypatch, records, tmp_path):
         losses = make_cpu_training_loop(monkeypatch, mlm_weight=0.0, api_weight=0.0).losses
         preparer = make_preparer(
-            tmp_path, mlm_weight=0.0, api_weight=0.0, api_types=["Draw"],
+            tmp_path, PreparerOptions(api_types=["Draw"]), mlm_weight=0.0, api_weight=0.0,
         )
         batch = _kinds(records)
         batcher = _scripted("SP$ Draw | NumCards$ 1")
@@ -265,7 +265,7 @@ class TestTheHeadTerms:
 
     def test_scoring_computes_only_the_shipped_heads(self, monkeypatch, records, tmp_path):
         losses = make_cpu_training_loop(monkeypatch).losses
-        preparer = make_preparer(tmp_path, api_types=["Draw"])
+        preparer = make_preparer(tmp_path, PreparerOptions(api_types=["Draw"]))
         batch = _kinds(records)
         terms = _terms(
             _Rig(monkeypatch, preparer, losses),
@@ -298,15 +298,15 @@ class TestTheApiTargets:
         lined = {self._TEXT: self._line()}
         for name in ("a", "b"):
             (tmp_path / name).mkdir()
-        first = make_preparer(tmp_path / "a", api_types=["Keyword"])
+        first = make_preparer(tmp_path / "a", PreparerOptions(api_types=["Keyword"]))
         first.head_builder.api.batch([self._TEXT], lined)
         after = first.head_builder.api.batch([self._TEXT], {}).types
-        fresh = make_preparer(tmp_path / "b", api_types=["Keyword"]).head_builder.api.batch(
-            [self._TEXT], {}).types
+        fresh_preparer = make_preparer(tmp_path / "b", PreparerOptions(api_types=["Keyword"]))
+        fresh = fresh_preparer.head_builder.api.batch([self._TEXT], {}).types
         assert after.tolist() == fresh.tolist() == [-1]
 
     def test_a_lineless_batch_first_leaves_the_line_s_target_whole(self, tmp_path):
-        preparer = make_preparer(tmp_path, api_types=["Keyword"])
+        preparer = make_preparer(tmp_path, PreparerOptions(api_types=["Keyword"]))
         preparer.head_builder.api.batch([self._TEXT], {})
         types = preparer.head_builder.api.batch([self._TEXT], {self._TEXT: self._line()}).types
         assert types.tolist() == [0]

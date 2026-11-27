@@ -8,7 +8,7 @@ from pathlib import Path
 from effects.domain.coverage import CardCoverage
 from tests.unit.effects.application.collect_coverage_support import _holding
 from tests.unit.effects.domain.test_coverage import _record
-from tests.unit.effects.file_builders import fresh_interpreter_env, write_plain_shard
+from tests.unit.effects.file_builders import PlainShard, fresh_interpreter_env, write_plain_shard
 from tests.unit.effects.record_builders import make_entity
 
 
@@ -32,7 +32,7 @@ class TestIncrementalCounting:
         return write_plain_shard(directory, lifetime, [
             _record([make_entity(f"E-{card}", card)], source=f"E-{card}")
             for card in cards
-        ], run_id="a")
+        ], PlainShard(run_id="a"))
 
     def test_the_first_pass_counts_every_shard(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
@@ -84,7 +84,7 @@ class TestIncrementalCounting:
             replace(_record([make_entity(f"E-{card}", card)], source=f"E-{card}"),
                     game_id=f"a.0-x.{index}", record_id=f"a.0-x.r{index}")
             for index, card in enumerate(cards)
-        ], run_id="a")
+        ], PlainShard(run_id="a"))
         members = [gzip.compress((line + "\n").encode("utf-8"))
                    for line in plain.read_text(encoding="utf-8").splitlines() if line]
         members[2] = b"XX" + members[2][2:]

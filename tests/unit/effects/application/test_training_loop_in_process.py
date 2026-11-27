@@ -35,6 +35,7 @@ from tests.unit.effects.batch_builders import make_preparer
 from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, curated_fixture_records
 from tests.unit.effects.file_builders import write_validation_samples
 from tests.unit.effects.training_builders import (
+    LoopCorpus,
     StubLosses,
     make_cpu_training_loop,
     make_training_loop,
@@ -111,7 +112,7 @@ def epoch(tmp_path, make_record, monkeypatch):
             model_output=tmp_path / "out", prefetch_workers=0,
         )
         loop = make_training_loop(
-            config, training_shards=shards, validation_samples=samples,
+            config, LoopCorpus(training_shards=shards, validation_samples=samples),
         )
         loop.losses = StubLosses(train)
         stub_validator(loop)

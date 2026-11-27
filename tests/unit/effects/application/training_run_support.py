@@ -27,7 +27,11 @@ from effects.domain.effect_model import EffectModel
 from effects.domain.split import CorpusSplit
 from tests.unit.effects.builders import FIXTURE_TRAINING_SEED, curated_fixture_records
 from tests.unit.effects.selection_builders import FIXTURE_RULE_OUTPUTS, fixture_selection
-from tests.unit.effects.training_builders import fixture_training_config, make_training_loop
+from tests.unit.effects.training_builders import (
+    LoopCorpus,
+    fixture_training_config,
+    make_training_loop,
+)
 
 SEED = FIXTURE_TRAINING_SEED
 
@@ -181,15 +185,18 @@ class TrainingRunner:
                 self.corpus, out, prefetch_workers=plan.workers, seed=plan.seed,
                 resume=plan.resume, **config,
             ),
+            LoopCorpus(
+                training_shards=self.corpus.shards,
+                validation_samples={
+                    "card-disjoint": self.corpus.sample, "game-disjoint": self.corpus.sample,
+                },
+                selection=every_record_selection(),
+            ),
             split=CorpusSplit(
                 held_out_cards=(), card_disjoint_games=frozenset(),
                 game_disjoint_games=frozenset({self.corpus.held}),
             ),
-            training_shards=self.corpus.shards,
-            validation_samples={
-                "card-disjoint": self.corpus.sample, "game-disjoint": self.corpus.sample,
-            },
-            selection=every_record_selection(), rule_outputs=FIXTURE_RULE_OUTPUTS,
+            rule_outputs=FIXTURE_RULE_OUTPUTS,
         )
 
     def _outcome(self, out: Path, losses: list[float], built: BuiltModules) -> dict:

@@ -20,7 +20,7 @@ from effects.domain.state_snapshot import (
 )
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
-from tests.unit.effects.batch_builders import make_batcher, slots_of_kind
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher, slots_of_kind
 from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 # ── decision records and option rows (FR-060a, FR-063a) ─────────────────
@@ -43,10 +43,10 @@ def _fixture_batcher() -> tuple[SurfaceBatcher, list[EffectRecord]]:
         {token: index for index, token in enumerate(SPECIAL_TOKENS)},
         load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS), surface="script",
     )
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=tokenizer, sidecars=sidecars, masks=BaselineMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
-    )
+    ))
     return batcher, records
 
 
@@ -86,10 +86,10 @@ def test_a_real_charm_gets_its_three_mode_rows_after_its_root():
     gen3 = _FIXTURES / "gen3-sidecars"
     sidecars = SidecarCache({"cardsfolder": gen3 / "cardsfolder"})
     root = ProvenanceKey("cardsfolder/a/azorius_charm.txt", 0, "spell", 0)
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
-    )
+    ))
     modes = batcher.options_for(root)
     assert [mode.option for mode in modes] == [0, 1, 2]
     azorius_charm = make_entity(

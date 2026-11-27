@@ -72,7 +72,7 @@ from effects.domain.state_snapshot import (
 )
 from effects.domain.surface_builder import NO_STRIP
 from effects.domain.surface_collation import gather_entities
-from tests.unit.effects.batch_builders import make_batcher, slots_of_kind
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher, slots_of_kind
 from tests.unit.effects.damage_step_boards import (
     CreatureTraits,
     creature,
@@ -196,14 +196,14 @@ def _batcher() -> SurfaceBatcher:
     tokenizer and no encoder: what these tests are about is the surface, and an
     encoder would only be a second thing that could fail.
     """
-    return make_batcher(
+    return make_batcher(BatcherSettings(
         tokenizer=None, sidecars=_Sidecars(),
         masks=BaselineMasks(identity_embedding=True),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
         identity_table=IdentityTable(
             [line.script_text for line in _LINES.values()], 4,
         ),
-    )
+    ))
 
 
 def _rows(batcher: SurfaceBatcher, records) -> dict[str, int]:

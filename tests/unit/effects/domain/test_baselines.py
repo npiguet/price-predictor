@@ -27,7 +27,7 @@ class TestEveryBaselineStagesEveryText:
         from effects.domain.ability_tokenizer import AbilityTokenizer
         from effects.infrastructure.sidecar_io import SidecarCache
         from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-        from tests.unit.effects.batch_builders import make_batcher
+        from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
 
         fixtures = Path(__file__).parents[3] / "fixtures"
         words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]"]
@@ -39,7 +39,7 @@ class TestEveryBaselineStagesEveryText:
             "cardsfolder": fixtures / "effects" / "gen3-sidecars" / "cardsfolder",
             "tokenscripts": fixtures / "effects" / "gen3-sidecars" / "tokenscripts",
         })
-        return make_batcher(tokenizer=tokenizer, sidecars=sidecars, masks=masks)
+        return make_batcher(BatcherSettings(tokenizer=tokenizer, sidecars=sidecars, masks=masks))
 
     @pytest.mark.parametrize("name", list(BASELINES))
     def test_staging_the_whole_fixture_raises_nothing(self, name):

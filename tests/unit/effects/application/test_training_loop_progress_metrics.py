@@ -22,7 +22,11 @@ from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.selection_builders import control_score_of
-from tests.unit.effects.training_builders import fixture_training_config, make_training_loop
+from tests.unit.effects.training_builders import (
+    LoopCorpus,
+    fixture_training_config,
+    make_training_loop,
+)
 
 BATCH_SIZE = 32
 
@@ -80,8 +84,10 @@ def scored(corpus, records, tmp_path_factory):
                 corpus, root / "out", prefetch_workers=0, epochs=1, curriculum_epoch=1,
                 batch_size=BATCH_SIZE,
             ),
-            training_shards=corpus.shards,
-            validation_samples={"card-disjoint": sample, "game-disjoint": corpus.sample},
+            LoopCorpus(
+                training_shards=corpus.shards,
+                validation_samples={"card-disjoint": sample, "game-disjoint": corpus.sample},
+            ),
         )
         loop.validator = _Measured(loop.config, loop.device, loop.losses)
         code = loop.execute()

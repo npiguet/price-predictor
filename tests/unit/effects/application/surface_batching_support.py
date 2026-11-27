@@ -13,7 +13,7 @@ from effects.domain.records import (
 from effects.domain.state_snapshot import (
     GlobalState,
 )
-from tests.unit.effects.batch_builders import make_batcher
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
 from tests.unit.effects.record_builders import lines_of, make_entity, make_record, make_snapshot
 
 _ACT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
@@ -55,7 +55,7 @@ def _record() -> EffectRecord:
 
 
 def _batcher(sidecars=None, **masks) -> SurfaceBatcher:
-    return make_batcher(
+    return make_batcher(BatcherSettings(
         tokenizer=None, sidecars=sidecars or _Sidecars(), masks=BaselineMasks(**masks),
         surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
-    )
+    ))

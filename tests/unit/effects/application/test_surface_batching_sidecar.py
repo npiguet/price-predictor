@@ -15,7 +15,7 @@ from tests.unit.effects.application.surface_batching_support import (
     _record,
     _Sidecars,
 )
-from tests.unit.effects.batch_builders import make_batcher, slots_of_kind
+from tests.unit.effects.batch_builders import BatcherSettings, make_batcher, slots_of_kind
 
 
 def test_a_dropped_key_gets_no_ability_token():
@@ -31,11 +31,11 @@ def _prepared(variant: str):
     from effects.domain.slot_widths import layout_widths
 
     record = _record()
-    batcher = make_batcher(
+    batcher = make_batcher(BatcherSettings(
         tokenizer=AbilityTokenizer({"[PAD]": 0, "[UNK]": 1, "[CLS]": 2, "[MASK]": 3}),
         sidecars=_Sidecars(), masks=baseline_masks(variant), surface="script",
         e_dim=4, widths=layout_widths(), device=torch.device("cpu"),
-    )
+    ))
     prepared = batcher.prepare([record])
     return prepared.surfaces[0], prepared.inputs
 

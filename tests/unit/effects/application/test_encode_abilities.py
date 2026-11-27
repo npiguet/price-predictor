@@ -580,17 +580,17 @@ class TestTruncation:
         """The trainer hands one log to every per-batch batcher."""
         from effects.application.line_preparation import TruncationLog
         from effects.domain.baselines import BaselineMasks
-        from tests.unit.effects.batch_builders import make_batcher
+        from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
 
         reported = []
         log = TruncationLog(lambda text, keys: reported.append(text))
         long_text = " ".join(["x"] * 600)
         for _batch in range(3):
-            batcher = make_batcher(
+            batcher = make_batcher(BatcherSettings(
                 tokenizer=tokenizer, sidecars=None, masks=BaselineMasks(),
                 surface="script", e_dim=4, widths={},
                 device=torch.device("cpu"), truncations=log,
-            )
+            ))
             batcher.stage({long_text: None, "x x": None})
         assert reported == [long_text]
 

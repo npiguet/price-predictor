@@ -4,6 +4,7 @@ needs to import the tree under test."""
 
 from __future__ import annotations
 
+from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 
 from effects.domain.records import EffectRecord
@@ -21,6 +22,7 @@ def write_ended_shard(path: Path, records) -> int:
 RAW_BLOCK_RECORDS = 256
 
 
+@dataclass(eq=False)
 class RawShardWriter:
     """One worker lifetime's raw shard, laid out as the Java collector writes it.
 
@@ -32,14 +34,18 @@ class RawShardWriter:
     readers.
     """
 
-    def __init__(
-        self, directory, run_id: str, worker: int, lifetime: str, *,
-        compressed: bool = True,
-    ) -> None:
-        suffix = ".jsonl.gz" if compressed else ".jsonl"
-        self.path = Path(directory) / f"{run_id}.{worker}-{lifetime}{suffix}"
-        self.compressed = compressed
-        self._block: list[str] = []
+    directory: str | Path
+    run_id: str
+    worker: int
+    lifetime: str
+    _: KW_ONLY
+    compressed: bool = True
+    path: Path = field(init=False)
+    _block: list[str] = field(init=False, default_factory=list)
+
+    def __post_init__(self) -> None:
+        suffix = ".jsonl.gz" if self.compressed else ".jsonl"
+        self.path = Path(self.directory) / f"{self.run_id}.{self.worker}-{self.lifetime}{suffix}"
 
     def __enter__(self) -> RawShardWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,18 +76,27 @@ class RawShardWriter:
         self._flush()
 
 
-def write_plain_shard(
-    directory, lifetime: str, records, *, run_id: str = "run", worker: int = 0,
-    ended: bool = True,
-) -> Path:
+@dataclass(frozen=True)
+class PlainShard:
+    """Which worker's shard :func:`write_plain_shard` writes, and whether its
+    games ended."""
+
+    run_id: str = "run"
+    worker: int = 0
+    #: False for a worker killed mid-game: no game-end markers.
+    ended: bool = True
+
+
+def write_plain_shard(directory, lifetime: str, records, shard: PlainShard = PlainShard()) -> Path:
     """A plain ``{run_id}.{worker}-{lifetime}.jsonl`` raw shard holding
     ``records``, written through :class:`RawShardWriter`: each gen-3 game
     ended by its game-end marker, as a worker that finished it writes it,
-    unless ``ended`` is False (a worker killed mid-game)."""
-    with RawShardWriter(directory, run_id, worker, lifetime, compressed=False) as shard:
-        for record in with_game_end_markers(records) if ended else records:
-            shard.write(record)
-    return shard.path
+    unless ``shard.ended`` is False (a worker killed mid-game)."""
+    with RawShardWriter(
+            directory, shard.run_id, shard.worker, lifetime, compressed=False) as writer:
+        for record in with_game_end_markers(records) if shard.ended else records:
+            writer.write(record)
+    return writer.path
 
 
 def write_validation_samples(directory, records) -> dict:

@@ -43,7 +43,7 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     from effects.infrastructure.effect_model_store import EffectCheckpoint, EffectModelStore
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
     from effects.infrastructure.vocabulary_file import save_vocabulary
-    from tests.unit.effects.batch_builders import make_batcher
+    from tests.unit.effects.batch_builders import BatcherSettings, make_batcher
     from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS
 
     root = tmp_path_factory.mktemp("checkpoint")
@@ -51,9 +51,10 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
     widths = layout_widths()
-    probe = make_batcher(tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
-                         surface="script", e_dim=E_DIM, widths=widths,
-                         device=torch.device("cpu"))
+    probe = make_batcher(BatcherSettings(
+        tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
+        surface="script", e_dim=E_DIM, widths=widths, device=torch.device("cpu"),
+    ))
     vocab = dict(base)
     texts = [*probe.batch_texts(records)]
     texts += [d.reminder_template for d in definitions.values() if d.reminder_template]
