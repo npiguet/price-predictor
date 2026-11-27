@@ -8,7 +8,8 @@ that draws more of the records a weak field needs, from the whole corpus, with t
 controller still to choose. It also takes up what gen-3 leaves to a later generation: the model sees
 both players' hidden information, no output says which library cards a player knows, three outcome
 fields learn only from the times they happened, checkpoint selection does not see how far a keyword
-moves a prediction, an ability Forge builds anew on a copy reaches the model with no text, and
+moves a prediction, an effect half cannot see the mana its source was cast with, an ability Forge
+builds anew on a copy reaches the model with no text, and
 keyword reminder text comes from a hand-written copy of Forge's formatting.
 Nothing has run.
 
@@ -84,6 +85,20 @@ and changes no verdict.
 **The control score, which picks the checkpoint, does not read the share.** A checkpoint whose
 model moves the right way by a fraction of the right amount is chosen as readily as one that
 makes the whole move.
+
+### An effect half cannot see the mana its source was cast with
+
+**Gen-3's effect half reads none of what its acting source paid, so an effect that depends on the
+mana spent cannot be learned from it.** Converge counts the colours spent (Prismatic Ending exiles a
+permanent whose mana value is at most that count), adamant checks for three mana of one colour, and
+some triggers check whether mana of a kind was spent. Each reads the payment of the spell or
+permanent whose ability resolves.
+
+**The payment is hidden because a forced resolution's source paid nothing.** Collection forces some
+resolutions in a copy of the game, without their cost being paid, to see what they do. On the
+2026-11-23 pilot, the acting source shows zero mana spent on 73% of forced effect halves and on 0.7%
+of live ones. Shown, the payment would let the model tell forced records from live ones and learn
+from that instead of from the card.
 
 ### An ability Forge builds anew on a copy reaches the model with no text
 
@@ -210,6 +225,15 @@ host-side inputs, so each epoch's scoring runs one more forward pass for them. T
 the control score as an item of its own or inside the grid component, which changes the count of
 equally weighted components. Every selection set is frozen again, so checkpoints chosen under
 gen-3's control score do not compare with gen-4's.
+
+### A forced resolution records its source's cost as paid
+
+**Gen-4's collector writes a forced spell with the payment a cast of it would have made, so the
+effect half can show what its source paid.** Where the live game cast the spell, the fork carries
+that cast's payment. Which payment a forced spell the live game never cast should show is open: its
+mana cost paid in its own colours is one choice, and the check is that forced and live effect halves
+then read zero mana equally often. The change is in the connector, before gen-4's first collection,
+so that no corpus mixes records written both ways.
 
 ### An ability built anew on a copy keys into the original card's file
 
