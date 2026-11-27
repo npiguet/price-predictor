@@ -624,7 +624,7 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
   forks still run there.
 - A game writes at most `--max-records-per-game` records. Past the cap the collector writes
   no further record of that game but its end-of-game records (fired trigger, mana, waiting rewrite,
-  the outcome, the marker), counts the records it withheld, and prints one line naming
+  the live record holding the game's outcome, the marker), counts the records it withheld, and prints one line naming
   the game, the turn and the acting card of the most frequent withheld record.
 - The first gen-3 pilot runs with the dropped-event count on, and reports the number of
   `mana_produced` events whose `mana_by_color` map is empty.
@@ -645,7 +645,7 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
 | `active` | each listed static line | bool |
 | `anchor_attacker`, `legal_defenders`, `must_attack` | `attackers` payload | entity ref; list of player or entity refs; bool |
 | `tapped_by_attack` | `attackers` payload, the anchor declared | bool |
-| `must_block` | `blockers` payload, per listed creature | bool: the creature is required to block the anchor |
+| `must_block` | `blockers` payload | list of creature refs, in candidate order: the listed creatures a requirement makes block the anchor |
 | `turn_action` | `kind` | with the subkinds of § 8.11 |
 | the fields of § 8.4 | snapshot | as `rules/gen3-fields.json` gives each field's shape |
 | `events` | cost-half payload | the cast card's move to the stack (§ 8.14) |
@@ -669,7 +669,9 @@ its events and payload are what the moment changed. No board after the moment is
 - The cost half supervises no affected gate. Its card's move to the stack supervises nothing.
   What its costs did supervises the per-entity outputs of § 11.6.
 - The effect half carries the stack item's outcome: resolved, fizzled, partially fizzled or
-  declined. A fizzled or declined resolution writes an effect half with no events.
+  declined. A fizzled or declined spell writes effect halves whose only event is its card's
+  move off the stack, in the last half. A fizzled or declined ability, and a copy of a spell,
+  writes effect halves with no events.
 - A countered stack item writes no effect half. The countering ability's effect half holds the
   countered spell's events, `spell_countered` and its card's move off the stack, or the countered
   ability's `ability_countered`, which names the ability by its line on its host.
@@ -700,7 +702,10 @@ Both rounds
   candidate's key, names the variant's script file.
 - A round plays `--decks-per-round` matches at a time, as the coverage collector does, each
   variant weighted by how many games it lacks. A variant with no new game in
-  `--no-progress-rounds` consecutive rounds retires.
+  `--no-progress-rounds` rounds whose games showed it retires. A variant whose script was
+  written into decks that no game of the round showed retires after three times as many
+  such rounds. A round that gives the variant a game resets both counts; a round whose decks
+  hold none of it changes neither.
 - Every variant, steered ones included, is written to the variant tree as a script file with
   its sidecar before any deck holds it, and stays there for good, because its records join its
   lines by key and training encodes its text from that file. A variant is deleted only before
@@ -1164,8 +1169,8 @@ The verdict head gains a column for `timing` and one for each identifier of
   any other verdict gets no share and no added copy. Its records are still counted per
   polarity and keep their natural share, and the manifest names it as unbudgeted.
 - Within a class, `build-corpus` adds copies of a rule's records beyond their natural
-  share until the rule's written records reach its share, through the gen-2 water-filling
-  allocator. The reuse cap and `--text-cap` bound the added copies.
+  share until the rule's written records reach its share, in rounds of at most one added copy
+  per record. A record leaves the rounds once none of its rules is below its half. The reuse cap and `--text-cap` bound the added copies.
 - Added copies come on top of the class budget.
 - Within a rule's share, records of polarity `fires` and records of polarity
   `does not fire` each draw half. A short side repeats up to the reuse cap. The rest of its
@@ -1213,7 +1218,10 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 ## 12.4 Strata and refusals
 
 - The game-disjoint stratum keeps games between two Forge AIs. The card-disjoint stratum
-  keeps every game naming a held-out card, random-seat games included.
+  keeps a game naming a held-out card, random-seat games included, when the game resolves a
+  held-out text and every held-out text it resolves has fewer than `--card-disjoint-text-cap`
+  games in the stratum (0 sets no cap). A held-out game it does not keep is written to no
+  stratum.
 - Every stratum has the same record composition:
   - every collecting run of the corpus, the held-out coverage round included, uses the same
     `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate`;
