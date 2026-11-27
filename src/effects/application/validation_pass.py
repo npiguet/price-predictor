@@ -66,36 +66,34 @@ class ValidationSamples:
         return cls(card_disjoint=card_disjoint, game_disjoint=game_disjoint)
 
 
-@dataclass(frozen=True)
 class HostSteps:
-    """Both validation samples' host halves, prepared for one field set.
+    """The validation samples' host halves, prepared for one field set.
 
     The samples never change (FR-089) and the field set moves only at the
-    curriculum epoch, so a step prepared for one epoch is the step every
-    later epoch with that field set scores: the :class:`Validator` holds the
-    value across epochs and prepares anew only when the field set, the
-    samples or the preparer differ.
+    curriculum epoch, so a step prepared for one epoch is the step every later
+    epoch with that field set scores: the :class:`Validator` holds this across
+    epochs and prepares a sample's steps on its first pass and again only
+    after the field set or the preparer change. A sample is told by identity:
+    the epochs hand it the one list the corpus was read into.
     """
 
-    preparer: object
-    samples: ValidationSamples
-    fields: tuple[FieldSpec, ...]
-    card_disjoint: list[DeviceStep]
-    game_disjoint: list[DeviceStep]
+    def __init__(self) -> None:
+        self._preparer: object = None
+        self._fields: tuple[FieldSpec, ...] | None = None
+        self._held: list[tuple[list, list[DeviceStep]]] = []
 
-    @classmethod
-    def prepare(
-        cls, preparer, samples: ValidationSamples, fields: tuple[FieldSpec, ...], size: int,
-    ) -> HostSteps:
-        """Each sample in batches of ``size`` records, in the sample's order."""
-        return cls(
-            preparer, samples, fields,
-            card_disjoint=list(scoring_steps(samples.card_disjoint, preparer, fields, size)),
-            game_disjoint=list(scoring_steps(samples.game_disjoint, preparer, fields, size)),
-        )
-
-    def serves(self, preparer, samples: ValidationSamples, fields: tuple[FieldSpec, ...]) -> bool:
-        return self.preparer is preparer and self.samples is samples and self.fields == fields
+    def steps(
+        self, records: list, preparer, fields: tuple[FieldSpec, ...], size: int,
+    ) -> list[DeviceStep]:
+        """``records`` as host-half scoring steps of ``size`` records each."""
+        if self._preparer is not preparer or self._fields != fields:
+            self._preparer, self._fields, self._held = preparer, fields, []
+        for held, steps in self._held:
+            if held is records:
+                return steps
+        steps = list(scoring_steps(records, preparer, fields, size))
+        self._held.append((records, steps))
+        return steps
 
 
 def scoring_steps(
@@ -278,7 +276,7 @@ class Validator:
         self.losses = losses
         self.floor = FloorCache()
         #: The samples' host halves for the field set last scored.
-        self._host: HostSteps | None = None
+        self._host = HostSteps()
         #: The control score's cache; :meth:`prepare` builds it.
         self.scorer: ControlScorer | None = None
 
@@ -328,12 +326,11 @@ class Validator:
         )
         kept = KeptTargets() if self.floor.stale(fields) else None
         collectors = (parts, margins) if kept is None else (parts, margins, kept)
-        host = self.host_steps(run, samples, fields)
         card = ValidationPass(
-            self.score_prepared(host.card_disjoint, run, collectors),
+            self.score(samples.card_disjoint, run, fields, collectors),
             parts.means(), margins.margins,
         )
-        game = ValidationPass(self.score_prepared(host.game_disjoint, run, ()), {}, None)
+        game = ValidationPass(self.score(samples.game_disjoint, run, fields), {}, None)
         if kept is not None:
             self.floor.update(
                 fields, constant_predictor_floor(kept.sample, fields=fields),
@@ -345,15 +342,6 @@ class Validator:
         started = time.perf_counter()
         control = self.control(run, fields)
         return EpochScores(card, game, control, time.perf_counter() - started)
-
-    def host_steps(
-        self, run: RunContext, samples: ValidationSamples, fields: tuple[FieldSpec, ...],
-    ) -> HostSteps:
-        """The samples' host halves for ``fields``, prepared on the first ask
-        and after any change of field set, samples or preparer."""
-        if self._host is None or not self._host.serves(run.preparer, samples, fields):
-            self._host = HostSteps.prepare(run.preparer, samples, fields, self.batch_size)
-        return self._host
 
     def score(
         self, records, run: RunContext, fields: tuple[FieldSpec, ...],
@@ -368,27 +356,12 @@ class Validator:
         batches, so none needs a second pass. A batch keeps the sample's
         order: its texts are encoded once whichever records share them
         (``SurfaceBatcher.batch_texts``), so grouping by game would save
-        nothing.
+        nothing. The batches are prepared on a stratum's first pass for a field
+        set and kept (:class:`HostSteps`).
         """
         if not records:
             return float("nan")
-        prepared = scoring_steps(records, run.preparer, fields, self.batch_size)
-        return self._score_steps(prepared, run, collectors)
-
-    def score_prepared(
-        self, steps: list[DeviceStep], run: RunContext,
-        collectors: tuple[PassCollector, ...] = (),
-    ) -> float:
-        """:meth:`score` over host halves already prepared: the same mean,
-        NaN for an empty sample."""
-        if not steps:
-            return float("nan")
-        return self._score_steps(steps, run, collectors)
-
-    def _score_steps(
-        self, prepared: Iterable[DeviceStep], run: RunContext,
-        collectors: tuple[PassCollector, ...],
-    ) -> float:
+        prepared = self._host.steps(records, run.preparer, fields, self.batch_size)
         scoring = StepScoring(
             RecordForward(run.encoder, run.model, run.scoring), self.losses, self.device,
         )
