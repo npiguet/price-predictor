@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.event.GameEventGameFinished;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -14,7 +15,6 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static com.pricepredictor.connector.effects.RecordEvents.eventTypes;
 import static com.pricepredictor.connector.effects.RecordEvents.eventsNaming;
@@ -23,11 +23,16 @@ import static com.pricepredictor.connector.effects.RecordPicks.only;
 import static com.pricepredictor.connector.effects.RecordAbilities.outcomeOf;
 import static com.pricepredictor.connector.effects.RecordPicks.records;
 import static com.pricepredictor.connector.effects.RecordAbilities.scriptOf;
+import static com.pricepredictor.connector.effects.RecordLines.parse;
+import static com.pricepredictor.connector.effects.RecordMoves.damageTo;
+import static com.pricepredictor.connector.effects.RecordMoves.deathsOf;
+import static com.pricepredictor.connector.effects.RecordMoves.eventsOn;
+import static com.pricepredictor.connector.effects.RecordMoves.moves;
+import static com.pricepredictor.connector.effects.RecordMoves.movesOffTheStack;
 import static com.pricepredictor.connector.effects.RecordPicks.withEventOfType;
 import static com.pricepredictor.connector.effects.TestBoard.cast;
 import static com.pricepredictor.connector.effects.TestBoard.enterStep;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
-import static com.pricepredictor.connector.effects.TestBoard.priorityWithTriggers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -47,8 +52,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Driven through the real engine — a card moved to the stack zone and then
  * onto the stack, as the engine's own play path does, the trigger handler,
- * {@code resolveStack} and the state-based check — with the collector on the
- * game's own bus, in the order {@code PhaseHandler.mainLoopStep} runs them.
+ * {@code resolveStack} and the state-based loop — with the game recorded as a
+ * worker on the patched checkout records it ({@link ShardRun#hooked}), in the
+ * order {@code PhaseHandler.mainLoopStep} runs them.
  */
 @ExtendWith(ForgeExtension.class)
 class StackItemBracketTest {
@@ -62,22 +68,22 @@ class StackItemBracketTest {
     private static final String COUNTERSPELL = "cardsfolder/c/counterspell.txt";
     private static final String GRAPESHOT = "cardsfolder/g/grapeshot.txt";
     private static final String EXPERTISE = "cardsfolder/k/kari_zevs_expertise.txt";
+    private static final String WHY = "for the resolution starts and the state-based loop's signals";
 
     /** A card in {@code caster}'s hand, to be cast with {@link #cast}. */
     private static Card inHand(Game game, Player caster, String name) {
         return TestBoard.inHand(game, caster, name);
     }
 
-    /** Resolve the top of the stack and run the priority after it. */
-    private static void resolve(Game game) {
-        game.getStack().resolveStack();
-        priorityWithTriggers(game);
+    /** The events of {@code type} the recording has counted as reaching no record in the first main phase. */
+    private static long dropped(GameRecording recording, String type) {
+        return recording.droppedEvents().counts()
+                .getOrDefault(new DroppedEvents.Key(type, "main1"), 0L);
     }
 
-    /** The moves the collector has counted as reaching no record in the first main phase. */
-    private static long droppedMoves(BusBracketCollector collector) {
-        return collector.droppedEvents().counts()
-                .getOrDefault(new DroppedEvents.Key("zone_change", "main1"), 0L);
+    /** The moves the recording has counted as reaching no record in the first main phase. */
+    private static long droppedMoves(GameRecording recording) {
+        return dropped(recording, "zone_change");
     }
 
     /** The cost half and the effect half through {@code script}, linked to each other. */
@@ -122,20 +128,19 @@ class StackItemBracketTest {
      */
     @Test
     void aSpellUnderItsCastTriggerWritesItsOwnHalf() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card bolt = inHand(game, caster, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
             // Entered under the collector's eye, so the pump is a change it
             // has a reading to compare against (FirstStatChangeTest).
-            TestBoard.inPlay(game, caster, "Monastery Swiftspear");
-            cast(game, bolt, caster, opponent);
-            priorityWithTriggers(game);
+            TestBoard.inPlay(game, duel.caster(), "Monastery Swiftspear");
+            cast(game, bolt, duel.caster(), duel.opponent());
+            duel.priority();
             assertEquals(2, game.getStack().size(), "prowess went on the stack above the Bolt");
-            resolve(game);
-            resolve(game);
+            duel.resolve();
+            duel.resolve();
             nextStep(game);
         });
 
@@ -151,37 +156,35 @@ class StackItemBracketTest {
      * board and is no record's: it is counted as dropped (FR-042a, FR-042b).
      * The 0/0 then dies in the state-based check with no resolution held and
      * no damage step open, so that death reaches no record and is counted
-     * (FR-029).
+     * (FR-029). The Bolt's half is its damage and its move off the stack.
      */
     @Test
-    void whatASpellGatheredBeforeATriggerWentAboveItStaysInItsHalf() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        TestBoard.inPlay(game, caster, "Monastery Swiftspear");
-        Card bolt = inHand(game, caster, "Lightning Bolt");
+    void whatACastSetOffBeforeItsTriggerWentAboveItIsCountedAsDropped() throws Throwable {
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        TestBoard.inPlay(game, duel.caster(), "Monastery Swiftspear");
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
         Card[] maro = new Card[1];
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
             // Entered under the collector's eye, so its shrink has a reading
             // to differ from (FirstStatChangeTest).
-            maro[0] = TestBoard.inPlay(game, caster, "Maro");
-            game.getAction().checkStateEffects(false);
-            cast(game, bolt, caster, opponent);
-            assertTrue(collector.droppedEvents().counts().getOrDefault(
-                            new DroppedEvents.Key("pt_change", "main1"), 0L) >= 1,
+            maro[0] = TestBoard.inPlay(game, duel.caster(), "Maro");
+            duel.stateBasedLoop();
+            cast(game, bolt, duel.caster(), duel.opponent());
+            assertTrue(dropped(recording, "pt_change") >= 1,
                     "the cast's shrink is counted as dropped (A4): "
-                            + collector.droppedEvents().counts());
-            long movesDroppedBefore = droppedMoves(collector);
-            priorityWithTriggers(game);
+                            + recording.droppedEvents().counts());
+            long movesDroppedBefore = droppedMoves(recording);
+            duel.priority();
             assertEquals(ZoneType.Graveyard,
                     game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
                     "Maro died with no card left in hand");
             assertEquals(2, game.getStack().size(), "prowess went on the stack above the Bolt");
-            assertEquals(1L, droppedMoves(collector) - movesDroppedBefore,
-                    "the death is counted: " + collector.droppedEvents().counts());
-            resolve(game);
-            resolve(game);
+            assertEquals(1L, droppedMoves(recording) - movesDroppedBefore,
+                    "the death is counted: " + recording.droppedEvents().counts());
+            duel.resolve();
+            duel.resolve();
             nextStep(game);
         });
 
@@ -198,23 +201,22 @@ class StackItemBracketTest {
      */
     @Test
     void aStormCopyAboveItsOriginalLeavesTheOriginalItsOwnHalf() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card bolt = inHand(game, caster, "Lightning Bolt");
-        Card grapeshot = inHand(game, caster, "Grapeshot");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
+        Card grapeshot = inHand(game, duel.caster(), "Grapeshot");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            cast(game, bolt, caster, opponent);
-            priorityWithTriggers(game);
-            resolve(game);
-            cast(game, grapeshot, caster, opponent);
-            priorityWithTriggers(game);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            cast(game, bolt, duel.caster(), duel.opponent());
+            duel.priority();
+            duel.resolve();
+            cast(game, grapeshot, duel.caster(), duel.opponent());
+            duel.priority();
             assertEquals(2, game.getStack().size(), "storm went on the stack above Grapeshot");
-            resolve(game);
+            duel.resolve();
             assertEquals(2, game.getStack().size(), "the copy is above the original");
-            resolve(game);
-            resolve(game);
+            duel.resolve();
+            duel.resolve();
             nextStep(game);
         });
 
@@ -237,55 +239,53 @@ class StackItemBracketTest {
      */
     @Test
     void aSpellAndTheResponseAboveItEachWriteTheirOwnHalf() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card shock = inHand(game, caster, "Shock");
-        Card bolt = inHand(game, opponent, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card shock = inHand(game, duel.caster(), "Shock");
+        Card bolt = inHand(game, duel.opponent(), "Lightning Bolt");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            cast(game, shock, caster, opponent);
-            cast(game, bolt, opponent, caster);
-            resolve(game);
-            resolve(game);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            cast(game, shock, duel.caster(), duel.opponent());
+            cast(game, bolt, duel.opponent(), duel.caster());
+            duel.resolve();
+            duel.resolve();
             nextStep(game);
         });
 
         String boltHalf = linkedHalf(all, BOLT);
         assertEquals(SPELL, eventTypes(boltHalf), boltHalf);
-        assertTrue(boltHalf.contains("\"amount\":3"), boltHalf);
+        assertEquals(List.of(3L), damageTo(boltHalf, Refs.of(duel.caster())), boltHalf);
         String shockHalf = linkedHalf(all, SHOCK);
         assertEquals(SPELL, eventTypes(shockHalf), shockHalf);
-        assertTrue(shockHalf.contains("\"subjects\":[\"E" + shock.getId()
-                + "\"],\"params\":{\"from_zone\":\"stack\""), shockHalf);
-        assertFalse(shockHalf.contains("\"subjects\":[\"E" + bolt.getId() + "\"]"), shockHalf);
-        assertTrue(shockHalf.contains("\"amount\":2"), shockHalf);
+        assertEquals(1, movesOffTheStack(shockHalf, shock).size(), shockHalf);
+        assertEquals(List.of(), eventsNaming(shockHalf, Refs.of(bolt)), shockHalf);
+        assertEquals(List.of(2L), damageTo(shockHalf, Refs.of(duel.opponent())), shockHalf);
     }
 
     /**
      * Lightning Bolt, then Shock, then a Counterspell at the Bolt. The
      * Counterspell resolves and writes its half with the Bolt's move off the
-     * stack (FR-042b); the Bolt, gone from the stack without resolving, has
-     * its cost half from its cast and writes no effect half; the Shock,
-     * between them, still writes its own, with nothing of the
+     * stack, the {@code spell_countered} the counter hook reports, and its
+     * own move off the stack (FR-042b); the Bolt, gone from the stack without
+     * resolving, has its cost half from its cast and writes no effect half;
+     * the Shock, between them, still writes its own, with nothing of the
      * Counterspell's.
      */
     @Test
     void aCounteredSpellIsWrittenOffAndTheSpellsAroundItKeepTheirHalves() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card bolt = inHand(game, caster, "Lightning Bolt");
-        Card shock = inHand(game, caster, "Shock");
-        Card counterspell = inHand(game, opponent, "Counterspell");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
+        Card shock = inHand(game, duel.caster(), "Shock");
+        Card counterspell = inHand(game, duel.opponent(), "Counterspell");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            SpellAbility boltSpell = cast(game, bolt, caster, opponent);
-            cast(game, shock, caster, opponent);
-            cast(game, counterspell, opponent, boltSpell);
-            resolve(game);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            SpellAbility boltSpell = cast(game, bolt, duel.caster(), duel.opponent());
+            cast(game, shock, duel.caster(), duel.opponent());
+            cast(game, counterspell, duel.opponent(), boltSpell);
+            duel.resolve();
             assertEquals(1, game.getStack().size(), "the Bolt was countered");
-            resolve(game);
+            duel.resolve();
             nextStep(game);
         });
 
@@ -293,10 +293,12 @@ class StackItemBracketTest {
         assertFalse(RecordEvents.payload(boltCost).containsKey("outcome"), boltCost);
         assertTrue(halvesThrough(all, BOLT).isEmpty(), all.toString());
         String counterHalf = linkedHalf(all, COUNTERSPELL);
-        assertEquals(List.of("zone_change", "zone_change"), eventTypes(counterHalf), counterHalf);
-        assertTrue(counterHalf.contains("\"subjects\":[\"E" + bolt.getId()
-                + "\"],\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"graveyard\""),
+        assertEquals(List.of("zone_change", "spell_countered", "zone_change"),
+                eventTypes(counterHalf), counterHalf);
+        assertEquals(1, moves(counterHalf, bolt, "stack", "graveyard").size(),
                 "the countered Bolt going to the graveyard: " + counterHalf);
+        assertEquals(1, eventsOn(counterHalf, bolt, "spell_countered").size(), counterHalf);
+        assertEquals(1, moves(counterHalf, counterspell, "stack", "graveyard").size(), counterHalf);
         assertEquals(SPELL, eventTypes(linkedHalf(all, SHOCK)), all.toString());
     }
 
@@ -307,19 +309,19 @@ class StackItemBracketTest {
      */
     @Test
     void aWinDecidedAboveAWaitingSpellIsStillWritten() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        opponent.setLife(3, null);
-        Card shock = inHand(game, caster, "Shock");
-        Card bolt = inHand(game, caster, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        duel.opponent().setLife(3, null);
+        Card shock = inHand(game, duel.caster(), "Shock");
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            SpellAbility shockSpell = cast(game, shock, caster, opponent);
-            cast(game, bolt, caster, opponent);
-            resolve(game);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            cast(game, shock, duel.caster(), duel.opponent());
+            cast(game, bolt, duel.caster(), duel.opponent());
+            duel.resolve();
             assertTrue(game.isGameOver(), "the Bolt won the game");
-            collector.finishGame(Set.of(shockSpell.getId()));
+            assertEquals(1, game.getStack().size(), "the Shock still waits");
+            game.fireEvent(new GameEventGameFinished());
         });
 
         List<String> won = withEventOfType(all, "player_won");
@@ -337,12 +339,12 @@ class StackItemBracketTest {
      */
     @Test
     void aResponsesPaymentIsNotTheWaitingSpells() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        SpellAbility shock = inHand(game, caster, "Shock").getFirstSpellAbility();
-        shock.setActivatingPlayer(caster);
-        SpellAbility bolt = inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
-        bolt.setActivatingPlayer(caster);
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        SpellAbility shock = inHand(game, duel.caster(), "Shock").getFirstSpellAbility();
+        shock.setActivatingPlayer(duel.caster());
+        SpellAbility bolt = inHand(game, duel.caster(), "Lightning Bolt").getFirstSpellAbility();
+        bolt.setActivatingPlayer(duel.caster());
 
         List<String> all = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(shock);
@@ -380,40 +382,36 @@ class StackItemBracketTest {
      */
     @Test
     void whatAResponsesMoveOntoTheStackSetsOffIsTheResponses() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card shock = inHand(game, caster, "Shock");
-        Card bolt = inHand(game, opponent, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card shock = inHand(game, duel.caster(), "Shock");
+        Card bolt = inHand(game, duel.opponent(), "Lightning Bolt");
         Card[] maro = new Card[1];
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
             // Entered under the collector's eye, so its shrink has a reading
             // to differ from (FirstStatChangeTest).
-            maro[0] = TestBoard.inPlay(game, opponent, "Maro");
-            game.getAction().checkStateEffects(false);
-            cast(game, shock, caster, opponent);
-            cast(game, bolt, opponent, caster);
-            long movesDroppedBefore = droppedMoves(collector);
-            priorityWithTriggers(game);
+            maro[0] = TestBoard.inPlay(game, duel.opponent(), "Maro");
+            duel.stateBasedLoop();
+            cast(game, shock, duel.caster(), duel.opponent());
+            cast(game, bolt, duel.opponent(), duel.caster());
+            long movesDroppedBefore = droppedMoves(recording);
+            duel.priority();
             assertEquals(ZoneType.Graveyard,
                     game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
                     "Maro died with no card left in hand");
-            assertEquals(1L, droppedMoves(collector) - movesDroppedBefore,
-                    "the death is counted: " + collector.droppedEvents().counts());
-            resolve(game);
-            resolve(game);
+            assertEquals(1L, droppedMoves(recording) - movesDroppedBefore,
+                    "the death is counted: " + recording.droppedEvents().counts());
+            duel.resolve();
+            duel.resolve();
             nextStep(game);
         });
 
         assertEquals(SPELL, eventTypes(linkedHalf(all, SHOCK)), all.toString());
         String boltHalf = linkedHalf(all, BOLT);
-        String maroRef = "\"subjects\":[\"E" + maro[0].getId() + "\"]";
         assertEquals(SPELL, eventTypes(boltHalf), boltHalf);
         for (String record : all) {
-            assertFalse(record.contains("{\"type\":\"zone_change\"," + maroRef
-                    + ",\"params\":{\"from_zone\":\"battlefield\""),
-                    "the death reached a record: " + record);
+            assertEquals(List.of(), deathsOf(record, maro[0]), "the death reached a record: " + record);
         }
     }
 
@@ -427,21 +425,20 @@ class StackItemBracketTest {
      */
     @Test
     void unmorphingInResponseIsNotTheWaitingSpells() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card shock = inHand(game, caster, "Shock");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card shock = inHand(game, duel.caster(), "Shock");
         Card[] craghorn = new Card[1];
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            craghorn[0] = faceDownCraghorn(game, caster);
-            SpellAbility unmorph = turnFaceUpOf(craghorn[0], caster);
-            cast(game, shock, caster, opponent);
-            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, unmorph, null),
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            craghorn[0] = faceDownCraghorn(duel);
+            SpellAbility unmorph = turnFaceUpOf(craghorn[0], duel.caster());
+            cast(game, shock, duel.caster(), duel.opponent());
+            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(duel.caster(), unmorph, null),
                     "the AI turned the Craghorn face up");
             assertFalse(craghorn[0].isFaceDown(), "the Craghorn is face up");
-            priorityWithTriggers(game);
-            resolve(game);
+            duel.priority();
+            duel.resolve();
             nextStep(game);
         });
 
@@ -455,9 +452,9 @@ class StackItemBracketTest {
      */
     @Test
     void aManaAbilityAtPriorityIsNotTheWaitingSpells() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Player caster = duel.caster();
         Card shock = inHand(game, caster, "Shock");
         Card reef = TestBoard.inPlay(game, caster, "Shivan Reef");
         SpellAbility painful = null;
@@ -470,34 +467,34 @@ class StackItemBracketTest {
         painful.setActivatingPlayer(caster);
         SpellAbility tap = painful;
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            cast(game, shock, caster, opponent);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            cast(game, shock, caster, duel.opponent());
             assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, tap, null),
                     "the AI activated the Reef");
             assertEquals(19, caster.getLife(), "the Reef dealt 1 damage to its controller");
-            priorityWithTriggers(game);
-            resolve(game);
+            duel.priority();
+            duel.resolve();
             nextStep(game);
         });
 
         String shockHalf = linkedHalf(all, SHOCK);
         assertEquals(SPELL, eventTypes(shockHalf), shockHalf);
-        assertEquals(List.of(), eventsNaming(shockHalf, "P0"),
+        assertEquals(List.of(), eventsNaming(shockHalf, Refs.of(caster)),
                 "nothing dealt to the Reef's controller: " + shockHalf);
     }
 
     /**
-     * Battering Craghorn face down on {@code owner}'s battlefield, with the
-     * three Mountains that pay for turning it face up, after the check that
-     * follows.
+     * Battering Craghorn face down on the caster's battlefield, with the
+     * three Mountains that pay for turning it face up, after the state-based
+     * loop that follows.
      */
-    private static Card faceDownCraghorn(Game game, Player owner) {
+    private static Card faceDownCraghorn(Duel duel) {
         for (int i = 0; i < 3; i++) {
-            TestBoard.inPlay(game, owner, "Mountain");
+            TestBoard.inPlay(duel.game(), duel.caster(), "Mountain");
         }
-        Card craghorn = TestBoard.inPlay(game, owner, "Battering Craghorn");
+        Card craghorn = TestBoard.inPlay(duel.game(), duel.caster(), "Battering Craghorn");
         craghorn.turnFaceDown(true);
-        game.getAction().checkStateEffects(false);
+        duel.stateBasedLoop();
         return craghorn;
     }
 
@@ -524,20 +521,19 @@ class StackItemBracketTest {
      */
     @Test
     void aCardLeftInTheStackZoneDoesNotSwallowAWin() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        opponent.setLife(3, null);
-        Card stuck = inHand(game, caster, "Grizzly Bears");
-        Card bolt = inHand(game, caster, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        duel.opponent().setLife(3, null);
+        Card stuck = inHand(game, duel.caster(), "Grizzly Bears");
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
             game.getAction().moveToStack(stuck, null);
-            priorityWithTriggers(game);
-            cast(game, bolt, caster, opponent);
-            resolve(game);
+            duel.priority();
+            cast(game, bolt, duel.caster(), duel.opponent());
+            duel.resolve();
             assertTrue(game.isGameOver(), "the Bolt won the game");
-            collector.finishGame(Set.of());
+            game.fireEvent(new GameEventGameFinished());
         });
 
         assertEquals(1, withEventOfType(all, "player_won").size(), "the win is written: " + all);
@@ -552,29 +548,28 @@ class StackItemBracketTest {
      */
     @Test
     void aCardLeftInTheStackZoneDoesNotSwallowADeath() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card stuck = inHand(game, caster, "Grizzly Bears");
-        Card shock = inHand(game, caster, "Shock");
-        Card bolt = inHand(game, opponent, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card stuck = inHand(game, duel.caster(), "Grizzly Bears");
+        Card shock = inHand(game, duel.caster(), "Shock");
+        Card bolt = inHand(game, duel.opponent(), "Lightning Bolt");
         Card[] maro = new Card[1];
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            maro[0] = TestBoard.inPlay(game, opponent, "Maro");
-            game.getAction().checkStateEffects(false);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            maro[0] = TestBoard.inPlay(game, duel.opponent(), "Maro");
+            duel.stateBasedLoop();
             game.getAction().moveToStack(stuck, null);
-            cast(game, shock, caster, opponent);
-            cast(game, bolt, opponent, caster);
-            long movesDroppedBefore = droppedMoves(collector);
-            priorityWithTriggers(game);
+            cast(game, shock, duel.caster(), duel.opponent());
+            cast(game, bolt, duel.opponent(), duel.caster());
+            long movesDroppedBefore = droppedMoves(recording);
+            duel.priority();
             assertEquals(ZoneType.Graveyard,
                     game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
                     "Maro died with no card left in hand");
-            assertEquals(1L, droppedMoves(collector) - movesDroppedBefore,
-                    "the death is counted: " + collector.droppedEvents().counts());
-            resolve(game);
-            resolve(game);
+            assertEquals(1L, droppedMoves(recording) - movesDroppedBefore,
+                    "the death is counted: " + recording.droppedEvents().counts());
+            duel.resolve();
+            duel.resolve();
             nextStep(game);
         });
 
@@ -591,26 +586,26 @@ class StackItemBracketTest {
      */
     @Test
     void anActionIsInNoRecordEvenAtTheEndOfTheGame() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
         Card[] craghorn = new Card[1];
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            craghorn[0] = faceDownCraghorn(game, caster);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            craghorn[0] = faceDownCraghorn(duel);
             // A cast and its resolution empty the orphans of the board's setup.
-            cast(game, inHand(game, caster, "Shock"), caster, game.getPlayers().get(1));
-            resolve(game);
+            cast(game, inHand(game, duel.caster(), "Shock"), duel.caster(), duel.opponent());
+            duel.resolve();
             nextStep(game);
-            SpellAbility unmorph = turnFaceUpOf(craghorn[0], caster);
-            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, unmorph, null),
+            SpellAbility unmorph = turnFaceUpOf(craghorn[0], duel.caster());
+            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(duel.caster(), unmorph, null),
                     "the AI turned the Craghorn face up");
             assertFalse(craghorn[0].isFaceDown(), "the Craghorn is face up");
-            priorityWithTriggers(game);
+            duel.priority();
             enterStep(game, PhaseType.COMBAT_BEGIN);
-            collector.finishGame(Set.of());
+            game.fireEvent(new GameEventGameFinished());
         });
 
-        String ref = "E" + craghorn[0].getId();
+        String ref = Refs.of(craghorn[0]);
         for (String record : all) {
             assertEquals(List.of(), eventsNaming(record, ref),
                     "an action's events written in a record: " + record);
@@ -621,21 +616,20 @@ class StackItemBracketTest {
      * An action at priority that files nothing of its own — Rod of Ruin's
      * activation named to the stack, one bus event that no record takes, and
      * the stack let go — still ends the waiting Shock's consequences: the
-     * Grizzly Bears that die in the state-based check after it are not in the
+     * Grizzly Bears that die in the state-based loop after it are not in the
      * Shock's half.
      */
     @Test
     void anActionThatFilesNothingStillEndsTheWaitingSpellsConsequences() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
         Card[] bears = new Card[1];
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            Card rod = TestBoard.inPlay(game, caster, "Rod of Ruin");
-            bears[0] = TestBoard.inPlay(game, opponent, "Grizzly Bears");
-            cast(game, inHand(game, caster, "Shock"), caster, opponent);
-            priorityWithTriggers(game);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            Card rod = TestBoard.inPlay(game, duel.caster(), "Rod of Ruin");
+            bears[0] = TestBoard.inPlay(game, duel.opponent(), "Grizzly Bears");
+            cast(game, inHand(game, duel.caster(), "Shock"), duel.caster(), duel.opponent());
+            duel.priority();
             SpellAbility activation = null;
             for (SpellAbility sa : rod.getSpellAbilities()) {
                 if (sa.isActivatedAbility()) {
@@ -643,23 +637,23 @@ class StackItemBracketTest {
                 }
             }
             assertNotNull(activation, "Rod of Ruin's activated ability");
-            activation.setActivatingPlayer(caster);
+            activation.setActivatingPlayer(duel.caster());
             // ComputerUtil.handlePlayingSpellAbility names the action first.
             game.getStack().freezeStack(activation);
             game.fireEvent(new forge.game.event.GameEventAddLog(
                     forge.game.GameLogEntryType.STACK_ADD, "an action that files nothing"));
             game.getStack().unfreezeStack();
             bears[0].setDamage(2);
-            game.getAction().checkStateEffects(false);
+            duel.stateBasedLoop();
             assertEquals(ZoneType.Graveyard,
                     game.getZoneOf(game.getCardState(bears[0])).getZoneType(),
                     "the Bears died in the check");
-            resolve(game);
+            duel.resolve();
             nextStep(game);
         });
 
         String shockHalf = linkedHalf(all, SHOCK);
-        assertEquals(List.of(), eventsNaming(shockHalf, "E" + bears[0].getId()),
+        assertEquals(List.of(), eventsNaming(shockHalf, Refs.of(bears[0])),
                 "the Bears' death after the action is not the Shock's: " + shockHalf);
         assertEquals(SPELL, eventTypes(shockHalf), shockHalf);
     }
@@ -671,21 +665,21 @@ class StackItemBracketTest {
      */
     @Test
     void aPaymentInTheDamageStepIsNotTheCombats() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_DAMAGE);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
+        Duel duel = Duel.at(PhaseType.COMBAT_DAMAGE);
+        Game game = duel.game();
+        Player caster = duel.caster();
         Card splinters = inHand(game, caster, "Bone Splinters");
         Card swamp = TestBoard.inPlay(game, caster, "Swamp");
         Card elves = TestBoard.inPlay(game, caster, "Llanowar Elves");
-        Card angel = TestBoard.inPlay(game, opponent, "Serra Angel");
+        Card angel = TestBoard.inPlay(game, duel.opponent(), "Serra Angel");
         SpellAbility spell = splinters.getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
         spell.resetTargets();
         spell.getTargets().add(angel);
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
             // Something dealt in the step, so the step has a combat record.
-            game.fireEvent(new forge.game.event.GameEventPlayerLivesChanged(opponent, 20, 18));
+            game.fireEvent(new forge.game.event.GameEventPlayerLivesChanged(duel.opponent(), 20, 18));
             assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, spell, null),
                     "the AI cast the Splinters");
             assertEquals(ZoneType.Graveyard,
@@ -694,10 +688,10 @@ class StackItemBracketTest {
             enterStep(game, PhaseType.COMBAT_END);
         });
 
-        List<String> combat = all.stream().filter(r -> r.contains("\"kind\":\"combat\"")).toList();
+        List<String> combat = all.stream().filter(r -> "combat".equals(parse(r).get("kind"))).toList();
         assertEquals(1, combat.size(), all.toString());
         for (Card paid : List.of(swamp, elves)) {
-            assertFalse(combat.get(0).contains("\"subjects\":[\"E" + paid.getId() + "\"]"),
+            assertEquals(List.of(), eventsNaming(combat.get(0), Refs.of(paid)),
                     "the Splinters' payment is in the combat record: " + combat.get(0));
         }
         assertEquals(List.of("life_change"), eventTypes(combat.get(0)), combat.get(0));
@@ -713,20 +707,20 @@ class StackItemBracketTest {
      */
     @Test
     void aForcedCastsMoveOntoTheStackIsNotItsEffect() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Card maro = TestBoard.inPlay(game, caster, "Maro");
-        TestBoard.inPlay(game, caster, "Grizzly Bears");
-        SpellAbility bolt = inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
-        bolt.setActivatingPlayer(caster);
-        game.getAction().checkStateEffects(false);
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card maro = TestBoard.inPlay(game, duel.caster(), "Maro");
+        TestBoard.inPlay(game, duel.caster(), "Grizzly Bears");
+        SpellAbility bolt = inHand(game, duel.caster(), "Lightning Bolt").getFirstSpellAbility();
+        bolt.setActivatingPlayer(duel.caster());
+        duel.stateBasedLoop();
         CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
-        List<String> records = ShardRun.forked(tempDir, game, caps, 5L, bolt).records();
+        List<String> records = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 5L, bolt, "for the fork's own resolution").records();
 
         assertEquals(1, records.size(), records.toString());
-        assertFalse(records.get(0).contains(
-                        "{\"type\":\"pt_change\",\"subjects\":[\"E" + maro.getId() + "\"]"),
+        assertEquals(List.of(), eventsOn(records.get(0), maro, "pt_change"),
                 "the shrink the forced Bolt's move from hand set off: " + records.get(0));
     }
 
@@ -740,32 +734,30 @@ class StackItemBracketTest {
      */
     @Test
     void aSpellCastBySorceryGetsNoneOfTheSorcerysMoveOffTheStack() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        Player opponent = game.getPlayers().get(1);
-        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
-        Card expertise = inHand(game, caster, "Kari Zev's Expertise");
-        Card bolt = inHand(game, caster, "Lightning Bolt");
+        Duel duel = Duel.inMainPhase();
+        Game game = duel.game();
+        Card bears = TestBoard.inPlay(game, duel.opponent(), "Grizzly Bears");
+        Card expertise = inHand(game, duel.caster(), "Kari Zev's Expertise");
+        Card bolt = inHand(game, duel.caster(), "Lightning Bolt");
 
-        List<String> all = ShardRun.observed(tempDir, game, collector -> {
-            cast(game, expertise, caster, bears);
+        List<String> all = ShardRun.hooked(tempDir, game, WHY, recording -> {
+            cast(game, expertise, duel.caster(), bears);
             game.getStack().resolveStack();
             assertEquals(ZoneType.Stack, game.getZoneOf(game.getCardState(bolt)).getZoneType(),
                     "the Expertise cast the Bolt");
-            priorityWithTriggers(game);
-            resolve(game);
+            duel.priority();
+            duel.resolve();
             nextStep(game);
         });
 
         String boltHalf = linkedHalf(all, BOLT);
         assertEquals(SPELL, eventTypes(boltHalf), "nothing of the Expertise's is the Bolt's: " + all);
-        assertFalse(boltHalf.contains("\"subjects\":[\"E" + expertise.getId() + "\"]"), boltHalf);
+        assertEquals(List.of(), eventsNaming(boltHalf, Refs.of(expertise)), boltHalf);
         String expertiseHalf = linkedHalf(all, EXPERTISE);
         List<String> types = eventTypes(expertiseHalf);
         assertEquals("zone_change", types.get(types.size() - 1), expertiseHalf);
-        assertTrue(expertiseHalf.contains("\"subjects\":[\"E" + expertise.getId()
-                + "\"],\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"graveyard\""),
+        assertEquals(1, moves(expertiseHalf, expertise, "stack", "graveyard").size(),
                 "the Expertise's own move off the stack ends its half: " + expertiseHalf);
-        assertFalse(eventTypes(expertiseHalf).contains("damage_dealt"), expertiseHalf);
+        assertFalse(types.contains("damage_dealt"), expertiseHalf);
     }
 }
