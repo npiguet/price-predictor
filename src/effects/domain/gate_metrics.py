@@ -37,7 +37,7 @@ GATE1_MIN_GATE_F1_GAIN = 0.05
 GATE1_MIN_ZONE_ACCURACY_GAIN = 0.05
 GATE1_MIN_DEVIANCE_REDUCTION = 0.05
 #: A zone outcome observed in fewer cells than this in the stratum is left out
-#: of gate 1's balanced zone accuracy (finding 13.5): one cell of a 3-cell
+#: of gate 1's balanced zone accuracy: one cell of a 3-cell
 #: class would move it by a twelfth of a class's weight.
 GATE1_MIN_ZONE_CLASS_CELLS = 10
 GATE3_MAX_MEAN_COSINE = 0.5
@@ -132,7 +132,7 @@ def per_field_deviance(
     deviance_floor: float, read: np.ndarray | None = None,
 ) -> float:
     """The mean over the magnitude fields of each field's mean deviance, each
-    field weighing the same whatever its cells (finding 13.5).
+    field weighing the same whatever its cells.
 
     A field whose constant-prediction deviance under ``scoring`` is at or
     below ``deviance_floor`` is left out, so the fields kept do not depend on

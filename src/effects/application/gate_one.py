@@ -140,7 +140,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     logger.info("gate 1: %d records in the unique-text stratum", len(stratum))
 
     # Both models read under the main model's dispersions, the fields kept by
-    # the floor the main checkpoint was scored under (finding 13.5).
+    # the floor the main checkpoint was scored under.
     main = context.main_runnable(stratum)
     read = partial(
         measure, stratum, log_dispersion=_dispersion(main),

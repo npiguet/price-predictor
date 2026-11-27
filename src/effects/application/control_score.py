@@ -50,7 +50,7 @@ deviance component every field of which falls at or below
 ``--deviance-floor`` — raises :class:`ControlScoreError` naming stratum,
 half and component, which ``train-effect-model`` turns into exit 1 (FR-068c).
 
-**A rule test's readout** (E6). For a binary or categorical output the
+**A rule test's readout** (research E6). For a binary or categorical output the
 reading is the probability of the scenario's category, for a count or delta
 its expected value under the negative binomial; per-entity readings are the
 unconditional ones gate 2 and the probes read (``HeadReading``: the gate's

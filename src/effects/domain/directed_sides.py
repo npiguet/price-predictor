@@ -1,5 +1,5 @@
 """What a collection run counts of its directed forks, and the probabilities
-that follow (D8).
+that follow.
 
 A directed fork's records carry ``aimed_at`` and ``directed = {variant,
 operation}``. ``aimed_at`` names every rule of the fork's registration: one,

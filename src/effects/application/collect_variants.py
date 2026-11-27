@@ -219,7 +219,7 @@ def write_variant(
 #: accepted, by the same lookup DeckMaterializer.resolve uses. Never a
 #: ``.txt``: the whole variant tree is staged into Forge's custom-cards
 #: directory, where Forge reads every ``.txt`` as a card script, and a list of
-#: names with no ``Name:`` line stops every Forge startup (python R1).
+#: names with no ``Name:`` line stops every Forge startup.
 LOADABLE_FILE = "loadable.lst"
 
 

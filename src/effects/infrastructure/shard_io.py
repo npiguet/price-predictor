@@ -449,7 +449,7 @@ _GAME_END = re.compile(r'"subkind"\s*:\s*"game_end"')
 
 def ended_games(path: Path) -> frozenset[str]:
     """The games of one shard that wrote their game-end marker
-    (``turn_action`` / ``game_end``, WP7): a game of the shard missing from
+(``turn_action`` / ``game_end``): a game of the shard missing from
     them was cut. Reads each line's head, parsing only a turn action's
     or a line whose head is in another shape. A damaged last member ends the
     read as it ends every read, but goes unreported here: the read of the

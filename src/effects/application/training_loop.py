@@ -286,7 +286,7 @@ class TrainingLoop:
 
     def _loss_denominators(self, run: RunContext):
         """The startup pre-pass's denominators, over training steps prepared
-        as an epoch's are (finding 15.4)."""
+        as an epoch's are."""
         tasks = denominator_tasks(
             self.training_shards, seed=self.spec.seed,
             steps_per_epoch=self.config.steps_per_epoch,
@@ -322,7 +322,7 @@ class TrainingLoop:
         run.optimizer.zero_grad(set_to_none=True)
         tally = EpochTally(running=torch.zeros((), device=self.device))
         if self.curriculum.resets_at(epoch):
-            # The field set changes here, so no earlier score compares (T5,
+            # The field set changes here, so no earlier score compares (research T5,
             # FR-069): the best control score and the patience start over.
             run.stopper.reset()
             self.reporter.curriculum(epoch, len(run.fields[epoch]))

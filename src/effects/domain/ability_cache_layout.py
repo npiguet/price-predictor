@@ -20,7 +20,7 @@ every ``.npz`` under the converted card tree
 Each variant's cache has a stamp beside it at the cache root
 (:func:`stamp_path`): a :class:`CacheStamp` naming the checkpoint, surface,
 vocabulary and converted trees it was encoded from, which every reader
-compares with the checkpoint it evaluates (finding 11.7).
+compares with the checkpoint it evaluates.
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@ A detector declaration that asks a record kind for an event the collector
 never writes there reads every record of that kind as the event's absence: an
 ``outcome_event`` near miss for each resolution of the declared API, an
 ``absent`` declaration's ``fires`` side for each, polarity and ``observed``
-agreeing so no review list catches it (V5 #14). Such a declaration is
+agreeing so no review list catches it. Such a declaration is
 *untaggable*: :class:`DetectorIndex` sets it aside with its reason, and
 ``rule-counts`` lists it, rather than letting it tag.
 

@@ -56,7 +56,7 @@ from effects.domain.strata import Half, Stratum
 #: The polarities a rule test reads (FR-068a); ``other`` draws none.
 TEST_POLARITIES: tuple[Polarity, ...] = (Polarity.FIRES, Polarity.DOES_NOT_FIRE)
 
-#: Each half of a stratum holds at least gen-2's whole probe set (E5).
+#: Each half of a stratum holds at least gen-2's whole probe set (research E5).
 MIN_GAMES_PER_HALF = 300
 #: The rescaled standard error a rule test may have in a half (FR-068b).
 MAX_ITEM_ERROR = 0.1
@@ -70,7 +70,7 @@ def rule_test_games_needed(max_item_error: float = MAX_ITEM_ERROR) -> int:
     """Games of each polarity a rule test needs in a half: the smallest n
     whose worst-case rescaled standard error with n games each side,
     ``2·√((2n + 1) / (12n²))``, is at most ``max_item_error`` (FR-068b): 68
-    at 0.1. The freeze clusters a rule test's error by game (E4), so a game
+    at 0.1. The freeze clusters a rule test's error by game (research E4), so a game
     counts once however many records of the cell it holds."""
     n = 1
     while auc_standard_error(n, n) > max_item_error:
@@ -91,7 +91,7 @@ def rule_test_eligible(record: EffectRecord, tag: RuleTag) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class PlacementRule:
-    """The flags placement follows, and its precision thresholds (E5)."""
+    """The flags placement follows, and its precision thresholds (research E5)."""
 
     game_disjoint_share: float
     keyword_share: float

@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 #: Records per prepared chunk of the probes', grids' and rule tests' forward,
 #: and per deviance step: forward passes only, so a chunk this large fits the
 #: card beside a training run's state, and runs several times faster than
-#: chunks of a training batch's size (T160).
+#: chunks of a training batch's size.
 CHUNK_RECORDS = 128
 
 

@@ -79,7 +79,7 @@ class SourceTrees:
 
     def require_sidecar_digest(self, recorded: str, *, corpus: Path | str) -> None:
         """Refuse converted trees whose sidecars are not the ones ``corpus``'s
-        manifest recorded (finding 11.3): a reconverted tree joins the
+        manifest recorded: a reconverted tree joins the
         records' keys to other lines without anything raising."""
         found = self.converted_sidecar_digest()
         if found != recorded:

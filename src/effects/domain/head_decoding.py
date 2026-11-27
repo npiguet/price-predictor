@@ -190,7 +190,7 @@ class _EntityFieldDecoder(Decoder):
     a legality field ungated), except on a record that trains no gate (a cost
     half, a playability record, a rewrite whose outcome is partly unknown),
     where a gated field trains at the entities the gate's target marks and is
-    read conditionally, as training reads it (task G11b)."""
+    read conditionally, as training reads it."""
 
     per_entity = True
 

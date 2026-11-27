@@ -217,7 +217,7 @@ class BoardReading:
 
     ``keywords_of(entity)`` names a card's keywords. ``lines`` reads the
     sidecars of the board's replacements and floating effects: a death a
-    regeneration shield or a replacement may turn is refused (P3a #14).
+    regeneration shield or a replacement may turn is refused.
     Without it they are not read.
     """
 

@@ -49,7 +49,7 @@ from price_predictor.infrastructure.atomic_write import write_atomically
 BALANCE_RATIO = 4
 #: Records per half the deviance sample holds at most (research E2).
 DEVIANCE_SAMPLE_CAP = 16_384
-#: The worst-case standard error each grid's records are sized to (T160): a
+#: The worst-case standard error each grid's records are sized to: a
 #: grid freezes the fewest of its records, by smallest keyed hash, that bring
 #: its standard error to this, just under the item target of 0.1, since every
 #: grid record is 64 or more forward records in every epoch (research E2, E4).
@@ -92,13 +92,13 @@ NO_READABLE_OUTPUT = "untested: its tagged records carry no output its map entry
 UNTESTED_REASONS = frozenset({UNTESTED, NO_READABLE_OUTPUT})
 #: Why a rule whose effective outputs are all per-entity is left out of a
 #: half: a polarity of it holds no row naming an outcome entity, where the
-#: rule test would read them (finding 7.8); the reason goes on with each
+#: rule test would read them; the reason goes on with each
 #: polarity's rows naming one.
 NO_OUTCOME_ENTITY = "no outcome entity"
 #: Why a rule-test output is left out of a half (``rule/output``): its mean
 #: targets over the rule's drawn rows differ between the polarities by less
 #: than ``rule_output_targets.MIN_DIFFERENCE``, or no ``fires`` row observes
-#: it; the control score reads no such output (finding 12.9).
+#: it; the control score reads no such output.
 SAME_TARGETS = "targets the same in both polarities"
 UNOBSERVED_TARGETS = "no fires row observes it"
 #: Why a rule is left out of a half when every output it has is left out.

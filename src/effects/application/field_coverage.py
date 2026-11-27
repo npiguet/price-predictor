@@ -70,7 +70,7 @@ class FieldCoverage:
         return not self.varied
 
 
-#: Fields a collector writes as a fixed literal (deviations log, D59), each
+#: Fields a collector writes as a fixed literal (deviations log), each
 #: confirmed by reading the writer. Fields constant only because one run is one
 #: run (``mode``, ``run_id``, ``mirror_of`` and the probe fields under an
 #: emptied ``--probe-keywords``) are absent, or a corpus exercising them would
@@ -82,7 +82,7 @@ class FieldCoverage:
 #: ``result`` and ``replaced_by``: each read constant through a collector
 #: defect, and listing one would make a broken channel look like a known one.
 #:
-#: Empty since the gen-3 pilot (T079): a decision candidate's
+#: Empty since the gen-3 pilot: a decision candidate's
 #: ``responsible_static`` now names the static of a ``static_prohibition``
 #: check, and ``global_.emblems`` carried emblems there.
 KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset()
@@ -141,7 +141,7 @@ def _constant_tag(path: str) -> str:
 
 def event_param_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
     """One row per parameter of each event type the corpus holds, over every
-    event list it appears in (P3b #14): ``absent`` where no event of the type
+    event list it appears in: ``absent`` where no event of the type
     wrote it, ``const`` where it never varied, ``varies`` otherwise. A
     parameter some type writes only at one site (a combat's, a rewrite's)
     reads by its whole."""

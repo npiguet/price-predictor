@@ -19,7 +19,7 @@ it weighs as any copy does, a record no copy was drawn for at one (n = d). A
 record aimed at a rule (a directed fork's, or one collected by
 ``collect-coverage`` or ``collect-variants``, ``aimed_at`` set whatever its
 value) is a record like any other here: its natural copy follows n / d, its
-added copies are masked (D15). A record with no ``curation`` (a lethality
+added copies are masked. A record with no ``curation`` (a lethality
 copy, a record no build curated) trains at full weight.
 
 A reader that weighs a validation row (the explained-deviance sample, the

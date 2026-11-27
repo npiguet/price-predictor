@@ -171,7 +171,7 @@ class NoDetector:
 
 @dataclass(frozen=True, slots=True)
 class SameAs:
-    """A scenario stating the same observable fact as another (D4): 702.17b's
+    """A scenario stating the same observable fact as another: 702.17b's
     shadow-blocks-shadow beside 702.28b, a second instance of a keyword that
     changes nothing beside the keyword's own scenario.
 

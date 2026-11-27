@@ -40,7 +40,7 @@ class EvaluationContext:
     corpus_path: Path
     manifest: CorpusManifest
     #: Each output stratum's shards as the manifest lists them, checked against
-    #: the disk once at load (finding 11.4): every reader of the corpus reads these.
+    #: the disk once at load: every reader of the corpus reads these.
     shards: Mapping[str, tuple[Path, ...]]
     _main_model: LoadedModel | None = field(default=None, repr=False)
     _sidecars: SidecarCache | None = field(default=None, repr=False)
@@ -198,7 +198,7 @@ def with_checkpoint_defaults(
 ) -> EvaluateEffectModelConfig:
     """``config`` reading the converted trees ``--cards-folder`` names, else
     the ones ``main`` recorded, refused unless their sidecars are the ones
-    the corpus was built against (finding 11.3); and the corpus's variant
+    the corpus was built against; and the corpus's variant
     tree where none is named (:func:`with_corpus_defaults`)."""
     from effects.infrastructure.converted_trees import SourceTrees
 
@@ -230,7 +230,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     store = CorpusStore(corpus_path)
     manifest = store.load()
     check_corpus(main.provenance, actual_digest=manifest.digest())
-    # The listed shards alone are read (finding 11.4), each checked before any
+    # The listed shards alone are read, each checked before any
     # record is (FR-020, FR-033).
     listed = require_listed_shards(store, manifest)
     require_generation(path for paths in listed.values() for path in paths)

@@ -236,7 +236,7 @@ def steered_round_error(args: argparse.Namespace) -> str | None:
 
 
 def continues_error(config: Any) -> str | None:
-    """Why ``collect-variants --continues`` cannot resume, or None (V4 #6).
+    """Why ``collect-variants --continues`` cannot resume, or None.
 
     Only the untargeted round resumes: a steered run's iterations aim at the
     counts of the corpus as it stands, so it starts again from fresh
@@ -271,8 +271,8 @@ def _flag_error(args: argparse.Namespace) -> str | None:
 
 def _check_workers_can_start(command: str, config: Any) -> None:
     """The connector JAR, ``java`` and the list files the run reads, checked
-    before any worker starts (python R2), so a missing one exits 1 naming it
-    rather than in a traceback (V4 #9)."""
+    before any worker starts, so a missing one exits 1 naming it
+    rather than in a traceback."""
     import price_predictor.infrastructure.forge_classpath as forge_classpath
 
     holdout = config.deck_holdout
@@ -289,7 +289,7 @@ def _check_workers_can_start(command: str, config: Any) -> None:
 def _check_conversion(command: str, config: Any) -> None:
     """The conversion the ``--cards-folder`` trees come from, checked against
     the connector JAR before any worker starts and kept in the run's
-    ``run.json`` (finding 11.3): a tree naming no conversion, or one converted
+    ``run.json``: a tree naming no conversion, or one converted
     at another Forge commit than the JAR's, or a records directory already
     recording another conversion, exits 1 naming both."""
     from price_predictor.domain.converted_provenance import ConversionRefused

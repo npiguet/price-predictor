@@ -514,9 +514,8 @@ def tag_record(record: EffectRecord, index: DetectorIndex,
 
 def _paid_outcomes(record: EffectRecord, tags: tuple[RuleTag, ...]) -> tuple[RuleTag, ...]:
     """``tags``, on a cost half each naming among its outcome entities the
-    entities the payment trains at (``cost_targets.paid_entities``, task
-    G11b, research R1): what a cost half's targets place is what it paid,
-    so a rule read off one reads its outputs there."""
+    entities the payment trains at (``cost_targets.paid_entities``): what a cost
+    half's targets place is what it paid, so a rule read off one reads its outputs there."""
     if not tags or not is_cost_half(record):
         return tags
     paid = paid_entities(record)

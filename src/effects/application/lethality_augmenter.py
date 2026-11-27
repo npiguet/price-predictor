@@ -33,7 +33,7 @@ class LethalityAugmenter:
     ) -> list[Counterfactual]:
         """The copies of the step's ``records``, whose ``targets`` they were
         derived to. Only a record's first natural row is copied: its other
-        natural rows and its added rows are not (D15). Each copy's text edit is
+        natural rows and its added rows are not. Each copy's text edit is
         staged on ``batcher``."""
         made: list[Counterfactual] = []
         first_naturals = first_natural_rows(records)
@@ -69,7 +69,7 @@ class LethalityAugmenter:
 
 def first_natural_rows(records: Sequence[EffectRecord]) -> frozenset[int]:
     """The indices of each record's first natural row in a step: a natural row
-    has no drawn rule, and a record's later natural copies repeat its id (D15)."""
+    has no drawn rule, and a record's later natural copies repeat its id."""
     seen: set[str] = set()
     firsts = set()
     for index, record in enumerate(records):

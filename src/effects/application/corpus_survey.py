@@ -25,7 +25,7 @@ game:
 them by subkind and reads nothing else of them but their game's properties.
 
 A game whose shard holds no game-end marker (``turn_action`` /
-``game_end``, WP7) was cut: a killed worker, a game or an end-of-game write
+``game_end``) was cut: a killed worker, a game or an end-of-game write
 that threw. Its records are incomplete (no fired-trigger or mana record, maybe
 a missing tail), so the survey drops it whole before any tally reads it,
 counting it in :class:`CutTally`, and the write pass drops the same games

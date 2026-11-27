@@ -61,7 +61,7 @@ def non_deck_names(texts: Mapping[str, str]) -> set[str]:
 @dataclass(frozen=True)
 class Unresolved:
     """The cards Forge's card database does not hold, out of the pool the
-    consult was asked about (P1 #11)."""
+    consult was asked about."""
 
     cards: tuple[str, ...] = ()
     pool: int = 0
@@ -217,7 +217,7 @@ def unresolvable(units: Iterable[str], verdicts: Mapping[str, ConsultVerdict]) -
     holds, and a decks-only round refuses a whole deck naming any other card,
     so a card left unanswered cannot be decked at all. Kept, it would be
     unrecorded and so weighted the most, failing every match whose deck holds
-    it until it retired unseen (P1 #11); it leaves the unit and the decks
+    it until it retired unseen; it leaves the unit and the decks
     instead. No share stops the run; the report says how many, out of how
     many, and what a large share means."""
     pool = sorted(units)

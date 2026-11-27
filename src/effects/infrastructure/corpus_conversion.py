@@ -1,5 +1,5 @@
 """``build-corpus`` joins its shards only against the conversion they were
-collected against (finding 11.3): the records directory's recorded
+collected against: the records directory's recorded
 conversions (``price_predictor.infrastructure.records_conversion``) must be
 the card trees' own."""
 

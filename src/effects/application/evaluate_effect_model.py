@@ -221,7 +221,7 @@ def cache_store(
     context: EvaluationContext, variant: Baseline, variants: dict,
 ) -> AbilityCacheStore:
     """``variant``'s cache, once its stamp names the checkpoint of that variant
-    this run holds (finding 11.7): the main one for ``full``, a
+    this run holds: the main one for ``full``, a
     ``--variant-checkpoint`` for a baseline. The taxonomy cache is read without
     one, compared on everything but the checkpoint, since no weights enter it;
     any other baseline's needs its checkpoint."""

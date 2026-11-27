@@ -123,7 +123,7 @@ class EffectCheckpoint:
     averaged: bool = True
     #: The corpus manifest's rule-map digest (FR-060a).
     rule_map_digest: str = ""
-    #: The digest of the selection set the run's control score read (E1);
+    #: The digest of the selection set the run's control score read (research E1);
     #: None when the run read none.
     selection_set_digest: str | None = None
 
@@ -346,10 +346,10 @@ def inference_files(
     return files
 
 
-#: Rewritten at the end of every epoch; not a checkpoint (see CLAUDE.md
-#: § Model artifacts).
+#: Rewritten at the end of every epoch; not a checkpoint (see
+#: ``src/effects/docs/checkpoints.md``).
 RESUME_NAME = "resume.pt"
-#: The resume state of the run's best card-disjoint epoch, copied from
+#: The resume state of the run's best epoch (by control score), copied from
 #: ``resume.pt`` whenever an epoch sets a new best (FR-063f). Copied into
 #: another run's directory as its ``resume.pt``, it continues from that epoch.
 RESUME_BEST_NAME = "resume-best.pt"

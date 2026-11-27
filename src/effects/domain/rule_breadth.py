@@ -1,4 +1,4 @@
-"""The breadth check: how much of its family's pool a rule detector tags (T036).
+"""The breadth check: how much of its family's pool a rule detector tags.
 
 A declaration names a family and parameters, some stating the family's
 condition and the rule's subject (``DetectorFamily.general``: the event, the

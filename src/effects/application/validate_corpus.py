@@ -89,7 +89,7 @@ def validate_directory(
 
     A shard whose read a damaged member or an undecodable line ends is a
     failed finding naming it and the line, its records before the damage
-    measured; the other shards are read on (V5 #20). What the read met
+    measured; the other shards are read on. What the read met
     without stopping, values outside the wire's closed lists and damaged last
     members (``shard_io.DecodeTally``), is reported as watched figures.
     ``source`` and ``record_renderer`` are the ports the command passes

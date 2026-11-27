@@ -95,7 +95,7 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
                          True, _countered_kind(payload))
     if payload.outcome is None:
         return None
-    # The targets as cast (V5 #25).
+    # The targets as cast.
     return _stack_object(record, payload.outcome)
 
 

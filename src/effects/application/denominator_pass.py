@@ -2,7 +2,7 @@
 
 Before the first step, a run prepares a seeded sample of training steps as
 training prepares them (the rarity-weighted draw, the lethality copies, the
-rule mask; finding 15.4) and keeps each shipped term's constant-prediction
+rule mask) and keeps each shipped term's constant-prediction
 loss over their targets, clamped at ``--deviance-floor``. The run stores the
 result in ``resume.pt`` and its checkpoints and a resume reuses it, so a run
 divides by one set of numbers from its first step to its last.

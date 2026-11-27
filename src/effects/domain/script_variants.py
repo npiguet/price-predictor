@@ -112,7 +112,7 @@ def selects_cards(key: str) -> bool:
     ``…Valid`` key, or one of :data:`_SELECTING_KEYS`. A duration
     (``Duration$ Permanent``), a type name (``Type$``, ``Types$``,
     ``AddType$``), a chain label (``SubAbility$``) or a description can read
-    like a whitelisted selector and is none (T191)."""
+    like a whitelisted selector and is none."""
     return key.startswith("Valid") or key.endswith("Valid") or key in _SELECTING_KEYS
 
 

@@ -92,7 +92,7 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
     acting line). A mana ability that tapped for nothing (Paliano's, no
     revealed colour matched) holds no ``mana_produced`` and is deferred all
     the same, as is one whose payment and sub-abilities did more (a pain
-    land's damage, WP7). Nothing defers an activation half, so a jump on one
+    land's damage). Nothing defers an activation half, so a jump on one
     is still a game boundary.
     """
     payload = record.payload
@@ -213,7 +213,7 @@ class GameBoundaries:
 
 
 class KindPresence:
-    """V5 #19: whether a window holds every record kind a game writes.
+    """Whether a window holds every record kind a game writes.
     Each per-kind check reads an absent kind as holding, so a collector that
     stopped writing one kind passed every check."""
 
@@ -263,7 +263,7 @@ _GAME_END = f"{RecordKind.TURN_ACTION.value}/{TurnActionSubkind.GAME_END.value}"
 
 
 class GameEndMarkers:
-    """WP7: which games ended with their ``turn_action`` / ``game_end``
+    """Which games ended with their ``turn_action`` / ``game_end``
     marker, and what the per-game cap withheld from them.
 
     A game without one was cut (a killed worker, a game or an end-of-game
@@ -450,7 +450,7 @@ class Links:
         yield self._casts_met(limits)
 
     def _casts_met(self, limits: Thresholds) -> Finding:
-        """V5 #18: a cost half standing alone pairs (its item was
+        """A cost half standing alone pairs (its item was
         countered, or still on the stack at the game's end), so the pairing
         check cannot see a collector writing no effect half at all. Judged
         only at the degenerate end: at least ``min_cost_evidence`` cost halves

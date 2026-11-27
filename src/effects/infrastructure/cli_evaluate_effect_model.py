@@ -92,7 +92,7 @@ def _baseline_checkpoint(value: str):
     BaselineVariantError: 1,
     CorpusMismatchError: 1,
     _SIDECARS_CHANGED: 1,
-    # A cache with no stamp, or stamped for another checkpoint (finding 11.7).
+    # A cache with no stamp, or stamped for another checkpoint.
     "effects.domain.ability_cache_layout.CacheStampError": 1,
     FileNotFoundError: 1,
     # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).

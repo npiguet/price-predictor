@@ -237,7 +237,7 @@ class _JoinTally:
             + (" (pass --variant-scripts)" if tree == SourceTree.VARIANT_SCRIPTS else "")
             for tree, count in sorted(self.unchecked_by_tree.items())
         )
-        # A key no tree of this run could join was checked by nothing (V5 #20).
+        # A key no tree of this run could join was checked by nothing.
         return Finding(
             name=_KEYWORD_JOIN,
             ok=broken == 0 and not self.unchecked_by_tree,

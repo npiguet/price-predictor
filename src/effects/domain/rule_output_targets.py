@@ -1,4 +1,4 @@
-"""A rule-test output's targets, and the direction they settle (finding 12.9).
+"""A rule-test output's targets, and the direction they settle.
 
 A rule test reads each of its rule's effective outputs at the tag's outcome
 entities (a per-entity field or the affected gate) or at the record (a

@@ -45,7 +45,7 @@ def _encode_abilities_parser(subparsers) -> None:
 
 @exits_with({
     f"{_EFFECT_MODEL_STORE}.HashMismatchError": 1, FileNotFoundError: 1, _LAYOUT_REFUSED: 1,
-    # --variant identity or state-only, whose models read no cache (finding 11.7).
+    # --variant identity or state-only, whose models read no cache.
     "effects.application.encode_abilities.UnencodedVariantError": 1,
 })
 def run_encode_abilities(args: argparse.Namespace) -> int:

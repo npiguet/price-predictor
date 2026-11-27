@@ -1,4 +1,4 @@
-"""The breadth check's pass over a records set (T036): pool and tagged counts per scenario.
+"""The breadth check's pass over a records set: pool and tagged counts per scenario.
 
 Reads shards the way ``rule-counts`` does (``rule_counts.CountContext``: one
 detector index and sidecar cache per worker), and counts, per declared

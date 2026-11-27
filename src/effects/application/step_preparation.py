@@ -88,7 +88,7 @@ class StepRows:
             [*self.records, *(copy.record for copy in copies)],
             [*self.targets, *(copy.targets for copy in copies)],
             # A lethality copy trains every output at full weight (FR-061),
-            # and is made for a record's first natural row alone (D15).
+            # and is made for a record's first natural row alone.
             [*self.weights, *([FULL_WEIGHT] * len(copies))],
         )
 

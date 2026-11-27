@@ -135,12 +135,10 @@ def require_cache_stamp(
     root: Path, wanted: CacheStamp | Callable[[], CacheStamp | None] | None, *,
     variant: Baseline = Baseline.FULL,
 ) -> AbilityCacheStore:
-    """``variant``'s cache under ``root``, once its stamp is ``wanted``'s
-    (finding 11.7). A root holding none of the variant's files needs no stamp;
-    files with no stamp, a stamp that differs, or a reader holding no
-    checkpoint of the variant (``wanted`` None) are refused. ``wanted`` may be
-    a function, called only when there are files, since a stamp hashes the
-    checkpoint file."""
+    """``variant``'s cache under ``root``, once its stamp is ``wanted``'s. A root holding none of
+    the variant's files needs no stamp; files with no stamp, a stamp that differs, or a
+    reader holding no checkpoint of the variant (``wanted`` None) are refused. ``wanted`` may be
+    a function, called only when there are files, since a stamp hashes the checkpoint file."""
     store = AbilityCacheStore(root, variant=variant)
     if store.written_files():
         _require_stamp(root, wanted() if callable(wanted) else wanted, variant)

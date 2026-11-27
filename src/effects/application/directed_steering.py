@@ -1,6 +1,6 @@
 """The directed-fork probabilities a ``collect-variants`` run hands its
 workers: recomputed from the forks its shards hold, before the first round
-and after each one (D8)."""
+and after each one."""
 
 from __future__ import annotations
 

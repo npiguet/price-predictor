@@ -70,15 +70,15 @@ def _train_effect_model_parser(subparsers) -> None:
     UnacceptedGenerationError: 1,
     **_SHARD_REFUSED,
     SurfaceMismatchError: 1,
-    # A --keyword-definitions that names no file, or not the corpus's (finding 11.5).
+    # A --keyword-definitions that names no file, or not the corpus's.
     "effects.application.tokenizer_inputs.KeywordDefinitionsError": 1,
-    # Shards under the corpus that its manifest does not list (finding 11.4).
+    # Shards under the corpus that its manifest does not list.
     "effects.infrastructure.curated_shards.CorpusShardsError": 1,
     EmptyHoldoutError: 1,
     # A resume under other settings (contracts/cli.md).
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 1,
     # No selection set frozen for the corpus, or one frozen for another or
-    # edited (E1); a control-score component with nothing to score (FR-068c).
+    # edited (research E1); a control-score component with nothing to score (FR-068c).
     "effects.domain.selection_set.SelectionSetError": 1,
     "effects.application.control_items.ControlScoreError": 1,
     # A missing manifest or resume file.

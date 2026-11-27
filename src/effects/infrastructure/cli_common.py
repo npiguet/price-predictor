@@ -34,7 +34,7 @@ _EFFECT_MODEL_STORE = "effects.infrastructure.effect_model_store"
 _LAYOUT_REFUSED = "effects.domain.checkpoint_layout.CheckpointLayoutError"
 #: A corpus manifest of an older generation, or one missing a member.
 _MANIFEST_REFUSED = "effects.domain.corpus_manifest.ManifestError"
-#: Converted trees reconverted since the corpus was built (finding 11.3).
+#: Converted trees reconverted since the corpus was built.
 _SIDECARS_CHANGED = "effects.infrastructure.converted_trees.SidecarsChangedError"
 
 #: Every reader's "nothing to read"; named, as its module is not imported here.

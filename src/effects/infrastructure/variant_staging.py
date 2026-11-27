@@ -5,7 +5,7 @@ variant tree into Forge's custom-cards directory before Forge reads its card
 database (``ForgeEnvironmentInitializer.stageCustomCards``), and lists what it
 copied in a manifest there. The next staging clears that list first, but
 between two variant rounds the scripts would stay loaded into every Forge
-startup on the machine (FR-058b; python R8). A round removes them when it ends.
+startup on the machine (FR-058b). A round removes them when it ends.
 """
 
 from __future__ import annotations

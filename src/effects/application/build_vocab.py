@@ -3,7 +3,7 @@
 A wrapper over ``price_predictor.application.build_vocabulary``. Both surfaces
 stage the sidecars' script lines: the script surface reads them, and the prose
 surface reads a line with no prose (a variant's) as its script reading
-(``script_text.script_reading``, finding 1.5). Script lines are tokenized here
+(``script_text.script_reading``). Script lines are tokenized here
 rather than by the shared builder, whose tokenizer lowercases before splitting
 and would erase the camel case the script rules split on. On the script
 surface they are counted before the prose, so a truncation drops prose first;

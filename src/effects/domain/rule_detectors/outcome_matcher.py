@@ -66,7 +66,7 @@ LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "candidate", "scrip
                          "chain_param",
                          "source_token_kind", "source_type", "acting_face",
                          "target_face_state"})
-#: Record filters read off the acting source and its targets (D4).
+#: Record filters read off the acting source and its targets.
 SOURCE_FILTERS = frozenset({"source_type", "acting_face", "target_face_state",
                             "half_outcome"})
 #: The family's own parameters; every other one is an event filter.
@@ -286,7 +286,7 @@ class Found:
     listed: tuple[Event, ...]
     wanted: list[Event]
     #: Whether an event's absence can be read: a hook-derived event a hookless
-    #: record lacks may have happened, so no side reads its absence (V5 #15).
+    #: record lacks may have happened, so no side reads its absence.
     absence: bool
 
 

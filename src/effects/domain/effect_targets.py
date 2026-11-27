@@ -10,7 +10,7 @@ that a destroyed creature was untapped.
 A playability record trains no gate (root spec § 11.4): what it observes is
 which entities could be chosen, not what an action changed, so its legality
 fields train on every entity they name whether or not the gate's target fires.
-A cost half trains no gate either (D7): whether an entity was affected is the
+A cost half trains no gate either: whether an entity was affected is the
 effect half's question, and what its payment did trains without the gate at
 the entities that paid (:mod:`effects.domain.cost_targets`).
 
@@ -148,14 +148,14 @@ _SETTERS: dict[EventType, tuple[str, int]] = {
 #: The restrictions a ``restriction_change`` names that are designations.
 _RESTRICTION_DESIGNATIONS: dict[str, str] = {"goad": "goaded"}
 
-#: ``card_looked_at.params.mode`` -> the library event it is (T123d).
+#: ``card_looked_at.params.mode`` -> the library event it is.
 _LOOK_MODES: dict[str, LibraryEvent] = {
     "Scry": LibraryEvent.SCRY,
     "Surveil": LibraryEvent.SURVEIL,
     "SearchedLibrary": LibraryEvent.TUTOR,
 }
 
-#: ``state_flag_change`` flags that are outputs of their own (T123g), each to
+#: ``state_flag_change`` flags that are outputs of their own, each to
 #: its binary field; ``class_level`` counts levels gained instead.
 _STATE_FLAG_FIELDS: dict[StateFlag, HeadField] = {
     StateFlag.DOOR_UNLOCKED: HeadField.DOOR_UNLOCKED,
@@ -309,7 +309,7 @@ def _drop_slotless(record: EffectRecord, targets: RecordTargets) -> None:
 
 def _trains_gate(record: EffectRecord) -> bool:
     """Whether the record trains the affected gate: neither a playability
-    record nor a cost half (D7), nor a rewrite that cannot say who its
+    record nor a cost half, nor a rewrite that cannot say who its
     replacement left unaffected."""
     return not (
         _is_playability(record) or is_cost_half(record) or _outcome_partly_unknown(record))

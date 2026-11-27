@@ -109,7 +109,7 @@ _EFFECTFUL = frozenset({
     SamplingClass.RESOLUTION_EFFECT, SamplingClass.REWRITE, SamplingClass.COMBAT,
 })
 #: A resolution's cost half, which names what its payment did and nothing
-#: else (task G11, D7): it supervises the zone outcome, tap state, counters
+#: else: it supervises the zone outcome, tap state, counters
 #: and life it paid with, at the entities that paid them, and no silence of
 #: it says nothing changed (:attr:`FieldSpec.silent_by`).
 _COST_HALVES = frozenset({SamplingClass.RESOLUTION_COST})
@@ -123,7 +123,7 @@ _STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
 _CONTINUOUS = frozenset({SamplingClass.CONTINUOUS})
 #: A resolution's effect half alone: what a field whose event an effect
 #: API's clause rule or a command-zone reading writes says nothing about on
-#: any other record (finding 10.2).
+#: any other record.
 _EFFECT_HALVES = frozenset({SamplingClass.RESOLUTION_EFFECT})
 
 

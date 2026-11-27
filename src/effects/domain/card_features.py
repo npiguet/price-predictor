@@ -355,7 +355,7 @@ def real_face_subtype_rows(entity: EntityState) -> tuple[int, ...]:
 def _paid_for(card: CardContext) -> CostsPaid | None:
     """What paid for the card, as the input reads it: nothing for the acting
     source on an effect half. A forced resolution skips the payment, so there
-    "paid no mana" would tell a forced half from a live one (D16)."""
+    "paid no mana" would tell a forced half from a live one."""
     if isinstance(card.payload, ResolutionPayload) and card.entity.id == card.state.refs.source:
         return None
     return card.entity.costs_paid

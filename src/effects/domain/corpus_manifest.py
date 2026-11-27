@@ -481,14 +481,14 @@ class CorpusManifest:
     #: sha256 over every sidecar the build joined against, by tree, relative
     #: path and size: a reconversion since the build moves it.
     sidecar_digest: str = field(default="", metadata=_reads(str))
-    #: Gen-3 games dropped whole as cut, their shard holding no game-end marker
-    #: (WP7); their records are ``per_stratum["dropped-cut"]``. Inside the
-    #: digest: which games are cut decides which records the corpus holds.
+    #: Gen-3 games dropped whole as cut, their shard holding no game-end marker; their records are
+    #: ``per_stratum["dropped-cut"]``. Inside the digest: which games are cut decides which records
+    #: the corpus holds.
     cut_games: int = field(default=0, metadata=_reads(int))
     #: ``output stratum -> its shards``, each by file name inside the
     #: stratum's directory with the records the write pass put in it, sorted
     #: by name; a stratum holding none lists none. What a reader compares the
-    #: shards it finds with (finding 11.4). Outside the digest: the names
+    #: shards it finds with. Outside the digest: the names
     #: follow from the repack, decided by members inside it.
     shards: dict[str, tuple[CuratedShard, ...]] = field(
         default_factory=dict, metadata=_reads(_curated_shards),

@@ -23,7 +23,7 @@ class Stratum(StrEnum):
     #: the survey and the write pass adds: never placed, so counted and
     #: never written, since one may name a held-out card.
     DROPPED_UNSURVEYED = "dropped-unsurveyed"
-    #: Records of gen-3 games whose shard holds no game-end marker (WP7): a
+    #: Records of gen-3 games whose shard holds no game-end marker: a
     #: game cut by a killed worker or one that threw, its records incomplete;
     #: counted, never written.
     DROPPED_CUT = "dropped-cut"

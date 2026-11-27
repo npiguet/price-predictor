@@ -149,7 +149,7 @@ class CatalogueStanding:
 
     ``declared``: the rules a taggable declaration speaks for, so one the
     records never tag is listed as declared with zero records rather than
-    omitted (D3); ``none``: rules every scenario of which declares no
+    omitted; ``none``: rules every scenario of which declares no
     detector, with the first reason; ``untaggable``: per scenario, a
     declaration asking its record kind for an event that kind never lists
     (``DetectorIndex.untaggable``); ``same_as``: per scenario, the scenario

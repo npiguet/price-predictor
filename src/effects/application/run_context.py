@@ -86,7 +86,7 @@ def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
 
     Clipped apart (FR-095): the head's gradient norm runs several times the
     encoder's, and a joint clip would shrink the encoder's update by it.
-    Decay reaches the weight matrices only (finding 15.3); an empty half is
+    Decay reaches the weight matrices only; an empty half is
     left out.
     """
     modules = [("encoder", encoder), ("head", model)]
@@ -131,7 +131,7 @@ class RunContext:
     fields: Mapping[int, tuple[FieldSpec, ...]]
     #: The best control score and the patience counted since it (FR-069).
     stopper: ControlScoreStopper
-    #: The averaged weights validation, stopping and checkpoints read (T4).
+    #: The averaged weights validation, stopping and checkpoints read (research T4).
     average: WeightAverage
     #: The processes preparing the run's steps; None prepares them here.
     pool: StepWorkerPool | None = None

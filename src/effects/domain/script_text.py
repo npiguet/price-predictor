@@ -62,7 +62,7 @@ SCRIPT_READING = "[SCRIPT]"
 #: Free text restating the card's printed wording, which a variant's
 #: perturbation leaves stating the original: every ``...Description$`` and
 #: ``TgtPrompt$``, and the four prompts found still stating the original value
-#: on perturbed lines of the gen-2 variant tree (finding 1.5).
+#: on perturbed lines of the gen-2 variant tree.
 _FREE_TEXT_KEY = re.compile(
     r"\w*Description|TgtPrompt|SelectPrompt|ChoiceTitle|CostDesc|RepeatOptionalMessage")
 

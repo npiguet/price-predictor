@@ -126,7 +126,7 @@ miss of every rule about which creature it moved.
 A qualifier cannot be combined with ``absent``.
 
 Record filters, which narrow both sides to records whose acting source or
-targets are of one kind (D4): ``source_type`` (the source card, as the
+targets are of one kind: ``source_type`` (the source card, as the
 snapshot shows it, has this card type: a resolving artifact spell, an
 instant), ``acting_face`` (``front`` or ``alternative``: an acting key on
 its card's first face or another, an Adventure or a back face) and

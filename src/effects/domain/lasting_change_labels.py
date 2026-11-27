@@ -1,4 +1,4 @@
-"""Labels one entity's several lasting-change events muddle (finding 10.7).
+"""Labels one entity's several lasting-change events muddle.
 
 Each event applies on its own (:mod:`effects.domain.effect_targets`); these
 read the record's events of one entity together and take back what they cannot

@@ -1,4 +1,4 @@
-"""What a resolution's cost half trains: what its payment did (task G11, D7).
+"""What a resolution's cost half trains: what its payment did.
 
 Whether an entity was affected is the effect half's question, so a cost half
 trains no affected gate (:func:`effect_targets.derive_targets`). Its payment
@@ -71,7 +71,7 @@ def apply_paid_costs(record: EffectRecord, slot: Callable) -> None:
 
 def paid_entities(record: EffectRecord) -> tuple[str, ...]:
     """The entities :func:`apply_paid_costs` trains at, in the order it
-    reaches them: a cost half's tag's outcome entities (task G11b), where a
+    reaches them: a cost half's tag's outcome entities, where a
     rule's outcome fell when the payment is the outcome; none on any other
     record."""
     reached: dict[str, _Reached] = {}

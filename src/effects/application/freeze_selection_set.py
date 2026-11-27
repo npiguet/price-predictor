@@ -7,7 +7,7 @@ their labels alone:
 1. Read the manifest's halves, rule-map snapshot and budgets. Placement's
    halves are used unchanged and the freeze assigns no game to a half. A half
    holding fewer than ``min_games_per_half`` games refuses the freeze, naming
-   stratum and half, before a record is read (E5).
+   stratum and half, before a record is read (research E5).
 2. Read both validation strata. Rule tests, probes and grids read each
    distinct record once; the deviance sample reads every copy (FR-068a).
 
@@ -26,15 +26,15 @@ their labels alone:
      them by smallest keyed hash that bring the grid's worst-case standard
      error to ``grid_target_error``, at most ``grid_record_cap``
      (``selection_set.grid_records_needed``), since each grid record is read
-     once per cell in every epoch (research E2, T160).
+     once per cell in every epoch (research E2).
    - The deviance sample: every copy of the half, then the
      ``deviance_cap`` of smallest keyed hash, each copy weighed by its
      ``curation.class_weight`` (FR-059a) in its standard errors.
 3. Balance with ``r`` by a seeded draw: each rule's larger polarity to r times
    its smaller, each probe type to r times the smallest probe type that
-   meets the item target (E3). The grids are edit grids, whose cells all edit
+   meets the item target (research E3). The grids are edit grids, whose cells all edit
    the same records, so no cell needs balancing.
-4. Each item's worst-case standard error (E4, ``score_scales``); an item
+4. Each item's worst-case standard error (research E4, ``score_scales``); an item
    above ``max_item_error`` is left out and named, and every trained rule
    whose detector finds no test record in a half is named untested (FR-073),
    as is, in every half, one whose tagged records carry none of the outputs
@@ -42,7 +42,7 @@ their labels alone:
    For a rule whose effective outputs are all per-entity, read at the tag's
    outcome entities, only the rows whose record carries one of those outputs
    at a named entity count toward n and the standard error, and a rule with
-   a polarity holding none is left out as ``no outcome entity`` (finding 7.8);
+   a polarity holding none is left out as ``no outcome entity``;
    a rule with a verdict, global or
    created-objects output keeps every row, read at the record.
    A deviance item is an output term of any shipped head — a per-entity
@@ -220,7 +220,7 @@ class RuleTestRules:
     #: Each mapped rule's effective outputs (the manifest's
     #: ``effective_rule_outputs``): a rule held here is frozen with the
     #: outputs alone whose targets settle a direction over its drawn rows
-    #: (``rule_output_targets``, finding 12.9), as the control score reads it.
+    #: (``rule_output_targets``), as the control score reads it.
     outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     @classmethod
@@ -332,7 +332,7 @@ def _left_out_line(where: str, items: Sequence[LeftOut], limit: int) -> str:
 
 
 def small_halves(manifest: CorpusManifest, minimum: int) -> list[FreezeMiss]:
-    """Every half of the manifest holding fewer than ``minimum`` games (E5)."""
+    """Every half of the manifest holding fewer than ``minimum`` games (research E5)."""
     misses = []
     for stratum, by_half in sorted(manifest.halves.items()):
         for half in Half:
@@ -538,7 +538,7 @@ def _hold_rule_tests(found: _Half, rules: RuleTestRules, record: EffectRecord) -
 
 
 def _games_error(positives: Sequence, negatives: Sequence) -> float:
-    """The clustered AUC standard error of rows carrying a ``game_id`` (E4)."""
+    """The clustered AUC standard error of rows carrying a ``game_id`` (research E4)."""
     return clustered_auc_standard_error([row.game_id for row in positives],
                                         [row.game_id for row in negatives])
 
@@ -643,7 +643,7 @@ class _Assembly:
                    ) -> tuple[dict[Polarity, list[TaggedRecord]], str | None]:
         """A rule's test rows per polarity, or why it is left out: a polarity
         with no row, or, for a rule read at entities only, none naming an
-        outcome entity, the only rows such a rule's test reads (finding 7.8)."""
+        outcome entity, the only rows such a rule's test reads."""
         rows = {polarity: list(sides.get(polarity, ())) for polarity in TEST_POLARITIES}
         counts = {polarity: len(found) for polarity, found in rows.items()}
         if min(counts.values()) == 0:

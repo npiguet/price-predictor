@@ -71,8 +71,8 @@ def check_holdout(
     """Raise ``EmptyHoldoutError`` on an empty card-disjoint stratum; return a
     warning for a thin one, None otherwise (FR-088b).
 
-    Empty is fatal because validation would be ``nan`` every epoch, which
-    never sets a best, so no checkpoint would ever be saved.
+    Empty is fatal because the card-disjoint losses every epoch reports would
+    be ``nan`` and gate 1 would have nothing to measure.
     """
     if card_disjoint_records <= 0:
         raise EmptyHoldoutError(
@@ -406,7 +406,7 @@ class CorpusFacts:
     #: checkpoint records and a resume compares; empty without one.
     selection_set_digest: str = ""
     #: The hash of the manifest's shard listing, which a resume compares
-    #: because the corpus digest leaves the listing out (finding 11.4).
+    #: because the corpus digest leaves the listing out.
     shards_digest: str = ""
 
     @classmethod
@@ -663,7 +663,7 @@ def frozen_selection(
     """The selection set frozen for the corpus, found by its digest under
     ``reports_dir``, with a reader of each validation stratum's ``listed`` shards; raises
     ``SelectionSetError`` (exit 1) when none is there, or one frozen against
-    another corpus or edited (E1)."""
+    another corpus or edited (research E1)."""
     from effects.application.control_score import FrozenSelection
     from effects.application.freeze_selection_set import stratum_reader
     from effects.domain.selection_set import load_selection_set, selection_set_path

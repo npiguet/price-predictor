@@ -298,7 +298,7 @@ def build_manifest(config: BuildCorpusConfig, outcome: BuildOutcome) -> CorpusMa
         rarity=decisions.rarity,
         sources=survey.shards,
         per_class=_per_class(written.training, decisions.key_text),
-        # The two dropped strata write nothing, so have no unique texts.
+        # The dropped strata write nothing, so have no unique texts.
         per_stratum={name: strata.records.get(name, 0) for name in Stratum},
         unique_texts={
             name: _unique_texts(strata.keys.get(name, ()), decisions.key_text)
@@ -383,11 +383,10 @@ def _under(where: str, records_dir: Path) -> str:
 
 
 def _collection_fields(config: BuildCorpusConfig, outcome: BuildOutcome) -> dict:
-    """How the records were collected and read, and what the build ran under
-    (P3a #17): the manifest's ``validation_rules``, ``record_flags``,
-    ``placement_thresholds``, ``keyword_definitions_digest``,
-    ``decode_off_list``, ``damaged_tails``, ``join_gaps`` and ``cut_games``, the survey's:
-    the write pass reads the same bytes, and a difference is warned of
+    """How the records were collected and read, and what the build ran under: the manifest's
+    ``validation_rules``, ``record_flags``, ``placement_thresholds``,
+    ``keyword_definitions_digest``, ``decode_off_list``, ``damaged_tails``, ``join_gaps`` and
+    ``cut_games``, the survey's: the write pass reads the same bytes, and a difference is warned of
     (:func:`report_write_pass`)."""
     import math
 

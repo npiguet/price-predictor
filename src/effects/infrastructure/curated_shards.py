@@ -1,4 +1,4 @@
-"""The shards a curated corpus lists, against the shards on disk (finding 11.4).
+"""The shards a curated corpus lists, against the shards on disk.
 
 The manifest names each output stratum's shards with the records the write
 pass put in them. A reader that walked the stratum directory instead would

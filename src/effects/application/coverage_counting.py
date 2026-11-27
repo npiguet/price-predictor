@@ -2,7 +2,7 @@
 cards and to the held-out round's texts, each shard counted once across the
 run through the shard ledger.
 
-Only the records build-corpus keeps count (python D1): no ``turn_action`` (a
+Only the records build-corpus keeps count: no ``turn_action`` (a
 draw or an untap is no record of the card), none it refuses, and none of a
 game its shard holds no game-end marker for (a cut game, which build-corpus
 drops whole; credits are held per game until the shard is read).
@@ -134,8 +134,8 @@ def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> Shar
     A record of an older generation stops the count with
     :class:`~effects.domain.shard_generation.OlderGenerationError`, as it
     stops every reader. Under ``roots`` an entity counts as the converted card
-    its printed script is (python D6), and a static's host through its script
-    (python D5). The cards shown are every game's, a cut one's too: its games
+    its printed script is, and a static's host through its script
+. The cards shown are every game's, a cut one's too: its games
     showed them.
     """
     from effects.infrastructure.converted_trees import process_sidecars

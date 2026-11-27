@@ -214,7 +214,7 @@ def _evaluated_trees(args: argparse.Namespace) -> list[Path]:
 
 
 def _cache_stamps(args: argparse.Namespace) -> list[Path]:
-    """The stamp of each variant's cache the evaluation reads (finding 11.7)."""
+    """The stamp of each variant's cache the evaluation reads."""
     from effects.domain.ability_cache_layout import stamp_path
 
     variants = (Baseline.FULL, Baseline.NO_STATE, Baseline.TAXONOMY)

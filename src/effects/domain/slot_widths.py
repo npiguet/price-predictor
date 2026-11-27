@@ -4,7 +4,7 @@ The widths are what the slot builders of :mod:`effects.domain.surface_builder`
 emit, and no builder's width depends on the record it reads. They are computed
 once per process, by running a blank record with one blank player and one
 blank card through those builders, so they cannot drift from what a batch
-holds; no record is ever read to find them (finding 19.1).
+holds; no record is ever read to find them.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Which rule keeps an entity out of a blockers or targets legality list (D4).
+"""Which rule keeps an entity out of a blockers or targets legality list.
 
 ``legality_membership`` without a ``restriction`` reads a list's inside and
 outside whatever put an entity there, so every "can't block" rule, from
