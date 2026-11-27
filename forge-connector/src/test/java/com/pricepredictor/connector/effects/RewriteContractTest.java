@@ -26,7 +26,6 @@ import static com.pricepredictor.connector.effects.TestParsed.replacementOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -74,9 +73,9 @@ class RewriteContractTest {
     @Test
     void aReplacementWithNoAnswerSaysSoRatherThanGuessing() {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 replacementOfMode("Moved"),
-                Map.of("Affected", card), Map.of("Affected", card), null, null).toJson();
+                Map.of("Affected", card), Map.of("Affected", card), null, null));
 
         assertTrue(json.contains("\"result\":null"), json);
     }
@@ -98,9 +97,9 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("DamageAmount", 1);
 
-        String json = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 replacementOfMode("DamageDone"), before, after,
-                ReplacementResult.Updated, null).toJson();
+                ReplacementResult.Updated, null));
 
         assertFalse(json.contains("\"outgoing\":null"),
                 "five down to one is a parameter edit: " + json);
@@ -126,8 +125,8 @@ class RewriteContractTest {
         Map<String, Object> params = Map.of(
                 "Affected", rest, "Destination", ZoneType.Graveyard);
 
-        String json = recording(tempDir).rewrites().record(
-                replacement, params, params, ReplacementResult.Replaced, ran).toJson();
+        String json = written(new Told(
+                replacement, params, params, ReplacementResult.Replaced, ran));
 
         assertTrue(json.contains("\"outgoing\":null"), json);
         assertTrue(json.contains("\"result\":\"replaced\""), json);
@@ -143,10 +142,10 @@ class RewriteContractTest {
     @Test
     void nothingRunningInsteadIsAnEmptyListNotANull() {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 replacementOfMode("Untap"),
                 Map.of("Affected", card), Map.of("Affected", card),
-                ReplacementResult.Prevented, null).toJson();
+                ReplacementResult.Prevented, null));
 
         assertTrue(json.contains("\"replaced_by\":[]"), json);
     }
@@ -162,10 +161,10 @@ class RewriteContractTest {
     @Test
     void aSubstitutedAbilityThatIsNotATraitCostsOnlyTheField() {
         Card card = TestCards.build("Mountain");
-        String json = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 replacementOfMode("Moved"),
                 Map.of("Affected", card), Map.of("Affected", card),
-                ReplacementResult.Replaced, "not an ability").toJson();
+                ReplacementResult.Replaced, "not an ability"));
 
         assertTrue(json.contains("\"replaced_by\":[]"), json);
         assertTrue(json.contains("\"result\":\"replaced\""), json);
@@ -335,11 +334,11 @@ class RewriteContractTest {
         Card rest = TestCards.build("Rest in Peace");
         ReplacementEffect replacement = replacementOf(rest);
 
-        String json = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 replacement,
                 Map.of("Affected", rest, "Destination", ZoneType.Graveyard),
                 Map.of("Affected", rest, "Destination", ZoneType.Exile),
-                ReplacementResult.Replaced, null).toJson();
+                ReplacementResult.Replaced, null));
 
         assertTrue(json.contains("\"kind\":\"rewrite\""), json);
         assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
@@ -373,12 +372,10 @@ class RewriteContractTest {
         ReplacementEffect prevention = replacementOf(paralyze);
         assertEquals("Untap", String.valueOf(prevention.getMode()));
 
-        EffectRecord record = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 prevention, Map.of("Affected", paralyze), Map.of("Affected", paralyze),
-                ReplacementResult.Skipped, null);
+                ReplacementResult.Skipped, null));
 
-        assertNotNull(record, "a skipped replacement is this channel's negative");
-        String json = record.toJson();
         assertTrue(json.contains("\"result\":\"skipped\""), json);
         assertTrue(json.contains("\"outgoing\":null"),
                 "null, never a copy of incoming: " + json);
@@ -404,12 +401,10 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Number", 1);
 
-        EffectRecord record = recording(tempDir).rewrites().record(
+        String json = written(new Told(
                 replacementOfMode("DrawCards"), before, after,
-                ReplacementResult.Updated, null);
+                ReplacementResult.Updated, null));
 
-        assertNotNull(record, "a replacement that halved a draw is a real rewrite");
-        String json = record.toJson();
         assertTrue(json.contains("\"type\":\"card_drawn\""), json);
         assertTrue(json.contains("\"count\":3"), json);
         assertTrue(json.contains("\"count\":1"), json);
@@ -505,6 +500,27 @@ class RewriteContractTest {
     }
 
     // ── plumbing ────────────────────────────────────────────────────────
+
+    /** A replacement as the engine reports it: effect, event before and after, result, stand-in. */
+    private record Told(Object trait, Object before, Object after, Object result,
+            Object replacedBy) {
+    }
+
+    /**
+     * The one shard line the handler writes for a replacement told the way
+     * the engine tells it: effect, the event before and after, the result and
+     * the ability that ran, then the buffered ability, none here.
+     */
+    private String written(Told told) {
+        try {
+            return oneRecordFrom(new Object[]{
+                    told.trait(), told.before(), told.after(), told.result(), told.replacedBy(),
+                    null},
+                    HookShapes.Replacement.class);
+        } catch (Throwable thrown) {
+            throw new AssertionError(thrown);
+        }
+    }
 
     /**
      * Everything the handler wrote for one notification, as the shard line.
