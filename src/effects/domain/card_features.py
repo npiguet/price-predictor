@@ -257,16 +257,23 @@ def _push_keyword_flags(out: list[float], card: CardContext) -> None:
 #: ``granted_temporary.hidden_keywords`` carry.
 CANT_BLOCK_KEYWORDS = frozenset({"CARDNAME can't block.", "CARDNAME can't attack or block."})
 CANT_ATTACK_KEYWORDS = frozenset({"CARDNAME can't attack.", "CARDNAME can't attack or block."})
+#: The lure keywords, both of which create a blocking requirement (rule 509.1c):
+#: the blockers' ``combat_requirement`` output depends on them.
+MUST_BE_BLOCKED_KEYWORDS = frozenset({"All creatures able to block CARDNAME do so.",
+                                      "CARDNAME must be blocked if able."})
 
 
 def _push_hidden_keywords(out: list[float], card: CardContext) -> None:
-    """Can't block, can't attack: Forge's hidden keywords no line carries, a
-    pump's or a static's "can't block this turn", which the blocker and
-    attacker legality outputs turn on. No other hidden keyword is read."""
+    """Can't block, can't attack, must be blocked: Forge's hidden keywords no
+    line carries, a pump's or a static's "can't block this turn", which the
+    blocker and attacker legality outputs turn on, and a lure's blocking
+    requirement, which the blockers' ``combat_requirement`` turns on. No other
+    hidden keyword is read."""
     entity = card.entity
     hidden = {keyword.strip() for keyword in entity.granted_temporary.hidden_keywords or ()}
     out.append(1.0 if hidden & CANT_BLOCK_KEYWORDS else 0.0)
     out.append(1.0 if hidden & CANT_ATTACK_KEYWORDS else 0.0)
+    out.append(1.0 if hidden & MUST_BE_BLOCKED_KEYWORDS else 0.0)
 
 
 def _push_relation_to_act(out: list[float], card: CardContext) -> None:

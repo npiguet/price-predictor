@@ -1,12 +1,15 @@
-"""A card slot reads Forge's hidden "can't block" and "can't attack".
+"""A card slot reads Forge's hidden "can't block", "can't attack" and "must be blocked".
 
 Forge keeps "can't block" and "can't attack" a pump or a static grants as a
 hidden keyword, ``granted_temporary.hidden_keywords``, which no line and no
 keyword flag reads. The blocker and attacker legality outputs depend on it,
-so the card slot carries two bits, "can't block" and "can't attack", from
-the three spellings the review pilots carry: ``CARDNAME can't block.``,
-``CARDNAME can't attack.`` and ``CARDNAME can't attack or block.``. Any other
-hidden keyword sets neither bit.
+so the card slot carries three bits, "can't block", "can't attack" and "must be
+blocked", from the spellings the review pilots carry: ``CARDNAME can't block.``,
+``CARDNAME can't attack.``, ``CARDNAME can't attack or block.`` and the two lure
+spellings, ``All creatures able to block CARDNAME do so.`` and ``CARDNAME must be
+blocked if able.``, which both create a blocking requirement (rule 509.1c). Any
+other hidden keyword sets no bit. No fixture record carries a lure keyword, so
+the lure cases hang the hidden keyword on a fixture combat record's creature.
 """
 
 from __future__ import annotations
@@ -54,16 +57,19 @@ def test_a_creature_that_cant_block_reads_apart_from_one_that_can(combat):
     assert hidden == ("CARDNAME can't block.",)
     free = _with_hidden(combat, "E74", ())
     assert _surface(combat).slots != _surface(free).slots
-    assert _bits(combat, "E74") == (1.0, 0.0)
-    assert _bits(free, "E74") == (0.0, 0.0)
+    assert _bits(combat, "E74") == (1.0, 0.0, 0.0)
+    assert _bits(free, "E74") == (0.0, 0.0, 0.0)
 
 
 @pytest.mark.parametrize(("hidden", "bits"), [
-    (("CARDNAME can't attack.",), (0.0, 1.0)),
-    (("CARDNAME can't attack or block.",), (1.0, 1.0)),
-    (("This card doesn't untap during your next untap step.",), (0.0, 0.0)),
-    (("CARDNAME can only attack alone.",), (0.0, 0.0)),
-    (None, (0.0, 0.0)),
+    (("CARDNAME can't attack.",), (0.0, 1.0, 0.0)),
+    (("CARDNAME can't attack or block.",), (1.0, 1.0, 0.0)),
+    (("All creatures able to block CARDNAME do so.",), (0.0, 0.0, 1.0)),
+    (("CARDNAME must be blocked if able.",), (0.0, 0.0, 1.0)),
+    (("CARDNAME must be blocked if able.", "CARDNAME can't attack."), (0.0, 1.0, 1.0)),
+    (("This card doesn't untap during your next untap step.",), (0.0, 0.0, 0.0)),
+    (("CARDNAME can only attack alone.",), (0.0, 0.0, 0.0)),
+    (None, (0.0, 0.0, 0.0)),
 ])
 def test_each_spelling_sets_its_bits(combat, hidden, bits):
     assert _bits(_with_hidden(combat, "E74", hidden), "E74") == bits

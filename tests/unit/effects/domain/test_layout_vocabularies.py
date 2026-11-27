@@ -85,19 +85,19 @@ def test_the_heads_keep_their_widths():
 
 
 def test_the_card_slot_keeps_its_width_and_parts():
-    """A card slot is 575 features in 20 parts. A combat record's damage
+    """A card slot is 576 features in 20 parts. A combat record's damage
     assignment is no part of it: it reads the first-strike rule
     without the keyword. The role is: six columns, the five
     of :data:`ENTITY_ROLES` and "other". The pending event's part is six
     columns: a pending event, the card is its subject, its source, its
     defender, among its blockers, its cause; a face-down card's real face
     is 27 (types, colours, mana value, printed power and toughness, the
-    subtype count); the hidden keywords' two: can't block, can't attack (finding
-    4.8). The width moves with the kept keyword flags and the other lists
+    subtype count); the hidden keywords' three: can't block, can't attack, must be blocked
+    (finding 4.8, CPD1 G-4). The width moves with the kept keyword flags and the other lists
     the parts one-hot over."""
     record = record_from_dict(gen3_fixture_records()[0])
     entity = record.state.entities[0]
-    assert len(card_features(entity, record)) == 575
+    assert len(card_features(entity, record)) == 576
     assert list(card_segments(entity, record)) == [
         "characteristics", "face_state", "real_face", "mana_cost", "printed_loyalty_defense",
         "status", "role", "keyword_flags", "hidden_keywords", "relation_to_act",
@@ -116,7 +116,7 @@ def test_the_global_and_player_slots_keep_their_widths():
     assert len(PENDING_EVENT_MODES) == 180
     widths = layout_widths()
     assert (widths[SlotKind.GLOBAL], widths[SlotKind.PLAYER]) == (325, 116)
-    assert widths[SlotKind.CARD] == 575
+    assert widths[SlotKind.CARD] == 576
 
 
 # The modes the 2026-11-23 pilot's pending events carried that the hand-made list lacked.

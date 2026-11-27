@@ -817,7 +817,7 @@ places:
 
 | where | inputs |
 |---|---|
-| card slot | subtypes, face state, a face-down card's real face, is a copy, is a token, role (§ 9.3), pending-event details, can't block and can't attack, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
+| card slot | subtypes, face state, a face-down card's real face, is a copy, is a token, role (§ 9.3), pending-event details, can't block, can't attack and must be blocked, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
 | player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit, pending-event subject |
@@ -857,9 +857,11 @@ places:
   and toughness and number of subtypes, in a part of its own, and its subtypes through the
   subtype table as above; every other card reads zeros
   there. The face-down characteristics stay in the characteristics part.
-- A card slot reads two of Forge's hidden keywords as bits: can't block (`CARDNAME can't
-  block.`, `CARDNAME can't attack or block.`) and can't attack (`CARDNAME can't attack.`,
-  `CARDNAME can't attack or block.`). No other hidden keyword is read.
+- A card slot reads three of Forge's hidden keywords as bits: can't block (`CARDNAME can't
+  block.`, `CARDNAME can't attack or block.`), can't attack (`CARDNAME can't attack.`,
+  `CARDNAME can't attack or block.`) and must be blocked (`All creatures able to block
+  CARDNAME do so.`, `CARDNAME must be blocked if able.`: both create a blocking requirement,
+  rule 509.1c). No other hidden keyword is read.
 - A rewrite record's pending event is its incoming event. Its outgoing event, result and
   replacing ability stay outputs.
 - Summoning sickness reads on a permanent on the battlefield only.

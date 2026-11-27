@@ -13,7 +13,12 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from effects.domain.canonical_digest import canonical_sha256
-from effects.domain.card_features import CANT_ATTACK_KEYWORDS, CANT_BLOCK_KEYWORDS, CARD_PARTS
+from effects.domain.card_features import (
+    CANT_ATTACK_KEYWORDS,
+    CANT_BLOCK_KEYWORDS,
+    CARD_PARTS,
+    MUST_BE_BLOCKED_KEYWORDS,
+)
 from effects.domain.effect_head_layout import (
     COUNTER_TYPES,
     CREATED_KINDS,
@@ -144,6 +149,7 @@ LAYOUT_VOCABULARIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("playability_subkinds", PLAYABILITY_SUBKINDS),
     ("cant_block_keywords", tuple(sorted(CANT_BLOCK_KEYWORDS))),
     ("cant_attack_keywords", tuple(sorted(CANT_ATTACK_KEYWORDS))),
+    ("must_be_blocked_keywords", tuple(sorted(MUST_BE_BLOCKED_KEYWORDS))),
     ("directions", DIRECTIONS),
     ("zone_outcomes", ZONE_OUTCOMES),
     ("durations", DURATIONS),
