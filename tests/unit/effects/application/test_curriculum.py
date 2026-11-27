@@ -43,13 +43,14 @@ def test_the_stopper_resets():
     assert stopper.update(0.1)          # a lower score is a new best after the reset
 
 
-def test_the_loop_resets_the_stopper_when_the_curriculum_switches():
-    """Scores before and after the sparse group enables do not compare (FR-082,
-    FR-069).
+def test_the_curriculum_names_its_switch_epoch_as_the_only_reset():
+    """The loop resets the stopper at the epochs ``Curriculum.resets_at`` names
+    (FR-082, FR-069), so scores before and after the sparse group enables are
+    never compared.
 
-    The reset fires once, at the curriculum epoch, and never at epoch 1 — a
-    ``--curriculum-epoch 1`` run enables the sparse group from its first step,
-    so there is no earlier best measuring a different objective to forget.
+    That is the switch epoch alone, and never epoch 1: a ``--curriculum-epoch 1``
+    run enables the sparse group from its first step, so there is no earlier
+    best measuring a different objective to forget.
     """
     curriculum = Curriculum(2)
     assert curriculum.resets_at(1) is False
