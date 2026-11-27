@@ -26,17 +26,8 @@ from tests.integration.conftest import require_jar, run_worker
 
 pytestmark = pytest.mark.integration
 
-def test_collection_writes_records_under_one_attribution_mode(
-    tmp_path: Path,
-) -> None:
-    require_jar()
-    records_dir = tmp_path / "records"
-    output_file = tmp_path / "match-outcomes.txt"
 
-    records = run_worker(records_dir, output_file)
-    if not records:
-        pytest.skip("worker produced no records within the collection window")
-
+def assert_one_worker_shard(records_dir: Path) -> None:
     shards = iter_shards(records_dir)
     assert shards, "no shard was written"
     # {run_id}.{worker}-{lifetime}.jsonl.gz. The lifetime is minted by the
@@ -48,9 +39,13 @@ def test_collection_writes_records_under_one_attribution_mode(
         shards[0].name
     )
 
+
+def assert_resolution_records_present(records: list) -> None:
     kinds = {record.kind.value for record in records}
     assert "resolution" in kinds, f"no resolution records; saw {kinds}"
 
+
+def assert_one_attribution_mode(records: list) -> None:
     # The mode is probed once per worker, so a run cannot mix the two: a corpus
     # that did would be attributed two different ways with nothing saying where
     # the boundary is.
@@ -58,6 +53,8 @@ def test_collection_writes_records_under_one_attribution_mode(
     assert len(modes) == 1, f"a single run reported both modes: {modes}"
     assert modes <= {"degraded", "patched"}, modes
 
+
+def assert_ids_carry_slot_and_lifetime(records: list) -> None:
     # Ids carry the worker slot and the JVM lifetime, and are unique across the
     # shard. One worker run is one lifetime, so the second half is constant
     # here — but it has to be there, because it is the only thing that keeps
@@ -70,6 +67,22 @@ def test_collection_writes_records_under_one_attribution_mode(
     assert len(lifetimes) == 1, lifetimes
     assert lifetimes != {""}, "ids carry no lifetime segment"
 
+
+def test_collection_writes_records_under_one_attribution_mode(
+    tmp_path: Path,
+) -> None:
+    require_jar()
+    records_dir = tmp_path / "records"
+    output_file = tmp_path / "match-outcomes.txt"
+
+    records = run_worker(records_dir, output_file)
+    if not records:
+        pytest.skip("worker produced no records within the collection window")
+
+    assert_one_worker_shard(records_dir)
+    assert_resolution_records_present(records)
+    assert_one_attribution_mode(records)
+    assert_ids_carry_slot_and_lifetime(records)
     # Every record names the game it came from, which is the split's join key.
     assert all(record.game_id for record in records)
 
