@@ -5,7 +5,9 @@
 Some of the effect model's output fields stay weak while the others improve, and training cannot
 respond: each record's share of training is fixed when the corpus is built. Gen-4 plans training
 that draws more of the records a weak field needs, from the whole corpus, with the mechanism and the
-controller still to choose. Nothing has run.
+controller still to choose. It also takes up the problems gen-3 leaves because fixing them needs the
+cards converted again, such as the hand-written copy of Forge's keyword reminder formatting. Nothing
+has run.
 
 ## Background
 
@@ -34,6 +36,24 @@ average. The table reads gen-2's first arm, which predicts 46 output fields per 
 **Which fields are weak after gen-3 is not known until gen-3 trains.** Gen-3 adds outputs, reads
 every line of a permanent, ties each line to its card, rebalances by rule and puts every field on
 one scale in the loss. Gen-4 starts from gen-3's per-field scores rather than gen-2's.
+
+### Gen-3 leaves problems whose fix needs the cards converted again
+
+**A keyword line's reminder text is filled by a Python copy of Forge's formatting, which can drift
+from Forge.** The model reads a keyword line with values, such as `Ward:2` or
+`TypeCycling:Basic:1 B`, through its reminder text with the values filled in. Forge fills that text
+with one Java class per kind of keyword, about fifteen in all, and with its own cost formatting.
+Gen-3's `src/effects/domain/keyword_formatting.py` re-implements those classes by hand. When Forge
+changes one of them, the copy can fill a different text than Forge does, and nothing reports the
+difference.
+
+**Gen-3 keeps the copy because removing it changes every converted card.** Removing it means the
+converter writes each printed keyword line's filled text into the card's provenance sidecar, the
+file beside each converted card that lists its lines and the keys records name them by. That
+changes the sidecars' digest, a hash over every sidecar of the conversion. A collection refuses to
+add to a records directory collected against another digest, and `build-corpus` refuses such
+records too. Gen-3's records collected before the change would therefore no longer build into a
+corpus with the new conversion.
 
 ## Description of the experiment
 
@@ -90,6 +110,13 @@ choice between pools, an index and a database.
 training records.** Gen-3 scores each field that way on the card-disjoint stratum to judge
 checkpoints, so the training side and checkpoint selection share their bookkeeping and keep their
 data apart.
+
+### The converter writes each keyword line's filled reminder text
+
+**Gen-4's conversion writes each printed keyword line's reminder text as Forge fills it, into the
+line's sidecar entry.** The Python copy of Forge's formatting then serves only the keywords granted
+while a game runs, which no sidecar line describes. The change goes in before the cards are
+converted for gen-4's first collection, so no collected record has to be given up for it.
 
 ## Result
 
