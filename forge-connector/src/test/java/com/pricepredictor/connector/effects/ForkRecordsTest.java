@@ -67,12 +67,6 @@ class ForkRecordsTest {
         return TestCollectors.context(writer, ShardRun.GAME_ID);
     }
 
-    /** Forced resolutions of no game, whose every copy fails, writing through the last {@link #context}'s writer. */
-    private InterventionFork interventions(CollectionCaps caps) {
-        context(caps);
-        return new InterventionFork(null, null, budget, 42L);
-    }
-
     private DamageStepProbe probes(CollectionCaps caps) {
         return new DamageStepProbe(null, context(caps), budget);
     }
@@ -91,31 +85,47 @@ class ForkRecordsTest {
     // ── the fixed per-resolution cap ────────────────────────────────────
 
     @Test
-    void thePerResolutionCapIsIndependentOfTheFlag() throws Throwable {
+    void thePerResolutionCapIsIndependentOfTheFlag() {
         // A generous --interventions-per-game must not let one board absorb
         // the whole budget: two counterfactuals for it are already both worth
         // having, and a third costs a game's simulation for a third variation.
-        InterventionFork collector = interventions(forkCaps().interventions(100).probes(2).build());
-        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7, null));
-        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 7, null));
-        assertFalse(collector.mayIntervene(7));
-        assertTrue(collector.mayIntervene(8));
+        CollectionCaps caps = forkCaps().interventions(100).probes(2).build();
+        ForkBudget spent = new ForkBudget(caps);
+        try (RealForks forks = RealForks.interventions(tempDir, spent, caps)) {
+            InterventionFork collector = forks.fork;
+            boolean bothTaken = collector.intervene(forks.bolt, 7, forks.holder)
+                    && collector.intervene(forks.bolt, 7, forks.holder);
+
+            assertTrue(bothTaken, "both forks of the resolution were taken");
+            assertFalse(collector.mayIntervene(7));
+            assertTrue(collector.mayIntervene(8));
+        }
     }
 
     @Test
-    void aDiscardedForkStillCountsAgainstItsBudget() throws Throwable {
+    void aDiscardedForkStillCountsAgainstItsBudget() {
         // Otherwise a systematically failing copy would retry until the game
-        // ended. A null game makes every copy fail.
-        InterventionFork collector = interventions(forkCaps().interventions(1).probes(2).build());
-        DiscardedCopies.expectOne("intervention", () -> assertFalse(collector.intervene(null, 1, null)));
-        assertFalse(collector.mayIntervene(1));
+        // ended. An ability of a card in no zone has no counterpart on
+        // the copy, so the real fork is discarded after it spent its budget.
+        CollectionCaps caps = forkCaps().interventions(1).probes(2).build();
+        ForkBudget spent = new ForkBudget(caps);
+        try (RealForks forks = RealForks.interventions(tempDir, spent, caps)) {
+            long refused = ForkRefusals.counts().getOrDefault("intervention no counterpart", 0L);
+            assertFalse(forks.fork.intervene(forks.abilityOfACardInNoZone(), 1, forks.holder));
+            assertEquals(refused + 1, ForkRefusals.counts().get("intervention no counterpart"),
+                    "the fork was refused on its copy, not skipped before it");
+            assertFalse(forks.fork.mayIntervene(1));
+        }
     }
 
     @Test
-    void aFailedForkWritesNoRecord() throws Throwable {
-        InterventionFork collector = interventions(forkCaps().interventions(2).probes(2).build());
-        DiscardedCopies.expectOne("intervention", () -> collector.intervene(null, 1, null));
-        assertFalse(Files.exists(ShardRun.closed(writer)));
+    void aFailedForkWritesNoRecord() throws IOException {
+        CollectionCaps caps = forkCaps().interventions(2).probes(2).build();
+        try (RealForks forks = RealForks.interventions(tempDir, new ForkBudget(caps), caps)) {
+            assertFalse(forks.fork.intervene(forks.abilityOfACardInNoZone(), 1, forks.holder));
+            Path shard = forks.closedShard();
+            assertEquals(List.of(), Files.exists(shard) ? ShardRun.readShard(shard) : List.of());
+        }
     }
 
     // ── the probe switch ────────────────────────────────────────────────
@@ -135,12 +145,21 @@ class ForkRecordsTest {
     }
 
     @Test
-    void theProbeBudgetIsSpentByTakingProbes() throws Throwable {
-        // Spent even by a fork that fails: a null game makes every copy fail.
-        DamageStepProbe collector = probes(forkCaps().interventions(2).probes(1).probeKeywords("wither").build());
-        DiscardedCopies.expectOne("probe", () -> assertTrue(
-                collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR).isEmpty()));
-        assertFalse(budget.mayProbe("wither"));
+    void theProbeBudgetIsSpentByTakingProbes() {
+        // A real probe of a blocked attacker's trample, over a board whose
+        // copy is made and played through the damage step.
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_DAMAGE);
+        Player attacking = game.getPlayers().get(0);
+        Player defending = game.getPlayers().get(1);
+        Card dreadmaw = TestBoard.onBattlefield(game, attacking, "Colossal Dreadmaw");
+        Card bears = TestBoard.onBattlefield(game, defending, "Grizzly Bears");
+        TestBoard.blockedCombat(new TestBoard.CombatSides(game, attacking, defending), dreadmaw, bears);
+        DamageStepProbe collector = new DamageStepProbe(
+                game, context(forkCaps().interventions(2).probes(1).probeKeywords("trample").build()),
+                budget);
+
+        assertTrue(collector.probe("trample", dreadmaw, DamageStep.REGULAR).isPresent());
+        assertFalse(budget.mayProbe("trample"));
     }
 
     @Test
