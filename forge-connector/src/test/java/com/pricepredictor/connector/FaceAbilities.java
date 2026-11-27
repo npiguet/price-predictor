@@ -1,6 +1,8 @@
 package com.pricepredictor.connector;
 
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /** What a converted face holds and prints, for the tests that read the parser's output. */
@@ -35,6 +37,21 @@ final class FaceAbilities {
                 .flatMap(a -> Stream.concat(Stream.of(a), a.subAbilities().stream()))
                 .filter(a -> a.type() == AbilityType.OPTION)
                 .toList();
+    }
+
+    /** The index of the face's first top-level ability whose type matches, or -1. */
+    static int firstIndexOf(CardFace card, Predicate<AbilityType> type) {
+        return indicesOf(card, type).findFirst().orElse(-1);
+    }
+
+    /** The index of the face's last top-level ability whose type matches, or -1. */
+    static int lastIndexOf(CardFace card, Predicate<AbilityType> type) {
+        return indicesOf(card, type).reduce((earlier, later) -> later).orElse(-1);
+    }
+
+    private static IntStream indicesOf(CardFace card, Predicate<AbilityType> type) {
+        List<Ability> abilities = card.abilities();
+        return IntStream.range(0, abilities.size()).filter(i -> type.test(abilities.get(i).type()));
     }
 
     /** The OPTION sub-abilities of {@code ability}, in order. */

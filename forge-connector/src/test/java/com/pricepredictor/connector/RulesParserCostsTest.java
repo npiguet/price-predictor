@@ -2,21 +2,33 @@ package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.aggregator.AggregateWith;
+import org.junit.jupiter.params.aggregator.ArgumentsAccessor;
+import org.junit.jupiter.params.aggregator.ArgumentsAggregator;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import static com.pricepredictor.connector.AbilityRendering.lineOf;
+import static com.pricepredictor.connector.ConvertedTextAssertions.assertContainsAll;
 import static com.pricepredictor.connector.ConvertedTextAssertions.assertHasAbility;
 import static com.pricepredictor.connector.FaceAbilities.abilitiesOfType;
 import static com.pricepredictor.connector.FaceAbilities.countOfType;
+import static com.pricepredictor.connector.FaceAbilities.firstIndexOf;
+import static com.pricepredictor.connector.FaceAbilities.lastIndexOf;
 import static com.pricepredictor.connector.FaceAbilities.rendered;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** The parser's cost lines: additional, alternate and reduced costs, their order and their text. */
 @ExtendWith(ForgeExtension.class)
 class RulesParserCostsTest {
+
+    private static final Set<AbilityType> COST_TYPES = EnumSet.of(
+            AbilityType.ADDITIONAL_COST, AbilityType.ALTERNATE_COST, AbilityType.COST_REDUCTION);
 
     private final ConvertedCards cards = new ConvertedCards();
 
@@ -73,14 +85,10 @@ class RulesParserCostsTest {
     void additionalCostFromRaiseCostStatic() {
         CardFace card = cards.face("a/aether_tide.txt");
 
-        String costLine = lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
-        assertTrue(costLine.contains("discard X creature cards"));
-        assertFalse(costLine.contains("as an additional cost to cast"));
+        assertCostLineWithoutItsLeadIn(card, "discard X creature cards");
         assertEquals(0, countOfType(card, AbilityType.STATIC), "RaiseCost should not appear as static");
 
-        assertTrue(lineOf(abilitiesOfType(card, AbilityType.SPELL).get(0))
-                .contains("return X target creatures"));
-        assertCostsBeforeSpells(card);
+        assertSpellLineAfterTheCosts(card, "return X target creatures");
     }
 
     @Test
@@ -95,9 +103,7 @@ class RulesParserCostsTest {
     void optionalAdditionalCost() {
         CardFace card = cards.face("a/analyze_the_pollen.txt");
 
-        String costLine = lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
-        assertTrue(costLine.contains("you may collect evidence 8"));
-        assertFalse(costLine.contains("as an additional cost to cast"));
+        assertCostLineWithoutItsLeadIn(card, "you may collect evidence 8");
         assertEquals(0, countOfType(card, AbilityType.STATIC));
         assertCostsBeforeSpells(card);
     }
@@ -106,26 +112,18 @@ class RulesParserCostsTest {
     void alternateAdditionalCost() {
         CardFace card = cards.face("a/annihilating_glare.txt");
 
-        String costLine = lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
-        assertTrue(costLine.contains("sacrifice"));
-        assertTrue(costLine.contains("or"));
+        assertContainsAll(additionalCostLine(card), "sacrifice", "or");
         assertEquals(0, countOfType(card, AbilityType.STATIC)
                 + countOfType(card, AbilityType.ACTIVATED),
                 "AlternateAdditionalCost should not appear as keyword");
 
-        assertTrue(lineOf(abilitiesOfType(card, AbilityType.SPELL).get(0))
-                .contains("destroy target creature or planeswalker"));
-        assertCostsBeforeSpells(card);
+        assertSpellLineAfterTheCosts(card, "destroy target creature or planeswalker");
     }
 
     @Test
     void doubleKickerIncludesBothCosts() {
-        String costLine = lineOf(abilitiesOfType(cards.face("a/archangel_of_wrath.txt"),
-                AbilityType.ADDITIONAL_COST).get(0));
-        assertTrue(costLine.contains("kicker"));
-        assertTrue(costLine.contains("{B}"));
-        assertTrue(costLine.contains("{R}"));
-        assertTrue(costLine.contains("and/or"));
+        assertContainsAll(additionalCostLine(cards.face("a/archangel_of_wrath.txt")),
+                "kicker", "{B}", "{R}", "and/or");
     }
 
     @ParameterizedTest
@@ -138,8 +136,8 @@ class RulesParserCostsTest {
             "w/wheel_of_fate.txt,         suspend",
             "s/surge_of_acclaim.txt,      jump-start",
     })
-    void keywordClassifiedAsAlternateCost(String file, String keyword) {
-        assertHasAbility(cards.face(file), AbilityType.ALTERNATE_COST, keyword);
+    void keywordClassifiedAsAlternateCost(@AggregateWith(ScriptText.FromCsv.class) ScriptText keyword) {
+        assertHasAbility(cards.face(keyword.file()), AbilityType.ALTERNATE_COST, keyword.text());
     }
 
     @ParameterizedTest
@@ -149,8 +147,8 @@ class RulesParserCostsTest {
             "w/wear_away.txt,           splice",
             "u/unfortunate_accident.txt, spree",
     })
-    void keywordClassifiedAsAdditionalCost(String file, String keyword) {
-        assertHasAbility(cards.face(file), AbilityType.ADDITIONAL_COST, keyword);
+    void keywordClassifiedAsAdditionalCost(@AggregateWith(ScriptText.FromCsv.class) ScriptText keyword) {
+        assertHasAbility(cards.face(keyword.file()), AbilityType.ADDITIONAL_COST, keyword.text());
     }
 
     @ParameterizedTest
@@ -159,8 +157,8 @@ class RulesParserCostsTest {
             "w/will_of_the_naga.txt,    delve",
             "w/whir_of_invention.txt,   improvise",
     })
-    void keywordClassifiedAsCostReduction(String file, String keyword) {
-        assertHasAbility(cards.face(file), AbilityType.COST_REDUCTION, keyword);
+    void keywordClassifiedAsCostReduction(@AggregateWith(ScriptText.FromCsv.class) ScriptText keyword) {
+        assertHasAbility(cards.face(keyword.file()), AbilityType.COST_REDUCTION, keyword.text());
     }
 
     @Test
@@ -181,16 +179,8 @@ class RulesParserCostsTest {
 
         // Zephyrim: alternate cost + additional cost + keywords
         CardFace zeph = cards.face("z/zephyrim.txt");
-        int firstNonCostIdx = -1, lastCostIdx = -1;
-        for (int i = 0; i < zeph.abilities().size(); i++) {
-            AbilityType t = zeph.abilities().get(i).type();
-            if (t == AbilityType.ALTERNATE_COST || t == AbilityType.ADDITIONAL_COST
-                    || t == AbilityType.COST_REDUCTION) {
-                lastCostIdx = i;
-            } else if (firstNonCostIdx == -1) {
-                firstNonCostIdx = i;
-            }
-        }
+        int firstNonCostIdx = firstIndexOf(zeph, t -> !COST_TYPES.contains(t));
+        int lastCostIdx = lastIndexOf(zeph, COST_TYPES::contains);
         assertTrue(lastCostIdx >= 0, "Zephyrim has cost lines: " + zeph.abilities());
         assertTrue(firstNonCostIdx >= 0, "Zephyrim has non-cost lines: " + zeph.abilities());
         assertTrue(lastCostIdx < firstNonCostIdx,
@@ -206,9 +196,8 @@ class RulesParserCostsTest {
             // K:Specialize:5::This ability costs {3} less…:ReduceCost$ X
             "Imoen specialize,               i/imoen_trickster_friend.txt,         specialize,    costs {3} less, instant and/or sorcery cards in your graveyard",
     })
-    void keywordReduceCostAppendsText(
-            String ignoredCase, String file, String keyword, String reduction, String countClause) {
-        assertActivatedLineCarries(file, keyword, reduction, countClause);
+    void keywordReduceCostAppendsText(@AggregateWith(ReducedCostLine.FromCsv.class) ReducedCostLine line) {
+        assertActivatedLineCarries(line);
     }
 
     /**
@@ -226,19 +215,32 @@ class RulesParserCostsTest {
             // A:AB$ PutCounter | Cost$ 10 B G | Monstrosity$ 10 | ReduceCost$ X
             "Grim Giganotosaurus monstrosity, g/grim_giganotosaurus.txt,           monstrosity,   costs {1} less, creature with power 4",
     })
-    void scriptedReduceCostKeepsItsSpellDescription(
-            String ignoredCase, String file, String keyword, String reduction, String countClause) {
-        assertActivatedLineCarries(file, keyword, reduction, countClause);
+    void scriptedReduceCostKeepsItsSpellDescription(@AggregateWith(ReducedCostLine.FromCsv.class) ReducedCostLine line) {
+        assertActivatedLineCarries(line);
     }
 
-    private void assertActivatedLineCarries(
-            String file, String keyword, String reduction, String countClause) {
-        Ability ability = abilitiesOfType(cards.face(file), AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains(keyword))
+    /**
+     * One reduced-cost case: the activated line of the card in {@code file}
+     * naming {@code keyword} carries {@code reduction} and {@code countClause}.
+     */
+    record ReducedCostLine(String file, String keyword, String reduction, String countClause) {
+
+        /** Reads a case from a CSV row whose first column only names the case. */
+        static final class FromCsv implements ArgumentsAggregator {
+            @Override
+            public ReducedCostLine aggregateArguments(ArgumentsAccessor row, ParameterContext context) {
+                return new ReducedCostLine(row.getString(1), row.getString(2), row.getString(3), row.getString(4));
+            }
+        }
+    }
+
+    private void assertActivatedLineCarries(ReducedCostLine line) {
+        Ability ability = abilitiesOfType(cards.face(line.file()), AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains(line.keyword()))
                 .findFirst().orElseThrow();
-        assertTrue(ability.descriptionText().contains(reduction),
+        assertTrue(ability.descriptionText().contains(line.reduction()),
                 "Must include cost reduction: " + ability.descriptionText());
-        assertTrue(ability.descriptionText().contains(countClause),
+        assertTrue(ability.descriptionText().contains(line.countClause()),
                 "Must include count clause: " + ability.descriptionText());
     }
 
@@ -253,16 +255,28 @@ class RulesParserCostsTest {
             // K:Craft:4 ExileCtrlOrGrave<…>:a Dinosaur, a Merfolk, a Pirate, and a Vampire:the four
             "Throne explicit multi-type text,   t/throne_of_the_grim_captain_the_grim_captain.txt, craft with a dinosaur,               {4}",
     })
-    void craftEmitsTheTerseFormat(String ignoredCase, String file, String craftText, String manaCost) {
-        Ability craft = abilitiesOfType(cards.face(file), AbilityType.ACTIVATED).stream()
+    void craftEmitsTheTerseFormat(@AggregateWith(CraftLine.FromCsv.class) CraftLine line) {
+        Ability craft = abilitiesOfType(cards.face(line.file()), AbilityType.ACTIVATED).stream()
                 .filter(a -> a.descriptionText().contains("craft"))
                 .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains(craftText),
-                "Must include '" + craftText + "': " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains(manaCost),
+        assertTrue(craft.descriptionText().contains(line.craftText()),
+                "Must include '" + line.craftText() + "': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains(line.manaCost()),
                 "Must include mana cost: " + craft.descriptionText());
         assertFalse(craft.descriptionText().contains("exile"),
                 "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    /** One craft case: the craft line of the card in {@code file} reads {@code craftText} and costs {@code manaCost}. */
+    record CraftLine(String file, String craftText, String manaCost) {
+
+        /** Reads a case from a CSV row whose first column only names the case. */
+        static final class FromCsv implements ArgumentsAggregator {
+            @Override
+            public CraftLine aggregateArguments(ArgumentsAccessor row, ParameterContext context) {
+                return new CraftLine(row.getString(1), row.getString(2), row.getString(3));
+            }
+        }
     }
 
     @Test
@@ -278,18 +292,28 @@ class RulesParserCostsTest {
                 abilitiesOfType(card, AbilityType.SPELL).stream().map(Ability::descriptionText).toList());
     }
 
-    private void assertCostsBeforeSpells(CardFace card) {
+    /** The line of the face's first additional cost. */
+    private static String additionalCostLine(CardFace card) {
+        return lineOf(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0));
+    }
+
+    /** The first additional cost line holds {@code costText} without the "as an additional cost" lead-in. */
+    private static void assertCostLineWithoutItsLeadIn(CardFace card, String costText) {
+        String costLine = additionalCostLine(card);
+        assertTrue(costLine.contains(costText), costLine);
+        assertFalse(costLine.contains("as an additional cost to cast"), costLine);
+    }
+
+    /** The first spell line holds {@code spellText}, and every cost line comes before the spell lines. */
+    private static void assertSpellLineAfterTheCosts(CardFace card, String spellText) {
+        assertTrue(lineOf(abilitiesOfType(card, AbilityType.SPELL).get(0)).contains(spellText));
+        assertCostsBeforeSpells(card);
+    }
+
+    private static void assertCostsBeforeSpells(CardFace card) {
         var abilities = card.abilities();
-        int lastCostIdx = -1, firstSpellIdx = -1;
-        for (int i = 0; i < abilities.size(); i++) {
-            AbilityType t = abilities.get(i).type();
-            if (t == AbilityType.ADDITIONAL_COST || t == AbilityType.ALTERNATE_COST
-                    || t == AbilityType.COST_REDUCTION) {
-                lastCostIdx = i;
-            } else if (firstSpellIdx == -1 && t == AbilityType.SPELL) {
-                firstSpellIdx = i;
-            }
-        }
+        int lastCostIdx = lastIndexOf(card, COST_TYPES::contains);
+        int firstSpellIdx = firstIndexOf(card, t -> t == AbilityType.SPELL);
         // A card missing either has no order to check, and would pass silently.
         assertTrue(lastCostIdx >= 0, "no cost line: " + abilities);
         assertTrue(firstSpellIdx >= 0, "no spell line: " + abilities);

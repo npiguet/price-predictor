@@ -21,6 +21,13 @@ final class ConvertedTextAssertions {
         }
     }
 
+    /** Each of {@code parts} is in {@code text}. */
+    static void assertContainsAll(String text, String... parts) {
+        for (String part : parts) {
+            assertTrue(text.contains(part), "'" + part + "' missing from: " + text);
+        }
+    }
+
     /** How many times {@code needle} appears in {@code text}, overlaps counted. */
     static int occurrences(String text, String needle) {
         int found = 0;
