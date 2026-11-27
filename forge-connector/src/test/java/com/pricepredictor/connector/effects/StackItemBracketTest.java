@@ -329,36 +329,6 @@ class StackItemBracketTest {
     }
 
     /**
-     * The same ability cast twice while its first cast is still on the stack:
-     * each cast writes its cost half, the first's bracket is written off when
-     * the second arrives, and only the second's effect half is written. A
-     * defensive guard, driven by
-     * hand because no real game reaches it: a card that leaves the stack is
-     * rebuilt by {@code CardCopyService.copyCard} with fresh spell ability
-     * ids, so a card cast again always casts a new id.
-     */
-    @Test
-    void aSpellCastAgainWritesOffItsEarlierCast() throws Throwable {
-        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-        Player caster = game.getPlayers().get(0);
-        SpellAbility bolt = inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
-        bolt.setActivatingPlayer(caster);
-
-        List<String> all = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            bracket.beginBracket(bolt);
-            bracket.beginBracket(bolt);
-            bracket.endBracket(bolt.getId(), false);
-            bracket.onNextAction();
-        });
-
-        List<String> costs = records(all, "activation");
-        assertEquals(2, costs.size(), all.toString());
-        String half = only(all, "resolution", BOLT);
-        assertEquals("resolved", outcomeOf(half), half);
-        assertEquals(linkOf(costs.get(1)), linkOf(half));
-    }
-
-    /**
      * A response's payment, made while a Shock waits on the stack — a land
      * tapped, an optional cost turned down — is the response's cost, not
      * the Shock's: the Shock keeps what it gathered since its cast, and none

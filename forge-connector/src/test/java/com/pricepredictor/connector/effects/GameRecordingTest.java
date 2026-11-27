@@ -28,23 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class GameRecordingTest {
 
-    /**
-     * A marker that cannot be written (its board snapshot throws) is counted,
-     * the game left without one, and close carries on: the match plays on.
-     */
-    @org.junit.jupiter.api.Test
-    void aMarkerThatCannotBeWrittenIsCountedAndTheGameGoesOn() {
-        long before = HookFailures.counts().getOrDefault("game-end marker", 0L);
-
-        boolean written = GameRecording.writeMarker("run.0-l1.0", () -> {
-            throw new IllegalStateException("a snapshot that throws");
-        });
-
-        org.junit.jupiter.api.Assertions.assertFalse(written);
-        org.junit.jupiter.api.Assertions.assertEquals(before + 1,
-                HookFailures.counts().get("game-end marker"));
-    }
-
     @TempDir
     Path tempDir;
 

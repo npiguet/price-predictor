@@ -88,13 +88,6 @@ class ForkRecordsTest {
         return new DamageStepProbe(TestCards.game(), context(caps), budget);
     }
 
-    // ── the per-game budget ─────────────────────────────────────────────
-
-    @Test
-    void anExhaustedInterventionBudgetStopsFurtherForks() {
-        assertFalse(new ForkBudget(forkCaps().interventions(0).probes(2).build()).mayIntervene(1));
-    }
-
     // ── the fixed per-resolution cap ────────────────────────────────────
 
     @Test

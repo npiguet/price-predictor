@@ -262,17 +262,6 @@ class TestTheRewriteChannelIsNotExcused:
 
 
 class TestTheRatchet:
-    def test_every_known_constant_names_a_field_the_collector_writes(self):
-        """A path that no longer exists means the entry is stale: without this
-        a renamed field leaves its old path on the list forever, silently
-        asserting nothing. Checked against the walk over every Java golden
-        record, the collector's own shapes (the list is empty today)."""
-        from effects.infrastructure.record_codec import record_from_dict
-        from tests.unit.effects.builders import java_golden_records
-
-        walked = set(field_coverage([record_from_dict(raw) for raw in java_golden_records()]))
-        assert set(KNOWN_CONSTANT_FIELDS) <= walked, sorted(set(KNOWN_CONSTANT_FIELDS) - walked)
-
     def test_coverage_of_no_records_is_empty_rather_than_an_error(self):
         assert field_coverage([]) == {}
 

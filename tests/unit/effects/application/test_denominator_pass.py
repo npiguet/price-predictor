@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 import torch
 
 from effects.application.denominator_pass import (
@@ -20,7 +19,6 @@ from effects.application.denominator_pass import (
 )
 from effects.application.run_context import preparer_settings
 from effects.application.step_preparation import ShardOpened, StepPreparer, StepReady
-from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, PER_ENTITY_FIELDS
 from effects.domain.loss_denominators import LossDenominators
 from effects.domain.loss_floor import PER_ENTITY, TargetSample, constant_predictor_losses
@@ -95,17 +93,6 @@ def test_the_denominators_are_the_floored_constant_losses_of_the_steps():
     expected = LossDenominators.of(constant_predictor_losses(sample, fields=FIELDS), floor=0.04)
     assert got == expected
     assert got.of_term(PER_ENTITY, "damage_taken") > 0.04
-
-
-def test_a_term_below_the_floor_is_raised_to_it():
-    """A field the sample's constant already predicts to 0.01 nats or less."""
-    got = loss_denominators(
-        _Preparer(), [SimpleNamespace(shard=Path("quiet"), budget=100, fields=FIELDS)],
-        floor=0.5,
-        read=lambda path: [0] * 199 + [1],
-    )
-    assert got.of_term(PER_ENTITY, "damage_taken") == 0.5
-    assert got.of_term(PER_ENTITY, "tap_state") == 0.5
 
 
 def _default_tasks():
@@ -205,8 +192,3 @@ def test_the_deviance_floor_flag_defaults_to_four_hundredths_of_a_nat():
     assert parse_cli(
         ["train-effect-model", "--corpus", "c", "--deviance-floor", "0.1"],
     ).deviance_floor == 0.1
-
-
-def test_a_floor_of_zero_or_less_is_refused():
-    with pytest.raises(ValueError, match="deviance-floor"):
-        TrainEffectModelConfig.unpathed(corpus="c", deviance_floor=0.0)

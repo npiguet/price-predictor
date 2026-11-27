@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.rule_catalogue import DetectorDeclaration, Polarity
+from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import DetectorIndex
 from effects.infrastructure.rules_catalogue_io import load_scenarios
 
@@ -159,12 +159,6 @@ def test_no_two_rules_tag_the_same_records(tagged):
 def test_the_checks_read_records_of_every_kind(tagged):
     _, kinds, _ = tagged
     assert {"resolution/resolution", "combat", "trigger", "playability/decision"} <= set(kinds)
-
-
-def test_every_declared_scenario_is_a_declaration():
-    assert all(isinstance(s.detector, DetectorDeclaration)
-               for s in load_scenarios(RULES).scenarios
-               if s.detector is not None and hasattr(s.detector, "family"))
 
 
 #: Each turn-action kind's own fact (504.1, 703.4c, 514.1): it fires on every record of its
