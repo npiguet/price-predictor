@@ -8,9 +8,18 @@ the entities ``payload.costs`` names:
 - a sacrificed permanent and a discarded card go to the graveyard, an exiled
   card to exile, a returned permanent to its owner's hand (``zone_outcome``);
 - a tapped permanent's ``tap_state`` is 1, an untapped one's 0;
-- the counters paid or put are the source's counter deltas, where the source
-  is on the battlefield: ``costs.counters`` names a count per type and no
-  permanent, and a source anywhere else holds no counter;
+- the counters paid or put are the source's counter deltas where the record
+  shows the source bore them: ``costs.counters`` names a net count per type
+  and no permanent (the Java ledger sums every counter change of the payment,
+  whatever it changed), so a removal books at the source only when the
+  source is on the battlefield and its snapshot, read before the payment,
+  holds at least that many counters of the type (Iron Spider, Stark
+  Upgrade's ``RemoveAnyCounter`` of +1/+1 it does not hold; The Filigree
+  Sylex's oil); an addition books there only for loyalty (a loyalty cost
+  always counts on its own planeswalker, 606.4), since the record carries no
+  cost script and a ``blight`` or ``PutCounter`` cost may count on another
+  permanent; every other change leaves the source's field of that type
+  unknown, never silent;
 - the payer, the source's controller, loses ``costs.life``.
 
 Nothing else trains: the cast card's own move to the stack is the cast, not an
@@ -40,6 +49,8 @@ _MOVES: tuple[tuple[str, ZoneOutcome], ...] = (
     ("exiled", ZoneOutcome.EXILED),
     ("returned", ZoneOutcome.TO_HAND),
 )
+#: The one counter type whose cost always counts on the acting permanent.
+_LOYALTY = "LOYALTY"
 #: ``costs`` channel -> the tap state of each permanent it names.
 _TAPS: tuple[tuple[str, int], ...] = (("tapped", 1), ("untapped", 0))
 
@@ -63,8 +74,8 @@ def apply_paid_costs(record: EffectRecord, slot: Callable) -> None:
     source = _source(record)
     if source is None:
         return
-    if costs.counters and source.zone == Zone.BATTLEFIELD:
-        _paid_counters(slot(source.id), costs.counters)
+    if costs.counters:
+        _paid_counters(slot(source.id), source, costs.counters)
     if costs.life:
         _paid(slot(source.controller)).add(HeadField.LIFE_DELTA, -costs.life)
 
@@ -90,6 +101,9 @@ class _Reached:
     def add(self, name: str, value: float) -> None:
         """What the payment wrote, not kept."""
 
+    def forget(self, name: str) -> None:
+        """What the payment left unknown, not kept."""
+
 
 def _source(record: EffectRecord) -> EntityState | None:
     source = record.state.refs.source
@@ -101,10 +115,23 @@ def _set_each(slot: Callable, refs: tuple[str, ...], name: str, value: int) -> N
         _paid(slot(ref)).set(name, value)
 
 
-def _paid_counters(entry, counters: dict[str, int]) -> None:
+def _paid_counters(entry, source: EntityState, counters: dict[str, int]) -> None:
     _paid(entry)
     for counter, delta in counters.items():
-        entry.add(counter_delta_field(counter), delta)
+        if _source_bore(source, counter, delta):
+            entry.add(counter_delta_field(counter), delta)
+        else:
+            entry.forget(counter_delta_field(counter))
+
+
+def _source_bore(source: EntityState, counter: str, delta: int) -> bool:
+    """Whether the record shows ``source`` itself changing ``delta`` counters
+    of the type: it holds them (a removal), or it is a loyalty cost."""
+    if source.zone != Zone.BATTLEFIELD:
+        return False
+    if delta < 0:
+        return source.counters.get(counter, 0) >= -delta
+    return counter == _LOYALTY
 
 
 def _paid(entry):

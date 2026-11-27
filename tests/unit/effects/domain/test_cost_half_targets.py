@@ -7,11 +7,12 @@ moved permanents and cards, and those train without the gate at the entities
 ``payload.costs`` names: a sacrificed or discarded card's move to the
 graveyard, an exiled card's to exile, a returned permanent's to its owner's
 hand, a tapped permanent's tap state 1 and an untapped one's 0, the source's
-counter delta, the payer's life. Nothing else of a cost half trains.
+counter delta where the source bore it (else unknown), the payer's life.
+Nothing else of a cost half trains.
 
 The records are real. The gen-3 fixture holds Benevolent Bodyguard's
 sacrifice, Vithian Stinger's tap, Quicksand's tap-and-sacrifice and Skitter of
-Lizards' mana-only cast; ``cost-halves.jsonl`` holds seven lines of the review
+Lizards' mana-only cast; ``cost-halves.jsonl`` holds nine lines of the review
 pilots, each as the collector wrote it. Only the unnamed-channel and
 off-battlefield cases edit a real record, since no record pays those channels
 alone.
@@ -51,9 +52,11 @@ from tests.unit.effects.domain.test_input_outcome_independence import E_DIM, _Li
 
 #: Cut from the review pilots (``output/effects/gen3/scratch/2026-11-2*-review-pilot*``):
 #: pilot 5's Tyvar, Jubilant Brawler -2, Firewild Borderpost's returned land
-#: and Soul Spike's two exiled cards; pilot 4's Champion of the Weird
-#: (1 life and two -1/-1 counters), Grimclaw Bats (1 life), Deadshot
-#: Minotaur's cycling discard and Silkbind Faerie's untap symbol. No byte of
+#: and Soul Spike's two exiled cards; the 2026-11-23 pilot's Iron Spider,
+#: Stark Upgrade (+1/+1 it does not hold) and The Filigree Sylex (oil it does
+#: not hold); pilot 4's Champion of the Weird (1 life and two -1/-1
+#: counters), Grimclaw Bats (1 life), Deadshot Minotaur's cycling discard and
+#: Silkbind Faerie's untap symbol. No byte of
 #: a line was changed.
 _LINES = Path(__file__).parents[3] / "fixtures" / "effects" / "cost-halves.jsonl"
 
@@ -70,12 +73,17 @@ _MINOTAUR = f"{_FIXTURE_RUN}.2-mwqvwtly1zvq.13805"
 _SOUL_SPIKE = f"{_PILOT_5_RUN}.3-mwr4qdjt90ol.9717"
 _BORDERPOST = f"{_PILOT_5_RUN}.3-mwr4qdjt90ol.3471"
 _SILKBIND = f"{_FIXTURE_RUN}.1-mwqw0ogy54jx.8677"
+_PILOT_RUN = "3931de33-72d0-4c0d-ad73-4a8846ebadd6"
+_SPIDER = f"{_PILOT_RUN}.0-mwsy29kjmygs.7408"
+_SYLEX = f"{_PILOT_RUN}.2-mwt1pha2byfh.9957"
 
 _DIED = ZONE_OUTCOMES.index(ZoneOutcome.TO_GRAVEYARD)
 _EXILED = ZONE_OUTCOMES.index(ZoneOutcome.EXILED)
 _TO_HAND = ZONE_OUTCOMES.index(ZoneOutcome.TO_HAND)
 _LOYALTY = "counters_delta_loyalty"
 _M1M1 = "counters_delta_m1m1"
+_P1P1 = "counters_delta_p1p1"
+_OIL = "counters_delta_oil"
 
 
 def _is_cost_half(record: EffectRecord) -> bool:
@@ -117,6 +125,15 @@ def _trained(entry, spec):
     return entry.supervised(spec)
 
 
+def _unknown(record: EffectRecord, subject: str) -> set[str]:
+    return set(derive_targets(record)[subject].unknown)
+
+
+def _with_counters(record: EffectRecord, counters: dict[str, int]) -> EffectRecord:
+    costs = replace(record.payload.costs, counters=counters)
+    return replace(record, payload=replace(record.payload, costs=costs))
+
+
 def _batch(*records: EffectRecord):
     """The records' real surfaces and their per-entity targets, collated."""
     builder = SurfaceBuilder(_Lines(), e_dim=E_DIM, rng=random.Random(0))
@@ -134,7 +151,7 @@ def _column(surface, subject: str) -> int:
 class TestACostHalfTrainsNoGate:
     def test_no_cost_half_trains_the_gate(self):
         halves = _cost_halves()
-        assert len(halves) == 46 + 7
+        assert len(halves) == 46 + 9
         assert not [record.record_id for record in halves if derive_targets(record).gated]
 
     def test_a_sacrifice_scores_no_gate_anywhere(self):
@@ -177,12 +194,34 @@ class TestWhatThePaymentDidTrains:
         assert record.state.entity(tyvar).name == "Tyvar, Jubilant Brawler"
         assert _scored(record) == {tyvar: {_LOYALTY: -2}}
 
-    def test_counters_put_as_a_cost_and_life_paid_score_source_and_payer(self):
+    def test_counters_put_by_a_blight_cost_are_unknown_and_life_paid_scores_the_payer(self):
+        """Champion of the Weird's blight 2 counts on a creature its payer
+        picks, which the record does not name: the source's field is unknown."""
         record = _record(_CHAMPION)
         champion = record.state.entity(record.state.refs.source)
-        assert _scored(record) == {
-            champion.id: {_M1M1: 2}, champion.controller: {HeadField.LIFE_DELTA: -1},
-        }
+        assert _scored(record) == {champion.controller: {HeadField.LIFE_DELTA: -1}}
+        assert _unknown(record, champion.id) == {_M1M1}
+
+    def test_counters_put_as_a_loyalty_cost_score_the_planeswalker(self):
+        """Hand-built: Tyvar's -2 as the +1 of a loyalty cost, which always
+        counts on its own planeswalker (606.4)."""
+        record = _record(_TYVAR)
+        tyvar = record.state.refs.source
+        edited = _with_counters(record, {"LOYALTY": 1})
+        assert _scored(edited) == {tyvar: {_LOYALTY: 1}}
+
+    @pytest.mark.parametrize(("record_id", "counter", "field"), [
+        (_SPIDER, "P1P1", _P1P1), (_SYLEX, "OIL", _OIL)])
+    def test_counters_removed_that_the_source_did_not_hold_are_unknown(
+            self, record_id, counter, field):
+        """Iron Spider, Stark Upgrade's ``RemoveAnyCounter`` of +1/+1 and The
+        Filigree Sylex's oil came off other permanents: the source held fewer
+        than the payment removed, so its field is unknown, not the full net."""
+        record = _record(record_id)
+        source = record.state.entity(record.state.refs.source)
+        assert source.counters[counter] < -record.payload.costs.counters[counter]
+        assert field not in _scored(record).get(source.id, {})
+        assert _unknown(record, source.id) == {field}
 
     def test_life_paid_scores_the_payers_life_alone(self):
         record = _record(_BATS)
