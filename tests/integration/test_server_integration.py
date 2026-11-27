@@ -194,46 +194,35 @@ UNKNOWN_CARD_WITH_RARITY = (
 )
 
 
+def assert_predicts_positive_price(client: TestClient, card_text: str) -> None:
+    """POST plain card text to the predict endpoint and expect a positive sklearn price."""
+    response = client.post(
+        "/api/v1/predict",
+        content=card_text,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+    assert data["sklearn"]["predicted_price_eur"] > 0
+
+
 @pytest.mark.integration
 class TestServerAutoFill:
     def test_known_card_without_printing_data_returns_200(
         self, printing_data_client: TestClient
     ) -> None:
         """POST known card text WITHOUT printing data, server looks up its printing data."""
-        response = printing_data_client.post(
-            "/api/v1/predict",
-            content=BOLT_NO_PRINTING,
-            headers={"Content-Type": "text/plain"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
-        assert data["sklearn"]["predicted_price_eur"] > 0
+        assert_predicts_positive_price(printing_data_client, BOLT_NO_PRINTING)
 
     def test_unknown_card_without_printing_data_returns_200(
         self, printing_data_client: TestClient
     ) -> None:
         """POST unknown card text (not in printing_data_map), server applies defaults."""
-        response = printing_data_client.post(
-            "/api/v1/predict",
-            content=UNKNOWN_CARD,
-            headers={"Content-Type": "text/plain"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
-        assert data["sklearn"]["predicted_price_eur"] > 0
+        assert_predicts_positive_price(printing_data_client, UNKNOWN_CARD)
 
     def test_unknown_card_with_partial_printing_data_returns_200(
         self, printing_data_client: TestClient
     ) -> None:
         """POST unknown card with rarity: mythic only, server fills remaining defaults."""
-        response = printing_data_client.post(
-            "/api/v1/predict",
-            content=UNKNOWN_CARD_WITH_RARITY,
-            headers={"Content-Type": "text/plain"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
-        assert data["sklearn"]["predicted_price_eur"] > 0
+        assert_predicts_positive_price(printing_data_client, UNKNOWN_CARD_WITH_RARITY)
