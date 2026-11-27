@@ -53,9 +53,4 @@ final class FaceAbilities {
         List<Ability> abilities = card.abilities();
         return IntStream.range(0, abilities.size()).filter(i -> type.test(abilities.get(i).type()));
     }
-
-    /** The OPTION sub-abilities of {@code ability}, in order. */
-    static List<Ability> optionsOf(Ability ability) {
-        return ability.subAbilities().stream().filter(a -> a.type() == AbilityType.OPTION).toList();
-    }
 }
