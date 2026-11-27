@@ -20,7 +20,7 @@ every rule these predicates encode is a rule about two creatures.
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
 
 import pytest
 
@@ -53,11 +53,6 @@ _PLANESWALKER_DEFENDER = "E9"
 _PLAYER_DEFENDER = "P1"
 
 
-
-def _creature(entity_id: str, power: int, toughness: int, **traits: Any) -> EntityState:
-    return creature(entity_id, power, toughness, CreatureTraits(**traits))
-
-
 def _board(*entities: EntityState, substep: str = "regular") -> StateSnapshot:
     return make_snapshot(
         global_=damage_step_global(substep),
@@ -69,32 +64,39 @@ def _board(*entities: EntityState, substep: str = "regular") -> StateSnapshot:
     )
 
 
+@dataclass(frozen=True)
+class BlockedAttack:
+    """``A``'s attack on ``P1``, blocked by one creature ``B<i>`` per entry of
+    ``blockers``; each size is ``(power, toughness)``."""
+
+    attacker: tuple[int, int] = (2, 2)
+    blockers: tuple[tuple[int, int], ...] = ((2, 2),)
+    attacker_damage: int = 0
+    attacker_keywords: tuple[str, ...] = ()
+    blocker_damage: int = 0
+    blocker_keywords: tuple[str, ...] = ()
+    substep: str = "regular"
+
+
 def _attacker_and_blockers(
-    *,
-    attacker: tuple[int, int] = (2, 2),
-    blockers: tuple[tuple[int, int], ...] = ((2, 2),),
-    attacker_damage: int = 0,
-    attacker_keywords: tuple[str, ...] = (),
-    blocker_damage: int = 0,
-    blocker_keywords: tuple[str, ...] = (),
-    substep: str = "regular",
+    attack: BlockedAttack = BlockedAttack(),
 ) -> tuple[StateSnapshot, EntityState]:
-    blocker_ids = tuple(f"B{i}" for i in range(len(blockers)))
-    carrier = _creature(
-        "A", *attacker, damage=attacker_damage, keywords=attacker_keywords,
+    blocker_ids = tuple(f"B{i}" for i in range(len(attack.blockers)))
+    carrier = creature("A", *attack.attacker, CreatureTraits(
+        damage=attack.attacker_damage, keywords=attack.attacker_keywords,
         combat=CombatStatus(
             attacking=_PLAYER_DEFENDER, blocked_by=blocker_ids,
             became_blocked=bool(blocker_ids),
         ),
-    )
+    ))
     blocking = tuple(
-        _creature(
-            blocker_id, *stats, controller="P1", damage=blocker_damage,
-            keywords=blocker_keywords, combat=CombatStatus(blocking=("A",)),
-        )
-        for blocker_id, stats in zip(blocker_ids, blockers)
+        creature(blocker_id, *stats, CreatureTraits(
+            controller="P1", damage=attack.blocker_damage,
+            keywords=attack.blocker_keywords, combat=CombatStatus(blocking=("A",)),
+        ))
+        for blocker_id, stats in zip(blocker_ids, attack.blockers)
     )
-    return _board(carrier, *blocking, substep=substep), carrier
+    return _board(carrier, *blocking, substep=attack.substep), carrier
 
 
 def _planeswalker() -> EntityState:
@@ -108,16 +110,14 @@ def _unblocked_attacker(
     power: int = 3, toughness: int = 3, *, substep: str = "regular",
     keywords: tuple[str, ...] = (),
 ):
-    carrier = _creature(
-        "A", power, toughness, keywords=keywords,
-        combat=CombatStatus(attacking=_PLAYER_DEFENDER),
-    )
+    carrier = creature("A", power, toughness, CreatureTraits(
+        keywords=keywords, combat=CombatStatus(attacking=_PLAYER_DEFENDER),
+    ))
     return _board(carrier, substep=substep), carrier
 
 
 def _overlay_keywords(entity) -> set[str]:
     return set(entity.granted_temporary.keywords)
-
 
 
 def _participant_of(state, carrier, keywords_of=_overlay_keywords):
@@ -159,22 +159,24 @@ class TestDealsDamageAtAll:
     )
     @pytest.mark.parametrize("substep", ["first_strike", "regular"])
     def test_a_powerless_carrier_qualifies_for_nothing(self, keyword, substep):
-        carrier = _creature(
-            "A", 0, 3, keywords=(keyword,),
-            combat=CombatStatus(attacking=_PLAYER_DEFENDER, blocked_by=("B0",),
-                                became_blocked=True),
+        carrier = creature(
+            "A", 0, 3, CreatureTraits(
+                keywords=(keyword,),
+                combat=CombatStatus(attacking=_PLAYER_DEFENDER, blocked_by=("B0",),
+                                    became_blocked=True),
+            ),
         )
-        blocker = _creature(
-            "B0", 1, 1, controller="P1", combat=CombatStatus(blocking=("A",)),
+        blocker = creature(
+            "B0", 1, 1, CreatureTraits(controller="P1", combat=CombatStatus(blocking=("A",))),
         )
         state = _board(carrier, blocker, substep=substep)
         assert not _qualifies(keyword, state, carrier)
 
     def test_a_powerless_carrier_can_still_be_indestructible(self):
         """Indestructible is about damage coming in, not damage going out."""
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(0, 2), blockers=((3, 3),),
-        )
+        ))
         assert _qualifies("indestructible", state, carrier)
 
 
@@ -193,8 +195,8 @@ class TestLifelink:
         assert _qualifies("lifelink", state, state.entity("B0"))
 
     def test_a_blocker_whose_attacker_is_gone_deals_nothing(self):
-        carrier = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
+        carrier = creature(
+            "B0", 2, 2, CreatureTraits(controller="P1", combat=CombatStatus(blocking=("A",))),
         )
         assert not _qualifies("lifelink", _board(carrier), carrier)
 
@@ -242,48 +244,48 @@ class TestInfect:
 
 class TestDeathtouch:
     def test_an_opponent_that_would_survive_qualifies(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((1, 3),),
-        )
+        ))
         assert _qualifies("deathtouch", state, carrier)
 
     def test_an_opponent_that_would_die_anyway_does_not(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(3, 3), blockers=((1, 3),),
-        )
+        ))
         assert not _qualifies("deathtouch", state, carrier)
 
     def test_damage_already_marked_counts_against_the_opponents_toughness(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((1, 3),), blocker_damage=2,
-        )
+        ))
         assert not _qualifies("deathtouch", state, carrier)
 
     def test_several_blockers_make_the_assignment_unpredictable(self):
         """Which blocker the two damage goes to is Forge's choice, not a rule."""
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((1, 1), (1, 5)),
-        )
+        ))
         assert not _qualifies("deathtouch", state, carrier)
 
 
 class TestTrample:
     def test_a_blocked_attacker_bigger_than_its_blockers_qualifies(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(4, 4), blockers=((1, 3),),
-        )
+        ))
         assert _qualifies("trample", state, carrier)
 
     def test_blockers_that_soak_every_point_do_not_qualify(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(4, 4), blockers=((1, 2), (1, 2)),
-        )
+        ))
         assert not _qualifies("trample", state, carrier)
 
     def test_damage_already_on_a_blocker_leaves_less_to_soak(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(4, 4), blockers=((1, 4),), blocker_damage=1,
-        )
+        ))
         assert _qualifies("trample", state, carrier)
 
     def test_an_unblocked_attacker_does_not_qualify(self):
@@ -292,49 +294,49 @@ class TestTrample:
         assert not _qualifies("trample", state, carrier)
 
     def test_a_blocker_does_not_qualify(self):
-        state, _ = _attacker_and_blockers(attacker=(1, 1), blockers=((4, 4),))
+        state, _ = _attacker_and_blockers(BlockedAttack(attacker=(1, 1), blockers=((4, 4),)))
         assert not _qualifies("trample", state, state.entity("B0"))
 
 
 class TestIndestructible:
     def test_lethal_incoming_damage_qualifies(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(1, 3), blockers=((3, 3),),
-        )
+        ))
         assert _qualifies("indestructible", state, carrier)
 
     def test_survivable_incoming_damage_does_not(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(1, 4), blockers=((3, 3),),
-        )
+        ))
         assert not _qualifies("indestructible", state, carrier)
 
     def test_damage_already_marked_makes_survivable_damage_lethal(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(1, 4), blockers=((3, 3),), attacker_damage=1,
-        )
+        ))
         assert _qualifies("indestructible", state, carrier)
 
     def test_several_blockers_add_up(self):
         """A sum does not depend on how Forge splits the damage, so unlike the
         first-strike rules this one still reads a multi-block."""
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(1, 4), blockers=((2, 2), (2, 2)),
-        )
+        ))
         assert _qualifies("indestructible", state, carrier)
 
     def test_a_deathtouch_blocker_makes_any_damage_lethal(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((1, 1),),
             blocker_keywords=("deathtouch",),
-        )
+        ))
         assert _qualifies("indestructible", state, carrier)
 
     def test_a_powerless_deathtouch_blocker_deals_no_lethal_damage(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((0, 1),),
             blocker_keywords=("deathtouch",),
-        )
+        ))
         assert not _qualifies("indestructible", state, carrier)
 
     def test_an_unblocked_attacker_takes_nothing(self):
@@ -344,17 +346,17 @@ class TestIndestructible:
     def test_an_infect_blocker_kills_through_indestructible(self):
         """Infect and wither damage lands as -1/-1 counters, which shrink the
         carrier to death without destroying it, so the keyword saves nothing."""
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((2, 2),),
             blocker_keywords=("infect",),
-        )
+        ))
         assert not _qualifies("indestructible", state, carrier)
 
     def test_a_wither_blocker_kills_through_indestructible(self):
-        state, carrier = _attacker_and_blockers(
+        state, carrier = _attacker_and_blockers(BlockedAttack(
             attacker=(2, 2), blockers=((2, 2),),
             blocker_keywords=("wither",),
-        )
+        ))
         assert not _qualifies("indestructible", state, carrier)
 
 

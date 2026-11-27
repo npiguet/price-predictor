@@ -23,10 +23,11 @@ from effects.domain.damage_step_keywords import (
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.rule_detectors.keyword_combat import KeywordCombatMatcher
 from effects.domain.state_snapshot import CombatStatus, GrantedTemporary
+from tests.unit.effects.damage_step_boards import CreatureTraits, creature
 from tests.unit.effects.domain.test_damage_step_predicates import (
+    BlockedAttack,
     _attacker_and_blockers,
     _board,
-    _creature,
     _planeswalker,
     _unblocked_attacker,
 )
@@ -54,7 +55,7 @@ def _with_keywords(state, entity_id: str, *keywords: str):
 
 def _double_block(attacker: tuple[int, int], blockers, keyword: str):
     """``A`` blocked by ``B0`` and ``B1``, ``B0`` carrying ``keyword``."""
-    state, _attacker = _attacker_and_blockers(attacker=attacker, blockers=blockers)
+    state, _attacker = _attacker_and_blockers(BlockedAttack(attacker=attacker, blockers=blockers))
     return _with_keywords(state, "B0", keyword)
 
 
@@ -77,8 +78,8 @@ class TestABlockerCarrierInAMultiBlock:
 
 class TestWitherAndInfectAtEachCreatureDealtDamage:
     def _infect_double_block(self):
-        state, _attacker = _attacker_and_blockers(
-            attacker=(3, 3), blockers=((2, 2), (2, 2)), attacker_keywords=("infect",))
+        state, _attacker = _attacker_and_blockers(BlockedAttack(
+            attacker=(3, 3), blockers=((2, 2), (2, 2)), attacker_keywords=("infect",)))
         return state
 
     def _outcome(self, record) -> tuple[str, ...]:
@@ -105,24 +106,24 @@ class TestPoisonAndCountersAreNoLifeOrDamage:
         assert _carriers("first_strike", _record(state)) == []
 
     def test_an_infect_trampler_moves_no_life(self):
-        state, _carrier = _attacker_and_blockers(
-            attacker=(5, 5), blockers=((1, 1),), attacker_keywords=("trample", "infect"))
+        state, _carrier = _attacker_and_blockers(BlockedAttack(
+            attacker=(5, 5), blockers=((1, 1),), attacker_keywords=("trample", "infect")))
         assert _carriers("trample", _record(state)) == []
 
     def test_a_wither_or_infect_first_striker_marks_no_damage(self):
         """702.80a, 702.90a: its damage to a creature is -1/-1 counters."""
         for keyword in ("wither", "infect"):
-            state, _carrier = _attacker_and_blockers(
+            state, _carrier = _attacker_and_blockers(BlockedAttack(
                 attacker=(2, 2), blockers=((1, 3),),
-                attacker_keywords=("first_strike", keyword), substep="first_strike")
+                attacker_keywords=("first_strike", keyword), substep="first_strike"))
             assert _carriers("first_strike", _record(state)) == [], keyword
 
 
 def test_a_first_striker_into_a_blocker_protected_from_it_qualifies_nothing():
     """702.16e: the protection prevents the damage first strike would move."""
-    state, carrier = _attacker_and_blockers(
+    state, carrier = _attacker_and_blockers(BlockedAttack(
         attacker=(2, 2), blockers=((1, 3),), attacker_keywords=("first_strike",),
-        blocker_keywords=("protection_from_red",), substep="first_strike")
+        blocker_keywords=("protection_from_red",), substep="first_strike"))
     red = dataclasses.replace(carrier, colors=("R",))
     assert _carriers("first_strike", _record(
         dataclasses.replace(state, entities=(red, *state.entities[1:])))) == []
@@ -134,7 +135,8 @@ def test_a_first_striker_into_a_blocker_protected_from_it_qualifies_nothing():
 def test_lifelink_with_the_defender_gone_qualifies_nothing():
     """506.4c: an attacker whose planeswalker left attacks ``E-1`` and deals
     no damage; one whose planeswalker is still there does."""
-    gone = _creature("A", 3, 3, keywords=("lifelink",), combat=CombatStatus(attacking="E-1"))
+    gone = creature("A", 3, 3, CreatureTraits(
+        keywords=("lifelink",), combat=CombatStatus(attacking="E-1")))
     assert _carriers("lifelink", _record(_board(gone))) == []
     there = dataclasses.replace(gone, combat=CombatStatus(attacking="E9"))
     assert _carriers("lifelink", _record(_board(there, _planeswalker()))) == ["A"]

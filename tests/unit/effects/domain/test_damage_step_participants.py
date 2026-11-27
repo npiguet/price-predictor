@@ -20,14 +20,15 @@ from effects.domain.provenance import SidecarLine
 from effects.domain.state_snapshot import (
     CombatStatus,
 )
+from tests.unit.effects.damage_step_boards import CreatureTraits, creature
 from tests.unit.effects.domain.test_damage_step_predicates import (
     _PLANESWALKER_DEFENDER,
     _PLAYER_DEFENDER,
     _WHITE_KNIGHT,
+    BlockedAttack,
     _attacker_and_blockers,
     _board,
     _combat_record,
-    _creature,
     _participant_of,
     _planeswalker,
     _qualifies,
@@ -39,7 +40,7 @@ class TestCombatParticipant:
     """Who the carrier is fighting, and which player the attack is aimed at."""
 
     def test_an_attacker_faces_every_creature_blocking_it(self):
-        state, carrier = _attacker_and_blockers(blockers=((1, 1), (2, 2)))
+        state, carrier = _attacker_and_blockers(BlockedAttack(blockers=((1, 1), (2, 2))))
         participant = _participant_of(state, carrier)
         assert [o.id for o in participant.opponents] == ["B0", "B1"]
 
@@ -69,32 +70,32 @@ class TestCombatParticipant:
         assert participant.defending_player is None
 
     def test_it_carries_the_damage_step_the_record_covers(self):
-        state, carrier = _attacker_and_blockers(substep="first_strike")
+        state, carrier = _attacker_and_blockers(BlockedAttack(substep="first_strike"))
         assert _participant_of(state, carrier).combat_substep == "first_strike"
 
     def test_the_defending_player_is_the_ref_the_attack_names(self):
         """The defender's ref is the defending player as it is."""
-        carrier = _creature(
-            "A", 2, 2, combat=CombatStatus(attacking="P1"),
+        carrier = creature(
+            "A", 2, 2, CreatureTraits(combat=CombatStatus(attacking="P1")),
         )
         participant = _participant_of(_board(carrier), carrier)
         assert participant.defending_player == "P1"
 
     def test_a_creature_outside_combat_is_no_participant(self):
-        carrier = _creature("A", 2, 2)
+        carrier = creature("A", 2, 2)
         assert _participant_of(_board(carrier), carrier) is None
 
     def test_a_blocker_whose_attacker_left_the_board_has_no_opponent(self):
-        carrier = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
+        carrier = creature(
+            "B0", 2, 2, CreatureTraits(controller="P1", combat=CombatStatus(blocking=("A",))),
         )
         participant = _participant_of(_board(carrier), carrier)
         assert participant.opponents == ()
 
     def test_an_attack_on_a_planeswalker_has_no_defending_player(self):
         """Its damage lands on the planeswalker, not on that player's life."""
-        carrier = _creature(
-            "A", 4, 4, combat=CombatStatus(attacking=_PLANESWALKER_DEFENDER),
+        carrier = creature(
+            "A", 4, 4, CreatureTraits(combat=CombatStatus(attacking=_PLANESWALKER_DEFENDER)),
         )
         participant = _participant_of(
             _board(carrier, _planeswalker()), carrier,
@@ -103,30 +104,30 @@ class TestCombatParticipant:
 
     def test_an_attack_on_a_battle_off_the_snapshot_has_no_defending_player(self):
         """A card ref names no player, whether or not the board holds it."""
-        carrier = _creature(
-            "A", 4, 4, combat=CombatStatus(attacking="E51"),
+        carrier = creature(
+            "A", 4, 4, CreatureTraits(combat=CombatStatus(attacking="E51")),
         )
         participant = _participant_of(_board(carrier), carrier)
         assert participant.defending_player is None
 
     def test_an_attack_on_a_departed_planeswalker_has_no_defending_player(self):
         """The placeholder a departed defender leaves (506.4c) is ``E-1``."""
-        carrier = _creature(
-            "A", 4, 4, combat=CombatStatus(attacking="E-1"),
+        carrier = creature(
+            "A", 4, 4, CreatureTraits(combat=CombatStatus(attacking="E-1")),
         )
         participant = _participant_of(_board(carrier), carrier)
         assert participant.defending_player is None
 
     def test_trample_over_a_planeswalkers_blockers_is_not_an_observation(self):
-        carrier = _creature(
+        carrier = creature(
             "A", 4, 4,
-            combat=CombatStatus(
+            CreatureTraits(combat=CombatStatus(
                 attacking=_PLANESWALKER_DEFENDER, blocked_by=("B0",),
                 became_blocked=True,
-            ),
+            )),
         )
-        blocker = _creature(
-            "B0", 1, 1, controller="P1", combat=CombatStatus(blocking=("A",)),
+        blocker = creature(
+            "B0", 1, 1, CreatureTraits(controller="P1", combat=CombatStatus(blocking=("A",))),
         )
         state = _board(carrier, _planeswalker(), blocker)
         assert not _qualifies("trample", state, carrier)
@@ -171,9 +172,10 @@ class TestQualifyingObservations:
     _FIRST_STRIKE = (KEYWORDS_BY_NAME["first_strike"],)
 
     def test_a_printed_keyword_is_found_through_the_sidecar(self):
-        carrier = _creature(
-            "A", 2, 2, printed=(_WHITE_KNIGHT,),
-            combat=CombatStatus(attacking=_PLAYER_DEFENDER),
+        carrier = creature(
+            "A", 2, 2, CreatureTraits(
+                printed=(_WHITE_KNIGHT,), combat=CombatStatus(attacking=_PLAYER_DEFENDER),
+            ),
         )
         record = _combat_record(_board(carrier, substep="first_strike"))
         found = qualifying_observations(
@@ -193,9 +195,9 @@ class TestQualifyingObservations:
         assert len(found) == 1
 
     def test_two_carriers_in_one_record_are_two_observations(self):
-        state, _carrier = _attacker_and_blockers(
+        state, _carrier = _attacker_and_blockers(BlockedAttack(
             attacker_keywords=("lifelink",), blocker_keywords=("lifelink",),
-        )
+        ))
         found = qualifying_observations(
             _combat_record(state), (KEYWORDS_BY_NAME["lifelink"],), KeywordResolver(None),
         )

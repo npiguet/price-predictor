@@ -26,6 +26,7 @@ from effects.domain.keyword_moves import damage_dealt_by, right_move
 from effects.domain.records import CombatPayload, RecordKind
 from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
 from tests.unit.effects.domain.test_damage_step_predicates import (
+    BlockedAttack,
     _attacker_and_blockers,
     _unblocked_attacker,
 )
@@ -128,9 +129,9 @@ class TestFirstAndDoubleStrike:
         assert _right(record, "A", keyword, "defending_player.life_delta") == [-3.0]
 
     def test_a_double_strikers_first_hit_moves_the_blockers_damage_and_death(self):
-        state, _ = _attacker_and_blockers(
+        state, _ = _attacker_and_blockers(BlockedAttack(
             attacker=(4, 4), blockers=((2, 3),), attacker_keywords=("double_strike",),
-            substep="first_strike")
+            substep="first_strike"))
         record = _combat(state, _hit("B0", 4), _death("B0"))
         assert _right(record, "A", "double_strike", "opponent.damage_taken") == [4.0]
         assert _right(record, "A", "double_strike", "opponent.zone_outcome/died") == [1.0]
@@ -138,16 +139,16 @@ class TestFirstAndDoubleStrike:
 
 class TestDeathtouch:
     def test_the_opponent_s_death_moves_by_one(self):
-        state, _ = _attacker_and_blockers(
-            attacker=(1, 1), blockers=((3, 3),), attacker_keywords=("deathtouch",))
+        state, _ = _attacker_and_blockers(BlockedAttack(
+            attacker=(1, 1), blockers=((3, 3),), attacker_keywords=("deathtouch",)))
         record = _combat(state, _hit("B0", 1, damage_type="deathtouch"), _death("B0"))
         assert _right(record, "A", "deathtouch", "opponent.zone_outcome/died") == [1.0]
 
     def test_an_observed_survival_against_the_rule_is_a_right_move_of_zero(self):
         """The rule says the deathtouch hit kills, the record shows the blocker
         alive (a regeneration shield, say): nothing shows the twin to differ."""
-        state, _ = _attacker_and_blockers(
-            attacker=(1, 1), blockers=((3, 3),), attacker_keywords=("deathtouch",))
+        state, _ = _attacker_and_blockers(BlockedAttack(
+            attacker=(1, 1), blockers=((3, 3),), attacker_keywords=("deathtouch",)))
         record = _combat(state, _hit("B0", 1, damage_type="deathtouch"))
         assert _right(record, "A", "deathtouch", "opponent.zone_outcome/died") == [0.0]
 
@@ -156,8 +157,8 @@ class TestLifelink:
     def test_the_controller_gains_everything_the_carrier_dealt(self):
         """702.15b: a trampling lifelinker's damage to its blocker and to the
         player both gain life; another creature's damage gains none."""
-        state, _ = _attacker_and_blockers(
-            attacker=(5, 5), blockers=((2, 2),), attacker_keywords=("lifelink", "trample"))
+        state, _ = _attacker_and_blockers(BlockedAttack(
+            attacker=(5, 5), blockers=((2, 2),), attacker_keywords=("lifelink", "trample")))
         record = _combat(state, _hit("B0", 2), _hit("P1", 3, damage_type=None),
                          _hit("A", 2, source="B0"), assignment={"A": {"B0": 2, "P1": 3}})
         assert _right(record, "A", "lifelink", "controller.life_delta") == [5.0]
@@ -173,8 +174,8 @@ class TestLifelink:
 
 class TestIndestructible:
     def _blocked_into_lethal(self, *events):
-        state, _ = _attacker_and_blockers(
-            attacker=(2, 2), blockers=((3, 3),), attacker_keywords=("indestructible",))
+        state, _ = _attacker_and_blockers(BlockedAttack(
+            attacker=(2, 2), blockers=((3, 3),), attacker_keywords=("indestructible",)))
         return _combat(state, _hit("B0", 2), _hit("A", 3, source="B0"), *events)
 
     def test_a_carrier_that_lived_through_lethal_damage_moves_its_death_down_by_one(self):
@@ -191,8 +192,8 @@ class TestWitherAndInfectOnCreatures:
 
     @pytest.mark.parametrize("keyword", ["wither", "infect"])
     def test_each_blocker_dealt_damage_moves_by_what_it_was_dealt(self, keyword):
-        state, _ = _attacker_and_blockers(
-            attacker=(3, 3), blockers=((2, 2), (2, 2)), attacker_keywords=(keyword,))
+        state, _ = _attacker_and_blockers(BlockedAttack(
+            attacker=(3, 3), blockers=((2, 2), (2, 2)), attacker_keywords=(keyword,)))
         record = _combat(state, _hit("B0", 2, damage_type="m1m1_counters"),
                          _hit("B1", 1, damage_type="m1m1_counters"),
                          assignment={"A": {"B0": 2, "B1": 1}})
