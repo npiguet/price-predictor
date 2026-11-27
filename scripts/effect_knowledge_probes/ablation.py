@@ -71,96 +71,175 @@ def scope_mask(slot_kinds, scope: str):
     return {"all": act | cards, "act": act, "cards": cards}[scope]
 
 
-def replacement_vectors(stats: CacheStatistics, texts: list[str], lines: dict,
-                        live, replacement: str, rng: np.random.Generator) -> np.ndarray:
-    """One substitute ``e`` per batch text (rows aligned with ``texts``)."""
+@dataclass(frozen=True)
+class SubstituteRequest:
+    """The batch's distinct texts, their lines and the live ``e`` rows to replace."""
+
+    texts: list[str]
+    lines: dict
+    live: object
+
+
+def _noise_vectors(stats: CacheStatistics, request: SubstituteRequest,
+                   rng: np.random.Generator) -> np.ndarray:
+    z = rng.standard_normal((len(request.texts), stats.mean.shape[0])).astype(np.float32)
+    return stats.mean + z @ stats.cholesky.T
+
+
+def _api_mean_vectors(stats: CacheStatistics, request: SubstituteRequest,
+                      rng: np.random.Generator) -> np.ndarray:
+    out = []
+    for text in request.texts:
+        line = request.lines.get(text)
+        api = getattr(line, "script_api_type", None)
+        out.append(stats.api_means.get(api, stats.mean))
+    return np.stack(out)
+
+
+def _nearest_vectors(stats: CacheStatistics, request: SubstituteRequest,
+                     rng: np.random.Generator) -> np.ndarray:
     import torch
 
-    if replacement == "noise":
-        z = rng.standard_normal((len(texts), stats.mean.shape[0])).astype(np.float32)
-        return stats.mean + z @ stats.cholesky.T
-    if replacement == "api-mean":
-        out = []
-        for text in texts:
-            line = lines.get(text)
-            api = getattr(line, "script_api_type", None)
-            out.append(stats.api_means.get(api, stats.mean))
-        return np.stack(out)
-    if replacement == "nearest":
-        cache = torch.tensor(stats.matrix, device=live.device)
-        cache = torch.nn.functional.normalize(cache, dim=-1)
-        query = torch.nn.functional.normalize(live.float(), dim=-1)
-        similarity = query @ cache.T
-        own = {text: index for index, text in enumerate(stats.texts)}
-        for row, text in enumerate(texts):
-            if text in own:
-                similarity[row, own[text]] = -2.0
-        nearest = similarity.argmax(dim=-1).cpu().numpy()
-        return stats.matrix[nearest]
-    raise KeyError(replacement)
+    live = request.live
+    cache = torch.tensor(stats.matrix, device=live.device)
+    cache = torch.nn.functional.normalize(cache, dim=-1)
+    query = torch.nn.functional.normalize(live.float(), dim=-1)
+    similarity = query @ cache.T
+    own = {text: index for index, text in enumerate(stats.texts)}
+    for row, text in enumerate(request.texts):
+        if text in own:
+            similarity[row, own[text]] = -2.0
+    nearest = similarity.argmax(dim=-1).cpu().numpy()
+    return stats.matrix[nearest]
+
+
+_SUBSTITUTES = {
+    "noise": _noise_vectors, "api-mean": _api_mean_vectors, "nearest": _nearest_vectors,
+}
+
+
+def replacement_vectors(stats: CacheStatistics, request: SubstituteRequest,
+                        replacement: str, rng: np.random.Generator) -> np.ndarray:
+    """One substitute ``e`` per batch text (rows aligned with ``request.texts``)."""
+    return _SUBSTITUTES[replacement](stats, request, rng)
+
+
+@dataclass(frozen=True)
+class AblationSettings:
+    """How :func:`run_ablation` batches the records and seeds its noise."""
+
+    batch_size: int = 32
+    seed: int = 42
+
+
+@dataclass
+class _Chunk:
+    """One batch of records as the model reads it, with its targets."""
+
+    records: list
+    batch: object
+    surfaces: list
+    encoded: object
+    targets: object
+    rows: object = None
+
+
+class _Ablation:
+    """The running loss totals of one ablation over successive record chunks."""
+
+    def __init__(self, probe_model, stats: CacheStatistics, settings: AblationSettings) -> None:
+        self.probe_model = probe_model
+        self.stats = stats
+        self.settings = settings
+        self.rng = np.random.default_rng(settings.seed)
+        self.totals: dict[tuple, float] = defaultdict(float)
+        self.count = 0
+
+    def run(self, records: list) -> dict:
+        import torch
+
+        size = self.settings.batch_size
+        with torch.no_grad():
+            for start in range(0, len(records), size):
+                self._add_chunk(records[start : start + size])
+        return self._report()
+
+    def _losses(self, chunk: _Chunk, e_vectors) -> dict[str, float]:
+        batch = replace(chunk.batch, e_vectors=e_vectors)
+        return entity_loss_parts(self.probe_model.model, batch, chunk.targets,
+                                 self.probe_model.fields)
+
+    def _add_chunk(self, records: list) -> None:
+        from effects.domain.surface_collation import per_entity_targets
+
+        probe_model = self.probe_model
+        batch, surfaces, encoded = probe_model.batcher.build(records, probe_model.encoder)
+        targets = per_entity_targets(records, surfaces, probe_model.fields)
+        chunk = _Chunk(records, batch, surfaces, encoded, targets)
+        for name, value in self._losses(chunk, batch.e_vectors).items():
+            self.totals[(name, "base", "")] += value * len(records)
+        if encoded.matrix is not None:
+            chunk.rows = _e_rows(chunk)
+            for replacement in REPLACEMENTS:
+                self._score_replacement(chunk, replacement)
+        self.count += len(records)
+
+    def _score_replacement(self, chunk: _Chunk, replacement: str) -> None:
+        import torch
+
+        batch, encoded = chunk.batch, chunk.encoded
+        substitute = torch.tensor(replacement_vectors(
+            self.stats, SubstituteRequest(encoded.texts, encoded.lines, encoded.matrix),
+            replacement, self.rng,
+        ), device=batch.e_vectors.device, dtype=batch.e_vectors.dtype)
+        for scope in SCOPES:
+            self._score_scope(chunk, replacement, scope, substitute)
+
+    def _score_scope(self, chunk: _Chunk, replacement: str, scope: str, substitute) -> None:
+        batch, rows = chunk.batch, chunk.rows
+        chosen = scope_mask(batch.slot_kinds, scope) & (rows >= 0)
+        e_vectors = batch.e_vectors.clone()
+        e_vectors[chosen] = substitute[rows[chosen]]
+        for name, value in self._losses(chunk, e_vectors).items():
+            self.totals[(name, replacement, scope)] += value * len(chunk.records)
+
+    def _report(self) -> dict:
+        totals, count = self.totals, max(self.count, 1)
+        out: dict[str, dict] = {}
+        for name in sorted({name for name, kind, _ in totals if kind == "base"}):
+            base = totals[(name, "base", "")] / count
+            out[name] = {
+                replacement: {
+                    scope: totals[(name, replacement, scope)] / count - base
+                    for scope in SCOPES
+                }
+                for replacement in REPLACEMENTS
+            }
+            out[name]["base_loss"] = base
+        return out
+
+
+def _e_rows(chunk: _Chunk):
+    """Each slot's row of the batch's ``e`` matrix, ``-1`` where it has none."""
+    import torch
+
+    batch = chunk.batch
+    rows = torch.full(batch.e_vectors.shape[:2], -1, dtype=torch.long)
+    for b, surface in enumerate(chunk.surfaces):
+        for s, slot in enumerate(surface.slots):
+            if slot.e_row is not None:
+                rows[b, s] = slot.e_row
+    return rows.to(batch.e_vectors.device)
 
 
 def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
-                 batch_size: int = 32, seed: int = 42) -> dict:
+                 settings: AblationSettings = AblationSettings()) -> dict:
     """``{field: {replacement: {scope: loss increase}}}`` over ``records``.
 
     Losses are the per-entity head's own terms, the affected gate among them,
     averaged per record exactly as training reports them.
     """
-    import torch
-
-    from effects.domain.surface_collation import per_entity_targets
-
-    model, encoder, batcher = probe_model.model, probe_model.encoder, probe_model.batcher
-    fields = probe_model.fields
-    rng = np.random.default_rng(seed)
-    totals: dict[tuple, float] = defaultdict(float)
-    count = 0
-
-    def losses(batch, targets, e_vectors) -> dict[str, float]:
-        return entity_loss_parts(model, replace(batch, e_vectors=e_vectors), targets, fields)
-
-    with torch.no_grad():
-        for start in range(0, len(records), batch_size):
-            chunk = records[start : start + batch_size]
-            batch, surfaces, encoded = batcher.build(chunk, encoder)
-            targets = per_entity_targets(chunk, surfaces, fields)
-            base = losses(batch, targets, batch.e_vectors)
-            for name, value in base.items():
-                totals[(name, "base", "")] += value * len(chunk)
-            if encoded.matrix is not None:
-                rows = torch.full(batch.e_vectors.shape[:2], -1, dtype=torch.long)
-                for b, surface in enumerate(surfaces):
-                    for s, slot in enumerate(surface.slots):
-                        if slot.e_row is not None:
-                            rows[b, s] = slot.e_row
-                rows = rows.to(batch.e_vectors.device)
-                has_row = rows >= 0
-                for replacement in REPLACEMENTS:
-                    substitute = torch.tensor(replacement_vectors(
-                        stats, encoded.texts, encoded.lines, encoded.matrix,
-                        replacement, rng,
-                    ), device=batch.e_vectors.device, dtype=batch.e_vectors.dtype)
-                    for scope in SCOPES:
-                        chosen = scope_mask(batch.slot_kinds, scope) & has_row
-                        e_vectors = batch.e_vectors.clone()
-                        e_vectors[chosen] = substitute[rows[chosen]]
-                        for name, value in losses(batch, targets, e_vectors).items():
-                            totals[(name, replacement, scope)] += value * len(chunk)
-            count += len(chunk)
-    out: dict[str, dict] = {}
-    names = sorted({name for name, kind, _ in totals if kind == "base"})
-    for name in names:
-        base = totals[(name, "base", "")] / max(count, 1)
-        out[name] = {
-            replacement: {
-                scope: totals[(name, replacement, scope)] / max(count, 1) - base
-                for scope in SCOPES
-            }
-            for replacement in REPLACEMENTS
-        }
-        out[name]["base_loss"] = base
-    return out
+    return _Ablation(probe_model, stats, settings).run(records)
 
 
 def entity_loss_parts(model, batch, targets, fields) -> dict[str, float]:

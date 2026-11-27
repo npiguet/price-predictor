@@ -25,7 +25,8 @@ def _cache_items(probe_model, records):
 class TestAblationsOnGen3:
     def test_ability_slot_noise_runs_over_gen3_records(self, records, probe_model):
         stats = ablation.cache_statistics(_cache_items(probe_model, records))
-        result = ablation.run_ablation(probe_model, records[:24], stats, batch_size=8)
+        result = ablation.run_ablation(probe_model, records[:24], stats,
+                                        settings=ablation.AblationSettings(batch_size=8))
         assert result
         for body in result.values():
             assert np.isfinite(body["base_loss"])
