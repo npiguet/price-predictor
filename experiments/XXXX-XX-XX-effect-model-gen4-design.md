@@ -7,8 +7,9 @@ respond: each record's share of training is fixed when the corpus is built. Gen-
 that draws more of the records a weak field needs, from the whole corpus, with the mechanism and the
 controller still to choose. It also takes up what gen-3 leaves to a later generation: the model sees
 both players' hidden information, no output says which library cards a player knows, three outcome
-fields learn only from the times they happened, and keyword reminder text comes from a hand-written
-copy of Forge's formatting. Nothing has run.
+fields learn only from the times they happened, an ability Forge builds anew on a copy reaches the
+model with no text, and keyword reminder text comes from a hand-written copy of Forge's formatting.
+Nothing has run.
 
 ## Background
 
@@ -68,6 +69,20 @@ some occurrences of these three:
 A silent 0 on these fields would teach the model that the outcome did not happen in records where it
 did. The collector fix is planned for the end of gen-3's implementation, but the gen-3 records
 collected before it keep the gaps.
+
+### An ability Forge builds anew on a copy reaches the model with no text
+
+**When a permanent becomes a copy, Forge builds some of the copied abilities anew instead of copying
+the original's, and gen-3 gives each such line no text.** Each ability line in a record carries a
+key into the converted card files, such as `forest.txt spell 0`, and the model reads the line's text
+from that file. Vesuva entering as a copy of a Forest gets the Forest's mana ability built on the
+copy. A copied planeswalker gets the replacement that makes it enter with loyalty counters built the
+same way. The connector's key resolver finds neither among the lines the original card prints, so it
+marks the line runtime-only, and the model reads a line with no text.
+
+**The gap is small.** The gen-3 pilots' checks find between about one in ten thousand and one in a
+thousand board lines runtime-only. The pilots' count also holds lines runtime-only for other
+reasons, such as the Mountain mana ability Blood Moon grants a land.
 
 ### Gen-3 leaves problems whose fix needs the cards converted again
 
@@ -170,6 +185,13 @@ shuffle clears it.
 half in a corpus whose records all come from the collector that writes every occurrence of their
 events.** A corpus that still holds records from before that fix keeps the three fields without a
 silent value.
+
+### An ability built anew on a copy keys into the original card's file
+
+**Gen-4's key resolver matches an ability Forge builds anew on a copy to the line the original card
+prints.** Vesuva's copied mana ability then keys to `forest.txt spell 0` and reads the Forest's
+text. The change is in the connector alone and needs no new conversion. It goes in before gen-4's
+first collection, so that every record in the corpus keys these lines the same way.
 
 ### The converter writes each keyword line's filled reminder text
 
