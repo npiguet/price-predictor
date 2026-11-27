@@ -15,9 +15,7 @@ from tests.unit.effects.application.surface_batching_support import (
     _batcher,
     _Sidecars,
 )
-from tests.unit.effects.builders import (
-    make_batcher,
-)
+from tests.unit.effects.batch_builders import make_batcher
 
 # ── the MLM pass (FR-060b) ───────────────────────────────────────────────
 

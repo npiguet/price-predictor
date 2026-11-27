@@ -29,7 +29,7 @@ from effects.domain.record_head_losses import (
     record_head_terms,
     verdict_loss,
 )
-from tests.unit.effects.builders import make_entity_targets
+from tests.unit.effects.batch_builders import make_entity_targets
 
 FLOOR = 0.04
 

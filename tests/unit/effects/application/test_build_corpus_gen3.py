@@ -26,9 +26,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _NO_RULES,
     _written,
 )
-from tests.unit.effects.builders import (
-    write_vocabulary,
-)
+from tests.unit.effects.file_builders import write_vocabulary
 
 
 def _gen3_records(root: Path) -> Path:

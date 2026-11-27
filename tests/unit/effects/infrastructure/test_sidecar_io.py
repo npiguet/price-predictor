@@ -34,7 +34,7 @@ from effects.infrastructure.sidecar_io import (
     sidecar_path_for,
     sidecar_to_dict,
 )
-from tests.unit.effects.builders import write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
 
 _SCRIPT = "cardsfolder/a/ajanis_pridemate.txt"
 _TRIGGER = ProvenanceKey(_SCRIPT, 0, "trigger", 0)

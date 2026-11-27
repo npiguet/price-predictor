@@ -23,7 +23,7 @@ from effects.domain.text_holdout import (
     normalize_script_text,
     select_holdout,
 )
-from tests.unit.effects.builders import fresh_interpreter_env
+from tests.unit.effects.file_builders import fresh_interpreter_env
 
 
 def test_an_eligible_text_is_held_out_when_its_hash_qualifies() -> None:

@@ -16,12 +16,12 @@ from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_schedule import ControlScoreStopper
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import (
+from tests.unit.effects.file_builders import write_validation_samples
+from tests.unit.effects.training_builders import (
     StubLosses,
     make_training_loop,
     stub_below_the_loop,
     stub_validator,
-    write_validation_samples,
 )
 
 

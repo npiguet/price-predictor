@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.effects.builders import fresh_interpreter_env
+from tests.unit.effects.file_builders import fresh_interpreter_env
 
 _SRC = Path(__file__).resolve().parents[3] / "src"
 

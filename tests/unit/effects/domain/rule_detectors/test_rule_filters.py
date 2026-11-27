@@ -26,7 +26,7 @@ from effects.domain.records import (
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import families
 from effects.domain.state_snapshot import PowerToughness, Refs
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 VERDICT = families()["verdict_bit"]
 OUTCOME = families()["outcome_event"]

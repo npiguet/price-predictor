@@ -18,14 +18,12 @@ from effects.infrastructure.record_codec import (
 from effects.infrastructure.shard_io import (
     read_shard,
 )
-from tests.unit.effects.builders import (
-    gen3_fixture_records,
-    make_record,
-)
+from tests.unit.effects.builders import gen3_fixture_records
 from tests.unit.effects.infrastructure.record_codec_support import (
     ALL_KINDS,
     _record,
 )
+from tests.unit.effects.record_builders import make_record
 
 
 class TestTheRandomSeatAndWhatIf:

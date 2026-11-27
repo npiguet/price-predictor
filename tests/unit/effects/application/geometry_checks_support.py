@@ -12,7 +12,8 @@ from effects.domain.line_query import LineQuery
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import read_cache, write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
+from tests.unit.effects.selection_builders import read_cache
 
 
 @dataclass(frozen=True)

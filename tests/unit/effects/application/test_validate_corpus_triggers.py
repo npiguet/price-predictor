@@ -29,7 +29,7 @@ class TestTriggerNegatives:
 
     @staticmethod
     def _ended(game_id: str):
-        from tests.unit.effects.builders import game_end_marker
+        from tests.unit.effects.record_builders import game_end_marker
 
         return game_end_marker(_combat(f"{game_id}.999", game_id=game_id,
                                        state=_snapshot(turn=30)))

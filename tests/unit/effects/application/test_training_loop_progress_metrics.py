@@ -21,11 +21,8 @@ from effects.application.model_loading import Runnable
 from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import (
-    control_score_of,
-    fixture_training_config,
-    make_training_loop,
-)
+from tests.unit.effects.selection_builders import control_score_of
+from tests.unit.effects.training_builders import fixture_training_config, make_training_loop
 
 BATCH_SIZE = 32
 

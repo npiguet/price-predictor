@@ -7,7 +7,7 @@ from effects.domain.card_features import card_segments, counter_rows
 from effects.domain.input_layout import SlotKind
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.state_snapshot import GrantedTemporary
-from tests.unit.effects.builders import slots_of_kind
+from tests.unit.effects.batch_builders import slots_of_kind
 from tests.unit.effects.domain.effect_head_input_support import (
     _ANTHEM,
     _CHOICE,

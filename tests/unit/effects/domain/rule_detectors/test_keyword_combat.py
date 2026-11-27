@@ -74,7 +74,7 @@ def _unblocked_attack(keywords: tuple[str, ...], blocker=None):
         PlayerState,
         PowerToughness,
     )
-    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+    from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
     carrier = make_entity(
         "E1", "carrier", pt=PowerToughness((3, 3)),

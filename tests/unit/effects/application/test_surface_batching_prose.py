@@ -19,12 +19,8 @@ from tests.unit.effects.application.surface_batching_support import (
     _ACT,
     _Sidecars,
 )
-from tests.unit.effects.builders import (
-    lines_of,
-    make_batcher,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.batch_builders import make_batcher
+from tests.unit.effects.record_builders import lines_of, make_record, make_snapshot
 
 # ── the prose surface (FR-069) ───────────────────────────────────────────
 

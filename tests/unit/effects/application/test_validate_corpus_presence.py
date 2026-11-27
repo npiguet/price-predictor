@@ -20,7 +20,7 @@ from tests.unit.effects.application.validate_corpus_support import (
     _named,
     _resolution,
 )
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 
 class TestEveryRecordKindIsPresent:

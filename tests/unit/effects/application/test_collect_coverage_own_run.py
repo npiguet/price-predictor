@@ -9,11 +9,9 @@ import pytest
 
 from effects.application.collect_coverage import CollectCoverageConfig
 from tests.unit.effects.application.collect_coverage_support import _two_cards
-from tests.unit.effects.builders import (
-    make_entity,
-    write_plain_shard,
-)
 from tests.unit.effects.domain.test_coverage import _record
+from tests.unit.effects.file_builders import write_plain_shard
+from tests.unit.effects.record_builders import make_entity
 
 
 class TestTheDeckFileIsTheRunsOwn:

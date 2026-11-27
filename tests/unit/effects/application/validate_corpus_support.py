@@ -37,7 +37,8 @@ from effects.domain.records import (
 )
 from effects.domain.state_snapshot import GlobalState, InclusionTier, StateSnapshot
 from effects.infrastructure.sidecar_io import SidecarCache
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _BEARS = "cardsfolder/g/grizzly_bears.txt"
@@ -182,7 +183,7 @@ def _healthy() -> list[EffectRecord]:
     two games, paid costs, distinct payloads. Each game ends with its
     game-end marker.
     """
-    from tests.unit.effects.builders import game_end_marker
+    from tests.unit.effects.record_builders import game_end_marker
 
     records: list[EffectRecord] = []
     for game in (0, 1):

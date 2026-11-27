@@ -14,7 +14,7 @@ from effects.application.geometry_checks import (
     gate_three_verdict,
 )
 from effects.domain.evaluation_report import CheckStatus
-from tests.unit.effects.builders import read_cache
+from tests.unit.effects.selection_builders import read_cache
 
 
 class TestDecodability:

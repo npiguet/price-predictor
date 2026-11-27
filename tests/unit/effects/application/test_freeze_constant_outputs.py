@@ -48,7 +48,7 @@ from tests.unit.effects.application.test_freeze_selection_set import (
     _manifest,
     _reader,
 )
-from tests.unit.effects.builders import fixture_run
+from tests.unit.effects.training_builders import fixture_run
 
 FIRES, NOT = Polarity.FIRES, Polarity.DOES_NOT_FIRE
 RULE = "121.2"

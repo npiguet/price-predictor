@@ -24,7 +24,7 @@ import pytest
 from effect_embedding_probes import build_texts, common, effect_profiles
 
 from effects.domain.provenance import BuiltTrait, ProvenanceKey
-from tests.unit.effects.builders import write_vocabulary
+from tests.unit.effects.file_builders import write_vocabulary
 
 _FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
 

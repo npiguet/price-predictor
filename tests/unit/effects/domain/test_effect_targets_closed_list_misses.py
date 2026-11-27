@@ -19,7 +19,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
 )
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 
 def _resolution(*events):

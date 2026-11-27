@@ -13,12 +13,12 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
-from tests.unit.effects import builders
+from tests.unit.effects import record_builders
 
 
 @pytest.fixture
 def snapshot() -> StateSnapshot:
-    return builders.make_snapshot(
+    return record_builders.make_snapshot(
         global_=GlobalState(
             turn=4, phase="main1", active="P0", priority="P0", stack_size=1,
         ),
@@ -38,7 +38,7 @@ def ability_key() -> ProvenanceKey:
 
 @pytest.fixture
 def make_record(snapshot, ability_key):
-    """:func:`builders.make_record` on the ``snapshot`` board, with collected
+    """:func:`record_builders.make_record` on the ``snapshot`` board, with collected
     ids and timestamp; a resolution acts through ``ability_key`` and its
     effect half deals damage."""
 
@@ -56,7 +56,7 @@ def make_record(snapshot, ability_key):
                     events=(Event(type=EventType.DAMAGE_DEALT),),
                 )
         defaults.update(overrides)
-        return builders.make_record(kind, **defaults)
+        return record_builders.make_record(kind, **defaults)
 
     return build
 

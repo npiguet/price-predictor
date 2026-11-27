@@ -12,10 +12,7 @@ from effects.domain.input_layout import SlotKind
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.state_snapshot import Refs
 from effects.domain.surface_builder import SurfaceBuilder
-from tests.unit.effects.builders import (
-    lines_of,
-    slots_of_kind,
-)
+from tests.unit.effects.batch_builders import slots_of_kind
 from tests.unit.effects.domain.effect_head_input_support import (
     _ANTHEM,
     _BOLT,
@@ -31,6 +28,7 @@ from tests.unit.effects.domain.effect_head_input_support import (
     _record,
     _snapshot,
 )
+from tests.unit.effects.record_builders import lines_of
 
 
 class TestAbilityTokens:
@@ -166,7 +164,7 @@ class TestOptionRows:
 
         from effects.domain.baselines import BaselineMasks
         from effects.domain.provenance import ProvenanceSidecar, SidecarLine
-        from tests.unit.effects.builders import make_batcher
+        from tests.unit.effects.batch_builders import make_batcher
 
         modes = self._modes()
         sidecar = ProvenanceSidecar(
@@ -244,7 +242,7 @@ class TestAKeywordOfSeveralLines:
         import torch
 
         from effects.domain.baselines import BaselineMasks
-        from tests.unit.effects.builders import make_batcher
+        from tests.unit.effects.batch_builders import make_batcher
 
         batcher = make_batcher(
             tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),

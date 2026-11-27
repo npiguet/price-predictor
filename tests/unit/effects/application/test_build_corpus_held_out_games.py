@@ -19,13 +19,8 @@ from tests.unit.effects.application.build_corpus_support import (
     _rewrite,
     _write_card,
 )
-from tests.unit.effects.builders import (
-    lines_of,
-    make_entity,
-    make_snapshot,
-    write_ended_shard,
-    write_sidecar,
-)
+from tests.unit.effects.file_builders import write_ended_shard, write_sidecar
+from tests.unit.effects.record_builders import lines_of, make_entity, make_snapshot
 
 
 def test_a_held_out_game_resolving_no_held_out_text_is_dropped(tmp_path, a_corpus):

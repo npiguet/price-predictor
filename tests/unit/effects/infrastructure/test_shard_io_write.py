@@ -44,7 +44,7 @@ def test_ended_games_are_the_games_whose_marker_the_shard_holds(tmp_path):
     from dataclasses import replace
 
     from effects.infrastructure.shard_io import ended_games, write_shard
-    from tests.unit.effects.builders import game_end_marker
+    from tests.unit.effects.record_builders import game_end_marker
 
     ended = replace(_record(), game_id="g1")
     cut = replace(_record(), record_id="run-uuid.4.2", game_id="g2")

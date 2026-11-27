@@ -31,7 +31,8 @@ from effects.domain.effect_targets import derive_targets, keyword_index
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import ResolutionPayload
 from effects.infrastructure.record_codec import record_from_dict
-from tests.unit.effects.builders import gen3_fixture_records, make_record
+from tests.unit.effects.builders import gen3_fixture_records
+from tests.unit.effects.record_builders import make_record
 
 _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 #: Elfhame Sanctuary's search: its ``card_looked_at`` names ``SearchedLibrary``.

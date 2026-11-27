@@ -72,18 +72,14 @@ from effects.domain.state_snapshot import (
 )
 from effects.domain.surface_builder import NO_STRIP
 from effects.domain.surface_collation import gather_entities
-from tests.unit.effects.builders import (
-    keyword_score,
-    make_batcher,
-    make_entity,
-    make_record,
-    slots_of_kind,
-)
+from tests.unit.effects.batch_builders import make_batcher, slots_of_kind
 from tests.unit.effects.damage_step_boards import (
     CreatureTraits,
     creature,
     damage_step_global,
 )
+from tests.unit.effects.record_builders import make_entity, make_record
+from tests.unit.effects.selection_builders import keyword_score
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 

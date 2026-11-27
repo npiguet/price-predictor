@@ -105,7 +105,7 @@ def test_the_game_end_marker_counts_in_no_pool():
     from effects.domain.records import TurnActionPayload, TurnActionSubkind
     from effects.domain.rule_catalogue import Polarity
     from effects.domain.rule_detectors import FamilyMatch
-    from tests.unit.effects.builders import make_record
+    from tests.unit.effects.record_builders import make_record
 
     class _Everything:
         id = "everything"

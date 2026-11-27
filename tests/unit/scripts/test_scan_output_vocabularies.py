@@ -19,7 +19,8 @@ from effects.domain.output_list_survey import (
 )
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import ContinuousPayload, Contribution, RecordKind, ResolutionPayload
-from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_record
+from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS
+from tests.unit.effects.record_builders import make_record
 
 _KNOWN = frozenset({"flying", "toxic", "ward", "enchant", "protection"})
 

@@ -15,10 +15,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _resolution,
     _write_corpus,
 )
-from tests.unit.effects.builders import (
-    write_ended_shard,
-    write_sidecar,
-)
+from tests.unit.effects.file_builders import write_ended_shard, write_sidecar
 
 _VARIANT_FILE = "variant-scripts/bolt_numdmg_2.txt"
 

@@ -43,7 +43,8 @@ def checkpoint_path(tmp_path_factory, records, sidecars):
     from effects.infrastructure.effect_model_store import EffectCheckpoint, EffectModelStore
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
     from effects.infrastructure.vocabulary_file import save_vocabulary
-    from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_batcher
+    from tests.unit.effects.batch_builders import make_batcher
+    from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS
 
     root = tmp_path_factory.mktemp("checkpoint")
     definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)

@@ -17,7 +17,8 @@ from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 from tests.unit.effects.application.geometry_checks_support import (
     _ward_cache,
 )
-from tests.unit.effects.builders import EFFECTS_FIXTURES, read_cache
+from tests.unit.effects.builders import EFFECTS_FIXTURES
+from tests.unit.effects.selection_builders import read_cache
 
 
 class TestWardCanary:

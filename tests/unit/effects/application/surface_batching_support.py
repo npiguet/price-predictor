@@ -13,13 +13,8 @@ from effects.domain.records import (
 from effects.domain.state_snapshot import (
     GlobalState,
 )
-from tests.unit.effects.builders import (
-    lines_of,
-    make_batcher,
-    make_entity,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.batch_builders import make_batcher
+from tests.unit.effects.record_builders import lines_of, make_entity, make_record, make_snapshot
 
 _ACT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _ANTHEM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 0)

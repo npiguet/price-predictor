@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.unit.effects.builders import make_entity_targets
+from tests.unit.effects.batch_builders import make_entity_targets
 
 
 class TestPerRecordLosses:

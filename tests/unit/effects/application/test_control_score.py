@@ -53,7 +53,7 @@ from effects.domain.selection_set import (
     TaggedRecord,
     item_key,
 )
-from tests.unit.effects.builders import fixture_run
+from tests.unit.effects.training_builders import fixture_run
 
 STRATA = ("card-disjoint", "game-disjoint")
 
@@ -631,7 +631,10 @@ class TestASavedCheckpoint:
 
     def test_score_half_scores_the_half_it_names(self, run, records):
         from effects.application.control_score import score_half
-        from tests.unit.effects.builders import FIXTURE_RULE_OUTPUTS, fixture_selection_set
+        from tests.unit.effects.selection_builders import (
+            FIXTURE_RULE_OUTPUTS,
+            fixture_selection_set,
+        )
 
         selection = fixture_selection_set(records)
         score = score_half(

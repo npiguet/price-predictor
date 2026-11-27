@@ -20,7 +20,7 @@ from effects.application.validation_pass import StepScoring, score_steps
 from effects.domain.baselines import BaselineMasks
 from effects.domain.effect_losses import LossParts
 from effects.domain.surface_collation import entity_index, per_entity_targets
-from tests.unit.effects.builders import StubLosses, fixture_run, one_parameter_module
+from tests.unit.effects.training_builders import StubLosses, fixture_run, one_parameter_module
 
 
 @pytest.fixture(scope="module")

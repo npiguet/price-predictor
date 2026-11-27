@@ -21,13 +21,8 @@ from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import HoldoutRule
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import (
-    StubLosses,
-    fields_everywhere,
-    make_entity_targets,
-    make_preparer,
-    make_training_loop,
-)
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets, make_preparer
+from tests.unit.effects.training_builders import StubLosses, make_training_loop
 
 
 @pytest.fixture

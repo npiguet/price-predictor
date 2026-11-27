@@ -43,10 +43,7 @@ from tests.unit.effects.application.training_run_support import (
     TrainingRunner,
     every_record_selection,
 )
-from tests.unit.effects.builders import (
-    fixture_training_config,
-    make_training_loop,
-)
+from tests.unit.effects.training_builders import fixture_training_config, make_training_loop
 
 pytestmark = pytest.mark.usefixtures("single_thread")
 

@@ -29,7 +29,8 @@ from effects.domain.rule_detectors.emittable_events import (
     carries,
     carries_buffered,
 )
-from tests.unit.effects.builders import java_golden_records, make_record
+from tests.unit.effects.builders import java_golden_records
+from tests.unit.effects.record_builders import make_record
 
 _SOURCES = (Path(__file__).resolve().parents[5] / "forge-connector" / "src" / "main" / "java"
             / "com" / "pricepredictor" / "connector" / "effects")

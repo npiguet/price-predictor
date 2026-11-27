@@ -7,15 +7,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from effects.domain.records import RecordKind
-from tests.unit.effects.builders import held_out_cards
+from tests.unit.effects.record_builders import held_out_cards
 
 
 def _convert_acting_line(cards_folder: Path) -> None:
     """A sidecar for :data:`ACTING_KEY` under ``cards_folder``, so a
     :func:`_record` acting through it is kept by the refusal rule."""
     from effects.domain.provenance import ProvenanceSidecar, SidecarLine
-    from tests.unit.effects.builders import write_sidecar
     from tests.unit.effects.domain.test_coverage import ACTING_KEY
+    from tests.unit.effects.file_builders import write_sidecar
 
     write_sidecar(
         ProvenanceSidecar(card="shock", script_file=ACTING_KEY.script_file, lines=(
@@ -68,7 +68,7 @@ def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]
 
 def _turn_action(entities, events):
     from effects.domain.records import TurnActionPayload, TurnActionSubkind
-    from tests.unit.effects.builders import make_record, make_snapshot
+    from tests.unit.effects.record_builders import make_record, make_snapshot
 
     return make_record(
         RecordKind.TURN_ACTION, subkind=TurnActionSubkind.DRAW, generation=3,

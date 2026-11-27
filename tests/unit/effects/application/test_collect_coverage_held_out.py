@@ -143,7 +143,8 @@ class TestHeldOutTextUnit:
         )
         from effects.domain.coverage import TextCoverage
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-        from tests.unit.effects.builders import make_record, write_ended_shard, write_sidecar
+        from tests.unit.effects.file_builders import write_ended_shard, write_sidecar
+        from tests.unit.effects.record_builders import make_record
 
         damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
         keys = []
@@ -179,7 +180,7 @@ class TestHeldOutTextUnit:
         from effects.application.coverage_counting import count_text_shard
         from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
         from effects.infrastructure.shard_io import read_shard
-        from tests.unit.effects.builders import write_ended_shard
+        from tests.unit.effects.file_builders import write_ended_shard
 
         effects = [
             record for record in read_shard(_GEN3_SHARD)

@@ -27,7 +27,7 @@ def _build_corpus(root: Path, corpus: Path) -> None:
 def _train(root: Path, corpus: Path) -> None:
     from effects.application.train_effect_model import TrainEffectModelConfig, run
     from tests.unit.effects.application.test_train_startup import _card_tree
-    from tests.unit.effects.builders import write_vocabulary
+    from tests.unit.effects.file_builders import write_vocabulary
 
     keywords = root / "keyword-definitions.json"
     keywords.write_text("{}", encoding="utf-8")

@@ -57,7 +57,8 @@ def probe_model(records, sidecars):
     from effects.domain.input_layout import SlotKind
     from effects.domain.slot_widths import layout_widths
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-    from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_batcher
+    from tests.unit.effects.batch_builders import make_batcher
+    from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS
 
     definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}

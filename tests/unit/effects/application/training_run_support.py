@@ -25,14 +25,9 @@ from effects.application.step_loss import StepLossComputer
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.effect_model import EffectModel
 from effects.domain.split import CorpusSplit
-from tests.unit.effects.builders import (
-    FIXTURE_RULE_OUTPUTS,
-    FIXTURE_TRAINING_SEED,
-    curated_fixture_records,
-    fixture_selection,
-    fixture_training_config,
-    make_training_loop,
-)
+from tests.unit.effects.builders import FIXTURE_TRAINING_SEED, curated_fixture_records
+from tests.unit.effects.selection_builders import FIXTURE_RULE_OUTPUTS, fixture_selection
+from tests.unit.effects.training_builders import fixture_training_config, make_training_loop
 
 SEED = FIXTURE_TRAINING_SEED
 

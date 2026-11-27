@@ -31,7 +31,7 @@ from effects.domain.rule_outcomes import (
     strikes_in_step,
 )
 from effects.domain.state_snapshot import EntityState, PowerToughness
-from tests.unit.effects.builders import make_entity
+from tests.unit.effects.record_builders import make_entity
 
 
 def _creature(toughness: int, *, damage: int = 0) -> EntityState:

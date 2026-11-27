@@ -27,7 +27,7 @@ from effects.domain.gate_metrics import (
     mean_pairwise_cosine,
     top_component_share,
 )
-from tests.unit.effects.builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets
 
 #: A dispersion as good as a Poisson's.
 POISSON = np.array(LOG_DISPERSION_MAX)

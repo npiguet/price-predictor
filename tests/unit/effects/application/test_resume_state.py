@@ -137,7 +137,7 @@ def _built_run(monkeypatch, tmp_path):
 
     from effects.application.run_context import build_run
     from effects.domain.input_layout import SlotKind
-    from tests.unit.effects.builders import make_cpu_training_loop
+    from tests.unit.effects.training_builders import make_cpu_training_loop
 
     loop = make_cpu_training_loop(
         monkeypatch, encoder_layers=1, encoder_d_model=8, model_output=tmp_path,

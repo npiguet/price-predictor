@@ -37,7 +37,7 @@ from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.curated_shards import CorpusShardsError
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import write_vocabulary
+from tests.unit.effects.file_builders import write_vocabulary
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -56,7 +56,7 @@ def _card_tree(root):
     """A converted tree whose holdout recomputes to ``_HELD_OUT_TEXTS``."""
     from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
     from effects.infrastructure.sidecar_io import sidecar_path_for
-    from tests.unit.effects.builders import write_sidecar
+    from tests.unit.effects.file_builders import write_sidecar
 
     for name, texts in _CARD_TEXTS.items():
         stem = name.lower().replace(" ", "_")
@@ -566,7 +566,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     from pathlib import Path
 
     from effects.domain.provenance import ProvenanceKey
-    from tests.unit.effects.builders import make_preparer
+    from tests.unit.effects.batch_builders import make_preparer
 
     fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-sidecars"
     kept = tmp_path / "old-cardsfolder"

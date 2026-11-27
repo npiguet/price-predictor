@@ -17,7 +17,7 @@ from effects.application import training_loop as loop_module
 from effects.application.run_reporter import EpochTally, ShardStats
 from effects.application.training_loop import EpochScope
 from effects.application.weight_average import WeightAverage
-from tests.unit.effects.builders import StubLosses, make_cpu_training_loop
+from tests.unit.effects.training_builders import StubLosses, make_cpu_training_loop
 
 
 def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkeypatch):

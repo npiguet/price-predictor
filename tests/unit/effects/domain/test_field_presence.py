@@ -37,13 +37,9 @@ from effects.domain.records import (
 from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import PlayerState
 from effects.domain.surface_collation import entity_target_tensors
-from tests.unit.effects.builders import (
-    curated_fixture_records,
-    make_entity,
-    make_entity_targets,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.batch_builders import make_entity_targets
+from tests.unit.effects.builders import curated_fixture_records
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 
 @dataclass

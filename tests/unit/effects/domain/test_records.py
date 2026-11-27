@@ -38,7 +38,7 @@ from effects.domain.records import (
     UnresolvedReason,
 )
 from tests.unit.effects.builders import JAVA_GOLDENS
-from tests.unit.effects.builders import make_record as build_record
+from tests.unit.effects.record_builders import make_record as build_record
 from tests.unit.forge_sources import FORGE_GAME, forge_source
 
 

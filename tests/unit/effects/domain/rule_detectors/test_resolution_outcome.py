@@ -102,7 +102,7 @@ def test_a_fizzled_half_reads_its_targets_as_cast():
     targets it was cast with are ``targets_at_cast`` (``Refs.as_cast``)."""
     from effects.domain.records import ResolutionPayload
     from effects.domain.state_snapshot import Refs
-    from tests.unit.effects.builders import make_record, make_snapshot
+    from tests.unit.effects.record_builders import make_record, make_snapshot
 
     def half(outcome, targets, at_cast):
         state = make_snapshot(refs=Refs(source="E1", targets=targets, targets_at_cast=at_cast))

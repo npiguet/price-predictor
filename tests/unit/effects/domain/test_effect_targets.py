@@ -16,11 +16,11 @@ import pytest
 
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
-from tests.unit.effects.builders import fresh_interpreter_env
 from tests.unit.effects.domain.effect_targets_support import (
     _resolution,
     _spec,
 )
+from tests.unit.effects.file_builders import fresh_interpreter_env
 
 
 class TestTheGate:

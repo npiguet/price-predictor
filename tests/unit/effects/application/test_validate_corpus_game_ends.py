@@ -221,7 +221,7 @@ class TestGameEndMarkers:
 
     @staticmethod
     def _marker(game_id: str, withheld: int = 0):
-        from tests.unit.effects.builders import game_end_marker
+        from tests.unit.effects.record_builders import game_end_marker
 
         return game_end_marker(TestGameEndMarkers._record(game_id, 0, state=_snapshot(turn=40)),
                                records_withheld=withheld)

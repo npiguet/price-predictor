@@ -12,7 +12,7 @@ from effect_knowledge_probes import (
     zone_effects,
 )
 
-from tests.unit.effects.builders import player_of
+from tests.unit.effects.record_builders import player_of
 from tests.unit.scripts.knowledge_probe_support import decision_record
 
 

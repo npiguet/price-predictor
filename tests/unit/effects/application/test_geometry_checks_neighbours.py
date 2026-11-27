@@ -17,7 +17,7 @@ from tests.unit.effects.application.geometry_checks_support import (
     TAX_PROSE,
     _two_cards_one_prose,
 )
-from tests.unit.effects.builders import read_cache
+from tests.unit.effects.selection_builders import read_cache
 
 
 class TestResolvingAQuery:

@@ -11,7 +11,7 @@ from effects.domain.records import CombatPayload, RecordKind, ResolutionPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import DetectorIndex, RuleTag
 from effects.domain.state_snapshot import PlayerState
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 PLAYERS = (PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
            PlayerState(id="P1", life=17, hand=3, library=30, graveyard=0))

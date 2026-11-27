@@ -21,7 +21,7 @@ from effects.domain.split import (
     HoldoutRule,
     record_names_held_out_card,
 )
-from tests.unit.effects.builders import (
+from tests.unit.effects.record_builders import (
     held_out_cards,
     lines_of,
     make_entity,

@@ -7,7 +7,7 @@ import torch
 from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.effect_losses import field_loss
 from effects.domain.loss_floor import constant_predictor_outputs
-from tests.unit.effects.builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets
 
 ONE = torch.tensor(0.0)  # a log-dispersion of zero: a dispersion of one
 

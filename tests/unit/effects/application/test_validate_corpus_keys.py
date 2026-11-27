@@ -17,7 +17,7 @@ from tests.unit.effects.application.validate_corpus_support import (
     _trigger,
     _write_bears_sidecar,
 )
-from tests.unit.effects.builders import make_entity
+from tests.unit.effects.record_builders import make_entity
 
 
 class TestAnEmptyAbilitySaysWhy:

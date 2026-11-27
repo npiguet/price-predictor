@@ -62,7 +62,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import Refs
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 

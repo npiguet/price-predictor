@@ -18,7 +18,7 @@ from effects.infrastructure.corpus_store import (
     training_acting_keys,
 )
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 
 def _key(name: str) -> ProvenanceKey:

@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests.unit.effects.builders import fresh_interpreter_env
+from tests.unit.effects.file_builders import fresh_interpreter_env
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:

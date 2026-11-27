@@ -48,12 +48,8 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.domain.surface_builder import SurfaceBuilder
-from tests.unit.effects.builders import (
-    java_golden_entities,
-    make_entity,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.builders import java_golden_entities
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 # The envelope as gen-3 freezes it. A field may be added to this set within
 # gen-3; one may never be removed, renamed, or retyped.

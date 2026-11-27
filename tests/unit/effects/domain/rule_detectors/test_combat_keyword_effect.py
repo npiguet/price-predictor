@@ -24,13 +24,8 @@ from effects.domain.state_snapshot import (
     PlayerState,
     PowerToughness,
 )
-from tests.unit.effects.builders import (
-    GEN3_RECORDS,
-    GEN3_SIDECAR_FOLDERS,
-    make_entity,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 
 @pytest.fixture(scope="module")

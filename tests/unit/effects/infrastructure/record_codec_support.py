@@ -38,9 +38,7 @@ from effects.domain.state_snapshot import (
     StackExtras,
     StateSnapshot,
 )
-from tests.unit.effects.builders import (
-    gen3_payload,
-)
+from tests.unit.effects.record_builders import gen3_payload
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
 _DONOR = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 1)

@@ -25,7 +25,7 @@ from tests.unit.effects.application.validate_corpus_support import (
     _trigger,
     _write_bears_sidecar,
 )
-from tests.unit.effects.builders import RawShardWriter
+from tests.unit.effects.file_builders import RawShardWriter
 
 
 def _broken(findings: list[Finding]) -> set[str]:

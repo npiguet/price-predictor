@@ -42,7 +42,8 @@ from effects.domain.strata import Stratum
 from effects.infrastructure.effect_model_store import ScoringFlags
 from effects.infrastructure.shard_io import write_shard
 from effects.infrastructure.vocabulary_file import vocabulary_surface
-from tests.unit.effects.builders import fixture_run, make_record
+from tests.unit.effects.record_builders import make_record
+from tests.unit.effects.training_builders import fixture_run
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(

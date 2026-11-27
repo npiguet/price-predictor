@@ -7,12 +7,9 @@ from pathlib import Path
 
 from effects.domain.coverage import CardCoverage
 from tests.unit.effects.application.collect_coverage_support import _holding
-from tests.unit.effects.builders import (
-    fresh_interpreter_env,
-    make_entity,
-    write_plain_shard,
-)
 from tests.unit.effects.domain.test_coverage import _record
+from tests.unit.effects.file_builders import fresh_interpreter_env, write_plain_shard
+from tests.unit.effects.record_builders import make_entity
 
 
 class TestIncrementalCounting:

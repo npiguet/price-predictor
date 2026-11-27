@@ -56,7 +56,8 @@ from sealed.infrastructure.cli_match_outcomes import _effect_collection_caps
 from sealed.infrastructure.collection_conversion import check_conversion
 from sealed.infrastructure.directed_fork_check import directed_fork_error
 from tests.integration.conftest import assert_no_lost_output, require_jar
-from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, write_vocabulary
+from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS
+from tests.unit.effects.file_builders import write_vocabulary
 
 pytestmark = pytest.mark.integration
 

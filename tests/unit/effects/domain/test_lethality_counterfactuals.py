@@ -36,7 +36,7 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     Refs,
 )
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 DIED = ZONE_OUTCOMES.index("died")
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "

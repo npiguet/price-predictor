@@ -24,12 +24,7 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.domain.surface_builder import NO_STRIP, SurfaceBuilder
-from tests.unit.effects.builders import (
-    lines_of,
-    make_entity,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.record_builders import lines_of, make_entity, make_record, make_snapshot
 
 E_DIM = 4
 _ZERO = (0.0,) * E_DIM

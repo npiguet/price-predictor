@@ -226,7 +226,7 @@ class TestOutcomeSignature:
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import ResolutionOutcome, ResolutionPayload
         from effects.domain.state_snapshot import Refs
-        from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+        from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
         spell = make_entity("S1", "shock", zone="stack")
         bear = make_entity("E1", "bear", types=("creature",))
@@ -332,7 +332,7 @@ def _decision(key, failed):
         PlayabilityDecisionPayload,
         RecordKind,
     )
-    from tests.unit.effects.builders import make_record
+    from tests.unit.effects.record_builders import make_record
 
     candidate = Candidate(
         ability=(key,), can_play=not failed, affordable=True, has_legal_target=True,
@@ -344,7 +344,7 @@ def _decision(key, failed):
 
 def _resolution(key, conditions):
     from effects.domain.records import ConditionMet, ResolutionPayload
-    from tests.unit.effects.builders import make_record
+    from tests.unit.effects.record_builders import make_record
 
     return make_record(generation=3, ability=(key,), payload=ResolutionPayload(
         conditions_met=tuple(ConditionMet(segment, met) for segment, met in conditions),
@@ -354,7 +354,7 @@ def _resolution(key, conditions):
 def _continuous(key, active):
     from effects.domain.records import RecordKind
     from effects.domain.state_snapshot import CardLine
-    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+    from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
     host = make_entity("E1", "anthem", lines=(
         CardLine(keys=(key,), kind="static", granted=False, active=active),
@@ -414,7 +414,7 @@ class TestConditionBalance:
             PlayabilityDecisionPayload,
             RecordKind,
         )
-        from tests.unit.effects.builders import make_record
+        from tests.unit.effects.record_builders import make_record
 
         undescribed, anthem = _key("gone", "static"), _key("anthem", "static")
         candidate = Candidate(
@@ -435,7 +435,7 @@ class TestConditionBalance:
         holds or not on the card the board holds."""
         from effects.domain.condition_balance import ConditionSide, turn_step_condition
         from effects.domain.state_snapshot import CardLine
-        from tests.unit.effects.builders import make_entity
+        from tests.unit.effects.record_builders import make_entity
 
         key = _key("anthem", "static")
         record = _continuous(key, True)

@@ -36,7 +36,7 @@ from effects.infrastructure.effect_model_store import (
 )
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from effects.infrastructure.vocabulary_file import save_vocabulary
-from tests.unit.effects.builders import write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
 
 
 def _vocabulary(path, words: list[str]):
@@ -580,7 +580,7 @@ class TestTruncation:
         """The trainer hands one log to every per-batch batcher."""
         from effects.application.line_preparation import TruncationLog
         from effects.domain.baselines import BaselineMasks
-        from tests.unit.effects.builders import make_batcher
+        from tests.unit.effects.batch_builders import make_batcher
 
         reported = []
         log = TruncationLog(lambda text, keys: reported.append(text))

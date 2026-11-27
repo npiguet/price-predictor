@@ -26,7 +26,7 @@ from effects.domain.script_text import RELABELLED_KEYS
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from effects.infrastructure.tokenizer_loading import load_tokenizer
-from tests.unit.effects.builders import write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
 
 _FORGE_CARDS = Path(__file__).resolve().parents[4].parent / "forge/forge-gui/res/cardsfolder"
 

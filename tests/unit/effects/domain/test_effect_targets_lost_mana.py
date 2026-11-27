@@ -13,7 +13,7 @@ from __future__ import annotations
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import RecordKind, ResolutionPayload, RewritePayload
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 
 def _ids() -> dict:

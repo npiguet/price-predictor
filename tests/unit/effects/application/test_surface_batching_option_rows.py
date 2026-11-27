@@ -20,13 +20,8 @@ from effects.domain.state_snapshot import (
 )
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
-from tests.unit.effects.builders import (
-    make_batcher,
-    make_entity,
-    make_record,
-    make_snapshot,
-    slots_of_kind,
-)
+from tests.unit.effects.batch_builders import make_batcher, slots_of_kind
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 # ── decision records and option rows (FR-060a, FR-063a) ─────────────────
 

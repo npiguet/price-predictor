@@ -24,7 +24,8 @@ from effects.domain.directed_sides import DirectedForkGames
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.variant_rounds import VariantGames
 from effects.infrastructure.record_codec import record_from_dict
-from tests.unit.effects.builders import make_record, write_ended_shard
+from tests.unit.effects.file_builders import write_ended_shard
+from tests.unit.effects.record_builders import make_record
 
 RULES = Path(__file__).parents[4] / "rules"
 _PLAYED = Path(__file__).parents[3] / "fixtures" / "effects" / "directed-702.19ef-combats.jsonl"

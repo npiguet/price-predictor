@@ -30,7 +30,7 @@ from effects.domain.sampling import (
     sample_weights,
     sampling_class,
 )
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 
 class TestSamplingClass:

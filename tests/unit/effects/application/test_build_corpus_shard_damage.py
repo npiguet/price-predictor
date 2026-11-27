@@ -31,10 +31,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _resolution,
     _written,
 )
-from tests.unit.effects.builders import (
-    lines_of,
-    make_entity,
-)
+from tests.unit.effects.record_builders import lines_of, make_entity
 
 
 def _raw_shard(path: Path, *members: bytes) -> None:
@@ -123,7 +120,7 @@ def test_records_appended_after_the_survey_to_a_shard_holding_a_cut_game_are_wri
     import gzip
 
     from effects.application import build_corpus as module
-    from tests.unit.effects.builders import game_end_marker
+    from tests.unit.effects.record_builders import game_end_marker
 
     shard = a_corpus.records / "full-strength" / "run.0-mixed.jsonl.gz"
     ended = [_resolution(f"g-ended.{n}", "g-ended", ability=(_SHOCK_KEY,)) for n in range(2)]
@@ -159,7 +156,7 @@ def test_a_damaged_last_member_after_a_marker_is_named_once_and_changes_nothing(
     the same bytes, finds the same tally."""
     import gzip
 
-    from tests.unit.effects.builders import game_end_marker
+    from tests.unit.effects.record_builders import game_end_marker
 
     ended = [_resolution(f"g-d.{n}", "g-d", ability=(_SHOCK_KEY,)) for n in range(2)]
     after = [_resolution(f"g-e.{n}", "g-e", ability=(_SHOCK_KEY,)) for n in range(2)]
@@ -202,7 +199,7 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
     unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
         make_entity("E0", "x variant", lines=lines_of(printed=(variant,)),
                     combat=CombatStatus(attacking="P1")),)))
-    from tests.unit.effects.builders import game_end_marker
+    from tests.unit.effects.record_builders import game_end_marker
 
     # The game ends in this shard too: a game without its marker is cut.
     with open(a_corpus.records / "full-strength" / "run.0-extra.jsonl.gz", "wb") as handle:

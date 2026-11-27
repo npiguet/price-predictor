@@ -40,13 +40,13 @@ from effects.domain.records import Curation
 from effects.domain.sampling import sampling_class
 from effects.domain.score_scales import loss_ratio_standard_error
 from effects.domain.selection_set import DEVIANCE, SampleRecord, item_key
-from tests.unit.effects.builders import (
+from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+from tests.unit.effects.selection_builders import (
     FIXTURE_RULE_OUTPUTS,
     FIXTURE_STRATA,
-    GEN3_SIDECAR_FOLDERS,
-    fixture_run,
     fixture_selection_set,
 )
+from tests.unit.effects.training_builders import fixture_run
 
 #: Records the freeze's reader scores.
 _SCORED = 48

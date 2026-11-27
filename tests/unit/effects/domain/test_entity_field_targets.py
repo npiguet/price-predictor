@@ -23,7 +23,7 @@ from effects.domain.effect_losses import EntityLossScoring, per_entity_loss
 from effects.domain.effect_targets import derive_targets
 from effects.domain.input_layout import Slot, SlotKind
 from effects.domain.surface_collation import entity_target_tensors
-from tests.unit.effects.builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets
 
 _RUN = "3550376f-3c30-4231-90cd-cc0f1b308e87"
 _SHREDDERS_TECHNIQUE = f"{_RUN}.5-mwqw5tpydi06.4292"

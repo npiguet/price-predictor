@@ -16,7 +16,7 @@ from effects.domain.state_snapshot import (
     GrantedTemporary,
     PowerToughness,
 )
-from tests.unit.effects.builders import lines_of, make_entity
+from tests.unit.effects.record_builders import lines_of, make_entity
 
 #: Each damage step's phase, keyed by its substep, as a real record spells them.
 DAMAGE_STEP_PHASES = {

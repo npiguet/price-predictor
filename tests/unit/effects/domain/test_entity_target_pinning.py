@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tests.unit.effects.builders import make_entity_targets
+from tests.unit.effects.batch_builders import make_entity_targets
 
 pytestmark = pytest.mark.skipif(
     not torch.cuda.is_available(), reason="page-locked memory needs a CUDA runtime",

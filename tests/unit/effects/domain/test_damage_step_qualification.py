@@ -23,7 +23,6 @@ from effects.domain.damage_step_keywords import (
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.rule_detectors.keyword_combat import KeywordCombatMatcher
 from effects.domain.state_snapshot import CombatStatus, GrantedTemporary
-from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_damage_step_predicates import (
     _attacker_and_blockers,
     _board,
@@ -31,6 +30,7 @@ from tests.unit.effects.domain.test_damage_step_predicates import (
     _planeswalker,
     _unblocked_attacker,
 )
+from tests.unit.effects.record_builders import make_record
 
 
 def _record(state, assignment=None):

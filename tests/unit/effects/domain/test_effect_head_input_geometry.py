@@ -19,10 +19,7 @@ from effects.domain.records import (
     PlayabilitySubkind,
     RecordKind,
 )
-from tests.unit.effects.builders import (
-    lines_of,
-    slots_of_kind,
-)
+from tests.unit.effects.batch_builders import slots_of_kind
 from tests.unit.effects.domain.effect_head_input_support import (
     _ANTHEM,
     _BOLT,
@@ -33,6 +30,7 @@ from tests.unit.effects.domain.effect_head_input_support import (
     _record,
     _snapshot,
 )
+from tests.unit.effects.record_builders import lines_of
 
 
 class TestSurfaceShape:

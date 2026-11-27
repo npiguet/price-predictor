@@ -6,7 +6,7 @@ from effects.domain.event_schema import Event, EventType
 from effects.domain.records import CombatPayload, RecordKind, ResolutionPayload, TriggerPayload
 from effects.domain.rule_output_carriage import carried_outputs
 from effects.domain.state_snapshot import PlayerState
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 PLAYERS = tuple(PlayerState(id=p, life=20, hand=3, library=30, graveyard=0) for p in ("P0", "P1"))
 

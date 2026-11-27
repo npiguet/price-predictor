@@ -25,7 +25,7 @@ from effects.domain.evaluation_report import (
     gate_verdict,
 )
 from effects.domain.gate_metrics import GateOneMetrics
-from tests.unit.effects.builders import keyword_score
+from tests.unit.effects.selection_builders import keyword_score
 
 
 class TestMargin:

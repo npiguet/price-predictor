@@ -34,10 +34,8 @@ from tests.unit.effects.builders import (
     gen3_fixture_records,
     java_golden_entities,
     java_golden_records,
-    lines_of,
-    make_entity,
-    make_snapshot,
 )
+from tests.unit.effects.record_builders import lines_of, make_entity, make_snapshot
 
 
 def _snapshot(**overrides) -> StateSnapshot:

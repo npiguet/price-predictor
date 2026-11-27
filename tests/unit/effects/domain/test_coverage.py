@@ -27,11 +27,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import CardLine, Refs
-from tests.unit.effects.builders import (
-    make_entity,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 #: The acting key every :func:`_record` carries: build-corpus refuses a
 #: resolution with none, so the coverage counts do too.

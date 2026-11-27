@@ -7,13 +7,13 @@ from effects.domain.protection_model import ProtectionOutcome
 from effects.domain.protection_opportunities import qualify
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
-from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_protection_copies import (
     CreatureLook,
     _creature,
     _damage,
     _state,
 )
+from tests.unit.effects.record_builders import make_record
 
 _GOBLIN = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
 _CREATURE = ProtectionQuality(QualityKind.CARD_TYPE, "creature")

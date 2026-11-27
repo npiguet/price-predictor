@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from effects.domain.value_targets import VALUE_TARGET_NAMES, value_targets
-from tests.unit.effects.builders import stated_targets
+from tests.unit.effects.batch_builders import stated_targets
 
 #: Lightning Bolt's script line, as a sidecar carries it.
 _BOLT = (

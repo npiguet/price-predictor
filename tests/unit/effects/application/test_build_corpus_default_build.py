@@ -13,9 +13,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _HELD_OUT_KEY,
     _HELD_OUT_TEXT,
 )
-from tests.unit.effects.builders import (
-    held_out_cards,
-)
+from tests.unit.effects.record_builders import held_out_cards
 
 
 def test_no_training_record_belongs_to_a_withheld_game(default_build):

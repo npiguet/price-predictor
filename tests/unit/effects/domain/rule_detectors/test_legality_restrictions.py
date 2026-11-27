@@ -35,7 +35,7 @@ from effects.domain.rule_outcomes import (
 )
 from effects.domain.state_snapshot import GrantedTemporary, PlayerState
 from effects.infrastructure.rules_catalogue_io import load_scenarios
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 RULES = Path(__file__).parents[5] / "rules"
 BLOCKING = {"509.1a", "701.35a", "702.13b", "702.14c", "702.16f", "702.16j", "702.28b",

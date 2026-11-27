@@ -30,7 +30,8 @@ from effects.domain.input_layout import SlotKind
 from effects.domain.surface_builder import NO_STRIP
 from effects.domain.surface_collation import TrunkInputs, entity_index
 from effects.infrastructure.record_codec import record_from_dict
-from tests.unit.effects.builders import fixture_run, gen3_fixture_records
+from tests.unit.effects.builders import gen3_fixture_records
+from tests.unit.effects.training_builders import fixture_run
 
 
 @pytest.fixture(scope="module")

@@ -18,7 +18,7 @@ from effects.domain.state_snapshot import (
     PlayerState,
     Refs,
 )
-from tests.unit.effects.builders import slots_of_kind
+from tests.unit.effects.batch_builders import slots_of_kind
 from tests.unit.effects.domain.effect_head_input_support import (
     _ANTHEM,
     _BOLT,

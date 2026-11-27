@@ -60,14 +60,9 @@ from effects.infrastructure.shard_io import (
     read_records,
 )
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import (
-    make_entity,
-    make_snapshot,
-    write_ended_shard,
-    write_sidecar,
-    write_vocabulary,
-)
-from tests.unit.effects.builders import make_record as _any_generation_record
+from tests.unit.effects.file_builders import write_ended_shard, write_sidecar, write_vocabulary
+from tests.unit.effects.record_builders import make_entity, make_snapshot
+from tests.unit.effects.record_builders import make_record as _any_generation_record
 
 
 def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> EffectRecord:

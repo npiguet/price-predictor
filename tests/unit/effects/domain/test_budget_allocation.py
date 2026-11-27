@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from effects.domain.budget_allocation import allocate
-from tests.unit.effects.builders import fresh_interpreter_env
+from tests.unit.effects.file_builders import fresh_interpreter_env
 
 
 def test_a_short_member_is_filled_and_its_remainder_shared():

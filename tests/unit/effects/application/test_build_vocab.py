@@ -24,7 +24,7 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from effects.infrastructure.vocabulary_file import read_vocabulary
-from tests.unit.effects.builders import write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
 
 
 def load_vocabulary(path: Path) -> dict[str, int]:

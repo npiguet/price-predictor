@@ -19,7 +19,7 @@ from effects.application.host_cache import (
     pack,
     unpack,
 )
-from tests.unit.effects.builders import fixture_run
+from tests.unit.effects.training_builders import fixture_run
 
 
 @pytest.fixture(scope="module")

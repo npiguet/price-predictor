@@ -15,10 +15,7 @@ from tests.unit.effects.application.surface_batching_support import (
     _record,
     _Sidecars,
 )
-from tests.unit.effects.builders import (
-    make_batcher,
-    slots_of_kind,
-)
+from tests.unit.effects.batch_builders import make_batcher, slots_of_kind
 
 
 def test_a_dropped_key_gets_no_ability_token():

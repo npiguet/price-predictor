@@ -17,7 +17,7 @@ from effects.domain.records import (
     key_sites,
 )
 from effects.domain.state_snapshot import GrantedTemporary
-from tests.unit.effects.builders import lines_of, make_entity
+from tests.unit.effects.record_builders import lines_of, make_entity
 
 
 def _key(name: str, kind: str = "static") -> ProvenanceKey:

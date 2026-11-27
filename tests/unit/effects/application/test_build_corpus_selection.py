@@ -26,9 +26,7 @@ from tests.unit.effects.application.build_corpus_support import (
     _training_ids,
     make_record,
 )
-from tests.unit.effects.builders import (
-    write_ended_shard,
-)
+from tests.unit.effects.file_builders import write_ended_shard
 
 
 @pytest.fixture(scope="module")

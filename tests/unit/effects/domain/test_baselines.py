@@ -27,7 +27,7 @@ class TestEveryBaselineStagesEveryText:
         from effects.domain.ability_tokenizer import AbilityTokenizer
         from effects.infrastructure.sidecar_io import SidecarCache
         from effects.infrastructure.tokenizer_loading import load_keyword_definitions
-        from tests.unit.effects.builders import make_batcher
+        from tests.unit.effects.batch_builders import make_batcher
 
         fixtures = Path(__file__).parents[3] / "fixtures"
         words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]"]

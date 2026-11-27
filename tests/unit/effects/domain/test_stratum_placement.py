@@ -20,7 +20,7 @@ from effects.domain.stratum_placement import (
     rule_test_games_needed,
     rule_test_misses,
 )
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 FIRES, NOT = Polarity.FIRES, Polarity.DOES_NOT_FIRE
 GAMES = tuple(f"run.0-a.{i}" for i in range(600))

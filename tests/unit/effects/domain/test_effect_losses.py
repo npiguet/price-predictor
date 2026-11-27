@@ -38,7 +38,7 @@ from effects.domain.record_head_losses import (
     verdict_loss,
 )
 from effects.domain.text_head_losses import api_loss, mlm_loss
-from tests.unit.effects.builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets
 
 #: Log-dispersions at zero (a dispersion of one) for every head a test scores.
 DISPERSION = torch.zeros(len(DISPERSED_FIELDS))

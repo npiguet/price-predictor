@@ -58,7 +58,8 @@ def _context(tmp_path, selection_digest=None):
 
 def _freeze(tmp_path):
     from effects.domain.selection_set import selection_set_path, write_selection_set
-    from tests.unit.effects.builders import curated_fixture_records, fixture_selection_set
+    from tests.unit.effects.builders import curated_fixture_records
+    from tests.unit.effects.selection_builders import fixture_selection_set
 
     selection = fixture_selection_set(curated_fixture_records()[:120],
                                       corpus_digest="corpus-digest").sealed()
@@ -71,7 +72,7 @@ class TestTheReportingHalf:
         self, tmp_path, monkeypatch,
     ):
         from effects.application import control_score, evaluate_effect_model
-        from tests.unit.effects.builders import control_score_of
+        from tests.unit.effects.selection_builders import control_score_of
 
         selection = _freeze(tmp_path)
         asked = {}
@@ -111,7 +112,7 @@ class TestTheReportingHalf:
 
     def test_a_set_frozen_again_since_training_is_named(self, tmp_path, monkeypatch):
         from effects.application import control_score, evaluate_effect_model
-        from tests.unit.effects.builders import control_score_of
+        from tests.unit.effects.selection_builders import control_score_of
 
         _freeze(tmp_path)
         monkeypatch.setattr(control_score, "score_half",

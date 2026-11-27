@@ -18,12 +18,12 @@ from effects.infrastructure.vocabulary_file import save_vocabulary
 from tests.unit.effects.application.build_corpus_support import CorpusFixture, _write_corpus
 from tests.unit.effects.application.geometry_checks_support import SourceRows, _write_source
 from tests.unit.effects.application.training_run_support import TrainingRunner
+from tests.unit.effects.batch_builders import make_batcher
 from tests.unit.effects.builders import (
     FIXTURE_KEYWORD_DEFINITIONS,
     FIXTURE_TRAINING_SHARDS,
     GEN3_SIDECAR_FOLDERS,
     curated_fixture_records,
-    make_batcher,
 )
 from tests.unit.effects.domain.conftest import ability_key, make_record, snapshot  # noqa: F401
 

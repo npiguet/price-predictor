@@ -18,8 +18,8 @@ from effects.domain.rule_detectors import (
     families,
     tag_record,
 )
-from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.rule_detectors.builders import catalogue, declaration, scenario
+from tests.unit.effects.record_builders import make_record
 
 
 @dataclass(frozen=True)

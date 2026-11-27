@@ -31,12 +31,8 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     Refs,
 )
-from tests.unit.effects.builders import (
-    curated_fixture_records,
-    make_entity,
-    make_record,
-    make_snapshot,
-)
+from tests.unit.effects.builders import curated_fixture_records
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
         "target creature. | ValidTgts$ Creature")

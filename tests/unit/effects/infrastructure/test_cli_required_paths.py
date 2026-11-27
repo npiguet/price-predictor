@@ -212,7 +212,7 @@ def test_the_trainer_records_its_seed_and_device_in_run_json(tmp_path: Path):
     """A seed drawn from the OS is in ``run.json``, not in ``console.log`` alone."""
     from effects.application.train_effect_model import TrainEffectModelConfig
     from price_predictor.infrastructure.run_manifest import RunCommand, run_recorded
-    from tests.unit.effects.builders import make_training_loop
+    from tests.unit.effects.training_builders import make_training_loop
 
     model_output = tmp_path / "model"
     config = TrainEffectModelConfig.unpathed(corpus=str(tmp_path), model_output=model_output)

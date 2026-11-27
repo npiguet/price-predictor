@@ -338,7 +338,7 @@ class TestEntityRoles:
     @staticmethod
     def _resolution(*events, entities=(), targets=()):
         from effects.domain.state_snapshot import PlayerState, Refs
-        from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+        from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
         players = tuple(PlayerState(id=p, life=20, hand=3, library=30, graveyard=0)
                         for p in ("P0", "P1"))
@@ -348,7 +348,7 @@ class TestEntityRoles:
         return make_record(state=state, payload=ResolutionPayload(events=events))
 
     def test_a_discard_names_the_card_and_the_player_who_discarded_it(self):
-        from tests.unit.effects.builders import make_entity
+        from tests.unit.effects.record_builders import make_entity
 
         card = make_entity("E5", "discarded", zone="hand", controller="P1", owner="P1")
         record = self._resolution(
@@ -361,7 +361,7 @@ class TestEntityRoles:
         assert found.outcome == ("E5", "P1")
 
     def test_a_spell_copy_is_placed_on_the_targeted_stack_object(self):
-        from tests.unit.effects.builders import make_entity
+        from tests.unit.effects.record_builders import make_entity
 
         spell = make_entity("E7", "spell", zone="stack")
         record = self._resolution(Event(EventType.SPELL_COPIED, (), {"count": 1}),

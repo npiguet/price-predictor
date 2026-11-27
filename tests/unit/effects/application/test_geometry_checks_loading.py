@@ -12,8 +12,8 @@ from tests.unit.effects.application.geometry_checks_support import (
     _two_cards_one_prose,
     _write_source,
 )
-from tests.unit.effects.builders import read_cache
 from tests.unit.effects.configs import evaluation_config
+from tests.unit.effects.selection_builders import read_cache
 
 
 class TestLoadingTheCache:

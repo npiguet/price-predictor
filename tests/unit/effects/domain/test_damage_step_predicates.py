@@ -40,17 +40,13 @@ from effects.domain.state_snapshot import (
     PlayerState,
     StateSnapshot,
 )
-from tests.unit.effects.builders import (
-    fresh_interpreter_env,
-    make_entity,
-    make_record,
-    make_snapshot,
-)
 from tests.unit.effects.damage_step_boards import (
     CreatureTraits,
     creature,
     damage_step_global,
 )
+from tests.unit.effects.file_builders import fresh_interpreter_env
+from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 

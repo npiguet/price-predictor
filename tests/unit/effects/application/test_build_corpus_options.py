@@ -8,9 +8,7 @@ from effects.domain.corpus_plan import BuildCorpusError
 from tests.unit.effects.application.build_corpus_support import (
     _BUDGET_FREE_RULES,
 )
-from tests.unit.effects.builders import (
-    write_vocabulary,
-)
+from tests.unit.effects.file_builders import write_vocabulary
 
 
 def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(

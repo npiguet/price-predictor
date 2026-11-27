@@ -45,7 +45,7 @@ from effects.domain.state_snapshot import (
     PlayerState,
     StateSnapshot,
 )
-from tests.unit.effects.builders import make_record, make_snapshot
+from tests.unit.effects.record_builders import make_record, make_snapshot
 
 
 def _snapshot(*entities: EntityState) -> StateSnapshot:

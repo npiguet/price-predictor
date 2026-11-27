@@ -24,12 +24,9 @@ from tests.unit.effects.application.test_build_corpus_survey import (
     a_record,
     converted_tree,
 )
-from tests.unit.effects.builders import (
-    GEN3_RECORDS,
-    GEN3_SIDECAR_FOLDERS,
-    held_out_cards,
-    write_ended_shard,
-)
+from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+from tests.unit.effects.file_builders import write_ended_shard
+from tests.unit.effects.record_builders import held_out_cards
 
 
 @pytest.fixture(scope="module")

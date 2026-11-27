@@ -26,7 +26,7 @@ from tests.unit.effects.application.test_control_score import (
     _prepare,
     _selection,
 )
-from tests.unit.effects.builders import fixture_run
+from tests.unit.effects.training_builders import fixture_run
 
 INF = float("inf")
 

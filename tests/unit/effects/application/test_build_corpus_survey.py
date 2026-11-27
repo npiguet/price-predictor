@@ -46,15 +46,13 @@ from effects.domain.split import HeldOutCards
 from effects.domain.stratum_placement import PlacementRule
 from effects.infrastructure.shard_io import list_shards, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import (
-    GEN3_FIXTURE_GAMES,
-    GEN3_FIXTURE_RECORDS,
+from tests.unit.effects.builders import GEN3_FIXTURE_GAMES, GEN3_FIXTURE_RECORDS
+from tests.unit.effects.file_builders import write_ended_shard, write_sidecar
+from tests.unit.effects.record_builders import (
     held_out_cards,
     make_entity,
     make_record,
     make_snapshot,
-    write_ended_shard,
-    write_sidecar,
 )
 
 _PAYLOAD_BY_KIND: dict[RecordKind, tuple[Moment | None, object]] = {
@@ -573,7 +571,7 @@ class TestACutGame:
         write_shard(tmp_path / name, records)
 
     def test_a_game_without_a_marker_reaches_no_tally_and_is_counted(self, tmp_path):
-        from tests.unit.effects.builders import game_end_marker
+        from tests.unit.effects.record_builders import game_end_marker
 
         ended = [self._gen3("run.0-a.0", "g1"), self._gen3("run.0-a.1", "g1")]
         cut = [self._gen3("run.0-a.2", "g2"), self._gen3("run.0-a.3", "g2")]
@@ -590,7 +588,7 @@ class TestACutGame:
         assert survey.shard_cut == {"run.0-a.jsonl.gz": frozenset({"g2"})}
 
     def test_a_marker_counts_in_its_own_shard_alone(self, tmp_path):
-        from tests.unit.effects.builders import game_end_marker
+        from tests.unit.effects.record_builders import game_end_marker
 
         first = self._gen3("run.0-a.0", "g1")
         self._shard(tmp_path, "run.0-a.jsonl.gz", [first])

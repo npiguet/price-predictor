@@ -15,7 +15,8 @@ from tests.unit.effects.application.build_corpus_support import (
     _write_card,
     _write_corpus,
 )
-from tests.unit.effects.builders import lines_of, make_entity, write_ended_shard
+from tests.unit.effects.file_builders import write_ended_shard
+from tests.unit.effects.record_builders import lines_of, make_entity
 
 _VARIANT_FILE = "variant-scripts/held_variant.txt"
 _VARIANT_KEY = ProvenanceKey(_VARIANT_FILE, 0, "spell", 0)

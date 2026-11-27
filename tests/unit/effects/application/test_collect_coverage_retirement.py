@@ -20,11 +20,9 @@ from effects.domain.coverage import (
     retire_stalled,
 )
 from tests.unit.effects.application.collect_coverage_support import _turn_action
-from tests.unit.effects.builders import (
-    make_entity,
-    write_plain_shard,
-)
 from tests.unit.effects.domain.test_coverage import _record
+from tests.unit.effects.file_builders import write_plain_shard
+from tests.unit.effects.record_builders import make_entity
 
 
 class TestRetirement:

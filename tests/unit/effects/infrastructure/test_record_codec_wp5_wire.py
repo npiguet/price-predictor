@@ -19,7 +19,8 @@ from effects.domain.records import DirectedTag, EffectRecord, ResolutionOutcome
 from effects.domain.rule_detectors.emittable_events import absence_readable
 from effects.domain.wire_closed_lists import off_list_values
 from effects.infrastructure.record_codec import format_record_line, record_from_dict
-from tests.unit.effects.builders import JAVA_GOLDENS, java_golden_records, make_record
+from tests.unit.effects.builders import JAVA_GOLDENS, java_golden_records
+from tests.unit.effects.record_builders import make_record
 
 
 def _lossy_golden() -> dict:

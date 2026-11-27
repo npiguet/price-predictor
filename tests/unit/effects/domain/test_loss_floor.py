@@ -23,7 +23,7 @@ from effects.domain.loss_floor import (
     constant_predictor_outputs,
 )
 from effects.domain.state_snapshot import COLORS
-from tests.unit.effects.builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets
 
 
 class TestConstantPredictorFloor:

@@ -18,7 +18,7 @@ from effects.application.training_schedule import (
     warmup_steps,
 )
 from effects.domain.baselines import Baseline
-from tests.unit.effects.builders import write_vocabulary
+from tests.unit.effects.file_builders import write_vocabulary
 
 
 class TestScheduleConstants:

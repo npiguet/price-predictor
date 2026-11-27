@@ -10,8 +10,9 @@ from effects.application.collect_coverage import build_coverage_units
 from effects.application.collector_common import read_name_list
 from effects.application.coverage_counting import count_shard
 from effects.infrastructure.card_sources import load_converted_cards
-from tests.unit.effects.builders import make_entity, write_plain_shard
 from tests.unit.effects.domain.test_coverage import _record
+from tests.unit.effects.file_builders import write_plain_shard
+from tests.unit.effects.record_builders import make_entity
 
 #: Converted names as the real tree spells them: they keep the capital X.
 CAPITALISED = ("prototype X-8", "dimension X")

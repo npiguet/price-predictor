@@ -12,7 +12,7 @@ import pytest
 
 from effects.application.collect_variants import CollectVariantsConfig, GeneratedVariant
 from effects.domain.records import EffectRecord
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.record_builders import make_record
 
 
 def _write_plain_sidecars(variant_scripts: Path) -> int:
@@ -20,7 +20,7 @@ def _write_plain_sidecars(variant_scripts: Path) -> int:
     variant script in the tree (the pass itself needs a JVM)."""
     from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
     from effects.infrastructure.sidecar_io import sidecar_path_for
-    from tests.unit.effects.builders import write_sidecar
+    from tests.unit.effects.file_builders import write_sidecar
 
     for script in Path(variant_scripts).glob("*.txt"):
         file = f"variant-scripts/{script.name}"
@@ -118,7 +118,7 @@ def _round_writes(directory: Path, *rounds: list[EffectRecord], run: str = _RUN,
     shard of this run's, every game ended by its marker unless ``ended`` is
     False, and a round past the last writes nothing."""
     from effects.infrastructure.shard_io import write_shard
-    from tests.unit.effects.builders import write_ended_shard
+    from tests.unit.effects.file_builders import write_ended_shard
 
     played = iter(rounds)
     writer = write_ended_shard if ended else write_shard
@@ -140,7 +140,7 @@ def test_a_damaged_variant_shard_is_counted_up_to_the_damage_once(tmp_path):
     from effects.application.collect_variants import VariantGameCounter
     from effects.domain.variant_rounds import VariantGames
     from effects.infrastructure.record_codec import format_record_line
-    from tests.unit.effects.builders import with_game_end_markers
+    from tests.unit.effects.record_builders import with_game_end_markers
 
     bolt = "variant-scripts/bolt_variant_0a1b2c3d.txt"
     members = [gzip.compress("".join(
@@ -289,7 +289,7 @@ class TestTheUntargetedRound:
         build-corpus drops; it must not finish a variant's games."""
         from effects.application.collect_variants import count_variant_shard
         from effects.infrastructure.shard_io import write_shard
-        from tests.unit.effects.builders import with_game_end_markers
+        from tests.unit.effects.record_builders import with_game_end_markers
 
         ended = with_game_end_markers([_variant_record(self.BOLT, "g1", 0)])
         cut = [_variant_record(self.BOLT, "g2", 0),
@@ -304,7 +304,7 @@ class TestTheUntargetedRound:
         assert found.records == 4, "every record is still read"
 
     def test_the_round_reports_its_cut_games(self, tmp_path, monkeypatch, fake_supervisor):
-        from tests.unit.effects.builders import with_game_end_markers
+        from tests.unit.effects.record_builders import with_game_end_markers
 
         records = with_game_end_markers([
             _variant_record(self.BOLT, "g1", 0),
@@ -327,7 +327,7 @@ class TestTheUntargetedRound:
     ):
         """python, two runs on one directory: only this run's shards say what
         its variants played."""
-        from tests.unit.effects.builders import write_ended_shard
+        from tests.unit.effects.file_builders import write_ended_shard
 
         collect_variants, config = self._fixture(
             _RoundEnv(tmp_path, monkeypatch, fake_supervisor), no_progress_rounds=1,
@@ -344,7 +344,7 @@ class TestTheUntargetedRound:
         """An interrupted run restarted with the same seed replayed
         every variant it had finished, doubling their games. ``--continues``
         counts the earlier run's shards first."""
-        from tests.unit.effects.builders import write_ended_shard
+        from tests.unit.effects.file_builders import write_ended_shard
 
         rounds = [self._games(self.SHOCK, "g1", "g2")]
         collect_variants, config = self._fixture(
@@ -378,7 +378,7 @@ class TestTheUntargetedRound:
     def test_a_continued_run_with_nothing_left_plays_no_round_and_succeeds(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):
-        from tests.unit.effects.builders import write_ended_shard
+        from tests.unit.effects.file_builders import write_ended_shard
 
         collect_variants, config = self._fixture(
             _RoundEnv(tmp_path, monkeypatch, fake_supervisor), continues=("earlier",),
@@ -399,7 +399,7 @@ class TestTheUntargetedRound:
         import logging
 
         from effects.domain.provenance import ProvenanceKey
-        from tests.unit.effects.builders import lines_of, make_entity, make_snapshot
+        from tests.unit.effects.record_builders import lines_of, make_entity, make_snapshot
 
         shock_on_board = make_snapshot(entities=(make_entity(
             "E9", "Shock Variant 99aa00ff",

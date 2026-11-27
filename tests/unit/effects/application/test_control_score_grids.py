@@ -26,7 +26,7 @@ from tests.unit.effects.application.test_control_score import (
     _Editor,
     _selection,
 )
-from tests.unit.effects.builders import fixture_run
+from tests.unit.effects.training_builders import fixture_run
 
 #: The second cell's answers, in the grid's record order: they differ by record.
 HIGH = (1.0, 0.0, 1.0, 0.0)

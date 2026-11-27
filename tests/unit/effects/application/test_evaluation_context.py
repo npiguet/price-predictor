@@ -181,7 +181,7 @@ class TestTheTreesTheCheckpointRecorded:
     def _tree(root: Path) -> Path:
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
         from effects.infrastructure.sidecar_io import sidecar_path_for
-        from tests.unit.effects.builders import write_sidecar
+        from tests.unit.effects.file_builders import write_sidecar
 
         script = "cardsfolder/s/shock.txt"
         write_sidecar(ProvenanceSidecar(card="Shock", script_file=script, lines=(

@@ -20,11 +20,8 @@ from effects.infrastructure.sidecar_io import (
     UnconfiguredTree,
     UnconvertedScript,
 )
-from tests.unit.effects.builders import (
-    make_record,
-    record_on_board,
-    write_sidecar,
-)
+from tests.unit.effects.file_builders import write_sidecar
+from tests.unit.effects.record_builders import make_record, record_on_board
 
 
 class FakeSidecarCache:
@@ -271,7 +268,7 @@ class TestWeightsKeyByAbilityText:
         from tests.unit.effects.application.test_ability_text import (
             FakeSidecarCache,
         )
-        from tests.unit.effects.builders import make_preparer
+        from tests.unit.effects.batch_builders import make_preparer
 
         common_key = ProvenanceKey("cardsfolder/c/common.txt", 0, "keyword", 0)
         rare_key = ProvenanceKey("cardsfolder/r/rare.txt", 0, "keyword", 0)

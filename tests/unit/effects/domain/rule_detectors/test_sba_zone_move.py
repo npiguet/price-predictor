@@ -318,7 +318,7 @@ def _combat_death(keywords=(), amount=2, granted=()):
     from effects.domain.event_schema import Event
     from effects.domain.records import CombatPayload, RecordKind
     from effects.domain.state_snapshot import GrantedTemporary, PowerToughness
-    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+    from tests.unit.effects.record_builders import make_entity, make_record, make_snapshot
 
     attacker = make_entity("E1", "giant", types=("Creature",), pt=PowerToughness((3, 3)),
                            granted_temporary=GrantedTemporary(keywords=tuple(keywords)))

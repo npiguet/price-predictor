@@ -22,14 +22,10 @@ from effects.application.step_preparation import ShardOpened, StepPreparer, Step
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, PER_ENTITY_FIELDS
 from effects.domain.loss_denominators import LossDenominators
 from effects.domain.loss_floor import PER_ENTITY, TargetSample, constant_predictor_losses
-from tests.unit.effects.builders import (
-    FIXTURE_TRAINING_SEED,
-    fields_everywhere,
-    fixture_training_config,
-    make_entity_targets,
-    make_training_loop,
-)
+from tests.unit.effects.batch_builders import fields_everywhere, make_entity_targets
+from tests.unit.effects.builders import FIXTURE_TRAINING_SEED
 from tests.unit.effects.cli_args import parse_cli
+from tests.unit.effects.training_builders import fixture_training_config, make_training_loop
 
 FIELDS = (FIELDS_BY_NAME["damage_taken"], FIELDS_BY_NAME["tap_state"])
 

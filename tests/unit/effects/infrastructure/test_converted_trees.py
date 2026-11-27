@@ -21,7 +21,7 @@ from tests.unit.conversion_fixtures import (
     write_conversion,
     write_jar,
 )
-from tests.unit.effects.builders import write_sidecar
+from tests.unit.effects.file_builders import write_sidecar
 
 
 def _convert(root: Path, script_file: str, name: str, text: str) -> None:
