@@ -30,33 +30,19 @@ SAMPLE_LINE = (
 )
 
 
-def _outcome(
-    deck_a: list[str],
-    deck_b: list[str],
-    games: str,
-    *,
-    timestamp: str = "2026-04-22T14:30:05Z",
-    run_id: str = "run-xyz",
-    set_code: str = "RVR",
-    method_a: str = "forge-best",
-    method_b: str = "forge-3sub",
-    play: str | None = None,
-    duration_s: int = 47,
-) -> MatchOutcome:
-    """Build a MatchOutcome fixture; play defaults to all-A of matching length."""
-    if play is None:
-        play = "A" * len(games)
+def _outcome(deck_a: list[str], deck_b: list[str], games: str) -> MatchOutcome:
+    """Build a MatchOutcome fixture; every game is played first by A."""
     return MatchOutcome(
-        timestamp=timestamp,
-        run_id=run_id,
-        set_code=set_code,
-        method_a=method_a,
-        method_b=method_b,
+        timestamp="2026-04-22T14:30:05Z",
+        run_id="run-xyz",
+        set_code="RVR",
+        method_a="forge-best",
+        method_b="forge-3sub",
         deck_a=Deck.of(deck_a),
         deck_b=Deck.of(deck_b),
         games=games,
-        play=play,
-        duration_s=duration_s,
+        play="A" * len(games),
+        duration_s=47,
     )
 
 
@@ -206,11 +192,7 @@ class TestBuildMatchTrainingExamples:
     def test_accented_card_name_resolved(self, tmp_path):
         """Dandân (with accent) resolves to dandan.npz on disk."""
         emb = np.random.randn(D_MODEL).astype(np.float32)
-        cards_dir = tmp_path / "cards"
-        cards_dir.mkdir()
-        d_dir = cards_dir / "d"
-        d_dir.mkdir()
-        np.savez_compressed(d_dir / "dandan.npz", embedding=emb)
+        cards_dir = self._make_embeddings(tmp_path, {"dandan": emb})
         outcomes = [_outcome(
             ["Dandân"],
             ["Dandân"],
@@ -222,14 +204,7 @@ class TestBuildMatchTrainingExamples:
     def test_double_faced_card_found_by_prefix(self, tmp_path):
         """A DFC stored as 'frontface_backface.npz' is found by front-face name."""
         emb = np.random.randn(D_MODEL).astype(np.float32)
-        cards_dir = tmp_path / "cards"
-        cards_dir.mkdir()
-        m_dir = cards_dir / "m"
-        m_dir.mkdir()
-        np.savez_compressed(
-            m_dir / "mosswood_dreadknight_dread_whispers.npz",
-            embedding=emb,
-        )
+        cards_dir = self._make_embeddings(tmp_path, {"mosswood_dreadknight_dread_whispers": emb})
         outcomes = [_outcome(
             ["Mosswood Dreadknight"],
             ["Mosswood Dreadknight"],
@@ -328,57 +303,33 @@ class TestSetTextVectors:
         assert source.grad.abs().sum().item() > 0
 
 
+def _example(winners: int, losers: int, margin: int = 1) -> MatchTrainingExample:
+    """A training example whose decks hold ``winners`` and ``losers`` cards."""
+    return MatchTrainingExample(
+        winner_indices=torch.arange(winners, dtype=torch.long),
+        loser_indices=torch.arange(losers, dtype=torch.long),
+        margin=margin,
+    )
+
+
 class TestCollateFunction:
     def test_variable_length_padding(self):
         """Collate should pad to max length with boolean masks."""
-        ex1 = MatchTrainingExample(
-            winner_indices=torch.arange(5, dtype=torch.long),
-            loser_indices=torch.arange(3, dtype=torch.long),
-            margin=1,
-        )
-        ex2 = MatchTrainingExample(
-            winner_indices=torch.arange(8, dtype=torch.long),
-            loser_indices=torch.arange(6, dtype=torch.long),
-            margin=1,
-        )
-
-        batch = collate_training_examples([ex1, ex2])
+        batch = collate_training_examples([_example(5, 3), _example(8, 6)])
         assert batch.winner_indices.shape == (2, 8)
         assert batch.loser_indices.shape == (2, 6)
         assert batch.winner_mask.shape == (2, 8)
         assert batch.loser_mask.shape == (2, 6)
 
     def test_mask_marks_real_cards_true(self):
-        ex1 = MatchTrainingExample(
-            winner_indices=torch.arange(3, dtype=torch.long),
-            loser_indices=torch.arange(2, dtype=torch.long),
-            margin=1,
-        )
-        ex2 = MatchTrainingExample(
-            winner_indices=torch.arange(5, dtype=torch.long),
-            loser_indices=torch.arange(4, dtype=torch.long),
-            margin=1,
-        )
-
-        batch = collate_training_examples([ex1, ex2])
+        batch = collate_training_examples([_example(3, 2), _example(5, 4)])
         assert batch.winner_mask[0, :3].all()
         assert not batch.winner_mask[0, 3:].any()
         assert batch.winner_mask[1, :5].all()
 
     def test_collate_propagates_margin(self):
         """Per-example margin lands in batch.margins as float tensor."""
-        ex1 = MatchTrainingExample(
-            winner_indices=torch.arange(3, dtype=torch.long),
-            loser_indices=torch.arange(2, dtype=torch.long),
-            margin=1,
-        )
-        ex2 = MatchTrainingExample(
-            winner_indices=torch.arange(4, dtype=torch.long),
-            loser_indices=torch.arange(3, dtype=torch.long),
-            margin=4,
-        )
-
-        batch = collate_training_examples([ex1, ex2])
+        batch = collate_training_examples([_example(3, 2, margin=1), _example(4, 3, margin=4)])
         assert batch.margins.dtype == torch.float
         assert batch.margins.shape == (2,)
         assert batch.margins.tolist() == [1.0, 4.0]
