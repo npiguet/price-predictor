@@ -868,11 +868,15 @@ loss.
   calibration; matched real-vs-fork agreement; the `identity` variant on the game-disjoint split; the
   linear-decodability battery; the `taxonomy` comparison; the average-effect control (the `no-state`
   variant); and the probe-diff re-check.
-- **FR-111**: Two FR-110 checks are not implemented: matched real-vs-fork agreement and the
-  role-polarity probe. Each MUST be reported on every run with status
+- **FR-111**: Some FR-110 and FR-116 checks are not implemented. Each MUST be reported on every run with status
   `NOT_IMPLEMENTED`, printed `[todo]`, naming what it would measure, and never as skipped: the
-  corpus holds the fork, probe and mana records they would read. Every other check runs against any
-  corpus.
+  corpus holds the records they would read. `NOT_IMPLEMENTED_CHECKS` in
+  `src/effects/application/unbuilt_checks.py` holds the list: matched real-vs-fork agreement; the
+  role-polarity probe; scaling calibration; the identity variant on the game-disjoint split; the
+  state-only floor per kind; the taxonomy comparison on held-out prediction and on decodability;
+  the no-state comparison on decodability, the ward canary and scaling calibration; and the
+  shared-text, novel-combination and numeric-extrapolation strata. Every other check runs against
+  any corpus.
 - **FR-112**: The ward canary MUST compare ward's `e` against a checked-in list of functional-twin
   ability lines in `src/effects/domain/ward_twins.py`, passing when ward is closer in cosine distance
   to each twin than the median of ward's cosine distances to all bare single-keyword `e` vectors.
